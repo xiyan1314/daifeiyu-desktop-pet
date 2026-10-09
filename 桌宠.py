@@ -62,9 +62,10 @@ import pet_alarm
 
 
 APP_NAME = "大肥鱼桌宠"
-VERSION = "2.1.2"
+VERSION = "2.1.3"
 PAD = 1.25  # 窗口相对角色的透明边距（为压扁/回弹预留空间）
 IDLE_FRAME_MS = 140      # 待机帧间隔
+IDLE_FORM_HOLD_SECS = 8  # v2.1.3：只有形态、没有动作可播时的展示期上限（到期回用户形态）
 EAT_FRAME_MS = 110       # 进食帧间隔
 SLEEP_AFTER_SECONDS = 60 # 无交互多久入睡
 STATE_DURATION_MS = 2500 # 状态图默认展示时长
@@ -690,6 +691,7 @@ class PetWindow(QWidget):
         # v2.1：待机系统状态（两触发 + 多动作轮换 + idle_form 展示期覆盖）
         self._idle_active = False
         self._idle_form_active = False
+        self._idle_hold_timer = None         # v2.1.3：形态待机的展示期封顶（防永久吞用户形态）
         self._idle_after_full_at = None      # 触发 A 到点时刻（None=无待触发）
         self._idle_last_action = ""          # 顺序模式记上次播到哪
         self._last_idle_at = 0.0
@@ -1086,9 +1088,12 @@ class PetWindow(QWidget):
             self.show_bubble("变回来啦~")
             return
         self._cancel_transform()
+        # v2.1.3 修复：**先**打断待机（含结束 idle_form 展示期、恢复用户形态），再记
+        # _transform_home。顺序反了会出两个 bug：①变身期间待机形态覆盖变身形态；
+        # ②_transform_home 记成待机形态 → 变身结束后"回"到待机形态，用户选定形态被吞掉。
+        self._touch_activity()  # 内部 _idle_interrupt：待机让位并恢复用户形态
         self._transform_home = self.form
         self._set_form(_target, cancel_transform=False, display_only=True)  # 变身是临时展示
-        self._touch_activity()
         self.show_bubble("变身！")
         try:
             _secs = int(self.cfg.get("transform_seconds", _d_secs) or _d_secs)
@@ -1114,9 +1119,14 @@ class PetWindow(QWidget):
         return self.behaviors.idle_config(lambda: self.cfg)
 
     def _idle_ready(self):
-        """待机能否开始：不忙/不摸头/没睡/处于待机表现/没在读台词/没有待机动作在播。"""
+        """待机能否开始：不忙/不摸头/没睡/**没在变身**/处于待机表现/没在读台词/没有待机动作在播。
+
+        v2.1.3 修复：此前漏判"变身进行中"，导致变身期间待机会把 idle_form 画上去
+        （表现为"待机吞了变身形态"，且变身结束时回切到的是待机形态）。"""
         if self.busy or self._petting or self._sleeping:
             return False
+        if getattr(self, "_transform_home", None) is not None:
+            return False  # 变身进行中：这是更高优先级的展示，待机必须让位
         if getattr(self, "_speaking_voice", False) or self.voice.is_speaking():
             return False
         if self.anim_mode not in ("idle", "form_idle"):
@@ -1167,9 +1177,41 @@ class PetWindow(QWidget):
             self._set_form(form, cancel_transform=False, display_only=True)
             self._idle_form_active = True
         if b is None:
-            return  # 没有可播动作：只做形态待机（或什么都不做）
+            # 没有可播动作：只做「形态待机」。v2.1.3 修复：必须给展示期封顶——
+            # 此前直接 return，_idle_form_active 永远挂着、_idle_end 永不被调用，
+            # 表现为"待机把用户形态永久吞掉"（用户实测反馈）。
+            if self._idle_form_active:
+                self._start_idle_hold()
+            return
         self._idle_active = True
         self._run_behavior(b["id"], as_idle=True)
+
+    def _stop_idle_hold(self):
+        """停掉形态待机的展示期定时器（幂等）。"""
+        if getattr(self, "_idle_hold_timer", None) is not None:
+            try:
+                self._idle_hold_timer.stop()
+                self._idle_hold_timer.deleteLater()
+            except RuntimeError:
+                pass  # 有意忽略：定时器可能已被销毁
+            self._idle_hold_timer = None
+
+    def _start_idle_hold(self):
+        """形态待机（没有动作可播）的展示期封顶：到期自动 _idle_end 回用户形态。"""
+        try:
+            _secs = int(self._idle_cfg().get("idle_form_hold") or IDLE_FORM_HOLD_SECS)
+        except (TypeError, ValueError):
+            _secs = IDLE_FORM_HOLD_SECS  # 有意忽略：坏值回默认
+        if self._idle_hold_timer is not None:
+            self._idle_hold_timer.stop()
+            try:
+                self._idle_hold_timer.deleteLater()
+            except RuntimeError:
+                pass  # 有意忽略：定时器可能已被销毁（幂等清理）
+        self._idle_hold_timer = QTimer(self)
+        self._idle_hold_timer.setSingleShot(True)
+        self._idle_hold_timer.timeout.connect(self._idle_end)
+        self._idle_hold_timer.start(max(2, min(60, _secs)) * 1000)
 
     def _idle_end(self):
         """待机动作自然播完：恢复用户选定形态，允许下一次触发。
@@ -1177,6 +1219,7 @@ class PetWindow(QWidget):
         M5 修复：待机动作里带 sleep 步骤时（已入睡）不复位形态——否则会"睡着却显示
         用户形态"，醒来也回不到睡眠形态。"""
         self._idle_active = False
+        self._stop_idle_hold()
         if self._sleeping:
             self._idle_form_active = False  # 睡眠形态接管，待机形态覆盖就此结束
             return
@@ -1188,6 +1231,7 @@ class PetWindow(QWidget):
         待机是最低优先级：立即停序列、恢复用户形态，两个触发来源都重新计时。"""
         was_active = bool(self._idle_active) or bool(getattr(self, "_idle_form_active", False))
         self._idle_active = False
+        self._stop_idle_hold()
         self._idle_after_full_at = None
         if getattr(self, "_behavior_is_idle", False) and self._behavior_seq is not None:
             self._behavior_gen = getattr(self, "_behavior_gen", 0) + 1  # 顶替旧链（挂起 singleShot 失效）
@@ -1957,6 +2001,9 @@ class PetWindow(QWidget):
         if self._sleeping:
             return  # v2.0.2：已在睡时重入直接返回（防二次睡眠语音/zzz 重播）
         self.voice.play_event("sleep")  # v2.0：睡眠语音片段（未配置/关闭则静默）
+        # v2.1.3 修复：入睡前先打断待机（否则待机的形态展示期与行为序列会跟着睡着继续跑，
+        # 睡着期间还可能被待机步骤切形态）。放在记 _sleep_home 之前，保证醒来回的是用户形态。
+        self._idle_interrupt("sleep")
         # v2.0.2 断点#12：配置了睡觉形态则先切过去（醒来回到原形态）
         if self._custom_role and not self._sleeping:
             _sf = self._sleep_form_key()
@@ -2490,7 +2537,10 @@ class PetWindow(QWidget):
     def _digest(self):
         """吃饱形态结束：回用户选定形态，并登记触发 A（延迟 idle_delay_after_full 后待机）。"""
         _uf = getattr(self, "_user_form", "") or self.form_keys[0]
-        if self.form != _uf:
+        # v2.1.3 修复：睡眠/变身期间不做形态回位——那两个是更高优先级的"临时展示"，
+        # 各自有自己的回位路径（醒来 / 变身到时）。此前会"吃饱把睡眠形态顶掉"。
+        _busy_display = bool(self._sleeping) or getattr(self, "_transform_home", None) is not None
+        if self.form != _uf and not _busy_display:
             # _set_form 内已在待机态回位；状态图展示中不掐断（state 结束时自然回待机）
             self._set_form(_uf, display_only=True)
         try:
@@ -3441,6 +3491,7 @@ class PetWindow(QWidget):
                       self._fly_timer, self._save_scale_timer, self._food_shown_timer,
                       self._hold_timer, self._pet_max, self._flight_timer,  # P1-手感
                       self._transform_timer,  # v2.1.2（L-1）：变身回切定时器此前漏停
+                      self._idle_hold_timer,   # v2.1.3：形态待机展示期定时器（可能为 None，stop 前过滤）
                       self._alarm_timer):  # v2.0.5：闹钟轮询
                 if t is not None:
                     t.stop()

@@ -27,7 +27,7 @@ sys.path.insert(0, HERE)
 
 FAILS = []
 CHECKS = []
-EXPECT_CHECKS = 241  # v2.1.2：检查总数硬断言（每次增删检查同步更新；本检查自身不计入）
+EXPECT_CHECKS = 253  # v2.1.3：检查总数硬断言（每次增删检查同步更新；本检查自身不计入）
 
 
 def check(name, cond, extra=""):
@@ -859,6 +859,86 @@ def main_flow():
     check("no_feed rejects", not pet.busy and bool(_bubbles2),
           "bubbles=%r busy=%r" % (_bubbles2, pet.busy))
     pet._set_form("f0")
+    # v2.1.3 回归：待机不得吞掉变身/睡眠形态（用户实测反馈"待机还会吞其他形态"）
+    pet.cfg["idle_form"] = "f1"          # 待机形态与变身形态同键不影响本检查（下面用 f0 区分）
+    pet.cfg["idle_trigger_delay"] = 3
+    pet._user_form = "f0"
+    pet._set_form("f0", display_only=True)
+    # 场景 1：变身进行中 → 到点的待机不得开始（_idle_ready 必须让位）
+    pet._do_transform()
+    _t_form = pet.form
+    pet._last_activity = 0.0
+    pet._last_idle_at = 0.0
+    pet.maybe_idle_behavior()
+    check("idle yields to transform", pet.form == _t_form and pet._idle_form_active is False
+          and pet._idle_active is False,
+          "form=%r idle_form=%r" % (pet.form, pet._idle_form_active))
+    pet._end_transform()
+    check("transform back after idle tick", pet.form == "f0", "form=%r" % pet.form)
+    # 场景 2：待机形态展示期 → 用户变身 → 变身结束必须回用户形态（f0），不是待机形态
+    # （需要一个与用户形态/变身形态都不同的第三形态来扮演 idle_form）
+    pet.role_lib._data["roles"][-1]["forms"].append(
+        {"name": "第三形态", "file": "cb_a.png"})
+    pet.role_lib._save()
+    pet.apply_role("cb1")
+    check("third form available", "f2" in pet.sprites and "f2" in pet.form_keys,
+          "forms=%r" % (pet.form_keys,))
+    pet._user_form = "f0"
+    pet._idle_form_active = True
+    pet._set_form("f2", display_only=True)     # 模拟待机形态已覆盖（f2 = idle_form）
+    pet._do_transform()
+    check("transform interrupts idle form",
+          pet.form == "f1" and pet._idle_form_active is False and pet._transform_home == "f0",
+          "form=%r idle_form=%r home=%r" % (pet.form, pet._idle_form_active, pet._transform_home))
+    pet._end_transform()
+    check("transform ends at user form", pet.form == "f0", "form=%r" % pet.form)
+    # 场景 3：待机形态展示期 → 入睡 → 睡形态；醒来回用户形态
+    pet._idle_form_active = True
+    pet._set_form("f0", display_only=True)
+    pet._show_sleep()
+    check("sleep interrupts idle", pet._sleeping and pet._idle_form_active is False,
+          "sleeping=%r idle_form=%r" % (pet._sleeping, pet._idle_form_active))
+    pet._wake()
+    check("wake after idle sleep", pet.form == "f0" and not pet._sleeping, "form=%r" % pet.form)
+    # 场景 4：待机动作列表为空（只有形态）→ 展示期必须有上限，不能永久挂着 idle_form
+    _acts_backup = list(pet.cfg.get("idle_actions") or [])
+    pet.cfg["idle_form"] = "f1"
+    pet.cfg["idle_actions"] = []
+    pet._user_form = "f0"
+    pet._set_form("f0", display_only=True)
+    pet._idle_form_active = False
+    pet._idle_active = False
+    pet._start_idle("idle")
+    check("form-only idle bounded",
+          pet._idle_form_active is True and pet._idle_hold_timer is not None
+          and pet._idle_hold_timer.isActive(),
+          "idle_form=%r timer=%r" % (pet._idle_form_active, pet._idle_hold_timer))
+    pet._idle_end()  # 等价于展示期到点：必须回到用户形态并清掉定时器
+    check("form-only idle restores",
+          pet.form == "f0" and pet._idle_form_active is False
+          and pet._idle_hold_timer is None,
+          "form=%r idle_form=%r timer=%r"
+          % (pet.form, pet._idle_form_active, pet._idle_hold_timer))
+    # 场景 5：吃饱消化（_digest）不得顶掉睡眠/变身形态（各自有回位路径）
+    pet._user_form = "f0"
+    pet._set_form("f0", display_only=True)
+    pet._show_sleep()
+    _sleep_form = pet.form
+    pet._digest()
+    check("digest keeps sleep form", pet.form == _sleep_form and pet._sleeping,
+          "form=%r sleep_form=%r" % (pet.form, _sleep_form))
+    pet._wake()
+    pet._set_form("f0", display_only=True)
+    pet._do_transform()
+    _t_form2 = pet.form
+    pet._digest()
+    check("digest keeps transform form", pet.form == _t_form2 and pet._transform_home == "f0",
+          "form=%r home=%r" % (pet.form, pet._transform_home))
+    pet._end_transform()
+    check("digest after transform back", pet.form == "f0", "form=%r" % pet.form)
+    pet.cfg["idle_actions"] = _acts_backup
+    pet.cfg.pop("idle_form", None)
+    pet.cfg["idle_trigger_delay"] = _cfg_saved.get("idle_trigger_delay", 8)
     # 行为设置对话框冒烟
     try:
         _bd = pet_dialogs.BehaviorDialog(pet, pet.behaviors)
