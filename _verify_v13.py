@@ -27,7 +27,7 @@ sys.path.insert(0, HERE)
 
 FAILS = []
 CHECKS = []
-EXPECT_CHECKS = 263  # v2.1.6：检查总数硬断言（每次增删检查同步更新；本检查自身不计入）
+EXPECT_CHECKS = 266  # v2.1.8：检查总数硬断言（每次增删检查同步更新；本检查自身不计入）
 
 
 def check(name, cond, extra=""):
@@ -1303,10 +1303,49 @@ def main_flow():
     _pick2, _aid2, _pe2 = pet.behaviors.idle_pick(lambda: pet.cfg, _aid1)
     check("idle pick rotates", _pick1 is not None and _pick2 is not None
           and _pick1["id"] != _pick2["id"])
-    # 触发 A：吃饱形态结束 → 登记待机时刻
+    # v2.1.8：待机只由"无交互"触发 —— 吃饱形态结束不再登记单独的待机时刻；
+    # _digest 只负责回位形态，之后由无交互条件在下一拍自然决定是否待机。
     pet._idle_after_full_at = None
+    _last_idle_before = pet._last_idle_at
     pet._digest()
-    check("trigger A armed", pet._idle_after_full_at is not None)
+    # v2.1.8：_digest 不得改动无交互计时（否则会变成"消化一结束就待机"或把待机推迟）
+    check("digest keeps idle timing untouched",
+          pet._idle_after_full_at is None and pet._last_idle_at == _last_idle_before)
+    # v2.1.8 正向回归：消化回位后，无交互条件满足时必须**仍然会**待机（避免"取消触发 A"变成不待机）
+    _hold_bak = pet.cfg.get("idle_form", "")
+    _acts_bak = list(pet.cfg.get("idle_actions") or [])
+    # 用**当前角色**的形态键（此处可能是默认角色 normal/full，写死 f1 会因不在 form_keys 而跳过）
+    _fk_user = pet.form_keys[0]
+    _fk_idle = pet.form_keys[-1] if len(pet.form_keys) > 1 else pet.form_keys[0]
+    pet.cfg["idle_form"] = _fk_idle
+    pet.cfg["idle_actions"] = []
+    pet._user_form = _fk_user
+    pet._set_form(_fk_user, display_only=True)
+    pet._stop_idle_hold()
+    pet._idle_form_active = False
+    pet._idle_active = False
+    # 先把状态清成"可待机"（前面的检查可能留下了表情展示/busy）
+    pet.busy = False
+    pet._petting = False
+    pet._cancel_transform()
+    pet.anim.stop()
+    pet.anim_mode = "idle"
+    pet._last_activity = 0.0
+    pet._last_idle_at = 0.0
+    check("idle ready for resume test", pet._idle_ready() is True)
+    pet.maybe_idle_behavior()
+    check("idle resumes after digest",
+          pet._idle_form_active is True and pet.form == _fk_idle,
+          "form=%r flag=%r expect_idle_form=%r" % (pet.form, pet._idle_form_active, _fk_idle))
+    # v2.1.8（M2）：展示期结束后**重新计时**——delay 秒内不得再次触发（否则待机形态近乎常驻）
+    pet._idle_end()
+    pet._last_activity = 0.0          # 无交互条件满足，但刚结束待机 → 冷却窗口内不该再触发
+    pet.maybe_idle_behavior()
+    check("idle not retrigger within delay", pet._idle_form_active is False,
+          "form=%r flag=%r" % (pet.form, pet._idle_form_active))
+    pet._idle_hold_timer = None
+    pet.cfg["idle_form"] = _hold_bak
+    pet.cfg["idle_actions"] = _acts_bak
     # 待机形态只做展示期覆盖，结束后回到用户选定形态
     _keys = pet.form_keys
     if len(_keys) >= 2:

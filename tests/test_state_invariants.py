@@ -10,6 +10,7 @@
 import itertools
 import os
 import sys
+import time
 
 import pytest
 
@@ -79,6 +80,10 @@ def _reset(win):
     win.anim.stop()
     win.anim_mode = "idle"
     win._set_form("f0", display_only=True)
+    # L3（找茬 2026-10-09）：把无交互计时重置为"刚交互过"——否则 _settle() 泵事件循环时
+    # 1s 的待机检查可能会真的触发待机并切走形态，让不变量测试出现被动改动。
+    win._last_activity = time.monotonic()
+    win._last_idle_at = time.monotonic()
 
 
 def _owner(win):
@@ -460,6 +465,38 @@ def test_feed_during_transform_basis_is_user_form(pet):
     pet.feed("小鱼干")
     assert pet.form == expect, \
         "变身中喂食的落点是 %r，应为用户形态的下一个（%r）" % (pet.form, expect)
+
+
+def test_form_only_idle_ends_within_hold(pet):
+    """v2.1.8（找茬 S1）**真实事件循环**回归：delay < 展示期上限时，形态待机不得被无限续期。
+
+    旧症状：1s 检查器每 delay 秒重新触发一次 → 展示期定时器被 stop+重建 → 永不到期 →
+    形态待机变成永久占位（用户形态被永久吞），实测 25s 内 IDLE_END=0。
+    """
+    from PySide6.QtCore import QEventLoop, QTimer
+    _reset(pet)
+    _fk_user = pet.form_keys[0]
+    _fk_idle = pet.form_keys[-1] if len(pet.form_keys) > 1 else pet.form_keys[0]
+    pet.cfg["idle_form"] = _fk_idle
+    pet.cfg["idle_trigger_delay"] = 3      # 故意小于展示期上限：旧实现必然被续期
+    pet.cfg["idle_form_hold"] = 2
+    pet.cfg["idle_actions"] = []
+    pet.apply_idle_settings(pet.cfg)
+    pet._user_form = _fk_user
+    pet._set_form(_fk_user, display_only=True)
+    pet._last_activity = 0.0
+    pet._last_idle_at = 0.0
+    ends = []
+    _real_end = pet._idle_end
+    pet._idle_end = lambda: (ends.append(1), _real_end())[1]
+    loop = QEventLoop()
+    QTimer.singleShot(9000, loop.quit)     # 真跑 9 秒：3s 触发 + 2s 展示 → 至少结束一次
+    loop.exec()
+    assert ends, "形态待机在 9 秒内从未结束（展示期被 1s 检查无限续期 → 永久占用形态）"
+    pet.cfg["idle_form"] = ""
+    pet.cfg["idle_actions"] = []
+    pet.cfg["idle_trigger_delay"] = 8
+    pet.apply_idle_settings(pet.cfg)
 
 
 def test_sleep_survives_voice_finished(pet):

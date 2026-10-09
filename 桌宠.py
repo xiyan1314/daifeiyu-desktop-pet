@@ -62,7 +62,7 @@ import pet_alarm
 
 
 APP_NAME = "大肥鱼桌宠"
-VERSION = "2.1.7"
+VERSION = "2.1.8"
 PAD = 1.25  # 窗口相对角色的透明边距（为压扁/回弹预留空间）
 IDLE_FRAME_MS = 140      # 待机帧间隔
 IDLE_FORM_HOLD_SECS = 8  # v2.1.3：只有形态、没有动作可播时的展示期上限（到期回用户形态）
@@ -713,9 +713,9 @@ class PetWindow(QWidget):
         self._idle_hold_timer = None         # v2.1.3：形态待机的展示期封顶（防永久吞用户形态）
         self._eat_watchdog = None            # v2.1.4：吃帧看门狗（防 on_finish 被顶掉后 busy 永久卡死）
         self._feed_form = ""                 # v2.1.6：本轮喂食的目标形态（消化窗口的主人判据）
-        self._idle_full_timer = None         # v2.1.7：触发 A（吃饱后待机）的精确投递定时器
         self._idle_display_form = ""         # v2.1.7：本次待机展示期实际画上去的形态
-        self._idle_after_full_at = None      # 触发 A 到点时刻（None=无待触发）
+        self._idle_check_timer = None        # v2.1.8：待机触发的高速检查（1s），由 __init__ 创建
+        self._idle_after_full_at = None      # （v2.1.8 起不再使用：待机只看无交互；保留字段兼容旧配置/测试）
         self._idle_last_action = ""          # 顺序模式记上次播到哪
         self._last_idle_at = 0.0
         self._speaking_voice = False         # 正在读台词（高优先级，待机让位）
@@ -842,7 +842,13 @@ class PetWindow(QWidget):
         # 定时器
         self.idle_timer = QTimer(self)
         self.idle_timer.timeout.connect(self._gslot('idle_tick', self.actions.idle_tick))
-        self.idle_timer.start(15000)
+        self.idle_timer.start(15000)  # 随机小动作（跳/zzz）的节奏；不要调快，否则会变吵
+        # v2.1.8：待机**触发**用独立的高速检查（1s），让"无交互 N 秒"真正按时生效——
+        # 此前靠上面 15s 的 tick 检查，配 8s 实际要等 15~23s（用户反馈"待机修得不够好"）。
+        self._idle_check_timer = QTimer(self)
+        self._idle_check_timer.timeout.connect(
+            self._gslot('idle_check', self.maybe_idle_behavior))
+        self._idle_check_timer.start(1000)
 
         self.walk_timer = QTimer(self)
         self.walk_timer.timeout.connect(self._gslot('walk_tick', self.wander.tick))
@@ -1139,6 +1145,7 @@ class PetWindow(QWidget):
                                         min(pet_behaviors.TRANSFORM_SECS_MAX, _secs)) * 1000)
 
     def _end_transform(self):
+        self._touch_activity()  # v2.1.8（M1）：变身结束=交互，避免"刚变回来就待机"
         _home = self._transform_home  # 先取回切目标（_cancel_transform 会清空）
         self._cancel_transform()
         _uf = getattr(self, "_user_form", "") or self.form_keys[0]
@@ -1161,9 +1168,12 @@ class PetWindow(QWidget):
         v2.1.3 修复：漏判"变身进行中" → 待机把 idle_form 画上去（吞变身形态）。
         v2.1.5 修复：漏判"消化窗口" → 喂食后吃饱形态要保留到消化定时器到点（默认 12s），
         而这段时间 busy 已释放、anim_mode 已回 idle，无交互触发（默认 8s）会先一步开始待机，
-        把吃饱形态顶掉（用户反馈："吃饱形态被待机吞了"）。吃饱结束后的待机由触发 A 负责。"""
+        把吃饱形态顶掉（用户反馈："吃饱形态被吞了"）。（v2.1.8 起没有"触发 A"了：待机只看无交互，
+        吃饱展示期只是**挡住**待机，不是触发条件。）"""
         if self.busy or self._petting or self._sleeping:
             return False
+        if getattr(self, "_drag_offset", None) is not None:
+            return False  # v2.1.8（M1）：正在拖拽（按住不放）时不得待机——否则会在用户手里换形态
         if getattr(self, "_transform_home", None) is not None:
             return False  # 变身进行中：这是更高优先级的展示，待机必须让位
         if self._digest_pending():
@@ -1175,33 +1185,26 @@ class PetWindow(QWidget):
         return not self._idle_active
 
     def maybe_idle_behavior(self):
-        """待机轮询（idle_tick 每拍调用）。两个触发来源共用同一套动作与形态规则：
+        """待机轮询（1s 的 _idle_check_timer 每拍调用；15s 的 idle_tick 也会顺带调一次）。
 
-        触发 A：吃饱形态结束后 idle_delay_after_full 秒（原「吃饱后卖萌」语义，保留）；
-        触发 B：无任何交互满 idle_trigger_delay 秒。
-        任一触发后重置另一个；待机进行中不重复触发；被打断后两触发都重新计时。"""
+        v2.1.8 按用户口径简化：**只看"无交互"一个条件**——
+        距最后一次交互 ≥ idle_trigger_delay 秒（默认 8s）且待机就绪即触发。
+        （"吃饱形态结束后再等 N 秒"这条触发已取消；吃饱形态展示期由 _idle_ready() 的
+         消化窗口判断挡住，形态结束时若无交互时间早已满足，下一拍自然进入待机。）
+        待机进行中不重复触发；被打断后计时重新开始。"""
         now = time.monotonic()
-        # 触发 A（到点即检查；条件不满足则作废本次，避免无限等待）
-        if self._idle_after_full_at is not None:
-            if now >= self._idle_after_full_at:
-                if self._idle_ready():
-                    self._start_idle("full")
-                    self._idle_after_full_at = None
-                elif now - self._idle_after_full_at > 60:
-                    # v2.1.7（M2）：到点但条件不满足时**重试**（此前直接作废，"吃饱后待机"会丢），
-                    # 只有超时 60s 才放弃，避免死等
-                    self._idle_after_full_at = None
-            return
-        # 触发 B
         cfg = self._idle_cfg()
         try:
             delay = int(cfg.get("idle_trigger_delay") or 0)
         except (TypeError, ValueError):
             delay = 0  # norm-ok：idle_config 已归一化，此处防御直改 cfg
-        if delay <= 0 or now - self._last_activity < delay:
+        if delay <= 0:
+            return  # 0 = 关闭"无交互触发"
+        # 条件 ①：无交互
+        if now - self._last_activity < delay:
             return
         if now - getattr(self, "_last_idle_at", 0.0) < delay:
-            return
+            return  # 刚待机过：同一冷却窗口内不重复
         if not self._idle_ready():
             return
         self._start_idle("idle")
@@ -1209,7 +1212,7 @@ class PetWindow(QWidget):
     def _start_idle(self, source):
         """开始一次待机：选动作（按模式）→ 切 idle_form（展示期）→ 播行为序列。"""
         cfg = self._idle_cfg()
-        self._idle_after_full_at = None  # 两触发互斥：触发即消费
+        self._idle_after_full_at = None  # v2.1.8：该字段不再参与触发（兼容保留）
         self._last_idle_at = time.monotonic()
         b, aid, err = self.behaviors.idle_pick(lambda: self.cfg, self._idle_last_action)
         if err:
@@ -1226,11 +1229,16 @@ class PetWindow(QWidget):
             self._idle_form_active = True
             self._idle_display_form = form  # v2.1.7：记下本次展示期实际显示形态（回位判据）
         if b is None:
-            # 没有可播动作：只做「形态待机」。v2.1.3 修复：必须给展示期封顶——
-            # 此前直接 return，_idle_form_active 永远挂着、_idle_end 永不被调用，
-            # 表现为"待机把用户形态永久吞掉"（用户实测反馈）。
+            # 没有可播动作：只做「形态待机」。
+            # v2.1.8（找茬 S1）：必须同时做两件事，否则 1s 检查器会把展示期**无限续期**
+            # （delay<8 时每 delay 秒重新触发一次 → 展示期定时器被 stop+重建 → 永不到期 →
+            #  形态待机变成永久占位，正是用户抱怨过两次的"形态被吞"）：
+            #   ① 标记 _idle_active → _idle_ready 的 not _idle_active 自然挡住重入；
+            #   ② 展示期定时器已 active 时**不重建**（重建=重新计时）。
             if self._idle_form_active:
-                self._start_idle_hold()
+                self._idle_active = True
+                if not (self._idle_hold_timer is not None and self._idle_hold_timer.isActive()):
+                    self._start_idle_hold()
             return
         self._idle_active = True
         self._run_behavior(b["id"], as_idle=True)
@@ -1269,6 +1277,10 @@ class PetWindow(QWidget):
         用户形态"，醒来也回不到睡眠形态。"""
         self._idle_active = False
         self._stop_idle_hold()
+        # v2.1.8（质量审查 M2）：展示期结束后**重新开始无交互计时**——否则新加的 1s 检查会在
+        # 下一秒立刻再次触发，"待机形态"变成近乎常驻（用户形态只在两次展示之间闪 <1s），
+        # 等于把 v2.1.3"形态待机不永久吞用户形态"的修复抵销掉。
+        self._last_idle_at = time.monotonic()
         if self._sleeping:
             self._idle_form_active = False  # 睡眠形态接管，待机形态覆盖就此结束
             return
@@ -2175,7 +2187,11 @@ class PetWindow(QWidget):
                               "drool": 3000, "cry": 3000, "smug": 2500, "blush": 2800}
 
     def _on_mood_state(self, state):
-        self._wake()
+        # v2.1.8（找茬 M2）：情绪是**内部事件**，不算"用户交互"——
+        # 此前无条件 _wake()（内部会 _touch_activity）会把无交互计时推后、并腰斩正在播的待机。
+        # 现在只在睡着时唤醒（醒着就什么都不做，交给待机/展示自己走完）。
+        if self._sleeping:
+            self._wake()
         if self.busy or self._petting:
             return  # 动画进行中 / 摸摸头中：丢弃情绪展示（S3 补全）
         self._show_state(state, self.MOOD_STATE_DURATION_MS.get(state, STATE_DURATION_MS))
@@ -2233,6 +2249,7 @@ class PetWindow(QWidget):
         self._end_petting()
 
     def _end_petting(self):
+        self._touch_activity()  # v2.1.8（M1）：摸头结束=交互，避免"刚松手就待机"
         self._petting = False
         self._fx_petpet_on = False
         self._pet_max.stop()
@@ -2662,7 +2679,7 @@ class PetWindow(QWidget):
         self._apply_transform()
 
     def _digest(self):
-        """吃饱形态结束：回用户选定形态，并登记触发 A（延迟 idle_delay_after_full 后待机）。"""
+        """吃饱形态结束：回用户选定形态（v2.1.8 起不再登记"吃饱后待机"，待机只看无交互）。"""
         _uf = getattr(self, "_user_form", "") or self.form_keys[0]
         # v2.1.3 修复：睡眠/变身期间不做形态回位——那两个是更高优先级的"临时展示"，
         # 各自有自己的回位路径（醒来 / 变身到时）。此前会"吃饱把睡眠形态顶掉"。
@@ -2674,25 +2691,8 @@ class PetWindow(QWidget):
         if self.form != _uf and not _busy_display:
             # _set_form 内已在待机态回位；状态图展示中不掐断（state 结束时自然回待机）
             self._set_form(_uf, display_only=True)
-        try:
-            _delay = int(self._idle_cfg().get("idle_delay_after_full") or 0)
-        except (TypeError, ValueError):
-            _delay = 0  # 有意忽略：坏值按 0（立即待机）
-        self._idle_after_full_at = time.monotonic() + max(0, _delay)
-        self._last_idle_at = 0.0  # 触发 A 立即生效（不受触发 B 去重窗口影响）
-        # v2.1.7（M2）：idle_timer 是 15s 粗粒度，触发 A 用它检查会晚最多 15s。
-        # 这里精确投递一次（到点即检查），tick 仍作兜底与去重。
-        if self._idle_full_timer is not None:
-            try:
-                self._idle_full_timer.stop()
-                self._idle_full_timer.deleteLater()
-            except RuntimeError:
-                pass  # 有意忽略：定时器可能已销毁（幂等）
-        self._idle_full_timer = QTimer(self)
-        self._idle_full_timer.setSingleShot(True)
-        self._idle_full_timer.timeout.connect(
-            self._gslot("idle_full_trigger", self.maybe_idle_behavior))
-        self._idle_full_timer.start(max(0, _delay) * 1000 + 50)
+        # v2.1.8：不再登记"吃饱后 N 秒待机"这条触发（用户口径：只看无交互）。
+        # 消化回位后不强制立刻待机，交给"无交互"条件在下一拍自然决定（_stop_idle_hold 见上）。
         self._show_emote("sparkle")
         if self._custom_role:
             # 显示形态**名字**而不是形态键（f0/f1）
@@ -2870,6 +2870,7 @@ class PetWindow(QWidget):
                 play_sound("boing")
             self._hold_timer.start(1500)  # 长按 1.5 秒 → 摸摸头
         elif e.button() == Qt.MouseButton.RightButton:
+            self._touch_activity()  # v2.1.8（L1）：右键（开菜单）=交互，避免对话框背后进入待机
             self._hold_timer.stop()
             if self._petting:
                 self._pet_watchdog_ended = True  # 右键取消同看门狗语义：后续松手不戳
@@ -3707,7 +3708,7 @@ class PetWindow(QWidget):
                       self._transform_timer,  # v2.1.2（L-1）：变身回切定时器此前漏停
                       self._idle_hold_timer,   # v2.1.3：形态待机展示期定时器（可能为 None，stop 前过滤）
                       self._eat_watchdog,      # v2.1.4：吃帧看门狗
-                      self._idle_full_timer,   # v2.1.7：触发 A 精确投递定时器
+                      self._idle_check_timer,  # v2.1.8：待机触发高速检查
                       self._alarm_timer):  # v2.0.5：闹钟轮询
                 if t is not None:
                     t.stop()
