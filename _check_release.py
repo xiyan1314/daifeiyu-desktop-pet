@@ -99,9 +99,10 @@ def check_clean_tree():
     """
     try:
         import subprocess
-        st = subprocess.run(["git", "status", "--porcelain", "--", "桌宠.py"] + sorted(
-            f for f in os.listdir(ROOT) if f.startswith("pet_") and f.endswith(".py")),
-            capture_output=True, text=True, cwd=ROOT, timeout=15)
+        # 覆盖面＝全部需要与发布物逐字节一致的源码/版本文件（不含 assets 通配）
+        # 只有 桌宠.py + pet_*.py 会漏掉 version_info.txt / _verify_green.py 的升号未提交
+        st = subprocess.run(["git", "status", "--porcelain", "--"] + list(SYNC_FILES),
+                            capture_output=True, text=True, cwd=ROOT, timeout=15)
         if st.returncode == 0 and st.stdout.strip():
             dirty = [l[3:].strip() for l in st.stdout.strip().split("\n")][:3]
             return ["运行时代码有未提交改动（发布前先提交并定版）：%s" % ", ".join(dirty)]

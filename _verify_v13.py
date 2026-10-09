@@ -27,7 +27,7 @@ sys.path.insert(0, HERE)
 
 FAILS = []
 CHECKS = []
-EXPECT_CHECKS = 258  # v2.1.5：检查总数硬断言（每次增删检查同步更新；本检查自身不计入）
+EXPECT_CHECKS = 263  # v2.1.6：检查总数硬断言（每次增删检查同步更新；本检查自身不计入）
 
 
 def check(name, cond, extra=""):
@@ -900,6 +900,36 @@ def main_flow():
           "sleeping=%r idle_form=%r" % (pet._sleeping, pet._idle_form_active))
     pet._wake()
     check("wake after idle sleep", pet.form == "f0" and not pet._sleeping, "form=%r" % pet.form)
+    # v2.1.6 回归：待机形态展示期里喂食必须"先结束待机展示再按用户形态推进形态"
+    # 需要第四个形态专门当"待机形态"（f1 是 no_feed 不能当展示期验证对象：喂食会被正当拒绝）
+    pet.role_lib._data["roles"][-1]["forms"].append(
+        {"name": "待机形态", "file": "cb_a.png"})
+    pet.role_lib._save()
+    pet.apply_role("cb1")
+    check("fourth form available", "f3" in pet.form_keys, "forms=%r" % (pet.form_keys,))
+    # 用 f3（无标记）当待机形态：喂食必须逃出展示期并把形态推进到 f2（跳过 no_feed 的 f1）
+    pet.cfg["idle_form"] = "f3"
+    pet._user_form = "f0"
+    pet._set_form("f0", display_only=True)
+    pet._idle_form_active = False
+    pet._start_idle("idle")                  # 待机形态展示期（form=f3）
+    _idle_disp_form = pet.form
+    check("idle display shows idle form", _idle_disp_form == "f3" and pet._idle_form_active is True)
+    pet.feed("小鱼干")
+    check("feed escapes idle display",
+          pet.form == "f2" and pet._idle_form_active is False,
+          "form=%r idle_form=%r（应为 f2：按用户形态 f0 推进并跳过 no_feed 的 f1）"
+          % (pet.form, pet._idle_form_active))
+    _full2 = pet.form
+    pet._eat_done("test")
+    pet._touch_activity()                    # 点一下：不得把吃饱形态拉回用户形态
+    pet._wake()
+    pet._on_voice_finished("d", "")
+    check("full form survives interactions", pet.form == _full2, "form=%r" % pet.form)
+    pet._digest_timer.stop()
+    pet._digest()
+    check("digest back to user form", pet.form == "f0", "form=%r" % pet.form)
+    pet.cfg.pop("idle_form", None)
     # v2.1.5 回归：消化窗口（吃饱形态保留期）内待机不得开始，否则"吃饱形态被待机吞了"
     pet.cfg["idle_form"] = "f1"
     pet._user_form = "f0"

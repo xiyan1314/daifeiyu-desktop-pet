@@ -67,6 +67,7 @@ def _reset(win):
     if getattr(win, "_digest_timer", None) is not None:
         win._digest_timer.stop()
         win._digest_timer = None
+    win._feed_form = ""
     win._behavior_gen = getattr(win, "_behavior_gen", 0) + 1
     win._behavior_seq = None
     win._behavior_is_idle = False
@@ -91,7 +92,10 @@ def _owner(win):
         owners.append("transform")
     if win._idle_form_active and (win._idle_active or win._idle_hold_timer is not None):
         owners.append("idle-display")
-    if getattr(win, "_digest_timer", None) is not None and win._digest_timer.isActive():
+    if (getattr(win, "_digest_timer", None) is not None and win._digest_timer.isActive()
+            and getattr(win, "_feed_form", "") == win.form):
+        # 只有"喂食目标形态正在展示"时，消化定时器才算形态主人
+        # （质量审查 L3：否则任意非用户形态都能拿 digest 当豁免，掩盖"消化窗口内形态被切走"）
         owners.append("digest")
     return owners
 
@@ -304,6 +308,92 @@ def test_idle_not_swallow_full_form(pet):
     pet._digest()
     assert pet.form == pet._user_form and not pet._digest_pending()
     pet.cfg.pop("idle_form", None)
+
+
+def test_feed_from_idle_display_shows_full_form(pet):
+    """v2.1.6 回归（"吃饱形态被待机吞了"的真因）：
+
+    待机形态展示期里喂食时，必须先结束待机展示（恢复用户形态）**再**按用户形态推进形态——
+    否则形态推进从待机形态往后算（f3→f0），根本走不到吃饱形态；且 _idle_form_active 会残留，
+    之后任何点击都把吃饱形态拉回用户形态。
+    """
+    _reset(pet)
+    pet.cfg["idle_form"] = "f3"
+    pet._start_idle("idle")                     # 待机形态展示期
+    assert pet.form == "f3" and pet._idle_form_active is True
+    # 严格的期望值：从**用户形态**出发、跳过 no_feed 后的第一个形态（与生产代码同源判定）
+    _user_idx = pet.form_keys.index(pet._user_form)
+    expect = pet.form_keys[_user_idx]
+    for _step in range(1, len(pet.form_keys) + 1):
+        _cand = pet.form_keys[(_user_idx + _step) % len(pet.form_keys)]
+        if not pet._role_no_feed(_cand):
+            expect = _cand
+            break
+    pet.feed("小鱼干")
+    # 严格相等：不给 or 子句留活路（质量审查 M1：弱断言会让"只回退修复①"的回归溜过去）
+    assert pet.form == expect, \
+        "喂食没有落到用户形态的下一个可喂形态：form=%r expect=%r" % (pet.form, expect)
+    assert pet._idle_form_active is False, "待机展示期旗标没清掉（之后点击会把形态拉走）"
+    _full = pet.form
+    pet._eat_done("test")
+    pet._touch_activity()                       # 用户点一下
+    assert pet.form == _full, "点击把吃饱形态拉回用户形态了（form=%r）" % pet.form
+    pet._wake()
+    assert pet.form == _full, "唤醒把吃饱形态拉走了"
+    pet._on_voice_finished("d", "")
+    assert pet.form == _full, "语音结束把吃饱形态拉走了"
+    pet._digest_timer.stop()
+    pet._digest()
+    assert pet.form == pet._user_form
+    pet.cfg.pop("idle_form", None)
+
+
+def test_busy_window_does_not_strand_idle_form(pet):
+    """v2.1.6 回归（质量审查 S1 场景 J）：待机展示期 + busy 重叠时，
+    _idle_end 早退也不得留下"旗标清了但形态还是待机形态"的悬挂态——
+    否则之后喂食会从待机形态往后推进（绕过吃饱形态），甚至永久卡在待机形态。"""
+    _reset(pet)
+    pet.cfg["idle_form"] = "f3"
+    pet._start_idle("idle")
+    assert pet.form == "f3" and pet._idle_form_active is True
+    pet.busy = True                 # 模拟食物飞行中（_fly_food 的窗口）
+    pet._idle_end()                 # 展示期定时器到点 → 早退分支
+    pet.busy = False
+    assert pet.form == pet._user_form, \
+        "展示期结束后形态仍停在待机形态（旗标已清、没人再回位）：form=%r" % pet.form
+    assert pet._idle_form_active is False
+    _user_idx = pet.form_keys.index(pet._user_form)
+    expect = pet.form_keys[_user_idx]
+    for _step in range(1, len(pet.form_keys) + 1):
+        _cand = pet.form_keys[(_user_idx + _step) % len(pet.form_keys)]
+        if not pet._role_no_feed(_cand):
+            expect = _cand
+            break
+    pet.feed("小鱼干")
+    assert pet.form == expect, "喂食仍从待机形态推进：form=%r expect=%r" % (pet.form, expect)
+    pet.cfg.pop("idle_form", None)
+
+
+def test_feed_during_idle_action_sequence(pet):
+    """v2.1.6（质量审查 M2）：待机**动作序列**播放中喂食，同样必须先收尾再推进。"""
+    _reset(pet)
+    pet.cfg["idle_form"] = "f3"
+    # 待机动作必须是**已登记的行为**（idle_actions 只是引用），所以这里真建一条短行为
+    # （行为名必须英文开头，validate_name 的约定）
+    _b, _err = pet.behaviors.add("short_act", [{"act": "wait", "param": "", "seconds": 5}])
+    assert _b, "行为创建失败：%s" % _err
+    import pet_behaviors as _pb
+    _pb.add_idle_action(pet.cfg, _b["id"], weight=1)   # 模块级函数：写入 cfg 的 idle_actions
+    pet.apply_idle_settings(pet.cfg)
+    assert pet._idle_cfg().get("idle_actions"), "待机动作没登记上"
+    pet._start_idle("idle")
+    assert pet._idle_active is True and pet._behavior_seq is not None
+    pet.feed("小鱼干")
+    assert pet._behavior_seq is None, "待机动作序列没被喂食中断"
+    assert pet._idle_form_active is False and pet._idle_active is False
+    assert pet.form != "f3", "喂食后仍停在待机形态"
+    pet.cfg.pop("idle_form", None)
+    pet.cfg["idle_actions"] = []
 
 
 def test_sleep_survives_voice_finished(pet):

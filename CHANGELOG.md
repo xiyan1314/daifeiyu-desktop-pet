@@ -4,6 +4,12 @@
 > 发布节奏：v1.5.x 每批按「三轮审查 → 全面检查 → 绿色版检测 → Release」流水线交付。
 > v1.3.0 起才有逐版说明；更早的 v1.0 / v1.2.0 见 git 历史（bfb1aa6 / 35e9d1a）。
 
+## v2.1.6（2026-10-01）
+- 真正修好「吃饱形态被待机吞了」：真因是 feed() 在 busy=True 之后才打断待机 → 打断流程的"恢复用户形态"被 busy 拦下（早退），于是①喂食的形态推进从**待机形态**往后算（f3→f0）根本没走到吃饱形态；②_idle_form_active 残留，之后任意点击/唤醒/语音结束都把吃饱形态拉回用户形态
+- 修法：feed()/_fly_food() 把 _touch_activity()（记交互 + 打断待机）提到 busy=True **之前**；_restore_user_form() 早退分支"清旗标 + 若画面仍是 idle_form 就地回位"（只清旗标会留下悬挂态，可能永久卡在待机形态）；喂食跳步与 no_feed 判定统一走 _role_no_feed（单一来源）；消化时长提为常量 DIGEST_MS
+- 回归：pytest 新增 test_feed_from_idle_display_shows_full_form（严格断言）/ test_busy_window_does_not_strand_idle_form / test_feed_during_idle_action_sequence；v13 新增 5 项
+- 护栏：pytest 245 例、_verify_v13 264 项
+
 ## v2.1.5（2026-10-01）
 - 修「吃饱形态被待机吞了」：消化窗口（吃饱保留期）此前不算高优先级展示，吃帧结束释放 busy 后无交互触发（默认 8s）会早于消化定时器（12s）开始待机，把吃饱形态顶掉
 - 修法：_idle_ready() 增加 _digest_pending() 判断（消化窗口内不启动待机，吃饱后的待机交给触发 A）；_digest() 回位时清理残留的待机展示期

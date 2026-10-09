@@ -62,10 +62,11 @@ import pet_alarm
 
 
 APP_NAME = "大肥鱼桌宠"
-VERSION = "2.1.5"
+VERSION = "2.1.6"
 PAD = 1.25  # 窗口相对角色的透明边距（为压扁/回弹预留空间）
 IDLE_FRAME_MS = 140      # 待机帧间隔
 IDLE_FORM_HOLD_SECS = 8  # v2.1.3：只有形态、没有动作可播时的展示期上限（到期回用户形态）
+DIGEST_MS = 12000         # v2.1.6：吃饱形态保留（消化）时长——吃饱形态展示期，期间不待机
 EAT_FRAME_MS = 110       # 进食帧间隔
 SLEEP_AFTER_SECONDS = 60 # 无交互多久入睡
 STATE_DURATION_MS = 2500 # 状态图默认展示时长
@@ -711,6 +712,7 @@ class PetWindow(QWidget):
         self._idle_form_active = False
         self._idle_hold_timer = None         # v2.1.3：形态待机的展示期封顶（防永久吞用户形态）
         self._eat_watchdog = None            # v2.1.4：吃帧看门狗（防 on_finish 被顶掉后 busy 永久卡死）
+        self._feed_form = ""                 # v2.1.6：本轮喂食的目标形态（消化窗口的主人判据）
         self._idle_after_full_at = None      # 触发 A 到点时刻（None=无待触发）
         self._idle_last_action = ""          # 顺序模式记上次播到哪
         self._last_idle_at = 0.0
@@ -1063,11 +1065,18 @@ class PetWindow(QWidget):
         """v2.0.2：当前角色是否配置了变身形态（菜单「变身」入口显示条件）。"""
         return bool(self._flag_forms("transform_form"))
 
+    def _role_no_feed(self, form_key):
+        """指定形态是否标记「不参与喂食」（喂食推进跳过判定用，与 _form_no_feed 同源）。"""
+        try:
+            idx = self.form_keys.index(form_key)
+        except ValueError:
+            return False
+        flags = self._form_role_flags()
+        return bool(flags and 0 <= idx < len(flags) and flags[idx].get("no_feed"))
+
     def _form_no_feed(self):
-        """当前形态是否标记「不参与喂食」。"""
-        _idx = self.form_keys.index(self.form) if self.form in self.form_keys else 0
-        _flags = self._form_role_flags()
-        return bool(_flags and 0 <= _idx < len(_flags) and _flags[_idx].get("no_feed"))
+        """当前形态是否标记「不参与喂食」（单一来源：_role_no_feed）。"""
+        return self._role_no_feed(self.form)
 
     def _sleep_form_key(self):
         """睡觉形态键（无标记返回 None=现状）。"""
@@ -1281,6 +1290,16 @@ class PetWindow(QWidget):
         if not getattr(self, "_idle_form_active", False):
             return
         if self.busy or self._sleeping or getattr(self, "_transform_home", None) is not None:
+            # v2.1.6：更高优先级的展示正在接管（吃帧/睡眠/变身）→ 待机展示期到此结束。
+            # 注意质量审查 S1 的反例：**只清旗标不回位**会留下"旗标没了但形态还是待机形态"的
+            # 状态——之后没人再负责回位（永久卡在待机形态），且喂食会从待机形态往后推进
+            # （f3→f0，绕过吃饱形态）＝用户反馈的原症状。所以这里若画面上仍是 idle_form，
+            # 就地回位到用户形态；吃帧/睡眠/变身接管时 form != idle_form，不会被误碰。
+            self._idle_form_active = False
+            _idle_f = str(self._idle_cfg().get("idle_form") or "")
+            uf = getattr(self, "_user_form", "") or self.form_keys[0]
+            if _idle_f and self.form == _idle_f and uf in self.sprites and self.form != uf:
+                self._set_form(uf, cancel_transform=False, display_only=True)
             return
         self._idle_form_active = False
         uf = getattr(self, "_user_form", "") or self.form_keys[0]
@@ -2428,6 +2447,10 @@ class PetWindow(QWidget):
         if self.busy:
             self.show_bubble(random.choice(["嘴里还有呢，等一下~", "还没咽下去啦！"]))
             return
+        # v2.1.6：飞行期间也是"忙"，必须先记交互并结束待机展示期，再置 busy——
+        # 否则展示期定时器在飞行 450ms 内到点时会走 _restore_user_form 的早退分支，
+        # 留下"旗标/形态"不一致（与 feed 同一修法；质量审查 S1 的场景 J）。
+        self._touch_activity()
         self.busy = True
         # 不在此播音：食物落嘴时 feed() 会播喂食音，避免「松手音」语义错位
         start = QPoint(self.food_tray.x() + self.food_tray.width() // 2, self.food_tray.y() + 16)
@@ -2615,6 +2638,7 @@ class PetWindow(QWidget):
         # v2.1.5：消化回位同时清掉"待机展示期"残留（否则 idle_form 旗标挂着，下次 _idle_end 还会再切一次）
         self._idle_form_active = False
         self._stop_idle_hold()
+        self._feed_form = ""  # v2.1.6：本轮喂食结束，喂食目标形态复位（消化窗口的主人判据）
         if self.form != _uf and not _busy_display:
             # _set_form 内已在待机态回位；状态图展示中不掐断（state 结束时自然回待机）
             self._set_form(_uf, display_only=True)
@@ -2644,6 +2668,11 @@ class PetWindow(QWidget):
             self.show_bubble(random.choice(["这个形态不吃东西啦~", "本形态拒绝投喂！",
                                             "现在只想安静地当一条鱼~"]))
             return
+        # v2.1.6 修复（"吃饱形态被待机吞了"的真因）：**必须在 busy=True 之前**打断待机，
+        # 否则 _idle_interrupt → _restore_user_form() 被 busy 拦下（早退），于是：
+        #   ① 形态推进会从"待机形态"往后算（f3→f0），**根本没有走到吃饱形态**；
+        #   ② _idle_form_active 残留为 True，之后任何点击都会把形态再拉回用户形态。
+        self._touch_activity()  # 记交互 + 结束待机展示期（恢复用户形态、清旗标）
         self.busy = True
         if self.cfg.get("sound", True):
             play_sound("feed")
@@ -2659,16 +2688,17 @@ class PetWindow(QWidget):
         cur_idx = self.form_keys.index(self.form) if self.form in self.form_keys else 0
         # v2.1.4 修复：推进时**跳过标记「不参与喂食」的形态**——此前只拦"当前形态不能喂"，
         # 却可能把形态推进到 no_feed 形态上（表现为"吃着吃着变成睡觉形态"，且此后喂不了）。
-        _flags = self._form_role_flags()
+        # 多形态角色：每次喂食**顺次前进**（正式的"形态循环"功能，f0→f1→f2→f0…），
+        # 推进时跳过标记「不参与喂食」的形态（判定单一来源：_role_no_feed）。
+        # 注意：这是循环语义，2 形态角色会 normal↔full 交替。
         next_idx = (cur_idx + 1) % len(self.form_keys)
-        if _flags:
-            for _step in range(1, len(self.form_keys) + 1):
-                _cand = (cur_idx + _step) % len(self.form_keys)
-                if not (_cand < len(_flags) and _flags[_cand].get("no_feed")):
-                    next_idx = _cand
-                    break
-        self._touch_activity()  # v2.1 修复：先记交互/打断待机，再切喂食形态
-        # （此前先切形态再打断，_idle_interrupt→_restore_user_form 会把刚切的形态拉回去）
+        for _step in range(1, len(self.form_keys) + 1):
+            _cand = (cur_idx + _step) % len(self.form_keys)
+            if not self._role_no_feed(self.form_keys[_cand]):
+                next_idx = _cand
+                break
+        # v2.1.6：打断待机已提前到 busy 设置之前（见函数开头），这里直接切喂食形态
+        self._feed_form = self.form_keys[next_idx]  # v2.1.6：记录本轮喂食目标形态（测试判据/自检用）
         self._set_form(self.form_keys[next_idx], refresh=False, display_only=True)
         if self._digest_timer is not None:
             self._digest_timer.stop()
@@ -2679,7 +2709,7 @@ class PetWindow(QWidget):
         self._digest_timer = QTimer(self)
         self._digest_timer.setSingleShot(True)
         self._digest_timer.timeout.connect(self._gslot('_digest', self._digest, recover=True))
-        self._digest_timer.start(12000)
+        self._digest_timer.start(DIGEST_MS)
         # v2.1.4（S2 修复）：判据 = **目标形态有没有 eat 帧集**（吃帧素材挂在形态上，
         # 有就播；没有才用大笑表达）。此前先按"源形态==用户形态"判定，no_feed 跳步时会错位；
         # 我先改成"目标是首形态"，又把默认角色（常态→吃饱，吃帧在吃饱形态上）的吃帧弄丢了。
