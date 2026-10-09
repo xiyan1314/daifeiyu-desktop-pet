@@ -62,7 +62,7 @@ import pet_alarm
 
 
 APP_NAME = "大肥鱼桌宠"
-VERSION = "2.1.0"
+VERSION = "2.1.1"
 PAD = 1.25  # 窗口相对角色的透明边距（为压扁/回弹预留空间）
 IDLE_FRAME_MS = 140      # 待机帧间隔
 EAT_FRAME_MS = 110       # 进食帧间隔
@@ -480,6 +480,7 @@ class Signals(QObject):
     voice_dialogue_done = Signal()     # 整段对白读完
     lines_changed = Signal()           # 台词库变化（池子/UI 刷新）
     voice_refs_changed = Signal(int)   # 失效引用数量（启动扫描/删除后）
+    voice_backend_msg = Signal(str)    # v2.1.1：本地后端启动/就绪结果（worker 线程 → 气泡）
     weather = Signal(str)
     weather_done = Signal()
     ai_done = Signal()
@@ -841,6 +842,9 @@ class PetWindow(QWidget):
         signals.voice_dialogue_done.connect(self._on_voice_dialogue_done)
         signals.lines_changed.connect(self._on_lines_changed)
         signals.voice_refs_changed.connect(lambda n: self._scan_invalid_refs())
+        signals.voice_backend_msg.connect(self.show_bubble)
+        # v2.1.1：本地后端**默认不自动启动**（和以前一样，用户自己开）；勾了开关才拉起
+        QTimer.singleShot(4000, self, lambda: self._auto_start_voice_backend())
         # v2.1：启动扫描一次失效引用（有失效就气泡提示，绝不静默）
         QTimer.singleShot(4000, self, lambda: self._scan_invalid_refs())
         signals.ai_emote.connect(self.chat.on_ai_emote)  # P3-3：AI 回复带出的表情
@@ -2997,6 +3001,42 @@ class PetWindow(QWidget):
         else:
             self.preview_audio(path)
 
+    # ---------- v2.1.1：本地配音后端（自动/手动启动） ----------
+    def _auto_start_voice_backend(self):
+        """启动时按开关自动拉起本地后端：默认关（= 和以前一样，用户自己启动）。
+
+        自动失败也会明确告知，用户随时可以用「🎙 启动配音后端」手动来一次。"""
+        try:
+            started, msg = self.voice.start_backend_if_configured()
+        except Exception as e:
+            _log_error("auto start voice backend failed: %r" % (e,))
+            return
+        if not started:
+            return
+        self.show_bubble("配音后端：" + msg)
+        threading.Thread(target=self._wait_voice_backend, daemon=True).start()
+
+    def _wait_voice_backend(self):
+        """后台等后端就绪，结果经信号回主线程（不阻塞 UI）。"""
+        try:
+            ok, msg = self.voice.wait_backend_ready()
+        except Exception as e:
+            ok, msg = False, "等待后端就绪出错：%s" % e
+        signals.voice_backend_msg.emit(("✅ " if ok else "⚠ ") + msg)
+
+    def start_voice_backend(self):
+        """手动启动本地后端（菜单/对话框共用）。返回 (ok, msg)。"""
+        ok, msg = self.voice.start_backend()
+        if ok:
+            threading.Thread(target=self._wait_voice_backend, daemon=True).start()
+        return ok, msg
+
+    def _menu_start_voice_backend(self):
+        """菜单项：手动启动配音后端。"""
+        ok, msg = self.start_voice_backend()
+        if not ok:
+            self.show_bubble("配音后端没起来：%s" % msg)
+
     def _stop_voice_clip(self):
         """v2.1：停止当前播放（配音 stop() 用）。winsound 与 QMediaPlayer 两条链路都停。"""
         try:
@@ -3340,6 +3380,13 @@ class PetWindow(QWidget):
         # v2.1：停配音（清空队列 + 停播放），避免退出时后台线程还在合成
         try:
             self.voice.stop()
+        except Exception:
+            pass  # 有意忽略：退出清理尽力而为
+        # v2.1.1：勾了「退出时结束后端」才关——且只关桌宠自己拉起的那个进程
+        try:
+            _need, _msg = self.voice.stop_backend_if_ours()
+            if _need and _msg:
+                _log_error("voice backend stop on exit: %s" % _msg)
         except Exception:
             pass  # 有意忽略：退出清理尽力而为
         # v2.0.4：等在途 API 测试线程收敛（运行中析构 QThread 是 Qt6 致命错误）

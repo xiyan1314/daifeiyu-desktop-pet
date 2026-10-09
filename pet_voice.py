@@ -587,6 +587,163 @@ def get_backend(backend_id):
     return BACKENDS.get(str(backend_id or "")) or BACKENDS[DEFAULT_BACKEND]
 
 
+# ---------------- v2.1.1：本地后端启动器 ----------------
+class VoiceLauncher:
+    """本地配音后端（GPT-SoVITS / F5-TTS / CosyVoice）进程启动器。
+
+    只负责「把用户填的命令跑起来」和「结束我们自己拉起的那个进程」，绝不碰用户手动启动的服务；
+    状态记录在 data/voice_backend.json，日志重定向到 data/voice_backend.log。
+    """
+
+    def __init__(self, data_dir, log=None):
+        self._state_path = os.path.join(data_dir, "voice_backend.json")
+        self._log_path = os.path.join(data_dir, "voice_backend.log")
+        self._log = log or pet_log.log_error
+        self._state = self._load_state()
+
+    def _load_state(self):
+        try:
+            with open(self._state_path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            return data if isinstance(data, dict) else {}
+        except Exception:
+            return {}  # 有意忽略：首次运行/损坏 → 视为没启动过
+
+    def _save_state(self):
+        try:
+            tmp = self._state_path + ".tmp"
+            with open(tmp, "w", encoding="utf-8") as f:
+                json.dump(self._state, f, ensure_ascii=False, indent=2)
+            os.replace(tmp, self._state_path)
+        except Exception as e:
+            self._log("voice backend state save failed: %r" % (e,))  # 有意忽略：丢状态不影响运行
+
+    def _clear_state(self):
+        self._state = {}
+        try:
+            if os.path.isfile(self._state_path):
+                os.remove(self._state_path)
+        except Exception:
+            pass  # 有意忽略：清状态尽力而为
+
+    def pid(self):
+        try:
+            return int(self._state.get("pid") or 0)
+        except (TypeError, ValueError):
+            return 0
+
+    def is_running(self):
+        """我们启动的后端进程是否还活着。"""
+        pid = self.pid()
+        if not pid:
+            return False
+        try:
+            import psutil
+            return bool(psutil.pid_exists(pid))
+        except Exception:
+            try:
+                os.kill(pid, 0)
+                return True
+            except Exception:
+                return False
+
+    def status(self):
+        return {"running": self.is_running(), "pid": self.pid(),
+                "cmd": str(self._state.get("cmd") or ""),
+                "backend": str(self._state.get("backend") or ""),
+                "started_at": str(self._state.get("started_at") or ""),
+                "log": self._log_path}
+
+    def start(self, cmd, cwd="", backend_id=""):
+        """按用户填的命令启动后端。返回 (ok, msg)。"""
+        cmd = str(cmd or "").strip()
+        if not cmd:
+            return False, "还没填启动命令（语音设置 → 本地后端服务 → 启动命令）"
+        if self.is_running():
+            return True, "后端已经在跑了（PID %d）" % self.pid()
+        try:
+            _dir = os.path.dirname(self._log_path)
+            if _dir:
+                os.makedirs(_dir, exist_ok=True)
+            f = open(self._log_path, "a", encoding="utf-8", errors="replace")
+            f.write("\n===== %s 启动：%s（%s）=====\n"
+                    % (time.strftime("%Y-%m-%d %H:%M:%S"), cmd, backend_id or "-"))
+            f.flush()
+            kwargs = {"cwd": (str(cwd).strip() or None), "stdout": f,
+                      "stderr": subprocess.STDOUT, "stdin": subprocess.DEVNULL,
+                      "shell": True}
+            if os.name == "nt":
+                kwargs["creationflags"] = 0x00000200  # CREATE_NEW_PROCESS_GROUP
+            proc = subprocess.Popen(cmd, **kwargs)
+        except Exception as e:
+            return False, "启动失败：%s" % e
+        self._state = {"pid": int(proc.pid), "cmd": cmd, "backend": str(backend_id or ""),
+                       "started_at": time.strftime("%Y-%m-%d %H:%M:%S")}
+        self._save_state()
+        return True, "已启动（PID %d），正在等它就绪…" % proc.pid
+
+    def stop(self):
+        """结束我们启动的后端（含子进程树）；没启动过视为已完成。"""
+        pid = self.pid()
+        if not pid:
+            return True, "没有需要结束的后端（桌宠没启动过后端）"
+        try:
+            import psutil
+            try:
+                proc = psutil.Process(pid)
+            except Exception:
+                self._clear_state()
+                return True, "后端进程已经不在了"
+            try:
+                kids = proc.children(recursive=True)
+            except Exception:
+                kids = []  # 有意忽略：取不到子进程就直接结束父进程
+            for p in kids + [proc]:
+                try:
+                    p.terminate()
+                except Exception:
+                    pass  # 有意忽略：单个失败继续处理其它
+            _gone, alive = psutil.wait_procs(kids + [proc], timeout=5)
+            for p in alive:
+                try:
+                    p.kill()
+                except Exception:
+                    pass  # 有意忽略：强杀失败只能交给用户手动关
+            self._clear_state()
+            return True, "已结束后端（PID %d）" % pid
+        except Exception as e:
+            try:
+                subprocess.run(["taskkill", "/PID", str(pid), "/T", "/F"],
+                               capture_output=True, timeout=15)
+                self._clear_state()
+                return True, "已结束后端（PID %d）" % pid
+            except Exception as e2:
+                return False, "结束后端失败：%s / %s" % (e, e2)
+
+    def wait_ready(self, base_url, timeout=30):
+        """轮询探测后端是否就绪（能连上就算就绪）。返回 (ok, msg)。"""
+        base = str(base_url or "").strip().rstrip("/")
+        if not base:
+            return False, "没填服务地址，无法判断后端是否就绪"
+        t0 = time.time()
+        last = ""
+        while time.time() - t0 < max(3, int(timeout or 30)):
+            if not self.is_running():
+                return False, "后端进程已退出（看日志：%s）" % self._log_path
+            try:
+                r = requests.get(base, timeout=2)
+                return True, "后端已就绪（HTTP %d）：%s" % (r.status_code, base)
+            except requests.exceptions.ConnectionError:
+                last = "还连不上：%s" % base
+            except requests.exceptions.Timeout:
+                last = "探测超时：%s" % base
+            except Exception as e:
+                last = "探测失败：%s" % e
+            time.sleep(1.0)
+        return False, "%s（等了 %d 秒；启动命令或地址可能不对，看日志 %s）" % (
+            last or "后端没起来", max(3, int(timeout or 30)), self._log_path)
+
+
 # ---------------- v2.1：语言系统服务 ----------------
 class VoiceService:
     """语言系统：事件片段 + 角色声音绑定 + 克隆合成队列 + 播放控制。主线程调用。
@@ -616,6 +773,7 @@ class VoiceService:
         self._gen = 0
         self._speaking = False
         self._cbs = {"started": [], "finished": [], "dialogue": [], "error": []}
+        self.launcher = VoiceLauncher(data_dir, self._log)  # v2.1.1：本地后端启动器
         self._load()
 
     # ---------------- 持久化（事件片段） ----------------
@@ -733,6 +891,75 @@ class VoiceService:
                 self._play_clip(p)
             except Exception as e:
                 self._log("voice clip play failed: %r" % (e,))
+
+    # ---------------- v2.1.1：本地后端启动 / 结束 ----------------
+    def local_service_cfg(self, backend_id=None):
+        """某本地后端的启动配置（cmd/cwd/auto_start/kill_on_exit/wait_seconds）。"""
+        bid = backend_id or self.backend_id()
+        cfg = self._cfg() or {}
+        services = (cfg.get("voice") or {}).get("local_services")
+        if not isinstance(services, dict):
+            return {}
+        one = services.get(bid)
+        return dict(one) if isinstance(one, dict) else {}
+
+    def is_local_backend(self, backend_id=None):
+        return bool(get_backend(backend_id or self.backend_id()).needs_service)
+
+    def launch_status(self):
+        """启动器状态（含我们启动的进程是否还活着）。"""
+        return self.launcher.status()
+
+    def start_backend(self, backend_id=None):
+        """手动/自动启动本地后端（只拉起进程，不等就绪）。返回 (ok, msg)。"""
+        bid = backend_id or self.backend_id()
+        backend = get_backend(bid)
+        if not backend.needs_service:
+            return False, "「%s」是云端/离线后端，不需要启动本地服务" % backend.label
+        one = self.local_service_cfg(bid)
+        return self.launcher.start(one.get("cmd") or "", one.get("cwd") or "", bid)
+
+    def start_backend_if_configured(self):
+        """启动时自动拉起：仅当语音开启 + 当前后端是本地服务 + 勾了"自动启动"。
+
+        返回 (started, msg)：started=False 且 msg 为空 = 配置没让自动启动（静默跳过）。
+        """
+        cfg = self._cfg() or {}
+        vcfg = cfg.get("voice") or {}
+        if not vcfg.get("enabled"):
+            return False, ""
+        bid = self.backend_id()
+        if not get_backend(bid).needs_service:
+            return False, ""
+        one = self.local_service_cfg(bid)
+        if not one.get("auto_start"):
+            return False, ""
+        if self.launcher.is_running():
+            return False, ""  # 已经在跑：不重复启动、也不打扰用户
+        ok, msg = self.start_backend(bid)
+        return (True, msg) if ok else (True, msg or "自动启动失败")
+
+    def wait_backend_ready(self, backend_id=None, timeout=None):
+        """等本地后端就绪（阻塞；调用方应放到工作线程）。返回 (ok, msg)。"""
+        bid = backend_id or self.backend_id()
+        one = self.local_service_cfg(bid)
+        _t = timeout if timeout is not None else int(one.get("wait_seconds") or 30)
+        base = self._params_for(bid).get("base_url") or ""
+        return self.launcher.wait_ready(base, _t)
+
+    def stop_backend(self):
+        return self.launcher.stop()
+
+    def stop_backend_if_ours(self):
+        """退出时清理：只结束我们启动的、且该后端勾了"退出时结束"。"""
+        bid = str(self.launcher.status().get("backend") or "") or self.backend_id()
+        one = self.local_service_cfg(bid)
+        if not one.get("kill_on_exit"):
+            return False, ""
+        if not self.launcher.is_running():
+            return False, ""
+        ok, msg = self.launcher.stop()
+        return True, msg if ok else ("结束失败：" + msg)
 
     # ---------------- 角色 ↔ 声音绑定 ----------------
     def bindings(self):
@@ -1217,6 +1444,24 @@ def normalize_voice(v):
         ks, vs = str(k or "")[:64], str(val or "")[:64]
         if vs:
             binds[ks] = vs
+    # v2.1.1：本地后端启动配置（每个本地服务一份；auto_start/kill_on_exit 默认开启自动、默认退出清理）
+    raw_ls = v.get("local_services") if isinstance(v.get("local_services"), dict) else {}
+    services = {}
+    for pbid, backend in BACKENDS.items():
+        if not backend.needs_service:
+            continue
+        src = raw_ls.get(pbid) if isinstance(raw_ls.get(pbid), dict) else {}
+        try:
+            wait_s = int(src.get("wait_seconds") or 30)
+        except (TypeError, ValueError):
+            wait_s = 30
+        services[pbid] = {
+            "cmd": str(src.get("cmd") or "")[:500],
+            "cwd": str(src.get("cwd") or "")[:500],
+            "auto_start": _to_bool(src.get("auto_start")),
+            "kill_on_exit": _to_bool(src.get("kill_on_exit", True)),
+            "wait_seconds": max(5, min(120, wait_s)),
+        }
     try:
         cache_max = int(v.get("cache_max") or 400)
     except (TypeError, ValueError):
@@ -1233,6 +1478,7 @@ def normalize_voice(v):
         "speak_daily": _to_bool(v.get("speak_daily")),
         "talk_action": str(v.get("talk_action") or "").strip()[:24],
         "cache_max": max(50, min(5000, cache_max)),
+        "local_services": services,
     }
 
 
@@ -1241,6 +1487,7 @@ DEFAULT_VOICE = normalize_voice(None)
 
 if __name__ == "__main__":
     # 命令行冒烟：无 GUI 自检（python pet_voice.py）
+    import sys
     import tempfile
     _cfg = {"voice": dict(DEFAULT_VOICE)}
     _svc = VoiceService(tempfile.mkdtemp(prefix="voice_"), lambda: _cfg, lambda p: None)
@@ -1252,6 +1499,17 @@ if __name__ == "__main__":
     assert _n["backend"] == DEFAULT_BACKEND and _n["cache_max"] == 5000
     assert _n["bindings"] == {"r": "v"}
     assert explain_backend_error(401).startswith("后端鉴权失败")
+    # v2.1.1：本地后端启动器（命令为空要明确报错；没启动过时 stop 视为已完成）
+    _ln = VoiceLauncher(tempfile.mkdtemp(prefix="launch_"))
+    assert _ln.start("", "", "gpt_sovits")[0] is False
+    assert _ln.stop() == (True, "没有需要结束的后端（桌宠没启动过后端）")
+    _ok_l, _msg_l = _ln.start('"%s" -c "import time; time.sleep(4)"' % sys.executable,
+                              "", "gpt_sovits")
+    assert _ok_l and _ln.is_running(), _msg_l
+    assert _ln.status()["pid"] > 0
+    assert _ln.stop()[0] is True and not _ln.is_running()
+    assert _n["local_services"]["gpt_sovits"]["kill_on_exit"] is True
+    assert _n["local_services"]["gpt_sovits"]["wait_seconds"] == 30
     # 后端缺服务/缺 Key 时必须明确报错（不假装实现）
     _b = get_backend("gpt_sovits")
     _data, _err = _b.synthesize("", "你好", {"base_url": ""})

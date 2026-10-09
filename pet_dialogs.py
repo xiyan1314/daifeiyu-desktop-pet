@@ -4517,6 +4517,20 @@ class VoiceDialog(QDialog):
             self._all_keys[info["id"]] = str(
                 (self._vcfg.get("backend_keys") or {}).get(info["id"]) or "")
         self._key_edited = set()  # 用户手动改过 Key 的后端（没改过就不动已存密钥）
+        # v2.1.1：本地后端启动配置（每个本地服务一份，切后端不串台）
+        self._local_all = {}
+        _raw_ls = self._vcfg.get("local_services") or {}
+        for info in self._infos:
+            if not info.get("needs_service"):
+                continue
+            src = _raw_ls.get(info["id"]) if isinstance(_raw_ls.get(info["id"]), dict) else {}
+            self._local_all[info["id"]] = {
+                "cmd": str(src.get("cmd") or ""),
+                "cwd": str(src.get("cwd") or ""),
+                "auto_start": bool(src.get("auto_start")),
+                "kill_on_exit": bool(src.get("kill_on_exit", True)),
+                "wait_seconds": int(src.get("wait_seconds") or 30),
+            }
         for key, label in (("base_url", "服务地址"), ("api", "接口版本（v1/v2）"),
                            ("model", "模型"), ("voice", "声音名"),
                            ("prompt_text", "参考音文本（可选，填了更像）"),
@@ -4563,6 +4577,50 @@ class VoiceDialog(QDialog):
         self._tts_model.setPlaceholderText("留空用 tts-1")
         f_tts.addRow("模型", self._tts_model)
         lay.addWidget(g_tts)
+
+        # v2.1.1：本地后端服务（启动命令/工作目录/自动启动开关/手动按钮/就绪等待）
+        self._g_local = QGroupBox("本地后端服务（GPT-SoVITS / F5-TTS / CosyVoice 要自己启动）")
+        f_local = QFormLayout(self._g_local)
+        _row_cmd = QHBoxLayout()
+        self._lcmd = QLineEdit()
+        self._lcmd.setPlaceholderText("启动命令，例如 D:\\GPT-SoVITS\\go-api.bat 或 python api.py")
+        _b_cmd = QPushButton("选脚本…")
+        _b_cmd.clicked.connect(self._pick_launch_cmd)
+        _row_cmd.addWidget(self._lcmd, 1)
+        _row_cmd.addWidget(_b_cmd)
+        f_local.addRow("启动命令", _row_cmd)
+        _row_cwd = QHBoxLayout()
+        self._lcwd = QLineEdit()
+        self._lcwd.setPlaceholderText("工作目录（可选；有些脚本要求在自己的目录里跑）")
+        _b_cwd = QPushButton("选目录…")
+        _b_cwd.clicked.connect(self._pick_launch_cwd)
+        _row_cwd.addWidget(self._lcwd, 1)
+        _row_cwd.addWidget(_b_cwd)
+        f_local.addRow("工作目录", _row_cwd)
+        self._lwait = QSpinBox()
+        self._lwait.setRange(5, 120)
+        self._lwait.setSuffix(" 秒")
+        self._lwait.setValue(30)
+        f_local.addRow("等就绪最长", self._lwait)
+        # 默认和以前一样：不自动启动，用户自己开（要用就勾上）
+        self._lauto = QCheckBox("启动桌宠时自动拉起后端（默认关：和以前一样自己启动）")
+        f_local.addRow("", self._lauto)
+        self._lkill = QCheckBox("桌宠退出时结束它自己拉起的后端（手动开的不动）")
+        self._lkill.setChecked(True)
+        f_local.addRow("", self._lkill)
+        _row_btn = QHBoxLayout()
+        self._lstart = QPushButton("立即启动后端")
+        self._lstart.clicked.connect(self._start_backend_now)
+        self._lstop = QPushButton("结束后端（只关桌宠拉起的）")
+        self._lstop.clicked.connect(self._stop_backend_now)
+        _row_btn.addWidget(self._lstart)
+        _row_btn.addWidget(self._lstop)
+        _row_btn.addStretch(1)
+        f_local.addRow("", _row_btn)
+        self._lstatus = QLabel("")
+        self._lstatus.setWordWrap(True)
+        f_local.addRow("状态", self._lstatus)
+        lay.addWidget(self._g_local)
         self._test_label = QLabel("")
         self._test_label.setWordWrap(True)
         lay.addWidget(self._test_label)
@@ -4589,6 +4647,99 @@ class VoiceDialog(QDialog):
             if info["id"] == bid:
                 return info
         return self._infos[0]
+
+    # ---------- v2.1.1：本地后端服务 ----------
+    def _local_cfg(self, bid=None):
+        bid = bid or self._backend.currentData()
+        one = (self._local_all or {}).get(bid) or {}
+        return dict(one)
+
+    def _stash_local_ui(self, bid=None):
+        """把本地后端服务控件值存回对应后端（切后端/保存前调用，防串台）。"""
+        bid = bid or getattr(self, "_shown_backend", None)
+        if not bid:
+            return
+        self._local_all[bid] = {
+            "cmd": self._lcmd.text().strip(),
+            "cwd": self._lcwd.text().strip(),
+            "auto_start": self._lauto.isChecked(),
+            "kill_on_exit": self._lkill.isChecked(),
+            "wait_seconds": int(self._lwait.value()),
+        }
+
+    def _load_local_ui(self):
+        bid = self._backend.currentData()
+        one = self._local_cfg(bid)
+        self._lcmd.setText(str(one.get("cmd") or ""))
+        self._lcwd.setText(str(one.get("cwd") or ""))
+        self._lauto.setChecked(bool(one.get("auto_start")))
+        self._lkill.setChecked(bool(one.get("kill_on_exit", True)))
+        try:
+            self._lwait.setValue(int(one.get("wait_seconds") or 30))
+        except (TypeError, ValueError):
+            self._lwait.setValue(30)
+        self._refresh_launch_status()
+
+    def _refresh_launch_status(self):
+        st = {}
+        try:
+            if self._svc is not None:
+                st = self._svc.launch_status()
+        except Exception:
+            st = {}
+        if st.get("running"):
+            self._lstatus.setText("运行中：PID %s（%s 启动，后端 %s）\n日志：%s"
+                                  % (st.get("pid"), st.get("started_at"),
+                                     st.get("backend") or "-", st.get("log")))
+        else:
+            self._lstatus.setText("未运行（桌宠没有拉起的后端；你自己启动的服务不受影响）")
+
+    def _pick_launch_cmd(self):
+        path, _f = QFileDialog.getOpenFileName(
+            self, "选择后端启动脚本", "", "启动脚本 (*.bat *.cmd *.exe *.ps1);;所有文件 (*)")
+        if path:
+            self._lcmd.setText(path)
+
+    def _pick_launch_cwd(self):
+        path = QFileDialog.getExistingDirectory(self, "选择工作目录")
+        if path:
+            self._lcwd.setText(path)
+
+    def _start_backend_now(self):
+        if self._svc is None:
+            self._lstatus.setText("❌ 语音服务不可用")
+            return
+        self._stash_local_ui()
+        self._save(silent=True)  # 先落配置，启动用最新命令
+        ok, msg = self._svc.start_backend()
+        self._lstatus.setText(("✅ " if ok else "❌ ") + msg)
+        self._refresh_launch_status()
+        if ok and self._svc.is_local_backend():
+            self._lstatus.setText(self._lstatus.text() + "（后台等就绪，稍后气泡告知）")
+            self._wait_ready_async()
+
+    def _stop_backend_now(self):
+        if self._svc is None:
+            return
+        ok, msg = self._svc.stop_backend()
+        self._lstatus.setText(("✅ " if ok else "❌ ") + msg)
+        self._refresh_launch_status()
+
+    def _wait_ready_async(self):
+        """后台线程等后端就绪，结果经信号回主线程（不阻塞设置界面）。"""
+        import threading as _th
+
+        def _work():
+            try:
+                ok, msg = self._svc.wait_backend_ready()
+            except Exception as e:
+                ok, msg = False, "等待后端就绪出错：%s" % e
+            try:
+                _call(self._pet, "show_bubble", ("✅ " if ok else "⚠ ") + msg)
+            except Exception:
+                pass  # 有意忽略：气泡失败不影响结果
+
+        _th.Thread(target=_work, daemon=True).start()
 
     def _stash_backend_ui(self, bid=None):
         """把控件的参数/密钥暂存回**指定后端**的槽位。
@@ -4625,6 +4776,8 @@ class VoiceDialog(QDialog):
         self._key.setVisible(need_key)
         self._key_label.setVisible(need_key)
         self._key.setText(str(self._all_keys.get(bid) or ""))
+        if hasattr(self, "_g_local"):
+            self._g_local.setVisible(bool(info.get("needs_service")))  # 只有本地后端需要启动
         _hint = getattr(self, "_hint", None)
         if _hint is not None:
             _hint.setText(info.get("help_text") or "")
@@ -4632,11 +4785,18 @@ class VoiceDialog(QDialog):
     def _sync_backend_ui(self):
         """切后端：先把"控件里当前显示的旧后端"的值存回旧槽位，再按新后端重填。
 
+        本地后端服务控件（v2.1.1）同样按后端隔离。
+
         S1 修复：分别在两处踩过坑——(1) 此前完全不重载参数/密钥；(2) 用 currentData()
         暂存，但信号触发时索引已变 → 旧值写进新后端。故用 _shown_backend 记录。"""
-        self._stash_backend_ui(getattr(self, "_shown_backend", None))
+        _old = getattr(self, "_shown_backend", None)
+        self._stash_backend_ui(_old)
+        if _old and getattr(self, "_local_all", None):
+            self._stash_local_ui(_old)
         self._shown_backend = self._backend.currentData()
         self._load_backend_ui()
+        if getattr(self, "_local_all", None):
+            self._load_local_ui()
 
     def _test_backend(self):
         if self._svc is None:
@@ -4888,6 +5048,9 @@ class VoiceDialog(QDialog):
         S1 修复：此前只提交当前后端 → 保存一次就清空其它后端的密钥/参数。"""
         self._stash_backend_ui(getattr(self, "_shown_backend", None)
                                or self._backend.currentData())
+        if getattr(self, "_local_all", None):
+            self._stash_local_ui(getattr(self, "_shown_backend", None)
+                                 or self._backend.currentData())
         bid = self._backend.currentData()
         talk = self._talk.currentData() or ""
         if not talk:
@@ -4898,6 +5061,7 @@ class VoiceDialog(QDialog):
             "backend": bid,
             "backend_params": {k: dict(v) for k, v in self._all_params.items()},
             "backend_keys": dict(self._all_keys),
+            "local_services": {k: dict(v) for k, v in (self._local_all or {}).items()},
             "speak_daily": self._daily.isChecked(),
             "talk_action": talk,
             # 旧字段（AI 回复朗读）：v2.1 起界面提供入口，不再只做透传

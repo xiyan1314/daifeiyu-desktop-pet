@@ -151,6 +151,9 @@ class MenuBuilder:
         # v2.0.2：行为设置（待机行为/行为编辑/变身时长）
         beh_act = set_menu.addAction("🧩 行为设置…")
         beh_act.triggered.connect(lambda checked=False: pet._open_behavior_dialog())
+        # v2.1.1：手动启动本地配音后端（自动启动默认关，随时可手动来一次）
+        vstart_act = set_menu.addAction("🎙 启动配音后端")
+        vstart_act.triggered.connect(lambda checked=False: pet._menu_start_voice_backend())
         # v2.1：待机设置（两触发/待机形态/多动作/播放模式）
         idle_act = set_menu.addAction("😴 待机设置…")
         idle_act.triggered.connect(lambda checked=False: pet._open_idle_dialog())

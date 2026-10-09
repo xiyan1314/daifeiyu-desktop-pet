@@ -25,7 +25,7 @@ sys.path.insert(0, HERE)
 
 FAILS = []
 CHECKS = []
-EXPECT_CHECKS = 233  # v2.1：检查总数硬断言（每次增删检查同步更新；本检查自身不计入）
+EXPECT_CHECKS = 237  # v2.1.1：检查总数硬断言（每次增删检查同步更新；本检查自身不计入）
 
 
 def check(name, cond, extra=""):
@@ -1066,6 +1066,8 @@ def main_flow():
     _voice_backup = dict(pet.cfg.get("voice") or {})
     try:
         _vd = pet_dialogs.VoiceDialog(pet)
+        check("voice dialog local group", hasattr(_vd, "_g_local") and hasattr(_vd, "_lcmd")
+              and hasattr(_vd, "_lauto"))
         # 走真实交互路径：先在控件里改 GPT-SoVITS 地址 → 切到 MiniMax 填 Key → 切回来保存
         _vd._backend.setCurrentIndex(_vd._backend.findData("gpt_sovits"))
         _vd._param_widgets["base_url"][1].setText("http://192.168.1.9:9880")
@@ -1102,6 +1104,17 @@ def main_flow():
     finally:
         pet.cfg.update(_cfg_backup2)
         main.save_config(pet.cfg)
+    # v2.1.1 回归：本地后端启动器（默认不自动启动 = 和以前一样；手动可启动；云端后端拒绝启动）
+    _lsvc = pet.cfg.get("voice", {}).get("local_services") or {}
+    check("local service default off",
+          _lsvc.get("gpt_sovits", {}).get("auto_start") is False
+          and _lsvc.get("gpt_sovits", {}).get("kill_on_exit") is True
+          and set(_lsvc) == {"gpt_sovits", "f5_tts", "cosyvoice"})
+    check("launcher empty cmd rejected",
+          pet.voice.start_backend("gpt_sovits")[0] is False
+          and pet.voice.start_backend("minimax")[0] is False)  # 云端：不需要启动
+    check("launcher status shape", isinstance(pet.voice.launch_status(), dict)
+          and "running" in pet.voice.launch_status())
     # S3 回归：旧 lines_extra 归一化不得再做 20 条/60 字截断（迁移前就丢数据）
     _cfg3 = {"lines_extra": {"sajiao": ["条%d" % _i for _i in range(25)] + ["长" * 80]}}
     main.pet_config.normalize_cfg(_cfg3, main.DEFAULT_CONFIG, frozenset())
