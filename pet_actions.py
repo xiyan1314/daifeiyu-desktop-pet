@@ -10,7 +10,6 @@ import time
 import psutil
 from PySide6.QtCore import QEasingCurve, QPoint
 
-import pet_lines  # LINES_HAPPY（台词库，不 import 桌宠）
 
 _MB = 1048576.0
 

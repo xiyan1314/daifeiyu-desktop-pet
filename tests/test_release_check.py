@@ -9,11 +9,16 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import _check_release as chk  # noqa: E402
 
 
-def _make_zip(path, names, version="9.9.9"):
+def _make_zip(path, names, version="9.9.9", real_main=False):
+    """real_main=True 时 桌宠.py 用仓库真实内容（v2.1.4 起 check_zip 会比内容 hash）。"""
+    real = ""
+    if real_main:
+        with open(os.path.join(chk.ROOT, "桌宠.py"), "rb") as f:
+            real = f.read().decode("utf-8", "replace")
     with zipfile.ZipFile(path, "w") as z:
         for n in names:
             if n == "桌宠.py":
-                z.writestr(n, 'VERSION = "%s"\n' % version)
+                z.writestr(n, real if real_main else ('VERSION = "%s"\n' % version))
             else:
                 z.writestr(n, "x")
 
@@ -23,11 +28,12 @@ def test_check_zip_flags_runtime_data(tmp_path):
     p = str(tmp_path / "bad.zip")
     _make_zip(p, ["桌宠.py", "main.py", "pet_voice.py", "pet_lines.py", "pet_dialogs.py",
                   "python.exe", "assets/", "config.json", "ledger.json", "error.log",
-                  "_verify_green.py", "roles/x.png"])
+                  "_verify_green.py", "_check_static.py", "_check_release.py", "roles/x.png"])
     fails = chk.check_zip(p, chk.repo_version())
     joined = " ".join(fails)
     assert "config.json" in joined and "ledger.json" in joined
     assert "error.log" in joined and "_verify_green.py" in joined
+    assert "_check_static.py" in joined and "_check_release.py" in joined
     assert any("roles/" in f for f in fails)
 
 
@@ -43,8 +49,18 @@ def test_check_zip_flags_missing_and_stale(tmp_path):
 def test_check_zip_passes_clean(tmp_path):
     p = str(tmp_path / "ok.zip")
     _make_zip(p, ["桌宠.py", "main.py", "pet_voice.py", "pet_lines.py", "pet_dialogs.py",
-                  "python.exe", "assets/char.png", "Lib/x.py"], version="2.0.0")
-    assert chk.check_zip(p, "2.0.0") == []
+                  "python.exe", "assets/char.png", "Lib/x.py"],
+              version=chk.repo_version(), real_main=True)
+    assert chk.check_zip(p, chk.repo_version()) == []
+
+
+def test_check_zip_flags_same_version_but_stale_content(tmp_path):
+    """M3 回归：版本号相同但内容不同（拿旧包冒充）必须被抓到。"""
+    p = str(tmp_path / "stale.zip")
+    _make_zip(p, ["桌宠.py", "main.py", "pet_voice.py", "pet_lines.py", "pet_dialogs.py",
+                  "python.exe", "assets/char.png"], version=chk.repo_version(), real_main=False)
+    fails = chk.check_zip(p, chk.repo_version())
+    assert any("内容不一致" in f for f in fails), fails
 
 
 def test_check_version_of_this_repo():

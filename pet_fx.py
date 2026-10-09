@@ -81,7 +81,7 @@ class AnimatedEmote(QObject):
 
         # 定时器选型：单个成员 QTimer 复用（理由见模块 docstring）
         self._timer = QTimer(self)
-        self._timer.timeout.connect(self._advance)
+        self._timer.timeout.connect(pet_log.guard_slot("fx._advance", self._advance))
 
     # ---------------- 对外接口 ----------------
     def play(self, frames, interval_ms=66, loops=1, on_finish=None):
@@ -346,7 +346,7 @@ if __name__ == "__main__":
         title, func, delay = plan.pop(0)
         print("-- " + title)
         func()
-        QTimer.singleShot(delay, drive)
+        QTimer.singleShot(delay, fx, drive)
 
-    QTimer.singleShot(0, drive)
+    QTimer.singleShot(0, fx, drive)
     sys.exit(app.exec())

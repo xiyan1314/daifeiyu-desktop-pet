@@ -12,6 +12,7 @@ from PySide6.QtGui import (
 from PySide6.QtWidgets import QWidget
 
 from pet_screen import screen_geometry_at
+import pet_log
 
 # 气泡样式（配置驱动；桌宠.apply_bubble_style 更新，Bubble.paintEvent 读取）
 BUBBLE_STYLE = {"bg": "#ffffff", "fg": "#203170", "border": "#203170", "font_size": 10, "radius": 16}
@@ -231,7 +232,7 @@ class Bubble(QWidget):
         self._text = ""
         self._timer = QTimer(self)
         self._timer.setSingleShot(True)
-        self._timer.timeout.connect(self.hide)
+        self._timer.timeout.connect(pet_log.guard_slot("bubble.hide", self.hide))
 
     def show_text(self, text, anchor_global):
         # P1-4：先定位屏（间隙取最近屏）；无屏直接放弃，不做半截状态变更

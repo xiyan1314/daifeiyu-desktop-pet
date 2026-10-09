@@ -34,7 +34,6 @@ import json
 import os
 import re
 import tempfile
-import time
 import uuid
 
 import pet_log

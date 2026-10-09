@@ -37,7 +37,7 @@ class BalanceService:
     def start(self):
         if self._timer is None:
             self._timer = QTimer(self.pet)
-            self._timer.timeout.connect(lambda: self.refresh(manual=False))
+            self._timer.timeout.connect(pet_log.guard_slot("balance.refresh", lambda: self.refresh(manual=False)))
         self.refresh(manual=False)
         self._timer.start(300000)  # 5 分钟轮询：60s 太密，浪费额度且易被限流
 
@@ -98,7 +98,7 @@ class BalanceService:
         pet._fetching_balance = False
         if pet._pending_manual:
             pet._pending_manual = False
-            QTimer.singleShot(0, lambda: self.refresh(manual=True))  # 补发排队的手动查询
+            QTimer.singleShot(0, self, lambda: self.refresh(manual=True))  # 补发排队的手动查询
         if not self._cfg().get("api_key"):
             return  # Key 已清空，忽略在途请求结果
         pet._currency = currency
@@ -148,7 +148,7 @@ class BalanceService:
         pet._fetching_balance = False
         if pet._pending_manual:
             pet._pending_manual = False
-            QTimer.singleShot(0, lambda: self.refresh(manual=True))  # 补发排队的手动查询
+            QTimer.singleShot(0, self, lambda: self.refresh(manual=True))  # 补发排队的手动查询
         if pet._manual_pending:
             pet._manual_pending = False
             pet.show_bubble("余额查不到……API Key 对吗？")

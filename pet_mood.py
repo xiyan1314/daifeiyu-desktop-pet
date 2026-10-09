@@ -32,6 +32,7 @@ from PySide6.QtCore import QObject, QTimer, Signal
 # ---------------- 台词库（中文，每组 3~5 条） ----------------
 # v2.1.2：情绪台词改由台词库提供（用户可增删改）；这里只是"库不可用时的兜底常量"，
 # 文本单一来源在 pet_lines（它零 Qt，不会造成循环 import）。
+import pet_log  # noqa: E402
 from pet_lines import (  # noqa: E402
     LINES_MOOD_PUZZLED as LINES_PUZZLED, LINES_MOOD_ANGRY as LINES_ANGRY,
     LINES_MOOD_HISS as LINES_HISS, LINES_MOOD_DROOL as LINES_DROOL,
@@ -66,7 +67,7 @@ class Mood(QObject):
         self._food_timer = QTimer(self)
         self._food_timer.setSingleShot(True)
         self._food_timer.setInterval(self.FOOD_WAIT_MS)
-        self._food_timer.timeout.connect(self._withhold)
+        self._food_timer.timeout.connect(pet_log.guard_slot("mood._withhold", self._withhold))
 
         # ---- 调皮事件（选型 A：外部周期定时器驱动 tick()）----
         # 主程序启动时先 prime_mischief() 把首次触发推迟到随机 45~90 秒后；
@@ -191,27 +192,27 @@ if __name__ == "__main__":
 
     def step0():
         mood.poke()  # 计数 1 → puzzled
-        QTimer.singleShot(100, step1)
+        QTimer.singleShot(100, mood, step1)
 
     def step1():
         mood.poke()  # 计数 2 → angry（距上次 100ms < 2.5s）
-        QTimer.singleShot(100, step2)
+        QTimer.singleShot(100, mood, step2)
 
     def step2():
         mood.poke()  # 计数 3 → hiss
-        QTimer.singleShot(100, step3)
+        QTimer.singleShot(100, mood, step3)
 
     def step3():
         mood.food_shown()  # → drool + 启动 8s 定时器
-        QTimer.singleShot(50, step4)
+        QTimer.singleShot(50, mood, step4)
 
     def step4():
         mood._withhold()  # 手动触发超时逻辑 → cry
-        QTimer.singleShot(50, step5)
+        QTimer.singleShot(50, mood, step5)
 
     def step5():
         mood.tick()  # 首次 tick() 立即触发一次 → smug
-        QTimer.singleShot(50, finish)
+        QTimer.singleShot(50, mood, finish)
 
     def finish():
         # 断言戳链：puzzled → angry → hiss
@@ -231,5 +232,5 @@ if __name__ == "__main__":
         print("MOOD SMOKE OK")
         app.quit()
 
-    QTimer.singleShot(0, step0)
+    QTimer.singleShot(0, mood, step0)
     sys.exit(app.exec())

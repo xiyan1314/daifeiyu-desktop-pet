@@ -62,7 +62,7 @@ import pet_alarm
 
 
 APP_NAME = "大肥鱼桌宠"
-VERSION = "2.1.3"
+VERSION = "2.1.4"
 PAD = 1.25  # 窗口相对角色的透明边距（为压扁/回弹预留空间）
 IDLE_FRAME_MS = 140      # 待机帧间隔
 IDLE_FORM_HOLD_SECS = 8  # v2.1.3：只有形态、没有动作可播时的展示期上限（到期回用户形态）
@@ -526,6 +526,20 @@ def _build_ai_sys_prompt(cfg):
     return sys_prompt + "\n" + _EMOTE_INSTRUCTION
 
 # ---------------- 主窗口 ----------------
+def _log_slot_error(name, err):
+    """定时器槽异常限流日志（同一槽 60 秒内只记一次，避免每拍刷屏）。"""
+    now = time.monotonic()
+    seen = globals().setdefault("_SLOT_ERR_SEEN", {})
+    if now - float(seen.get(name, 0.0)) < 60:
+        return
+    seen[name] = now
+    try:
+        import traceback
+        _log_error("timer slot %s failed: %r\n%s" % (name, err, traceback.format_exc()))
+    except Exception:
+        _log_error("timer slot %s failed: %r" % (name, err))  # 有意忽略：取 traceback 失败就只记一行
+
+
 class PetWindow(QWidget):
     # v2.0.1：帧间隔默认值以类属性暴露（pet_actions 等服务不 import 桌宠，须经实例访问）
     IDLE_FRAME_MS = IDLE_FRAME_MS
@@ -550,10 +564,14 @@ class PetWindow(QWidget):
             n = len(CONFIG_FIXES)
             fixes = list(CONFIG_FIXES)  # 拷贝进闭包：1.5s 后展示时不被后续 load_config 重置串味
             detail = "、".join(fixes[:2]) + ("…" if n > 2 else "")
-            QTimer.singleShot(1500, lambda: self.show_bubble(
+            QTimer.singleShot(1500, self, lambda: self.show_bubble(
                 "配置有 %d 处坏值，已自动修正：%s" % (n, detail)))
         # ---- v1.3：角色库 / 音频库 / 记账账本 ----
-        pet_resources.FRAME_MAX = int(self.cfg.get("role_frame_max", 24) or 24)  # P3-5+：帧上限用户可调
+        # P3-5+：帧上限用户可调（配置已在 load_config 归一化，这里再兜一层，坏值不阻断启动）
+        try:
+            pet_resources.FRAME_MAX = max(2, min(64, int(self.cfg.get("role_frame_max", 24) or 24)))
+        except (TypeError, ValueError):
+            pet_resources.FRAME_MAX = 24  # norm-ok
         self.role_lib = pet_resources.RoleLibrary(DATA_DIR)
         self.audio_lib = pet_resources.AudioLibrary(DATA_DIR)
         self.role_lib.set_active(self.cfg.get("role", ""))  # roles.json 与 config 同步
@@ -629,10 +647,10 @@ class PetWindow(QWidget):
         self._history_lock = threading.Lock()  # 保护 _chat_history 的跨线程读写
         self._drag_timer = QTimer(self)
         self._drag_timer.setInterval(30)
-        self._drag_timer.timeout.connect(self._drag_tick)
+        self._drag_timer.timeout.connect(self._gslot('_drag_tick', self._drag_tick))
         self._food_shown_timer = QTimer(self)  # 托盘馋嘴错峰（可取消的单次定时器）
         self._food_shown_timer.setSingleShot(True)
-        self._food_shown_timer.timeout.connect(self._food_shown_guarded)
+        self._food_shown_timer.timeout.connect(self._gslot('_food_shown_guarded', self._food_shown_guarded))
         self.food_tray.clicked_food.connect(self._fly_food)
         self.food_tray.drag_started.connect(self._start_food_drag)
         self.food_flyer.dropped.connect(self._on_food_dropped)
@@ -679,10 +697,10 @@ class PetWindow(QWidget):
         self._pet_watchdog_ended = False  # 摸摸头被看门狗结束（松手不戳）
         self._hold_timer = QTimer(self)  # 长按 1.5s 触发摸摸头
         self._hold_timer.setSingleShot(True)
-        self._hold_timer.timeout.connect(self._start_petting)
+        self._hold_timer.timeout.connect(self._gslot('_start_petting', self._start_petting))
         self._pet_max = QTimer(self)  # 摸摸头最长 15s 看门狗（release 丢失兜底）
         self._pet_max.setSingleShot(True)
-        self._pet_max.timeout.connect(self._on_pet_watchdog)
+        self._pet_max.timeout.connect(self._gslot('_on_pet_watchdog', self._on_pet_watchdog))
 
         self._build_sprites()
         self.form = self.form_keys[0]
@@ -692,6 +710,7 @@ class PetWindow(QWidget):
         self._idle_active = False
         self._idle_form_active = False
         self._idle_hold_timer = None         # v2.1.3：形态待机的展示期封顶（防永久吞用户形态）
+        self._eat_watchdog = None            # v2.1.4：吃帧看门狗（防 on_finish 被顶掉后 busy 永久卡死）
         self._idle_after_full_at = None      # 触发 A 到点时刻（None=无待触发）
         self._idle_last_action = ""          # 顺序模式记上次播到哪
         self._last_idle_at = 0.0
@@ -721,7 +740,7 @@ class PetWindow(QWidget):
         self._last_activity = time.monotonic()
         self._state_timer = QTimer(self)
         self._state_timer.setSingleShot(True)
-        self._state_timer.timeout.connect(self._state_done)
+        self._state_timer.timeout.connect(self._gslot('_state_done', self._state_done, recover=True))
 
         # ---- 阶段2：情绪状态机 ----
         # v2.1.2：情绪台词也走台词库（用户可增删改）；库为空/不可用时 pet_mood 回落内置常量
@@ -733,13 +752,13 @@ class PetWindow(QWidget):
         self.mood.prime_mischief()
         self.mood_timer = QTimer(self)
         self.mood_timer.setInterval(1000)
-        self.mood_timer.timeout.connect(self._mood_tick)
+        self.mood_timer.timeout.connect(self._gslot('_mood_tick', self._mood_tick))
         self.mood_timer.start()
 
         # v2.0.5：闹钟轮询（15s 一拍，秒级精度足够；到点判定纯函数）
         self._alarm_timer = QTimer(self)
         self._alarm_timer.setInterval(15000)
-        self._alarm_timer.timeout.connect(self._alarm_tick)
+        self._alarm_timer.timeout.connect(self._gslot('_alarm_tick', self._alarm_tick))
         self._alarm_timer.start()
 
         # ---- 阶段3：音频（参考项目 WAV + 合成回退）----
@@ -778,7 +797,7 @@ class PetWindow(QWidget):
         self._last_drag_t = None
         self._flight_timer = QTimer(self)
         self._flight_timer.setInterval(16)
-        self._flight_timer.timeout.connect(self._flight_tick)
+        self._flight_timer.timeout.connect(self._gslot('_flight_tick', self._flight_tick))
 
         scale = self.cfg.get("scale", 1.0)
         if not os.path.exists(CONFIG_PATH):
@@ -818,15 +837,15 @@ class PetWindow(QWidget):
 
         # 定时器
         self.idle_timer = QTimer(self)
-        self.idle_timer.timeout.connect(self.actions.idle_tick)
+        self.idle_timer.timeout.connect(self._gslot('idle_tick', self.actions.idle_tick))
         self.idle_timer.start(15000)
 
         self.walk_timer = QTimer(self)
-        self.walk_timer.timeout.connect(self.wander.tick)
+        self.walk_timer.timeout.connect(self._gslot('walk_tick', self.wander.tick))
 
         self._last_cpu = 0.0
         self.cpu_timer = QTimer(self)
-        self.cpu_timer.timeout.connect(self.actions.cpu_tick)
+        self.cpu_timer.timeout.connect(self._gslot('cpu_tick', self.actions.cpu_tick))
         self.cpu_timer.start(6000)
         try:
             psutil.cpu_percent(interval=None)
@@ -888,9 +907,9 @@ class PetWindow(QWidget):
 
         # v1.3：有 Key 且开了 AI 对话（未开挂件）时，启动后补一次余额观测刷新账本基线
         if self.cfg.get("api_key") and self.cfg.get("ai_enabled") and not self.cfg.get("badge"):
-            QTimer.singleShot(2500, lambda: self.balance.refresh(manual=False))
+            QTimer.singleShot(2500, self, lambda: self.balance.refresh(manual=False))
         # B3：启动 3s 后预加载撒钱帧（主线程一次性 ~100ms），避免首次查余额瞬间卡顿
-        QTimer.singleShot(3000, self._preload_money_fx)
+        QTimer.singleShot(3000, self, self._preload_money_fx)
 
     def _preload_money_fx(self):
         """预热撒钱帧集（86 帧约 6.7MB）：在启动空闲期加载，首次撒钱不再卡。"""
@@ -1101,7 +1120,7 @@ class PetWindow(QWidget):
             _secs = _d_secs  # 有意忽略：坏值回默认（normalize 已兜底，此处防御直改 cfg）
         self._transform_timer = QTimer(self)
         self._transform_timer.setSingleShot(True)
-        self._transform_timer.timeout.connect(self._end_transform)
+        self._transform_timer.timeout.connect(self._gslot('_end_transform', self._end_transform, recover=True))
         self._transform_timer.start(max(pet_behaviors.TRANSFORM_SECS_MIN,
                                         min(pet_behaviors.TRANSFORM_SECS_MAX, _secs)) * 1000)
 
@@ -1149,7 +1168,10 @@ class PetWindow(QWidget):
             return
         # 触发 B
         cfg = self._idle_cfg()
-        delay = int(cfg.get("idle_trigger_delay") or 0)
+        try:
+            delay = int(cfg.get("idle_trigger_delay") or 0)
+        except (TypeError, ValueError):
+            delay = 0  # norm-ok：idle_config 已归一化，此处防御直改 cfg
         if delay <= 0 or now - self._last_activity < delay:
             return
         if now - getattr(self, "_last_idle_at", 0.0) < delay:
@@ -1210,7 +1232,7 @@ class PetWindow(QWidget):
                 pass  # 有意忽略：定时器可能已被销毁（幂等清理）
         self._idle_hold_timer = QTimer(self)
         self._idle_hold_timer.setSingleShot(True)
-        self._idle_hold_timer.timeout.connect(self._idle_end)
+        self._idle_hold_timer.timeout.connect(self._gslot('_idle_end', self._idle_end, recover=True))
         self._idle_hold_timer.start(max(2, min(60, _secs)) * 1000)
 
     def _idle_end(self):
@@ -1828,6 +1850,7 @@ class PetWindow(QWidget):
         self._behavior_seq = None      # v2.0.2：切角色取消在途行为序列
         self._behavior_is_idle = False
         self._cancel_transform()       # v2.0.2：切角色取消变身回切定时器
+        _was_sleeping = bool(self._sleeping)  # v2.1.4（L2）：切角色不该把睡着的鱼静默弄醒
         self._sleep_home = None
         # v2.1：切角色重置待机状态与用户选定形态（旧角色的形态键在新角色上无意义）
         self._idle_active = False
@@ -1849,6 +1872,11 @@ class PetWindow(QWidget):
         self._using_front = False
         self.set_scale(self.scale)  # 按新角色尺寸重算窗口
         self._play_idle()
+        if _was_sleeping:
+            # v2.1.4（L2）：仍在睡眠 → 按新角色的睡眠形态重绘（显式走 _show_sleep，
+            # 声音/表情语义与正常入睡一致），而不是静默醒来后停在睡形态（无主人卡死）。
+            self._sleeping = False
+            self._show_sleep()
         try:
             self.tray.setIcon(QIcon(self.sprites[self.form_keys[0]]["front"]))
         except Exception:
@@ -1866,7 +1894,13 @@ class PetWindow(QWidget):
                 self.item.setPixmap(pix)
 
     def _play_idle(self, _name=None):
-        self._sleeping = False
+        # v2.1.4 修复（S1）：吃帧进行中绝不复位——anim.play() 内部会先 stop()，
+        # 而 stop() 会**丢弃**待回调的 on_finish（_eat_done），导致 busy 永久卡死
+        # （表现为之后喂食被"嘴里还有呢"拒绝、待机/摸头全部失效，只能重启）。
+        if self.busy and self.anim_mode == "eat":
+            return
+        # v2.1.4 修复（M1）：_sleeping 只由 _show_sleep/_wake 管理，这里不再悄悄清除——
+        # 否则"睡眠中语音读完→_play_idle"会静默醒来且形态永久留在睡形态（无主人卡死）。
         self._cur_state = None  # 离开表情/睡眠展示
         if self._custom_role:
             self._wire_anim_sets()  # P1-7：待机前按当前形态重查「形态×动作」帧集
@@ -1910,9 +1944,38 @@ class PetWindow(QWidget):
             interval = self._cur_form_anim().get("interval_ms") or EAT_FRAME_MS
         # 若 "eat" 帧集未注册（空集），play() 会立即回调 on_finish 并返回 False，无需兜底分支
         self.anim.play("eat", interval, loops=2, on_finish=self._eat_done)
+        # v2.1.4 修复（S1）：看门狗——吃帧回调可能被任何 anim.play()/stop() 顶掉（stop 不回调），
+        # 那样 busy 永远没人释放。这里按"吃帧理论时长 + 余量"兜底释放，保证不会永久卡死。
+        _frames = len(self.anim._sets.get("eat") or []) or 7
+        _ms = max(800, int(_frames * 2 * interval) + 600)
+        if self._eat_watchdog is not None:
+            try:
+                self._eat_watchdog.stop()
+                self._eat_watchdog.deleteLater()
+            except RuntimeError:
+                pass  # 有意忽略：定时器可能已被销毁（幂等清理）
+        self._eat_watchdog = QTimer(self)
+        self._eat_watchdog.setSingleShot(True)
+        self._eat_watchdog.timeout.connect(self._gslot("_eat_watchdog", self._eat_watchdog_fire))
+        self._eat_watchdog.start(_ms)
+
+    def _eat_watchdog_fire(self):
+        """吃帧看门狗：到点还卡在 busy 就强制收尾（只记日志，不弹框）。"""
+        if not self.busy:
+            return
+        _log_slot_error("eat_watchdog", "吃帧收尾回调丢失，强制释放 busy（anim_mode=%s）"
+                        % self.anim_mode)
+        self._eat_done("watchdog")
 
     def _eat_done(self, _name):
         self.busy = False
+        if self._eat_watchdog is not None:
+            try:
+                self._eat_watchdog.stop()
+                self._eat_watchdog.deleteLater()
+            except RuntimeError:
+                pass  # 有意忽略：可能已被销毁
+            self._eat_watchdog = None
         self._play_idle()
 
     # 吃饱形态缺图（用户素材只有 7 张吃饱版状态图）时用同形态近义图兜底，避免显示瘦图
@@ -2028,6 +2091,7 @@ class PetWindow(QWidget):
     def _wake(self):
         self._touch_activity()  # 唤醒=交互：重置无交互计时并打断待机
         if self._sleeping:
+            self._sleeping = False  # v2.1.4：睡眠标志由这里（唯一唤醒路径）清除
             self.voice.play_event("wake")  # v2.0：唤醒语音片段
             _uf = getattr(self, "_user_form", "") or self.form_keys[0]
             if _uf in self.form_keys and self.form != _uf:
@@ -2395,7 +2459,7 @@ class PetWindow(QWidget):
             except RuntimeError:
                 pass  # 有意忽略：定时器可能已被销毁（幂等清理）
         self._fly_timer = QTimer(self)
-        self._fly_timer.timeout.connect(tick)
+        self._fly_timer.timeout.connect(self._gslot('food_fly_tick', tick))
         self._fly_timer.start(30)
 
     def _start_food_drag(self, food, gp):
@@ -2557,6 +2621,10 @@ class PetWindow(QWidget):
             self.show_bubble(random.choice(["消化完啦，又饿了~", "瘦回来啦！", "还能再吃一点……"]))
 
     def feed(self, food):
+        # v2.1.4 修复（S1-c）：睡眠中投喂先正常唤醒（此前会在"睡着"状态下起吃帧，
+        # 用户点一下就把 _eat_done 顶掉 → busy 永久卡死）
+        if self._sleeping:
+            self._wake()
         if self.busy:
             self.show_bubble(random.choice(["嘴里还有呢，等一下~", "别急嘛，还在吃！", "呜……咽不下去啦！"]))
             return
@@ -2571,13 +2639,23 @@ class PetWindow(QWidget):
         self.voice.play_event("feed")  # v2.0：喂食语音片段
         # v2.1：喂食台词来自台词库（用户可增删改；库空则回落内置 FOOD_LINES）
         line = random.choice(self.lines_lib.food_texts(food))
-        _uf = getattr(self, "_user_form", "") or self.form_keys[0]
-        was_first = self.form == _uf  # 必须在 _set_form 之前记录（相对用户形态判定「首形态」）
+        # v2.1.4（L3）：吃帧是**首形态**的形象 → 判定要看"喂到的目标形态"是不是首形态，
+        # 而不是源形态是不是用户形态（no_feed 跳过会让源/目标错位，导致在非首形态播吃帧、
+        # 在首形态却不播）。下面用 _eat_frames 在算出 next_idx 后判定。
         self.mood.fed()
         # 喂食：形态顺次前进（多形态循环），refresh=False 先播吃帧再落新形态；
         # 临时展示语义：吃完消化回 user_selected_form，不吞掉用户选定的形态
         cur_idx = self.form_keys.index(self.form) if self.form in self.form_keys else 0
+        # v2.1.4 修复：推进时**跳过标记「不参与喂食」的形态**——此前只拦"当前形态不能喂"，
+        # 却可能把形态推进到 no_feed 形态上（表现为"吃着吃着变成睡觉形态"，且此后喂不了）。
+        _flags = self._form_role_flags()
         next_idx = (cur_idx + 1) % len(self.form_keys)
+        if _flags:
+            for _step in range(1, len(self.form_keys) + 1):
+                _cand = (cur_idx + _step) % len(self.form_keys)
+                if not (_cand < len(_flags) and _flags[_cand].get("no_feed")):
+                    next_idx = _cand
+                    break
         self._touch_activity()  # v2.1 修复：先记交互/打断待机，再切喂食形态
         # （此前先切形态再打断，_idle_interrupt→_restore_user_form 会把刚切的形态拉回去）
         self._set_form(self.form_keys[next_idx], refresh=False, display_only=True)
@@ -2589,14 +2667,17 @@ class PetWindow(QWidget):
                 pass  # 有意忽略：定时器可能已被销毁（幂等清理）
         self._digest_timer = QTimer(self)
         self._digest_timer.setSingleShot(True)
-        self._digest_timer.timeout.connect(self._digest)
+        self._digest_timer.timeout.connect(self._gslot('_digest', self._digest, recover=True))
         self._digest_timer.start(12000)
-        if self.has_frames and was_first:
-            # 首形态 → 下一形态：错峰 120ms 启动吃帧；busy 在 _eat_done 释放
+        # v2.1.4（S2 修复）：判据 = **目标形态有没有 eat 帧集**（吃帧素材挂在形态上，
+        # 有就播；没有才用大笑表达）。此前先按"源形态==用户形态"判定，no_feed 跳步时会错位；
+        # 我先改成"目标是首形态"，又把默认角色（常态→吃饱，吃帧在吃饱形态上）的吃帧弄丢了。
+        _eat_pool = self.anim._sets.get("eat") or []
+        if self.has_frames and _eat_pool:
+            # 目标形态有吃帧：错峰 120ms 启动；busy 在 _eat_done 释放
             QTimer.singleShot(120, self, self._play_eat)  # 带 context：窗口销毁自动取消
         elif self.has_frames:
-            # 已在非首形态：不重播吃帧（吃帧是首形态形象，会顶掉当前形态），
-            # 以大笑表情表达「又吃到了」，并立即释放 busy
+            # 目标形态没有吃帧：以大笑表情表达「又吃到了」，并立即释放 busy
             def _full_refeed():
                 self._show_state("laugh", 2200)
                 self.busy = False
@@ -2926,7 +3007,7 @@ class PetWindow(QWidget):
         if self._save_scale_timer is None:
             self._save_scale_timer = QTimer(self)
             self._save_scale_timer.setSingleShot(True)
-            self._save_scale_timer.timeout.connect(lambda: save_config(self.cfg))
+            self._save_scale_timer.timeout.connect(self._gslot('save_scale', lambda: save_config(self.cfg)))
         self._save_scale_timer.start(400)
 
     def _set_always_on_top(self, on):
@@ -3126,6 +3207,10 @@ class PetWindow(QWidget):
     def _on_voice_finished(self, role_slot, line_id):
         """读完一条：解除说话态；无其他动作时回待机表现。"""
         self._speaking_voice = False
+        # v2.1.4 修复（M1）：睡着时不回待机表现——_play_idle 以前会顺手清 _sleeping，
+        # 造成"语音读完=静默醒来且形态留在睡形态"。睡眠只由 _wake 结束。
+        if self._sleeping:
+            return
         if not (self.busy or self._petting):
             self._play_idle()
 
@@ -3357,7 +3442,7 @@ class PetWindow(QWidget):
         save_config(self.cfg)
         if moved:
             _log_error("lines_extra migrated: %d" % moved)
-            QTimer.singleShot(2600, lambda: self.show_bubble(
+            QTimer.singleShot(2600, self, lambda: self.show_bubble(
                 "已把 %d 条自定义台词迁进新的台词库~" % moved))
 
     def speak_dialogue(self, dialogue_id):
@@ -3451,6 +3536,43 @@ class PetWindow(QWidget):
         box.setFocus()
         box.exec()
 
+    def _gslot(self, name, fn, recover=False):
+        """把定时器槽包一层：槽内异常只记日志并继续跑，不冒到 excepthook 弹模态框。
+
+        v2.1.4：此前任何一个 tick 里的未捕获异常都会弹"大肥鱼桌宠出错了"模态框，
+        并且因为 tick 反复触发而反复弹（虽然有 60s 同因限流），表现为桌宠"卡住不动"。
+        定时器槽属于后台心跳：出错应该记日志、下一拍继续，而不是打断用户。
+
+        recover=True 用于**单发的状态机终结器**（变身结束/待机结束/表情结束/消化）：
+        它们抛错时状态机会停在"半个更新"（例如 _transform_home 已清但形态没回位），
+        所以除了记日志还要做一次幂等收尾，否则会永久卡在非用户形态。"""
+        def _run(*_a, **_kw):
+            try:
+                return fn(*_a, **_kw)
+            except Exception as _e:  # noqa: BLE001
+                _log_slot_error(name, _e)
+                if recover:
+                    self._slot_recover(name)
+                return None
+        return _run
+
+    def _slot_recover(self, name):
+        """状态机终结器失败后的幂等收尾：释放卡住的状态并回用户形态（尽力而为）。"""
+        try:
+            self.busy = False
+            self._cancel_transform()
+            self._stop_idle_hold()
+            self._idle_active = False
+            self._idle_form_active = False
+            self.anim_mode = "idle"
+            self._sleeping = False
+            self._sleep_home = None
+            _uf = getattr(self, "_user_form", "") or self.form_keys[0]
+            if _uf in self.sprites and self.form != _uf:
+                self._set_form(_uf, cancel_transform=False, display_only=True)
+        except Exception as _e:  # noqa: BLE001
+            _log_slot_error(name + ":recover", _e)  # 收尾再失败只能放弃了（已记日志）
+
     def _quit(self):
         """退出：停止全部定时器/动画、隐藏窗口、清理临时文件，然后结束进程。"""
         self._closing = True  # P1-5：先立退出标志，在途网络请求信号/气泡被守卫拦下
@@ -3492,6 +3614,7 @@ class PetWindow(QWidget):
                       self._hold_timer, self._pet_max, self._flight_timer,  # P1-手感
                       self._transform_timer,  # v2.1.2（L-1）：变身回切定时器此前漏停
                       self._idle_hold_timer,   # v2.1.3：形态待机展示期定时器（可能为 None，stop 前过滤）
+                      self._eat_watchdog,      # v2.1.4：吃帧看门狗
                       self._alarm_timer):  # v2.0.5：闹钟轮询
                 if t is not None:
                     t.stop()

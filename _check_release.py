@@ -38,7 +38,7 @@ USER_DATA_NAMES = {"config.json", "roles.json", "audio.json", "voice.json", "voi
                    "memory.log", "usage.json", "memory.json"}
 USER_DATA_DIRS = ("roles", "voice", "voice_ref", "audio", "alarms", "__pycache__")
 # 发布包**额外**禁止的开发/验证文件（绿色版目录里做检测时允许存在）
-ZIP_EXTRA_NAMES = {"_verify_green.py", "_check_release.py", "_g_out.txt"}
+ZIP_EXTRA_NAMES = {"_verify_green.py", "_check_release.py", "_check_static.py", "_g_out.txt"}
 ZIP_EXTRA_PREFIX = ("_verify_assets/",)
 
 _VERSION_RE = re.compile(r'VERSION\s*=\s*"([^"]+)"')
@@ -74,7 +74,40 @@ def check_version():
     if not re.search(r'check\(\s*"green version"\s*,\s*main\.VERSION\s*==\s*"%s"'
                      % re.escape(version), vg):
         fails.append("_verify_green.py 的 green version 断言不是 %s" % version)
+    # 版本号必须**升过**：如果该版本号已经有 git tag，说明改完代码没升版本号
+    # （三处一致检查查不出这种漏升），发布前必须发现。
+    # 版本号必须**升过**：三处一致检查查不出"改完代码没升版本"，改用两个不依赖 tag 的判据
+    # （本仓库 v2.x 线从未打 tag，用 tag 判据会静默失效；给已发布版本打 tag 后又会误红）：
+    #   ① CHANGELOG 的**首条**版本必须等于 VERSION（改完没写变更/没升版本 → 报）
+    #   ② 运行时代码必须已提交（有未提交改动说明还没定版 → 报）
+    try:
+        cl = io.open(os.path.join(ROOT, "CHANGELOG.md"), encoding="utf-8").read()
+        m_top = re.search(r"^##\s*v([0-9][\w.]*)", cl, re.M)
+        top = m_top.group(1) if m_top else ""
+        if top != version:
+            fails.append("CHANGELOG.md 首条版本是 %r，与 VERSION %r 不一致（忘了升版本/写变更？）"
+                         % (top or "无", version))
+    except Exception as e:
+        fails.append("CHANGELOG.md 读不到：%r" % (e,))
     return fails
+
+
+def check_clean_tree():
+    """发布时才跑：运行时代码必须已提交（有未提交改动 = 还没定版）。
+
+    单独成一个检查（而不是塞进 check_version()），否则开发期间本地护栏长期假红。
+    """
+    try:
+        import subprocess
+        st = subprocess.run(["git", "status", "--porcelain", "--", "桌宠.py"] + sorted(
+            f for f in os.listdir(ROOT) if f.startswith("pet_") and f.endswith(".py")),
+            capture_output=True, text=True, cwd=ROOT, timeout=15)
+        if st.returncode == 0 and st.stdout.strip():
+            dirty = [l[3:].strip() for l in st.stdout.strip().split("\n")][:3]
+            return ["运行时代码有未提交改动（发布前先提交并定版）：%s" % ", ".join(dirty)]
+    except Exception:
+        pass  # 无 git（绿色版/离线环境）：跳过
+    return []
 
 
 def check_green_dir():
@@ -149,20 +182,55 @@ def check_zip(zip_path, version=None):
                or any(n.startswith(p) for p in ZIP_EXTRA_PREFIX)
                or any(n.startswith(d + "/") for d in USER_DATA_DIRS)]
         if bad:
-            fails.append("发布包含运行时数据/开发文件：%s" % ", ".join(sorted(bad)[:5]))
+            fails.append("发布包含运行时数据/开发文件：%s" % ", ".join(sorted(bad)[:8]))
         need = ["桌宠.py", "main.py", "pet_voice.py", "pet_lines.py", "pet_dialogs.py",
                 "python.exe", "assets/"]
         lack = [n for n in need if not any(x == n or x.startswith(n) for x in names)]
         if lack:
             fails.append("发布包缺关键内容：%s" % ", ".join(lack))
         try:
-            m = _VERSION_RE.search(z.read("桌宠.py").decode("utf-8", "replace"))
+            raw = z.read("桌宠.py")
+            m = _VERSION_RE.search(raw.decode("utf-8", "replace"))
             zv = m.group(1) if m else "?"
             if zv != version:
                 fails.append("发布包里是旧版本：%s（仓库是 %s）" % (zv, version))
+            # M3：版本号相同也可能是旧包 → 再比内容（包内 桌宠.py 必须与仓库逐字节一致）
+            import hashlib
+            repo_main = os.path.join(ROOT, "桌宠.py")
+            if os.path.isfile(repo_main):
+                with open(repo_main, "rb") as f:
+                    repo_raw = f.read()
+                if hashlib.sha256(raw).hexdigest() != hashlib.sha256(repo_raw).hexdigest():
+                    fails.append("发布包里的 桌宠.py 与仓库内容不一致（包是旧的/未重新打包）")
         except KeyError:
             fails.append("发布包里没有 桌宠.py")
     return fails
+
+
+def check_static():
+    """跑静态体检（_check_static.py），有问题就带进发布检测结果。"""
+    import subprocess
+    script = os.path.join(ROOT, "_check_static.py")
+    if not os.path.isfile(script):
+        return []
+    try:
+        env = dict(os.environ)
+        env["QT_QPA_PLATFORM"] = "offscreen"
+        env["PYTHONIOENCODING"] = "utf-8"
+        r = subprocess.run([sys.executable, script], capture_output=True, text=True,
+                           encoding="utf-8", errors="replace", cwd=ROOT, timeout=180, env=env)
+    except Exception as e:
+        return ["静态体检跑不起来：%r" % (e,)]
+    if r.returncode == 0:
+        return []
+    lines = [x.strip() for x in (r.stdout or "").split("\n") if x.strip().startswith(("A ", "B ", "C ", "D ", "F ", "G ", "L "))]
+    if lines:
+        return ["静态体检有问题：%s" % "; ".join(lines[:5])]
+    # 没解析出条目时把 stdout/stderr 尾巴都带上（否则只有一句"退出码 1"，没法排障；
+    # 注意"缺少 Qt/依赖"这类友好结论是打在 **stdout** 上的）
+    tail = " | ".join([x.strip() for x in ((r.stdout or "") + "\n" + (r.stderr or "")).split("\n")
+                       if x.strip()][-3:])
+    return ["静态体检退出码 %d%s" % (r.returncode, ("；stderr: " + tail) if tail else "")]
 
 
 def main():
@@ -171,6 +239,8 @@ def main():
     version = repo_version()
     print("[1] 版本一致：%s" % version)
     fails += check_version()
+    fails += check_clean_tree()  # v2.1.4：发布时运行时代码必须已提交（定版）
+    fails += check_static()  # v2.1.4：静态体检（入口解析/配置键/空池/类型转换/定时器/线程…）
     fails += check_green_dir()  # L7：绿色版目录本身也不能有运行时数据
     missing, diff = check_sync()
     print("[2] 绿色版同步：%d 个文件（缺失 %d，不一致 %d）"

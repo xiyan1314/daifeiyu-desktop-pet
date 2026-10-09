@@ -504,7 +504,7 @@ def _looks_like_audio(data):
     if not data or len(data) < 4:
         return False
     head = bytes(data[:4])
-    if head in (b"RIFF", b"OggS", b"fLaC") or head[:3] == b"ID3":
+    if head[:3] == b"ID3" or head in AUDIO_MAGICS:  # 魔数单一来源：AUDIO_MAGICS
         return True
     return head[0] == 0xFF and (head[1] & 0xE0) == 0xE0  # MPEG 帧同步（mp3/aac）
 

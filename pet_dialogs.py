@@ -2360,12 +2360,13 @@ class BehaviorDialog(QDialog):
         if not items:
             _warn(self, "行为编辑", "台词库是空的，先去「💬 自定义台词…」建一条")
             return ""
-        labels = ["[%s] %s" % (pet_lines.CATEGORY_LABELS.get(x["category"], x["category"]),
-                               x["text"].replace("\n", " ")[:24]) for x in items]
+        labels = _unique_labels(
+            ["[%s] %s" % (pet_lines.CATEGORY_LABELS.get(x["category"], x["category"]),
+                          x["text"].replace("\n", " ")[:24]) for x in items])
         label, ok = QInputDialog.getItem(self, "选择台词", "这条行为要读哪句台词：", labels, 0, False)
         if not ok:
             return ""
-        return items[labels.index(label)]["id"]
+        return items[labels.index(label) if label in labels else 0]["id"]
 
     def _pick_from_dialogues(self):
         """行为步骤「读整段对白」：从对白列表选一段（返回 dialogue_id 或 ""）。"""
@@ -2377,11 +2378,11 @@ class BehaviorDialog(QDialog):
         if not items:
             _warn(self, "行为编辑", "还没有对白，先去「💬 自定义台词… → 对白编排」建一段")
             return ""
-        labels = ["%s（%d 条）" % (x["name"], len(x["line_ids"])) for x in items]
+        labels = _unique_labels(["%s（%d 条）" % (x["name"], len(x["line_ids"])) for x in items])
         label, ok = QInputDialog.getItem(self, "选择对白", "这条行为要读哪段对白：", labels, 0, False)
         if not ok:
             return ""
-        return items[labels.index(label)]["id"]
+        return items[labels.index(label) if label in labels else 0]["id"]
 
     def _collect_steps(self):
         out = []
@@ -2734,12 +2735,12 @@ class AISettingsDialog(QDialog):
         row.addWidget(QLabel("回复字数上限"))
         self._reply = QSpinBox()
         self._reply.setRange(4, 50)
-        self._reply.setValue(int(cfg.get("ai_reply_len", 25) or 25))
+        self._reply.setValue(int(cfg.get("ai_reply_len", 25) or 25))  # norm-ok（配置加载时已归一化）
         row.addWidget(self._reply)
         row.addWidget(QLabel("max_tokens"))
         self._tokens = QSpinBox()
         self._tokens.setRange(16, 512)
-        self._tokens.setValue(int(cfg.get("ai_max_tokens", 60) or 60))
+        self._tokens.setValue(int(cfg.get("ai_max_tokens", 60) or 60))  # norm-ok
         row.addWidget(self._tokens)
         row.addStretch(1)
         root.addLayout(row)
@@ -4293,11 +4294,11 @@ class LinesDialog(QDialog):
         if not lid or self._lib is None:
             return
         items = self._role_items()
-        labels = [x[1] for x in items]
+        labels = _unique_labels([x[1] for x in items])
         label, ok = QInputDialog.getItem(self, "修复角色", "选择要指向的角色：", labels, 0, False)
         if not ok:
             return
-        slot = items[labels.index(label)][0]
+        slot = items[labels.index(label) if label in labels else 0][0]
         res = self._lib.save(lid, role_slot=slot, clear_role=not slot)
         if res[0] is False:
             _warn(self, "修复失败", res[1])
@@ -4308,11 +4309,11 @@ class LinesDialog(QDialog):
         if not lid or self._lib is None:
             return
         items = self._voice_items()
-        labels = [x[1] for x in items]
+        labels = _unique_labels([x[1] for x in items])
         label, ok = QInputDialog.getItem(self, "修复声音", "选择要指向的声音素材：", labels, 0, False)
         if not ok:
             return
-        slot = items[labels.index(label)][0]
+        slot = items[labels.index(label) if label in labels else 0][0]
         res = self._lib.save(lid, voice_slot=slot, clear_voice=not slot)
         if res[0] is False:
             _warn(self, "修复失败", res[1])
@@ -4400,7 +4401,7 @@ class PhysicsDialog(QDialog):
             sp = QDoubleSpinBox()
             sp.setRange(lo, hi)
             sp.setDecimals(2)
-            sp.setValue(float(cfg.get(key, 1.0)))
+            sp.setValue(float(cfg.get(key, 1.0)))  # norm-ok（physics 段已归一化为数值）
             row.addWidget(sp)
             row.addStretch(1)
             root.addLayout(row)
@@ -5355,6 +5356,23 @@ def open_resource_manager(pet, initial_tab=0):
         modal(dlg)
     except Exception as e:
         _dialog_failed(pet, "资源管理", e)
+
+
+def _unique_labels(labels):
+    """把可能重复的标签变成唯一（重复的追加「（2）」…）。
+
+    L1 修复：QInputDialog.getItem 只回传文本，调用方用 labels.index(文本) 反查下标，
+    而台词/对白/声音的标签是内容派生的（text[:24] 截断且 add 不去重）——重复标签会让
+    用户选第 2 条却静默绑定到第 1 条；标签漂移时 .index() 还会抛 ValueError。
+    """
+    seen = {}
+    out = []
+    for s in labels:
+        s = str(s)
+        n = seen.get(s, 0)
+        seen[s] = n + 1
+        out.append(s if n == 0 else "%s（%d）" % (s, n + 1))
+    return out
 
 
 def _dialog_failed(pet, name, err):

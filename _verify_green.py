@@ -10,6 +10,8 @@
 """
 import os
 import sys
+
+sys.dont_write_bytecode = True  # v2.1.4：检测不得在绿色版目录里生成 __pycache__（会让发布检测假失败）
 import tempfile
 import shutil
 import time
@@ -44,7 +46,7 @@ main.USAGE_PATH = os.path.join(_tmp, "usage.json")
 main.MEMORY_PATH = os.path.join(_tmp, "memory.json")  # P1-6：记忆文件同样隔离到临时目录
 main.pet_log.set_data_dir(_tmp)  # P0-2：pet_* 直连日志同样隔离
 
-check("green version", main.VERSION == "2.1.3", main.VERSION)
+check("green version", main.VERSION == "2.1.4", main.VERSION)
 
 from PySide6.QtWidgets import QApplication  # noqa: E402
 

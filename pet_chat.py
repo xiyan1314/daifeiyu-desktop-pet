@@ -219,6 +219,8 @@ class ChatService:
             model = (cfg.get("ai_model") or "").strip() or DEFAULT_MODEL
             # P1-10+：人设预设（default/sheshe/tsundere）或用户自定义（custom → ai_system_prompt）
             sys_prompt = self._prompt(cfg)
+            # 这三个键在 load_config 归一化时已被强制成 int（见 tests/test_config_robustness.py），
+            # 这里直接转换是安全的：norm-ok
             max_tokens = int(cfg.get("ai_max_tokens", 60) or 60)
             reply_len = int(cfg.get("ai_reply_len", self._default_reply_len) or self._default_reply_len)
             rounds = int(cfg.get("chat_memory_rounds", 3) or 3)

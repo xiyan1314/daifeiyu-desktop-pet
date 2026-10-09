@@ -38,6 +38,35 @@ def set_redact_key(key):
     _redact_key = key
 
 
+def guard_slot(name, fn):
+    """定时器槽守卫（共享实现）：槽内异常只记日志（含 traceback）并继续跑。
+
+    为什么需要：QTimer 槽里未捕获的异常会走 sys.excepthook → 弹模态错误框，
+    高频 tick 会反复弹，表现为桌宠"卡住不动"。定时器槽是后台心跳，出错应该记日志、
+    下一拍继续。（v2.1.4：主窗口 _gslot 与各服务模块的槽统一走这里。）
+    """
+    import functools
+
+    @functools.wraps(fn)
+    def _run(*args, **kwargs):
+        try:
+            return fn(*args, **kwargs)
+        except Exception as e:  # noqa: BLE001
+            try:
+                import time as _t
+                import traceback
+                _seen = globals().setdefault("_SLOT_SEEN", {})
+                _now = _t.monotonic()
+                if _now - float(_seen.get(name, 0.0)) >= 60:  # 限流：同一槽 60s 一条
+                    _seen[name] = _now
+                    log_error("timer slot %s failed: %r\n%s" % (name, e, traceback.format_exc()))
+            except Exception:
+                pass  # 有意忽略：日志自身失败无处可记
+            return None
+
+    return _run
+
+
 def _default_dir():
     """默认日志目录：与 桌宠.py 的 _data_dir() 同规则（可写探测 → APPDATA 回退）。
 

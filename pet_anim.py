@@ -18,6 +18,7 @@ import os
 
 from PySide6.QtCore import QObject, QTimer, Signal
 from PySide6.QtGui import QPixmap
+import pet_log
 
 
 class FrameAnim(QObject):
@@ -44,7 +45,7 @@ class FrameAnim(QObject):
         self._loops = -1         # 目标循环遍数；-1 表示无限
         self._on_finish = None   # 播放结束回调
         self._timer = QTimer(self)
-        self._timer.timeout.connect(self._advance)
+        self._timer.timeout.connect(pet_log.guard_slot("anim._advance", self._advance))
 
     # ---- 帧集管理 ----
     def add_set(self, name, pixmaps):
@@ -161,5 +162,5 @@ if __name__ == "__main__":
         print("FRAMEANIM SMOKE OK")
         app.quit()
 
-    QTimer.singleShot(100, stop_and_report)
+    QTimer.singleShot(100, anim, stop_and_report)
     sys.exit(app.exec())
