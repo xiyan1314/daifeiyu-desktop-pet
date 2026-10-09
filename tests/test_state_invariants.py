@@ -499,6 +499,41 @@ def test_form_only_idle_ends_within_hold(pet):
     pet.apply_idle_settings(pet.cfg)
 
 
+def test_random_wander_action_blocked_during_full_form(pet):
+    """v2.1.9 回归（用户反复反馈的"吃饱形态被待机吞了"的真因）：
+
+    默认配置下 v2.1 待机是空操作，真正的"待机动作"是 idle_tick 里的**内置随机闲逛动作**
+    （jump/zzz）。它在吃饱形态（消化窗口）里照常插播，导致"吃饱形态没保持住"。
+    修法：消化窗口/变身/待机展示期间，idle_tick 不得播放随机闲逛动作、也不得入睡。
+    """
+    _reset(pet)
+    pet.feed("小鱼干")
+    pet._eat_done("test")
+    assert pet._digest_pending() is True and pet.form != pet._user_form
+    played = []
+    _real_pa = pet.actions.play_action
+    _real_pick = pet.actions._pick
+    pet.actions._pick = lambda: ("jump", None)   # 强制抽到动作，验证门控
+    pet.actions.play_action = lambda name, arg=None: (played.append(name), _real_pa(name, arg))[1]
+    try:
+        pet.actions.idle_tick()                  # 模拟 15s tick 在消化窗口内到点
+        assert played == [], "消化窗口内仍插播了随机动作：%r" % played
+    finally:
+        pet.actions.play_action = _real_pa
+        pet.actions._pick = _real_pick
+    pet._digest_timer.stop()
+    pet._digest()
+    # 消化结束后，随机动作应恢复可播
+    pet.actions._pick = lambda: ("jump", None)
+    pet.actions.play_action = lambda name, arg=None: played.append(name)
+    try:
+        pet.actions.idle_tick()
+        assert "jump" in played, "消化结束后随机动作没恢复"
+    finally:
+        pet.actions.play_action = _real_pa
+        pet.actions._pick = _real_pick
+
+
 def test_sleep_survives_voice_finished(pet):
     """M1 回归：睡眠中「朗读完成」不得静默醒来，也不得把形态留在睡形态且无主人。"""
     _reset(pet)

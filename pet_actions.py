@@ -85,6 +85,15 @@ class ActionService:
         _maybe_idle = getattr(pet, "maybe_idle_behavior", None)
         if _maybe_idle is not None:
             _maybe_idle()
+        # v2.1.9：吃饱形态（消化窗口）/变身/待机展示期间**不入睡**，也不插播随机闲逛动作——
+        # 否则 jump/zzz 会在"吃饱形态"保留期里播放（用户从头到尾反馈的"吃饱形态被待机吞了"
+        # 正是这个内置随机动作，而不是 v2.1 待机系统：默认配置下 v2.1 待机是空操作）。
+        _high_priority_display = (
+            getattr(pet, "_digest_pending", lambda: False)()
+            or getattr(pet, "_transform_home", None) is not None
+            or bool(getattr(pet, "_idle_form_active", False)))
+        if _high_priority_display:
+            return
         if pet.anim_mode in ("idle", "form_idle") and (time.monotonic() - pet._last_activity) > self._sleep_after:
             pet._show_sleep()
             pet.show_bubble(random.choice(["呼……呼……", "zzZ……睡得好香~", "睡着了……别吵~"]))
