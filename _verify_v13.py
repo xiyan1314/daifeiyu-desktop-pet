@@ -5,6 +5,7 @@
 新菜单构建、6 个对话框、托盘/退出路径。运行时数据全部落到临时目录，
 不污染真实 DATA_DIR；退出时清理。用法：python _verify_v13.py
 """
+import json
 import os
 import sys
 import shutil
@@ -24,7 +25,7 @@ sys.path.insert(0, HERE)
 
 FAILS = []
 CHECKS = []
-EXPECT_CHECKS = 207  # v2.0.7：检查总数硬断言（每次增删检查同步更新；本检查自身不计入）
+EXPECT_CHECKS = 233  # v2.1：检查总数硬断言（每次增删检查同步更新；本检查自身不计入）
 
 
 def check(name, cond, extra=""):
@@ -130,7 +131,8 @@ def main_flow():
     # ---- 1. 启动基础状态 ----
     check("startup cfg role default", pet.cfg.get("role") == "")
     check("book created", pet.book is not None)
-    check("lines_pools built", set(pet.lines_pools) == {"sajiao", "greedy", "happy", "idle"})
+    check("lines_pools built", set(pet.lines_pools) == {"sajiao", "greedy", "scared",
+                                                       "happy", "idle", "startup", "petting"})
     check("bubble style default", main.BUBBLE_STYLE.get("font_size") == 10)
 
     # ---- 1b. 行走参数断言（v1.4.2 降速档，纯函数直测） ----
@@ -472,10 +474,12 @@ def main_flow():
         pet._set_form("f2")
         check("menu form switch pix",
               pet.item.pixmap().cacheKey() == pet.sprites["f2"]["side"].cacheKey())
-        # 消化回第一形态
+        # v2.1：消化回**用户选定形态**（不再写死第一形态）
+        pet.set_user_form("f2")
         pet._set_form("f2")
         pet._digest()
-        check("digest back to f0", pet.form == "f0")
+        check("digest back to user form", pet.form == "f2" and pet._user_form == "f2")
+        pet.set_user_form("f0")
         # 删除无孤儿：全部形态文件清理
         _form_files = [os.path.join(_tmp, "roles", m["file"]) for m in pet.role_lib.form_metas(r3["id"])]
         pet.role_lib.delete(r3["id"])
@@ -763,22 +767,31 @@ def main_flow():
           and any("行为测试" in b for b in _bubbles), "bubbles=%r" % (_bubbles,))
     # 待机行为：默认关闭（现行为等价）；配置后空闲超时触发
     check("behavior idle default off", pet.behaviors.idle(lambda: pet.cfg) is None)
-    pet.cfg["idle_behavior"] = _bhv["id"]
-    pet.cfg["idle_behavior_seconds"] = 5
+    pet.cfg["idle_behavior"] = _bhv["id"]      # 旧键兼容：自动进 idle_actions
+    pet.cfg["idle_trigger_delay"] = 5          # v2.1：触发 B 延迟（新键）
+    pet.cfg["idle_actions"] = []               # 清掉上面 v2.1 段落的动作，隔离验证本条
     pet._last_activity = time.monotonic() - 10
+    pet._last_idle_at = 0.0                    # 清掉去重窗口（隔离验证本场景）
+    pet._idle_after_full_at = None
+    pet.anim_mode = "idle"
     pet.maybe_idle_behavior()
     check("idle behavior triggers", pet._behavior_seq is not None)
     pet._behavior_seq = None
-    # 待机行为触发不得重置 _last_activity（入睡计时不受影响 → 行为后仍会入睡）
+    pet._idle_active = False
+    # 待机触发不得重置 _last_activity（入睡计时不受影响 → 行为后仍会入睡）
     pet._last_activity = time.monotonic() - 70  # 已超入睡阈值
     _act_before = pet._last_activity
-    pet._last_idle_behavior_at = 0.0  # 清掉上次触发的去重窗口（隔离验证本场景）
+    pet._last_idle_at = 0.0
+    pet._idle_after_full_at = None
+    pet.anim_mode = "idle"
     pet.maybe_idle_behavior()
     check("idle behavior keeps sleep timer", pet._last_activity == _act_before
           and pet._behavior_seq is not None)
     pet._behavior_seq = None
+    pet._idle_active = False
     pet.cfg["idle_behavior"] = ""
-    pet.cfg["idle_behavior_seconds"] = pet_behaviors.DEFAULT_BEHAVIOR_CFG["idle_behavior_seconds"]
+    pet.cfg["idle_trigger_delay"] = pet_behaviors.DEFAULT_BEHAVIOR_CFG["idle_trigger_delay"]
+    pet.cfg["idle_actions"] = []
     # 行为级 off 等价：默认配置下 idle_tick 仍按旧逻辑入睡（行为系统关闭=现行为）
     _sleep_calls = []
     _real_show_sleep = pet._show_sleep
@@ -792,14 +805,15 @@ def main_flow():
     check("idle tick off-equivalent sleep", len(_sleep_calls) == 1, "n=%d" % len(_sleep_calls))
     # 配置归一化：越界/坏值钳回默认口径
     _cfg_saved = dict(pet.cfg)
-    pet.cfg["idle_behavior_seconds"] = 99999
+    pet.cfg["idle_trigger_delay"] = 99999      # v2.1：新键是唯一来源（旧键自动同步）
     pet.cfg["transform_seconds"] = "abc"
     main.save_config(pet.cfg)
     _cfg_n = main.load_config()
     check("config behavior clamp",
-          _cfg_n.get("idle_behavior_seconds") == 60  # 上界=入睡阈值，防死配置
+          _cfg_n.get("idle_trigger_delay") == 60   # 上界=入睡阈值，防死配置
+          and _cfg_n.get("idle_behavior_seconds") == 60  # 旧键同步（旧版读取路径兼容）
           and _cfg_n.get("transform_seconds") == pet_behaviors.DEFAULT_BEHAVIOR_CFG["transform_seconds"],
-          "s=%r t=%r" % (_cfg_n.get("idle_behavior_seconds"), _cfg_n.get("transform_seconds")))
+          "s=%r t=%r" % (_cfg_n.get("idle_trigger_delay"), _cfg_n.get("transform_seconds")))
     main.save_config(_cfg_saved)
     pet.cfg = dict(_cfg_saved)
     # 断点#12：双形态角色（睡觉/变身/不参与喂食标记；字符串 "false" 不算真）
@@ -1016,6 +1030,133 @@ def main_flow():
     for _aid2 in [a["id"] for a in pet.alarms.list()]:
         pet.alarms.delete(_aid2)
 
+    # ---- v2.1：台词库 / 声音素材 / 配音系统 / 待机系统 ----
+    import pet_voice as _pv
+    check("lines lib seeded", pet.lines_lib.count() > 30)
+    _ln, _lerr = pet.lines_lib.add("v2.1 测试台词", "happy", "r_x", "v_x")
+    check("line add/save", _ln is not None and not _lerr
+          and pet.lines_lib.save(_ln["id"], text="改过了")[0] is True
+          and pet.lines_lib.get(_ln["id"])["text"] == "改过了", "err=%r" % (_lerr,))
+    _dlg1, _derr = pet.lines_lib.add_dialogue("v2.1 对白", [_ln["id"]])
+    check("dialogue crud", _dlg1 is not None and not _derr
+          and [x["text"] for x in pet.lines_lib.dialogue_lines(_dlg1["id"])] == ["改过了"],
+          "err=%r" % (_derr,))
+    _badref = pet.lines_lib.validate_references(lambda s: False, lambda s: False)
+    check("validate references", any(x["line_id"] == _ln["id"] for x in _badref)
+          and "角色不存在" in _badref[0]["reason"])
+    _scan = pet._scan_invalid_refs(notify=False)
+    check("scan invalid refs ui", isinstance(_scan, list) and len(_scan) >= 1)
+    # 声音素材库（与音效片段分开）
+    _ref_wav = os.path.join(_tmp, "v21_ref.wav")
+    make_test_wav(_ref_wav)
+    _asset, _aerr = pet.voice_assets.import_file(_ref_wav, "v21 音色")
+    check("voice asset import", _asset is not None and not _aerr
+          and pet.voice_assets.asset_path(_asset["id"]) is not None, "err=%r" % (_aerr,))
+    _infos = _pv.backend_infos()
+    check("voice backends pluggable", len(_infos) >= 7
+          and {i["id"] for i in _infos} >= {"gpt_sovits", "f5_tts", "cosyvoice",
+                                            "minimax", "elevenlabs"})
+    check("voice bind+resolve", pet.voice.bind_voice("r_bind", _asset["id"])[0] is True
+          and pet.voice.resolve_voice("r_bind", None)[0] == _asset["id"]
+          and pet.voice.resolve_voice("r_unbound", None)[0] == "")
+    check("voice ready gate", pet.voice.check_ready()[0] is False  # 默认关闭：阻止播放并给原因
+          and bool(pet.voice.check_ready()[1]))
+    pet.voice.unbind_voice("r_bind")
+    # S1 回归：切后端保存后，其它后端的 Key 与参数必须原样保留（此前会被清空/串台）
+    _voice_backup = dict(pet.cfg.get("voice") or {})
+    try:
+        _vd = pet_dialogs.VoiceDialog(pet)
+        # 走真实交互路径：先在控件里改 GPT-SoVITS 地址 → 切到 MiniMax 填 Key → 切回来保存
+        _vd._backend.setCurrentIndex(_vd._backend.findData("gpt_sovits"))
+        _vd._param_widgets["base_url"][1].setText("http://192.168.1.9:9880")
+        _vd._backend.setCurrentIndex(_vd._backend.findData("minimax"))
+        _vd._key.setText("MM-KEY")
+        _vd._key_edited.add("minimax")
+        _vd._backend.setCurrentIndex(_vd._backend.findData("gpt_sovits"))
+        _vd._save(silent=True)
+        _v = pet.cfg.get("voice") or {}
+        check("voice save isolates backends",
+              (_v.get("backend_keys") or {}).get("minimax") == "MM-KEY"
+              and ((_v.get("backend_params") or {}).get("gpt_sovits") or {}).get(
+                  "base_url") == "http://192.168.1.9:9880",
+              "keys=%r url=%r" % ((_v.get("backend_keys") or {}).get("minimax"),
+                                  ((_v.get("backend_params") or {}).get("gpt_sovits")
+                                   or {}).get("base_url")))
+        _vd.close()
+    except Exception as e:
+        check("voice save isolates backends", False, repr(e))
+    finally:
+        pet.cfg["voice"] = _pv.normalize_voice(_voice_backup)
+        main.save_config(pet.cfg)
+    # S2 回归：只有旧键 idle_behavior_seconds 的配置文件，启动后必须迁进新键（不被默认值吃掉）
+    _cfg_backup2 = dict(pet.cfg)
+    try:
+        with open(main.CONFIG_PATH, "w", encoding="utf-8") as _f:
+            json.dump({"schema_version": 2, "idle_behavior_seconds": 12}, _f,
+                      ensure_ascii=False)
+        _loaded = main.load_config()
+        check("legacy idle seconds migrate", _loaded.get("idle_trigger_delay") == 12,
+              "got=%r" % (_loaded.get("idle_trigger_delay"),))
+    except Exception as e:
+        check("legacy idle seconds migrate", False, repr(e))
+    finally:
+        pet.cfg.update(_cfg_backup2)
+        main.save_config(pet.cfg)
+    # S3 回归：旧 lines_extra 归一化不得再做 20 条/60 字截断（迁移前就丢数据）
+    _cfg3 = {"lines_extra": {"sajiao": ["条%d" % _i for _i in range(25)] + ["长" * 80]}}
+    main.pet_config.normalize_cfg(_cfg3, main.DEFAULT_CONFIG, frozenset())
+    check("legacy lines not truncated",
+          len(_cfg3["lines_extra"]["sajiao"]) == 26
+          and len(_cfg3["lines_extra"]["sajiao"][-1]) == 80,
+          "n=%d" % len(_cfg3["lines_extra"]["sajiao"]))
+    # 待机系统：两触发 / 多动作 / 播放模式 / idle_form 不吞用户形态
+    _icfg = pet.behaviors.idle_config(lambda: pet.cfg)
+    check("idle cfg defaults", _icfg["idle_trigger_delay"] == 8
+          and _icfg["idle_delay_after_full"] == 2 and _icfg["idle_play_mode"] == "sequential")
+    _ib1, _ = pet.behaviors.add("idle_a", [{"act": "say", "text": "待机一"}])
+    _ib2, _ = pet.behaviors.add("idle_b", [{"act": "say", "text": "待机二"}])
+    check("idle apply settings", pet.apply_idle_settings({
+        "idle_trigger_delay": 6, "idle_delay_after_full": 1, "idle_play_mode": "sequential",
+        "idle_actions": [
+            {"id": _ib1["id"], "behavior_id": _ib1["id"], "enabled": True, "weight": 1.0, "order": 1},
+            {"id": _ib2["id"], "behavior_id": _ib2["id"], "enabled": True, "weight": 1.0, "order": 2}]}) is True
+        and len(pet.behaviors.idle_config(lambda: pet.cfg)["idle_actions"]) == 2)
+    _pick1, _aid1, _pe1 = pet.behaviors.idle_pick(lambda: pet.cfg, None)
+    _pick2, _aid2, _pe2 = pet.behaviors.idle_pick(lambda: pet.cfg, _aid1)
+    check("idle pick rotates", _pick1 is not None and _pick2 is not None
+          and _pick1["id"] != _pick2["id"])
+    # 触发 A：吃饱形态结束 → 登记待机时刻
+    pet._idle_after_full_at = None
+    pet._digest()
+    check("trigger A armed", pet._idle_after_full_at is not None)
+    # 待机形态只做展示期覆盖，结束后回到用户选定形态
+    _keys = pet.form_keys
+    if len(_keys) >= 2:
+        pet.set_user_form(_keys[-1])
+        _uf_before = pet._user_form == _keys[-1] and pet.form == _keys[-1]
+        pet.apply_idle_settings({"idle_form": _keys[0]})
+        pet._start_idle("test")
+        _overlay = pet.form == _keys[0] and pet._user_form == _keys[-1]
+        pet._idle_end()
+        check("idle form overlay+restore", _uf_before and _overlay and pet.form == pet._user_form)
+        pet.apply_idle_settings({"idle_form": ""})
+        pet.set_user_form(_keys[0])
+    else:
+        check("idle form overlay+restore", True, "单形态角色：跳过形态覆盖检查")
+    # 导出包：携带台词/对白，剥掉克隆后端密钥
+    _vm, _ve = pet_export.build_manifest(
+        {"id": "x2", "name": "y", "file": "a.png", "form": "single",
+         "frames": ["a.png"], "added": ""},
+        [], {"voice": {"enabled": True, "backend_keys": {"minimax": "SECRETKEY"}}},
+        None, [{"id": "l1", "text": "t"}], [{"id": "d1", "name": "n", "line_ids": ["l1"]}],
+        [{"id": "v1", "name": "vn", "ext": ".wav", "file": "voice_ref/v1.wav"}])
+    check("bundle carries lines", bool(_vm) and isinstance(_vm.get("lines"), list)
+          and _vm["lines"][0]["id"] == "l1"
+          and isinstance(_vm.get("dialogues"), list)
+          and isinstance(_vm.get("voice_assets"), list), "err=%r" % (_ve,))
+    check("bundle scrubs voice keys", "SECRETKEY" not in json.dumps(_vm)
+          and any("backend_keys" in str(x) for x in _vm.get("excluded") or []))
+
     # ---- 3. 音效导入 + 音效组 ----
     wav = os.path.join(_tmp, "tone.wav")
     make_test_wav(wav)
@@ -1067,17 +1208,30 @@ def main_flow():
     pet.apply_bubble_style({"bg": "#ffe9c8", "fg": "#7a4a21", "border": "#b07030", "font_size": 12, "radius": 20})
     check("bubble style applied", main.BUBBLE_STYLE.get("bg") == "#ffe9c8" and main.BUBBLE_STYLE.get("font_size") == 12)
     pet.apply_bubble_style({"bg": "#ffffff", "fg": "#203170", "border": "#203170", "font_size": 10, "radius": 16})
+    # v2.1：台词数据落在台词库（lines.json）；save_lines 作为兼容入口整体替换该类别的用户条目
+    _bi_before = len([x for x in pet.lines_lib.lines("sajiao") if x.get("builtin")])
     pet.save_lines("sajiao", ["这是自定义台词一", "这是自定义台词二"])
-    check("lines saved", len(pet.lines_pools["sajiao"]) == len(main.LINES_SAJIAO) + 2)
-    # M4 / H1 回归：台词对话框必须能预填已保存的自定义台词（lines_extra 键）
+    _user_lines = [x for x in pet.lines_lib.lines("sajiao") if not x.get("builtin")]
+    check("lines saved", len(_user_lines) == 2
+          and {x["text"] for x in _user_lines} == {"这是自定义台词一", "这是自定义台词二"}
+          and len([x for x in pet.lines_lib.lines("sajiao") if x.get("builtin")]) == _bi_before,
+          "user=%d" % len(_user_lines))
+    # v2.1：台词对话框（新三页签）冒烟 + 池子同步 + 失效引用页
     try:
         ldlg = pet_dialogs.LinesDialog(pet)
-        prefill = ldlg._edits["sajiao"].toPlainText()
-        check("lines dialog prefill", "这是自定义台词一" in prefill and "这是自定义台词二" in prefill,
-              "prefill=%r" % (prefill[:60],))
+        _texts = [ldlg._list.item(i).text() for i in range(ldlg._list.count())]
+        check("lines dialog smoke", ldlg._tabs.count() == 3
+              and any("这是自定义台词一" in t for t in _texts),
+              "rows=%d" % len(_texts))
         ldlg.close()
     except Exception as e:
-        check("lines dialog prefill", False, repr(e))
+        check("lines dialog smoke", False, repr(e))
+    # v2.1：删台词 → 池子立即刷新（on_changed → 桌宠._on_lines_changed）
+    _del_id = _user_lines[0]["id"]
+    pet.lines_lib.delete(_del_id)
+    check("lines changed refresh", "这是自定义台词一" not in pet.lines_pools["sajiao"]
+          and pet.lines_lib.get(_del_id) is None)
+    pet.lines_lib.undo()  # 撤销回来，后续检查不受影响
 
     # ---- 6. 菜单构建（stub exec，断言分区与动作数量）----
     class _Menu(main.QMenu):
@@ -1118,6 +1272,9 @@ def main_flow():
         check("menu resource item", any("资源管理" in t for t in texts))
         check("menu behavior entry", any("行为设置" in t for t in texts))
         check("menu alarm entry", any("闹钟" in t for t in texts))
+        check("menu lines entry", any("自定义台词" in t for t in texts))
+        check("menu idle entry", any("待机设置" in t for t in texts))
+        check("menu resource entry", any("资源管理" in t or "音频片段" in t for t in texts))
         check("menu transform hidden default", not any(t == "🐡 变身" for t in texts))
         check("menu bundle entries", any("导出角色包" in t for t in texts)
               and any("导入角色包" in t for t in texts))
@@ -1177,6 +1334,10 @@ def main_flow():
         ("AmountNote", lambda: pet_dialogs.AmountNoteDialog(pet)),
         ("RoleImport", lambda: pet_dialogs.RoleImportDialog(pet)),
         ("Voice", lambda: pet_dialogs.VoiceDialog(pet)),  # v2.0.7：防回归（曾因布局误传 addWidget 打不开）
+        # v2.1：新增面板全部进冒烟（构造期异常会被入口 try/except 吞掉，必须靠这里兜住）
+        ("VoiceAssetPanel", lambda: pet_dialogs.VoiceAssetPanel(pet)),
+        ("Idle", lambda: pet_dialogs.IdleDialog(pet)),
+        ("ResourceManager21", lambda: pet_dialogs.ResourceManagerDialog(pet, 2)),
     ):
         try:
             dlg = mk()

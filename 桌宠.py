@@ -62,7 +62,7 @@ import pet_alarm
 
 
 APP_NAME = "大肥鱼桌宠"
-VERSION = "2.0.7"
+VERSION = "2.1.0"
 PAD = 1.25  # 窗口相对角色的透明边距（为压扁/回弹预留空间）
 IDLE_FRAME_MS = 140      # 待机帧间隔
 EAT_FRAME_MS = 110       # 进食帧间隔
@@ -161,6 +161,13 @@ DEFAULT_CONFIG = {
     "idle_behavior": pet_behaviors.DEFAULT_BEHAVIOR_CFG["idle_behavior"],
     "idle_behavior_seconds": pet_behaviors.DEFAULT_BEHAVIOR_CFG["idle_behavior_seconds"],
     "transform_seconds": pet_behaviors.DEFAULT_BEHAVIOR_CFG["transform_seconds"],
+    # v2.1：待机系统（两触发 + 多动作 + idle_form；默认值单一来源 pet_behaviors）
+    "idle_trigger_delay": pet_behaviors.DEFAULT_BEHAVIOR_CFG["idle_trigger_delay"],
+    "idle_delay_after_full": pet_behaviors.DEFAULT_BEHAVIOR_CFG["idle_delay_after_full"],
+    "idle_form": pet_behaviors.DEFAULT_BEHAVIOR_CFG["idle_form"],
+    "idle_actions": pet_behaviors.DEFAULT_BEHAVIOR_CFG["idle_actions"],
+    "idle_play_mode": pet_behaviors.DEFAULT_BEHAVIOR_CFG["idle_play_mode"],
+    "idle_resume_on_interrupt": pet_behaviors.DEFAULT_BEHAVIOR_CFG["idle_resume_on_interrupt"],
 }
 
 # P1-3：config.json schema 版本（1=旧版全量存储；2=diff 只存改动项）
@@ -173,7 +180,9 @@ _SOFT_FIX_KEYS = {"always_on_top", "ai_enabled", "follow_mouse", "wander", "soun
                   "ai_base_url", "ai_model", "ai_system_prompt", "lines_extra",
                   "sound_group", "role", "scale_compensated_role",
                   "ai_persona", "click_through", "role_frame_max", "physics", "voice",
-                  "idle_behavior", "idle_behavior_seconds", "transform_seconds"}
+                  "idle_behavior", "idle_behavior_seconds", "transform_seconds",
+                  "idle_trigger_delay", "idle_delay_after_full", "idle_form", "idle_actions",
+                  "idle_play_mode", "idle_resume_on_interrupt"}
 
 
 def _fix_entry(k, a, b):
@@ -319,6 +328,15 @@ def load_config():
             for k, v in data.items():
                 if k in DEFAULT_CONFIG:
                     cfg[k] = v
+            # v2.1 迁移（必须在合并默认值之后、归一化之前，且以**原始文件**为准）：
+            # 新键 idle_trigger_delay 在 DEFAULT_CONFIG 里天然存在，若只让 normalize 判断
+            # "新键缺失才读旧键"，旧用户设的 idle_behavior_seconds 会被默认值吃掉（S2）。
+            if "idle_trigger_delay" not in data and "idle_behavior_seconds" in data:
+                cfg["idle_trigger_delay"] = data.get("idle_behavior_seconds")
+            # 同理：旧自定义台词（lines_extra）在 normalize 里已被历史截断逻辑处理过，
+            # 迁移必须用原始值，否则 20 条/60 字的旧限制会在迁移时把数据吃掉（S3）。
+            if isinstance(data.get("lines_extra"), dict):
+                cfg["_legacy_lines_extra"] = data.get("lines_extra")
     except Exception as e:
         _log_error("load_config 读取失败（按默认值运行）: %r" % (e,))
         set_redact_key("")  # 配置读不到=没有 key：同步脱敏缓存，阻断 _redact 兜底重读的日志环
@@ -456,6 +474,12 @@ class Signals(QObject):
     ai_emote = Signal(str, str)  # P3-3：AI 回复带出表情（mode=state/emote, kind）
     voice_play = Signal(str)  # v2.0：合成 worker 线程 → 主线程播放投递（QMediaPlayer 仅主线程）
     voice_error = Signal(str)  # v2.0：合成失败原因 → 主线程气泡（不跨线程碰 Qt 控件）
+    # v2.1：语言系统（配音）worker 线程 → 主线程（角色槽位, 台词 id）
+    voice_started = Signal(str, str)   # 开始朗读一条
+    voice_finished = Signal(str, str)  # 读完一条
+    voice_dialogue_done = Signal()     # 整段对白读完
+    lines_changed = Signal()           # 台词库变化（池子/UI 刷新）
+    voice_refs_changed = Signal(int)   # 失效引用数量（启动扫描/删除后）
     weather = Signal(str)
     weather_done = Signal()
     ai_done = Signal()
@@ -534,6 +558,13 @@ class PetWindow(QWidget):
             self.book = None
         self._usage = self.book.today_usage() if self.book is not None else 0.0
         self._preview_player = None  # mp3 试听兜底播放器（惰性构建）
+        # ---- v2.1：台词库（独立台词自定义模块）+ 声音素材库（资源库内，与音效分开） ----
+        self.lines_lib = pet_lines.LineService(DATA_DIR, _log_error)
+        self.voice_assets = pet_resources.VoiceAssetLibrary(DATA_DIR)
+        self._migrate_lines_extra()  # v2.0 的 cfg["lines_extra"] → v2.1 台词库（一次性）
+        self.lines_lib.on_changed(signals.lines_changed.emit)  # 跨线程安全：只 emit，不碰控件
+        self.role_lib.on_deleted(lambda rid: signals.voice_refs_changed.emit(-1))
+        self.voice_assets.on_deleted(lambda sid: signals.voice_refs_changed.emit(-1))
         self.lines_pools = {}
         self._refresh_lines()
 
@@ -552,8 +583,14 @@ class PetWindow(QWidget):
         self.actions = pet_actions.ActionService(self, lambda: self.cfg, pick_idle_action,
                                                  SLEEP_AFTER_SECONDS)
         # v2.0：语音服务（默认关闭；片段播放注入 preview_audio）
+        # v2.1：升级为配音系统——注入台词库/角色库/声音素材库，可插拔克隆后端 + 播放队列
         self.voice = pet_voice.VoiceService(DATA_DIR, lambda: self.cfg,
-                                            self._play_voice_clip, _log_error)
+                                            self._play_voice_clip, _log_error,
+                                            stop_clip=self._stop_voice_clip,
+                                            save_cfg=save_config,
+                                            lines=self.lines_lib,
+                                            roles=self.role_lib,
+                                            voice_assets=self.voice_assets)
         # v2.0.2：行为自定义服务（待机行为/行为序列；执行调度在本类主线程）
         self.behaviors = pet_behaviors.BehaviorService(DATA_DIR)
         # v2.0.5：闹钟服务（到点判定在主线程 QTimer 轮询）
@@ -643,6 +680,16 @@ class PetWindow(QWidget):
 
         self._build_sprites()
         self.form = self.form_keys[0]
+        # v2.1：用户显式选定的形态（待机/idle_form/睡眠/变身/喂食都不得覆盖）
+        self._user_form = self.form_keys[0]
+        # v2.1：待机系统状态（两触发 + 多动作轮换 + idle_form 展示期覆盖）
+        self._idle_active = False
+        self._idle_form_active = False
+        self._idle_after_full_at = None      # 触发 A 到点时刻（None=无待触发）
+        self._idle_last_action = ""          # 顺序模式记上次播到哪
+        self._last_idle_at = 0.0
+        self._speaking_voice = False         # 正在读台词（高优先级，待机让位）
+        self._invalid_refs = []              # 台词失效引用（UI 提示用）
         self._digest_timer = None
         # P1-7：各形态尺寸可能不同：窗口按较大者定（v2 角色计入形态 scale），避免溢出/不居中
         self.base_w, self.base_h = self._compute_base_size()
@@ -784,6 +831,18 @@ class PetWindow(QWidget):
         signals.reply.connect(self._on_reply_voice)  # v2.0：AI 回复语音（默认关闭）
         signals.voice_play.connect(self.preview_audio)  # v2.0：主线程播放合成/片段
         signals.voice_error.connect(self.show_bubble)  # v2.0：合成失败原因主线程气泡
+        # v2.1：语言系统（配音）回调——worker 线程 emit → 主线程槽（不跨线程碰控件）
+        self.voice.on_speaking_started(signals.voice_started.emit)
+        self.voice.on_speaking_finished(signals.voice_finished.emit)
+        self.voice.on_dialogue_finished(signals.voice_dialogue_done.emit)
+        self.voice.on_error(signals.voice_error.emit)
+        signals.voice_started.connect(self._on_voice_started)
+        signals.voice_finished.connect(self._on_voice_finished)
+        signals.voice_dialogue_done.connect(self._on_voice_dialogue_done)
+        signals.lines_changed.connect(self._on_lines_changed)
+        signals.voice_refs_changed.connect(lambda n: self._scan_invalid_refs())
+        # v2.1：启动扫描一次失效引用（有失效就气泡提示，绝不静默）
+        QTimer.singleShot(4000, self, lambda: self._scan_invalid_refs())
         signals.ai_emote.connect(self.chat.on_ai_emote)  # P3-3：AI 回复带出的表情
         signals.reply_ok.connect(self.chat.on_reply_ok)  # 任务完成音回主线程播
         signals.balance_updated.connect(self.balance.on_updated)
@@ -799,7 +858,8 @@ class PetWindow(QWidget):
             self._position_badge()
             self.balance.start()
         self._show_state("laugh", 3200)  # 开场第一个表情：开心大笑
-        self.show_bubble(random.choice(LINES_STARTUP))  # 开场即称呼用户「绳匠」
+        # v2.1：开场台词也来自台词库（用户可增删改「开场」类别），空池兜底
+        self._say_line(self._pick_line(("startup",), fallback="绳匠，你来啦！"))
 
         # ---- 托盘图标（窗口被遮挡/找不到时的兜底入口）----
         self.tray = QSystemTrayIcon(self)
@@ -1005,20 +1065,21 @@ class PetWindow(QWidget):
             return
         _target = _tf[0]
         _d_secs = pet_behaviors.DEFAULT_BEHAVIOR_CFG["transform_seconds"]
+        _uf = getattr(self, "_user_form", "") or self.form_keys[0]
         if self.form == _target:
             _home = self._transform_home
             self._cancel_transform()
             if _home and _home in self.form_keys:
-                self._set_form(_home)
-            elif self.form != self.form_keys[0]:
-                # 手动停在变身形态且无回切目标：回第一形态（与喂食消化回位同语义）
-                self._set_form(self.form_keys[0])
+                self._set_form(_home, display_only=True)
+            elif self.form != _uf:
+                # 手动停在变身形态且无回切目标：回用户选定形态（与喂食消化回位同语义）
+                self._set_form(_uf, display_only=True)
             self.show_bubble("变回来啦~")
             return
         self._cancel_transform()
         self._transform_home = self.form
-        self._set_form(_target, cancel_transform=False)
-        self._last_activity = time.monotonic()
+        self._set_form(_target, cancel_transform=False, display_only=True)  # 变身是临时展示
+        self._touch_activity()
         self.show_bubble("变身！")
         try:
             _secs = int(self.cfg.get("transform_seconds", _d_secs) or _d_secs)
@@ -1033,46 +1094,145 @@ class PetWindow(QWidget):
     def _end_transform(self):
         _home = self._transform_home  # 先取回切目标（_cancel_transform 会清空）
         self._cancel_transform()
-        if _home and _home in self.form_keys:
-            self._set_form(_home, cancel_transform=False)
+        _uf = getattr(self, "_user_form", "") or self.form_keys[0]
+        _back = _home if (_home and _home in self.form_keys) else _uf
+        if self.form != _back:
+            self._set_form(_back, cancel_transform=False, display_only=True)
+
+    # ---------- v2.1：待机系统（两触发 + 分层优先级 + 多动作 + idle_form） ----------
+    def _idle_cfg(self):
+        """归一化后的待机配置（默认值/钳制单一来源 pet_behaviors）。"""
+        return self.behaviors.idle_config(lambda: self.cfg)
+
+    def _idle_ready(self):
+        """待机能否开始：不忙/不摸头/没睡/处于待机表现/没在读台词/没有待机动作在播。"""
+        if self.busy or self._petting or self._sleeping:
+            return False
+        if getattr(self, "_speaking_voice", False) or self.voice.is_speaking():
+            return False
+        if self.anim_mode not in ("idle", "form_idle"):
+            return False
+        return not self._idle_active
 
     def maybe_idle_behavior(self):
-        """v2.0.2：待机行为（idle_tick 每拍调用）。未配置/条件不满足 → 不做任何事
-        （默认关闭 = 行为与旧版完全等价）。"""
-        _b = self.behaviors.idle(lambda: self.cfg)
-        if _b is None:
-            return
-        if self.busy or self._petting or self._sleeping:
-            return
-        if self.anim_mode not in ("idle", "form_idle"):
-            return
-        try:
-            _secs = int(self.cfg.get("idle_behavior_seconds",
-                                     pet_behaviors.DEFAULT_BEHAVIOR_CFG["idle_behavior_seconds"]) or 0)
-        except (TypeError, ValueError):
-            _secs = 0  # 有意忽略：坏值按不启用处理（normalize 已兜底，此处防御直改 cfg）
-        _now = time.monotonic()
-        if _secs <= 0 or _now - self._last_activity < _secs:
-            return
-        # 距上次待机行为触发不足 secs → 本轮不重复触发；
-        # 用独立时间戳而非重置 _last_activity：不打断入睡阈值计时
-        # （待机行为触发后仍按现有逻辑进睡眠，除非行为本身含 sleep 步骤）
-        if _now - getattr(self, "_last_idle_behavior_at", 0.0) < _secs:
-            return
-        self._last_idle_behavior_at = _now
-        self._run_behavior(_b["id"])
+        """待机轮询（idle_tick 每拍调用）。两个触发来源共用同一套动作与形态规则：
 
-    def _run_behavior(self, bid):
+        触发 A：吃饱形态结束后 idle_delay_after_full 秒（原「吃饱后卖萌」语义，保留）；
+        触发 B：无任何交互满 idle_trigger_delay 秒。
+        任一触发后重置另一个；待机进行中不重复触发；被打断后两触发都重新计时。"""
+        now = time.monotonic()
+        # 触发 A（到点即检查；条件不满足则作废本次，避免无限等待）
+        if self._idle_after_full_at is not None:
+            if now >= self._idle_after_full_at:
+                if self._idle_ready():
+                    self._start_idle("full")
+                self._idle_after_full_at = None
+            return
+        # 触发 B
+        cfg = self._idle_cfg()
+        delay = int(cfg.get("idle_trigger_delay") or 0)
+        if delay <= 0 or now - self._last_activity < delay:
+            return
+        if now - getattr(self, "_last_idle_at", 0.0) < delay:
+            return
+        if not self._idle_ready():
+            return
+        self._start_idle("idle")
+
+    def _start_idle(self, source):
+        """开始一次待机：选动作（按模式）→ 切 idle_form（展示期）→ 播行为序列。"""
+        cfg = self._idle_cfg()
+        self._idle_after_full_at = None  # 两触发互斥：触发即消费
+        self._last_idle_at = time.monotonic()
+        b, aid, err = self.behaviors.idle_pick(lambda: self.cfg, self._idle_last_action)
+        if err:
+            # 引用失效不静默，但同一原因最多 60s 提示一次（此前每拍都弹，气泡刷屏）
+            _now = time.monotonic()
+            if _now - getattr(self, "_idle_err_at", 0.0) > 60:
+                self._idle_err_at = _now
+                self.show_bubble(err)
+        if aid:
+            self._idle_last_action = aid
+        form = str(cfg.get("idle_form") or "")
+        if form and form in self.form_keys and form != self.form:
+            self._set_form(form, cancel_transform=False, display_only=True)
+            self._idle_form_active = True
+        if b is None:
+            return  # 没有可播动作：只做形态待机（或什么都不做）
+        self._idle_active = True
+        self._run_behavior(b["id"], as_idle=True)
+
+    def _idle_end(self):
+        """待机动作自然播完：恢复用户选定形态，允许下一次触发。
+
+        M5 修复：待机动作里带 sleep 步骤时（已入睡）不复位形态——否则会"睡着却显示
+        用户形态"，醒来也回不到睡眠形态。"""
+        self._idle_active = False
+        if self._sleeping:
+            self._idle_form_active = False  # 睡眠形态接管，待机形态覆盖就此结束
+            return
+        self._restore_user_form()
+
+    def _idle_interrupt(self, why=""):
+        """高优先级动作/交互（说话、拖拽、喂食、摸头、手动切形态…）打断待机。
+
+        待机是最低优先级：立即停序列、恢复用户形态，两个触发来源都重新计时。"""
+        was_active = bool(self._idle_active) or bool(getattr(self, "_idle_form_active", False))
+        self._idle_active = False
+        self._idle_after_full_at = None
+        if getattr(self, "_behavior_is_idle", False) and self._behavior_seq is not None:
+            self._behavior_gen = getattr(self, "_behavior_gen", 0) + 1  # 顶替旧链（挂起 singleShot 失效）
+            self._behavior_seq = None
+            self._behavior_is_idle = False
+        cfg = self._idle_cfg()
+        if not cfg.get("idle_resume_on_interrupt"):
+            self._idle_last_action = ""  # 未消费：下次重新选（顺序模式从头/继续由 last 决定）
+        if was_active:
+            self._restore_user_form()
+        self._last_idle_at = time.monotonic()
+
+    def _restore_user_form(self):
+        """待机结束/被打断：回到用户选定形态（idle_form 只做展示期覆盖）。
+
+        展示期（吃帧/睡眠/变身）不复位：那些形态是更高优先级动作主动切的。"""
+        if not getattr(self, "_idle_form_active", False):
+            return
+        if self.busy or self._sleeping or getattr(self, "_transform_home", None) is not None:
+            return
+        self._idle_form_active = False
+        uf = getattr(self, "_user_form", "") or self.form_keys[0]
+        if uf in self.sprites and self.form != uf:
+            self._set_form(uf, cancel_transform=False, display_only=True)
+
+    def set_user_form(self, form):
+        """用户显式选择形态（菜单）：记为 user_selected_form，待机不得覆盖它。"""
+        if form not in self.sprites:
+            return
+        self._user_form = form
+        self._idle_interrupt("user_form")
+        self._set_form(form)
+
+    def _touch_activity(self):
+        """记一次「用户交互」：重置无交互计时 + 打断待机（两触发重新计时）。"""
+        self._last_activity = time.monotonic()
+        self._idle_interrupt("activity")
+
+    def _run_behavior(self, bid, as_idle=False):
         """v2.0.2：启动行为序列（主线程、QTimer 逐步骤调度；不设 busy）。
 
         序列带代次 token：重触发时旧序列挂起的 singleShot 触发后因代次不符立即退出，
-        不会并行驱动新序列（防 wait 节奏错乱/步骤重叠）。"""
+        不会并行驱动新序列（防 wait 节奏错乱/步骤重叠）。
+        v2.1：as_idle=True 时按待机规则执行（忽略 form 步骤、结束后回调 _idle_end）。"""
         _b = self.behaviors.get(bid)
         if _b is None or not _b.get("steps"):
+            if as_idle:
+                self._idle_end()
             return
         _gen = getattr(self, "_behavior_gen", 0) + 1
         self._behavior_gen = _gen
-        self._behavior_seq = {"steps": list(_b["steps"]), "idx": 0, "gen": _gen}
+        self._behavior_is_idle = bool(as_idle)
+        self._behavior_seq = {"steps": list(_b["steps"]), "idx": 0, "gen": _gen,
+                              "as_idle": bool(as_idle)}
         self._behavior_step(_gen)
 
     def _behavior_step(self, gen):
@@ -1081,10 +1241,15 @@ class PetWindow(QWidget):
         if _seq is None or _seq.get("gen") != gen:
             return  # 序列已被新触发顶替：旧链静默退出（幂等）
         if _seq["idx"] >= len(_seq["steps"]):
+            _was_idle = bool(_seq.get("as_idle"))
             self._behavior_seq = None
+            self._behavior_is_idle = False
+            if _was_idle:
+                self._idle_end()  # 待机动作播完：恢复用户形态
             return
         _st = _seq["steps"][_seq["idx"]]
         _act = _st["act"]
+        _as_idle = bool(_seq.get("as_idle"))
         if _act == "play_action":
             # 与 play_action 同款门控：busy/摸摸头时有意跳过（互斥语义，非静默失败）
             if not (self.busy or self._petting):
@@ -1100,10 +1265,14 @@ class PetWindow(QWidget):
         elif _act == "emote":
             self._show_emote(_st["kind"])
         elif _act == "form":
-            if not (self.busy or self._petting):
+            # v2.1：待机行为里的 form 步骤按规格忽略（形态以 idle_form / 用户选定形态为准）；
+            # 用户手动播放的行为仍允许切形态（手动编排可能就是要切形态）。
+            if _as_idle:
+                pass
+            elif not (self.busy or self._petting):
                 if _st["name"] in self.form_keys:
                     self._stop_tween()  # 与合成动作互斥：先停振荡再切形态
-                    self._set_form(_st["name"])
+                    self.set_user_form(_st["name"])  # 用户编排的切形态=用户意图，记为用户形态
                 else:
                     self.show_bubble("形态「%s」不存在，跳过~" % _st["name"])
         elif _act == "sleep":
@@ -1112,10 +1281,37 @@ class PetWindow(QWidget):
                 self._show_sleep()
                 # sleep 为终止步：入睡中继续播后续步骤会被 _wake 回切撤销、语义混乱
                 self._behavior_seq = None
+                self._behavior_is_idle = False
+                self._idle_active = False
+                if _as_idle:
+                    self._idle_end()  # 已入睡：_idle_end 内部会跳过形态复位（M5）
                 return
+        elif _act == "speak_line":
+            # v2.1：读台词交给语言系统（本模块不 import pet_voice，经 PetWindow 转交）
+            self._behavior_speak_line(_st.get("line_id") or "")
+        elif _act == "speak_dialogue":
+            self._behavior_speak_dialogue(_st.get("dialogue_id") or "")
         _wait = _st.get("ms", 500) if _act == "wait" else 400
         _seq["idx"] += 1
         QTimer.singleShot(_wait, self, lambda: self._behavior_step(gen))
+
+    def _behavior_speak_line(self, line_id):
+        """v2.1：行为步骤 speak_line → 语言系统朗读（引用失效时明确提示，不静默）。"""
+        if not line_id:
+            return
+        self._idle_speak_self = line_id if getattr(self, "_behavior_is_idle", False) else ""
+        ok, err = self.voice.speak_line(line_id)
+        self._idle_speak_self = ""
+        if not ok:
+            self.show_bubble(err or "这条台词读不了")
+
+    def _behavior_speak_dialogue(self, dialogue_id):
+        """v2.1：行为步骤 speak_dialogue → 语言系统按顺序朗读整段对白。"""
+        if not dialogue_id:
+            return
+        ok, err = self.voice.speak_dialogue(dialogue_id)
+        if not ok:
+            self.show_bubble(err or "这段对白读不了")
 
     def _open_behavior_dialog(self):
         """v2.0.2：行为设置对话框（菜单入口）。"""
@@ -1123,6 +1319,34 @@ class PetWindow(QWidget):
             pet_dialogs.BehaviorDialog(self, self.behaviors, save_config).exec()
         except Exception as e:
             _log_error("behavior dialog: %r" % (e,))
+
+    def _open_idle_dialog(self):
+        """v2.1：待机设置对话框（两触发/待机形态/待机动作列表/播放模式）。"""
+        try:
+            pet_dialogs.IdleDialog(self).exec()
+        except Exception as e:
+            _log_error("idle dialog: %r" % (e,))
+
+    def apply_idle_settings(self, data=None):
+        """v2.1：待机设置回调（归一化后落盘；立即生效，不影响正在进行的动作）。"""
+        if not isinstance(data, dict):
+            return False
+        norm = pet_behaviors.normalize_idle_cfg({**self.cfg, **data})
+        self.cfg["idle_trigger_delay"] = norm["idle_trigger_delay"]
+        self.cfg["idle_delay_after_full"] = norm["idle_delay_after_full"]
+        self.cfg["idle_form"] = norm["idle_form"]
+        self.cfg["idle_actions"] = norm["idle_actions"]
+        self.cfg["idle_play_mode"] = norm["idle_play_mode"]
+        self.cfg["idle_resume_on_interrupt"] = norm["idle_resume_on_interrupt"]
+        self.cfg["idle_behavior_seconds"] = norm["idle_trigger_delay"]  # 旧键同步（兼容旧版读取）
+        # M3 修复：迁移已完成，清掉旧键——否则 normalize 每次都把旧行为补回列表，
+        # 用户"移除待机动作"会复活（也关不掉）。
+        self.cfg["idle_behavior"] = ""
+        save_config(self.cfg)
+        n = len([a for a in norm["idle_actions"] if a.get("enabled")])
+        self.show_bubble("待机设置已更新~（%d 条动作，%s）" % (
+            n, pet_behaviors.IDLE_MODE_LABELS.get(norm["idle_play_mode"], "")))
+        return True
 
     # ---------- v2.0.5：闹钟系统 ----------
     def _alarm_tick(self):
@@ -1170,23 +1394,159 @@ class PetWindow(QWidget):
             "角色包 (*.dfypet.zip)")
         if not _path:
             return
-        _ok, _err = pet_export.export_bundle(self.role_lib, self.behaviors, self.cfg, _path,
-                                                alarms_getter=self.alarms.list)
+        # v2.1：参考音默认不打包，用户可勾选要带上的声音素材（体积/隐私考虑）
+        _voice_ids = None
+        if self.voice_assets.assets():
+            _voice_ids = pet_dialogs.pick_voice_assets(self)
+            if _voice_ids is None:
+                return  # 用户取消整个导出
+        _ok, _err = pet_export.export_bundle(
+            self.role_lib, self.behaviors, self.cfg, _path,
+            alarms_getter=self.alarms.list,
+            # v2.1：只带**用户写的**台词（内置台词对面也有，避免每包重复一份语料）
+            lines_getter=lambda: [x for x in self.lines_lib.lines() if not x.get("builtin")],
+            dialogues_getter=self.lines_lib.dialogues,  # v2.1：对白随包
+            voice_assets_getter=self._voice_asset_files,
+            include_voice_ids=_voice_ids)
         if _ok:
-            self.show_bubble("角色包已导出，可以分享给朋友啦~")
+            _extra = ("（含 %d 个参考音）" % len(_voice_ids)) if _voice_ids else ""
+            self.show_bubble("角色包已导出%s，可以分享给朋友啦~" % _extra)
         else:
             self.show_bubble("导出失败：%s" % _err)
+
+    def _voice_asset_files(self):
+        """v2.1：声音素材（含可打包的绝对路径），供导出勾选用。"""
+        out = []
+        for a in self.voice_assets.assets():
+            p = self.voice_assets.asset_path(a["id"])
+            if p:
+                item = dict(a)
+                item["path"] = p
+                out.append(item)
+        return out
+
+    def _apply_imported_voice_assets(self, items, extract_dir):
+        """v2.1：导入包内声音素材 → 返回 {旧槽位: 新槽位} 映射。"""
+        mapping = {}
+        for a in (items or []):
+            if not isinstance(a, dict):
+                continue
+            _old = str(a.get("id") or "")
+            _base = os.path.basename(str(a.get("file") or ""))
+            _src = os.path.join(extract_dir or "", _base)
+            if not _old or not os.path.isfile(_src):
+                continue
+            _new, _err = self.voice_assets.import_file(_src, a.get("name") or _old)
+            if _new is None:
+                _log_error("import voice asset failed: %s" % _err)
+                continue
+            mapping[_old] = _new["id"]
+        return mapping
+
+    def _apply_imported_lines(self, lines, dialogues, maps):
+        """v2.1：导入包内台词与对白（id 换新、槽位按映射重指、对白引用同步重写）。"""
+        warnings = []
+        vmap = (maps or {}).get("voice") or {}
+        rmap = (maps or {}).get("role") or {}
+        id_map = {}
+        dlg_map = {}
+        for ln in (lines or []):
+            if not isinstance(ln, dict):
+                continue
+            _text = str(ln.get("text") or "").strip()
+            if not _text:
+                continue
+            _role = rmap.get(str(ln.get("role_slot") or ""), ln.get("role_slot") or "")
+            _voice = vmap.get(str(ln.get("voice_slot") or ""), ln.get("voice_slot") or "")
+            if ln.get("voice_slot") and not vmap.get(str(ln.get("voice_slot"))):
+                warnings.append("台词「%s」的声音不在包内，已改为跟随角色绑定"
+                                % _text[:10])
+                _voice = ""
+            if ln.get("role_slot") and not rmap.get(str(ln.get("role_slot"))):
+                _role = ""  # 角色不在包内：清空引用（不静默指向别的角色）
+            _new, _err = self.lines_lib.add(_text, ln.get("category") or "idle",
+                                            _role or None, _voice or None,
+                                            food=ln.get("food") or "")  # L2：喂食归属一并带过来
+            if _new is None:
+                warnings.append("台词未导入：%s" % _err)
+                continue
+            id_map[str(ln.get("id") or "")] = _new["id"]
+        if isinstance(dialogues, list):
+            for d in dialogues:
+                if not isinstance(d, dict):
+                    continue
+                # 包内对白可能同时引用"用户台词"与"内置台词"：用户台词按新 id 映射，
+                # 内置台词 id 在本地同样存在（种子 id 稳定）→ 原样保留，其余丢弃
+                _ids = []
+                for _x in (d.get("line_ids") or []):
+                    _k = str(_x)
+                    _mapped = id_map.get(_k)
+                    if _mapped:
+                        _ids.append(_mapped)
+                    elif self.lines_lib.get(_k) is not None:
+                        _ids.append(_k)
+                if not _ids:
+                    continue
+                _nd, _err = self.lines_lib.add_dialogue(d.get("name") or "导入对白", _ids)
+                if _nd is None:
+                    warnings.append("对白未导入：%s" % _err)
+                else:
+                    dlg_map[str(d.get("id") or "")] = _nd["id"]
+        # M6 修复：把包内**行为**里的读台词/读对白步骤重指到新 id
+        # （必须在对白导入之后：speak_dialogue 要用 dlg_map）
+        _bm = (maps or {}).get("behavior") or {}
+        for _bid in _bm.values():
+            _b = self.behaviors.get(_bid)
+            if _b is None or not _b.get("steps"):
+                continue
+            _steps, _changed = [], False
+            for _st in _b["steps"]:
+                _st = dict(_st)
+                if _st.get("act") == "speak_line" and _st.get("line_id") in id_map:
+                    _st["line_id"] = id_map[_st["line_id"]]
+                    _changed = True
+                elif _st.get("act") == "speak_dialogue" and _st.get("dialogue_id") in dlg_map:
+                    _st["dialogue_id"] = dlg_map[_st["dialogue_id"]]
+                    _changed = True
+                _steps.append(_st)
+            if _changed:
+                _ok, _err = self.behaviors.update(_bid, _b["name"], _steps)
+                if not _ok:
+                    warnings.append("行为「%s」的读台词步骤未重指：%s" % (_b["name"], _err))
+        self._refresh_lines()
+        self._scan_invalid_refs(notify=False)  # 导入后立刻刷新失效引用（不打扰，面板可见）
+        return warnings
 
     def _import_role_bundle(self):
         """导入角色包：素材/行为/可分享配置落地，缺资源明确提示，成功即切换展示。"""
         _path, _f = QFileDialog.getOpenFileName(self, "导入角色包", "", "角色包 (*.dfypet.zip)")
         if not _path:
             return
-        _res, _err = pet_export.import_bundle(self.role_lib, self.behaviors, self.cfg, _path,
-                                                alarms_apply=self._apply_imported_alarms)
+        _res, _err = pet_export.import_bundle(
+            self.role_lib, self.behaviors, self.cfg, _path,
+            alarms_apply=self._apply_imported_alarms,
+            voice_apply=self._apply_imported_voice_assets,
+            lines_apply=self._apply_imported_lines)
         if _res is None:
             self.show_bubble("导入失败：%s" % _err)
             return
+        # M7 修复：包内未带参考音时，绑定会指向不存在的槽位（界面还显示"未绑定"）——
+        # 明确清掉并告知，避免"看起来绑定了其实没有"的静默失效。
+        try:
+            _binds = dict((self.cfg.get("voice") or {}).get("bindings") or {})
+            _dead = [k for k, v in _binds.items()
+                     if v and self.voice_assets.get_asset(v) is None]
+            if _dead:
+                for k in _dead:
+                    _binds.pop(k, None)
+                self.cfg.setdefault("voice", {})["bindings"] = _binds
+                _res["warnings"].append(
+                    "包内 %d 个声音绑定没有随包参考音，已清空（去语音设置重新绑定）" % len(_dead))
+        except Exception as e:
+            _log_error("clean bindings failed: %r" % (e,))  # 有意忽略：清理失败不影响导入
+        # M1 修复：老分享包（v2.0.x）的自定义台词存在 cfg.lines_extra 里，导入后要立刻迁移，
+        # 否则要重启才进台词库（且重启时可能被旧截断逻辑吃掉）。
+        self._migrate_lines_extra()
         save_config(self.cfg)  # 可分享配置（语音开关等）已应用 → 持久化
         # 立即生效（不必重启）：气泡样式/音效组走现成应用入口
         if "bubble_style" in self.cfg:
@@ -1413,14 +1773,21 @@ class PetWindow(QWidget):
             self._digest_timer.stop()  # 切换角色：作废旧角色的消化定时器（L1）
         self._stop_tween()  # v2.0.1：切角色立即停合成动作，防旧角色振荡残留到新角色
         self._behavior_seq = None      # v2.0.2：切角色取消在途行为序列
+        self._behavior_is_idle = False
         self._cancel_transform()       # v2.0.2：切角色取消变身回切定时器
         self._sleep_home = None
+        # v2.1：切角色重置待机状态与用户选定形态（旧角色的形态键在新角色上无意义）
+        self._idle_active = False
+        self._idle_form_active = False
+        self._idle_after_full_at = None
+        self._idle_last_action = ""
         self._build_sprites()
         self._build_state_pix()  # 自定义角色：程序化表情图随底图重建
         # P1-7：各形态尺寸可能不同：窗口按较大者定（v2 角色计入形态 scale），避免溢出/不居中
         self.base_w, self.base_h = self._compute_base_size()
         if self.form not in self.sprites:
             self.form = self.form_keys[0]  # 角色形态数变少：回第一形态
+        self._user_form = self.form if self.form in self.form_keys else self.form_keys[0]
         self._wire_anim_sets()
         if self.busy and self.anim_mode == "eat":
             self.busy = False  # S1：吃帧被角色切换打断，_eat_done 不会再回调，显式释放
@@ -1586,7 +1953,7 @@ class PetWindow(QWidget):
             _sf = self._sleep_form_key()
             if _sf and _sf != self.form:
                 self._sleep_home = self.form
-                self._set_form(_sf)
+                self._set_form(_sf, display_only=True)  # 睡眠是临时展示，不改用户选定形态
         self.anim.stop()
         self.anim_mode = "sleep"
         self._cur_state = "sleep"
@@ -1603,11 +1970,12 @@ class PetWindow(QWidget):
         self._show_emote("zzz")
 
     def _wake(self):
-        self._last_activity = time.monotonic()
+        self._touch_activity()  # 唤醒=交互：重置无交互计时并打断待机
         if self._sleeping:
             self.voice.play_event("wake")  # v2.0：唤醒语音片段
-            if self._sleep_home and self._sleep_home in self.form_keys:
-                self._set_form(self._sleep_home)  # v2.0.2：醒来回到睡觉前的形态
+            _uf = getattr(self, "_user_form", "") or self.form_keys[0]
+            if _uf in self.form_keys and self.form != _uf:
+                self._set_form(_uf, display_only=True)  # v2.1：醒来回到用户选定形态
             self._sleep_home = None
             self._play_idle()
 
@@ -1670,11 +2038,12 @@ class PetWindow(QWidget):
         if not self._fx_petpet:
             return
         self._petting = True
+        self._touch_activity()  # v2.1：摸头=交互（打断待机 + 重新计时）
         self._fx_petpet_on = True
         self._place_fx("petpet")
         self.fx.play(self._fx_petpet, interval_ms=80, loops=-1)
         self._pet_max.start(15000)  # 看门狗：release 丢失时 15s 自停（M2 修复）
-        self.show_bubble(random.choice(LINES_PETTING))
+        self._say_line(random.choice(self.lines_pools.get("petting") or LINES_PETTING))
 
     def _on_pet_watchdog(self):
         """看门狗超时结束摸摸头：标记后收尾，随后的松手不再算「戳一下」。"""
@@ -1861,9 +2230,11 @@ class PetWindow(QWidget):
         self.bubble.show_text(text, gp)
 
     def _cycle_line(self):
-        pool = (self.lines_pools["sajiao"] + self.lines_pools["greedy"] + LINES_SCARED
-                + self.lines_pools["happy"] + self.lines_pools["idle"] + LINES_PETTING)
-        self.show_bubble(random.choice(pool))
+        """戳一戳随机台词：v2.1 起来自台词库（用户可增删改），空池兜中性句子。
+
+        走日常台词出口（_say_line）：开了「日常台词也用配音」时会用角色声音读出来。"""
+        self._say_line(self._pick_line(
+            ("sajiao", "greedy", "scared", "happy", "idle", "petting")))
 
     # ---------- 余额挂件 ----------
     def moveEvent(self, event):
@@ -2071,13 +2442,20 @@ class PetWindow(QWidget):
         anim.start()
         return anim
 
-    def _set_form(self, form, refresh=True, cancel_transform=True):
+    def _set_form(self, form, refresh=True, cancel_transform=True, display_only=False):
+        """切换展示形态。
+
+        display_only=False（默认）= 用户意图表达的切换（菜单/行为编排）→ 记为
+        user_selected_form；True = 临时展示（待机/睡眠/变身/喂食形态推进），
+        不改 user_selected_form——待机与临时状态因此永远不会吞掉用户选定的形态。"""
         if form not in self.sprites:
             return
         if form == self.form:
             return  # 同形态重选：什么都不做，避免待机动画重启造成的帧跳/卡顿
         if cancel_transform:
             self._cancel_transform()  # v2.0.2：手动切形态取消变身回切定时器（防 8s 后强制弹回）
+        if not display_only:
+            self._user_form = form  # 用户选定形态：待机/idle_form 不得覆盖
         self.form = form
         if self._custom_role:
             # P1-7：形态切换后帧集按「形态×动作」重查；若正在播待机帧，
@@ -2098,14 +2476,23 @@ class PetWindow(QWidget):
         self._apply_transform()
 
     def _digest(self):
-        if self.form != self.form_keys[0]:
+        """吃饱形态结束：回用户选定形态，并登记触发 A（延迟 idle_delay_after_full 后待机）。"""
+        _uf = getattr(self, "_user_form", "") or self.form_keys[0]
+        if self.form != _uf:
             # _set_form 内已在待机态回位；状态图展示中不掐断（state 结束时自然回待机）
-            self._set_form(self.form_keys[0])
-            self._show_emote("sparkle")
-            if self._custom_role:
-                self.show_bubble("变回「%s」啦~" % self.form_names.get(self.form_keys[0], "第一形态"))
-            else:
-                self.show_bubble(random.choice(["消化完啦，又饿了~", "瘦回来啦！", "还能再吃一点……"]))
+            self._set_form(_uf, display_only=True)
+        try:
+            _delay = int(self._idle_cfg().get("idle_delay_after_full") or 0)
+        except (TypeError, ValueError):
+            _delay = 0  # 有意忽略：坏值按 0（立即待机）
+        self._idle_after_full_at = time.monotonic() + max(0, _delay)
+        self._last_idle_at = 0.0  # 触发 A 立即生效（不受触发 B 去重窗口影响）
+        self._show_emote("sparkle")
+        if self._custom_role:
+            # 显示形态**名字**而不是形态键（f0/f1）
+            self.show_bubble("变回「%s」啦~" % self.form_names.get(_uf, _uf))
+        else:
+            self.show_bubble(random.choice(["消化完啦，又饿了~", "瘦回来啦！", "还能再吃一点……"]))
 
     def feed(self, food):
         if self.busy:
@@ -2120,14 +2507,18 @@ class PetWindow(QWidget):
         if self.cfg.get("sound", True):
             play_sound("feed")
         self.voice.play_event("feed")  # v2.0：喂食语音片段
-        line = random.choice(FOOD_LINES.get(food, ["啊呜~好吃！"]))
-        was_first = self.form == self.form_keys[0]  # 必须在 _set_form 之前记录
+        # v2.1：喂食台词来自台词库（用户可增删改；库空则回落内置 FOOD_LINES）
+        line = random.choice(self.lines_lib.food_texts(food))
+        _uf = getattr(self, "_user_form", "") or self.form_keys[0]
+        was_first = self.form == _uf  # 必须在 _set_form 之前记录（相对用户形态判定「首形态」）
         self.mood.fed()
-        # 喂食：形态顺次前进（多形态循环），refresh=False 先播吃帧再落新形态
+        # 喂食：形态顺次前进（多形态循环），refresh=False 先播吃帧再落新形态；
+        # 临时展示语义：吃完消化回 user_selected_form，不吞掉用户选定的形态
         cur_idx = self.form_keys.index(self.form) if self.form in self.form_keys else 0
         next_idx = (cur_idx + 1) % len(self.form_keys)
-        self._set_form(self.form_keys[next_idx], refresh=False)
-        self._last_activity = time.monotonic()
+        self._touch_activity()  # v2.1 修复：先记交互/打断待机，再切喂食形态
+        # （此前先切形态再打断，_idle_interrupt→_restore_user_form 会把刚切的形态拉回去）
+        self._set_form(self.form_keys[next_idx], refresh=False, display_only=True)
         if self._digest_timer is not None:
             self._digest_timer.stop()
             try:
@@ -2161,7 +2552,7 @@ class PetWindow(QWidget):
 
             self._run_anim(900, onval, on_finished=_squash_done)
         self._show_emote("note")
-        self.show_bubble(line)
+        self._say_line(line)  # v2.1：日常台词出口（气泡；开了「日常台词也用配音」则朗读）
 
     # ---------- 天气 ----------
     def _set_city(self):
@@ -2228,6 +2619,7 @@ class PetWindow(QWidget):
             if self._flying:
                 return  # P1-手感：飞行中不响应戳戳/摸摸头（落地静止后恢复）
             self._wake()
+            self._touch_activity()  # v2.1：点击=交互（打断待机 + 两触发重新计时）
             self._drag_samples = []  # P1-手感：新一轮拖拽轨迹采样
             self._spring_vx = 0.0
             self._spring_vy = 0.0
@@ -2605,6 +2997,90 @@ class PetWindow(QWidget):
         else:
             self.preview_audio(path)
 
+    def _stop_voice_clip(self):
+        """v2.1：停止当前播放（配音 stop() 用）。winsound 与 QMediaPlayer 两条链路都停。"""
+        try:
+            import winsound
+            winsound.PlaySound(None, winsound.SND_PURGE)  # wav 链路：立即静音
+        except Exception:
+            pass  # 有意忽略：非 Windows / 无播放时无需处理
+        try:
+            if self._preview_player is not None:
+                self._preview_player.stop()
+        except Exception:
+            pass  # 有意忽略：播放器可能未创建或已销毁（停止尽力而为）
+
+    # ---------- v2.1：语言系统（配音）回调（均在主线程） ----------
+    def _on_voice_started(self, role_slot, line_id):
+        """开始朗读：打断待机 + 播「说话」动作（对上动作/行为模块的自定义）。
+
+        M3 修复：**待机序列自己发起的朗读不算外部打断**——否则序列刚说出第一步，
+        speaking_started 就把这条序列的 gen 顶掉，后面所有步骤都不执行。"""
+        if line_id and line_id == getattr(self, "_idle_speak_self", ""):
+            self._speaking_voice = True  # 本序列自己的朗读：只标记，不打断
+            return
+        self._idle_interrupt("speak")
+        self._speaking_voice = True
+        name = str((self.cfg.get("voice") or {}).get("talk_action") or "").strip()
+        if name and self._action_exists(name):
+            self.actions.play_action(name)
+
+    def _on_voice_finished(self, role_slot, line_id):
+        """读完一条：解除说话态；无其他动作时回待机表现。"""
+        self._speaking_voice = False
+        if not (self.busy or self._petting):
+            self._play_idle()
+
+    def _on_voice_dialogue_done(self):
+        self._speaking_voice = False
+        self.show_bubble("对白读完啦~")
+
+    def _on_lines_changed(self):
+        """台词库变化：刷新池子 + 重新扫描失效引用（语言系统队列由自身清理）。"""
+        try:
+            self._refresh_lines()
+        except Exception as e:
+            _log_error("refresh lines failed: %r" % (e,))
+        self._scan_invalid_refs()
+
+    def _scan_invalid_refs(self, notify=True):
+        """v2.1：扫描台词库失效引用；返回失效列表。
+
+        启动 / 删除角色或声音素材 / 打开面板 / 台词变化时调用；有失效就明确提示
+        （气泡 + 面板红色提示条），**不自动删、不静默替换**。"""
+        try:
+            items = self.lines_lib.validate_references(
+                lambda slot: self.role_lib.get(slot) is not None,
+                lambda slot: self.voice_assets is not None and self.voice_assets.exists(slot))
+        except Exception as e:
+            _log_error("validate refs failed: %r" % (e,))
+            return []
+        # M6 修复：行为步骤里的读台词/读对白也会失效（分享包换 id 后可命中），一并扫描
+        try:
+            for _b in self.behaviors.list():
+                for _st in (_b.get("steps") or []):
+                    if _st.get("act") == "speak_line":
+                        if self.lines_lib.get(_st.get("line_id")) is None:
+                            items.append({
+                                "line_id": "", "behavior_id": _b["id"],
+                                "text_preview": "行为「%s」：读台词" % _b["name"],
+                                "missing_role": None, "missing_voice": None,
+                                "reason": "行为里要读的台词不存在了（可能被删或分享包换过 id）"})
+                    elif _st.get("act") == "speak_dialogue":
+                        if self.lines_lib.get_dialogue(_st.get("dialogue_id")) is None:
+                            items.append({
+                                "line_id": "", "behavior_id": _b["id"],
+                                "text_preview": "行为「%s」：读对白" % _b["name"],
+                                "missing_role": None, "missing_voice": None,
+                                "reason": "行为里要读的对白不存在了"})
+        except Exception as e:
+            _log_error("scan behavior refs failed: %r" % (e,))  # 有意忽略：扫描失败不影响台词扫描
+        self._invalid_refs = items
+        self.lines_lib.emit_invalid_reference(items)
+        if notify and items:
+            self.show_bubble("有 %d 处引用失效了，去「台词设置 → 失效引用」看看~" % len(items))
+        return items
+
     def _on_reply_voice(self, text):
         """v2.0：AI 回复 → 语音播放。优先级：reply 片段 > TTS 合成；错误提示文本不朗读。
 
@@ -2620,13 +3096,31 @@ class PetWindow(QWidget):
         self.voice.speak(text, on_error=signals.voice_error.emit)
 
     def apply_voice(self, data=None):
-        """v2.0：语音设置回调（归一化后落盘）。"""
+        """v2.0：语音设置回调（归一化后落盘）。返回 True（供对话框判断成败）。
+
+        v2.1 修复：backend_params / backend_keys **按后端深合并**——此前顶层浅合并 +
+        只回传当前后端 → 保存一次就把其它后端的 Key 清空、参数回落默认（凭据丢失）。"""
         if not isinstance(data, dict):
-            return
-        vcfg = pet_voice.normalize_voice({**self.cfg.get("voice", {}), **data})
-        self.cfg["voice"] = vcfg
+            return False
+        merged = {**self.cfg.get("voice", {})}
+        for k, v in data.items():
+            if k in ("backend_params", "backend_keys") and isinstance(v, dict):
+                old = dict(merged.get(k) or {})
+                for bid, sub in v.items():
+                    if isinstance(sub, dict):
+                        cur = dict(old.get(bid) or {})
+                        cur.update(sub)
+                        old[bid] = cur
+                    else:
+                        old[bid] = sub
+                merged[k] = old
+            else:
+                merged[k] = v
+        self.cfg["voice"] = pet_voice.normalize_voice(merged)
         save_config(self.cfg)
-        self.show_bubble("语音设置已更新~")
+        if not data.get("_silent"):
+            self.show_bubble("语音设置已更新~")
+        return True
 
     def preview_audio(self, path):
         """试听：wav 走 winsound 主链路；mp3 等降级 QMediaPlayer。返回是否发出。"""
@@ -2667,31 +3161,111 @@ class PetWindow(QWidget):
         self.bubble.update()
 
     def save_lines(self, pool, lines):
-        """保存自定义台词：pool ∈ sajiao/greedy/happy/idle。
+        """兼容入口（v2.0 台词对话框语义）：整体替换某类别的台词文本。
 
-        v2.0.6：解除数量与长度限制（不再截断），想写多少写多少。"""
-        pool = pool if pool in ("sajiao", "greedy", "happy", "idle") else "idle"
-        clean = []
+        v2.1 起数据落在台词库 lines.json（用户条目），旧的 cfg["lines_extra"] 只作迁移来源。"""
+        pool = pool if pool in pet_lines.LINE_CATEGORIES else "idle"
+        kept_ids = [ln["id"] for ln in self.lines_lib.lines(pool) if not ln.get("builtin")]
+        if kept_ids:
+            self.lines_lib.delete_many(kept_ids)
+        added = 0
         for x in (lines or []):
             s = str(x).strip()
             if s:
-                clean.append(s)
-        le = dict(self.cfg.get("lines_extra") or {})
-        le[pool] = clean
-        self.cfg["lines_extra"] = le
-        save_config(self.cfg)
+                ln, err = self.lines_lib.add(s, pool)
+                if ln is not None:
+                    added += 1
+                else:
+                    _log_error("save_lines add failed: %s" % err)
         self._refresh_lines()
-        self.show_bubble("台词库更新啦~")
+        self.show_bubble("台词库更新啦~（%s：%d 条）" % (
+            pet_lines.CATEGORY_LABELS.get(pool, pool), added))
+
+    # v2.1：台词池回落表（库被清空/类别为空时的兜底，保证气泡永不空）
+    _LINE_FALLBACK = {"sajiao": LINES_SAJIAO, "greedy": LINES_GREEDY, "scared": LINES_SCARED,
+                      "happy": LINES_HAPPY, "idle": LINES_IDLE, "startup": LINES_STARTUP,
+                      "petting": LINES_PETTING}
 
     def _refresh_lines(self):
-        """内置台词 + 用户自定义台词合并（戳气泡随机抽取用）。"""
-        base = {"sajiao": LINES_SAJIAO, "greedy": LINES_GREEDY, "happy": LINES_HAPPY, "idle": LINES_IDLE}
-        self.lines_pools = {k: list(v) for k, v in base.items()}
-        le = self.cfg.get("lines_extra") or {}
-        if isinstance(le, dict):
-            for k, v in le.items():
-                if k in self.lines_pools and isinstance(v, list):
-                    self.lines_pools[k] = self.lines_pools[k] + [x for x in v if x]
+        """v2.1：从台词库（lines.json）刷新随机台词池。
+
+        M12 修复：**库可用时不再回落内置常量**——用户把某类台词删光后，回落会让
+        被删的内置台词"复活"（与「内置可删」矛盾）。只有整个库为空/不可用时才回落，
+        且取词处用 _pick_line 兜中性句子，避免 random.choice([]) 崩。"""
+        pools = {}
+        try:
+            _empty = self.lines_lib.count() == 0
+        except Exception:
+            _empty = True
+        for cat, builtin in self._LINE_FALLBACK.items():
+            try:
+                texts = self.lines_lib.by_category(cat)
+            except Exception:
+                texts = []
+            pools[cat] = (texts or list(builtin)) if _empty else texts
+        self.lines_pools = pools
+
+    def _pick_line(self, cats, fallback=None):
+        """从若干类别池随机取一句；池子为空时给中性兜底（不崩、不复活已删台词）。"""
+        pool = []
+        for c in cats:
+            pool.extend(self.lines_pools.get(c) or [])
+        if not pool:
+            return fallback if fallback is not None else "……"
+        return random.choice(pool)
+
+    def _migrate_lines_extra(self):
+        """把 v2.0 的 cfg["lines_extra"]（只能追加的 4 池）迁进 v2.1 台词库，然后清空该键。
+
+        幂等：只补库中不存在的文本；迁移后 cfg 不再保存该键（数据单一来源=lines.json）。"""
+        # 优先用 load_config 保存的**原始文件值**（normalize 之前），迁移不丢数据（S3）
+        le = self.cfg.get("_legacy_lines_extra") or self.cfg.get("lines_extra")
+        if not isinstance(le, dict) or not le:
+            self.cfg.pop("_legacy_lines_extra", None)
+            return
+        moved = 0
+        for cat, texts in le.items():
+            if cat not in pet_lines.LINE_CATEGORIES or not isinstance(texts, list):
+                continue
+            have = {x["text"] for x in self.lines_lib.lines(cat)}
+            for t in texts:
+                s = str(t).strip()
+                if not s or s in have:
+                    continue
+                if self.lines_lib.add(s, cat)[0] is not None:
+                    moved += 1
+                    have.add(s)
+        self.cfg["lines_extra"] = {}
+        self.cfg.pop("_legacy_lines_extra", None)
+        save_config(self.cfg)
+        if moved:
+            _log_error("lines_extra migrated: %d" % moved)
+            QTimer.singleShot(2600, lambda: self.show_bubble(
+                "已把 %d 条自定义台词迁进新的台词库~" % moved))
+
+    def speak_dialogue(self, dialogue_id):
+        """v2.1：朗读整段对白（对话框/行为/菜单共用入口）。返回 (ok, err)。"""
+        return self.voice.speak_dialogue(dialogue_id)
+
+    def speak_line(self, line_id):
+        """v2.1：朗读单条台词（对话框/行为共用入口）。返回 (ok, err)。"""
+        return self.voice.speak_line(line_id)
+
+    def _say_line(self, text):
+        """v2.1：日常台词出口——气泡 + （可选）用角色声音读出来。
+
+        cfg["voice"]["speak_daily"] 打开且配音就绪时走克隆后端；否则纯气泡（老行为）。"""
+        text = str(text or "")
+        self.show_bubble(text)
+        vcfg = self.cfg.get("voice") or {}
+        if not (vcfg.get("speak_daily") and vcfg.get("enabled") and text):
+            return
+        # v2.1 修复：先确认"确实绑定了可用声音"再朗读——否则每条日常台词都会被
+        # 「没绑定声音」的错误气泡顶掉（把刚显示的台词覆盖掉）。
+        vs, _err = self.voice.resolve_voice("", None)
+        if not vs:
+            return
+        self.voice.speak_text(text, "", vs, on_error=signals.voice_error.emit)
 
     def on_ledger_changed(self):
         """账本变化（记一笔 / 余额差）后刷新挂件今日已用。"""
@@ -2763,6 +3337,11 @@ class PetWindow(QWidget):
     def _quit(self):
         """退出：停止全部定时器/动画、隐藏窗口、清理临时文件，然后结束进程。"""
         self._closing = True  # P1-5：先立退出标志，在途网络请求信号/气泡被守卫拦下
+        # v2.1：停配音（清空队列 + 停播放），避免退出时后台线程还在合成
+        try:
+            self.voice.stop()
+        except Exception:
+            pass  # 有意忽略：退出清理尽力而为
         # v2.0.4：等在途 API 测试线程收敛（运行中析构 QThread 是 Qt6 致命错误）
         try:
             pet_dialogs.shutdown_api_tests()

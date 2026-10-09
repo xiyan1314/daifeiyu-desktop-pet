@@ -76,7 +76,8 @@ class MenuBuilder:
             if key == pet.form:
                 name += " ✓"
             act = form_menu.addAction(name)
-            act.triggered.connect(lambda checked=False, k=key: pet._set_form(k))
+            # v2.1：菜单选形态 = 用户显式选择（记为 user_selected_form，待机不得覆盖）
+            act.triggered.connect(lambda checked=False, k=key: pet.set_user_form(k))
 
         role_menu = menu.addMenu("🐟 角色")
         role_group = QActionGroup(menu)
@@ -150,6 +151,9 @@ class MenuBuilder:
         # v2.0.2：行为设置（待机行为/行为编辑/变身时长）
         beh_act = set_menu.addAction("🧩 行为设置…")
         beh_act.triggered.connect(lambda checked=False: pet._open_behavior_dialog())
+        # v2.1：待机设置（两触发/待机形态/多动作/播放模式）
+        idle_act = set_menu.addAction("😴 待机设置…")
+        idle_act.triggered.connect(lambda checked=False: pet._open_idle_dialog())
         # v2.0.5：闹钟（到点提醒 + 自定义铃声 + 语音提醒）
         alarm_act = set_menu.addAction("⏰ 闹钟…")
         alarm_act.triggered.connect(lambda checked=False: pet._open_alarm_dialog())

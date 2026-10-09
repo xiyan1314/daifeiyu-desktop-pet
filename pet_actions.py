@@ -34,7 +34,9 @@ class ActionService:
         pet._run_anim(520, lambda v: pet.move(start + QPoint(0, -int(h * v))),
                       keyframes=[(0.5, 1.0)], end=0.0, easing=QEasingCurve.Type.InOutQuad)
         pet._show_emote("heart")
-        pet.show_bubble(random.choice(pet_lines.LINES_HAPPY))
+        # v2.1：跳跃台词优先取台词库"开心"类别（用户可增删改），空则回落内置常量
+        _say = getattr(pet, "_say_line", pet.show_bubble)
+        _say(random.choice(pet.lines_pools.get("happy") or pet_lines.LINES_HAPPY))
 
     def play_action(self, name, arg=None):
         """P3-2：按名称点播动作（闲逛加权随机与右键「动作」菜单共用同一实现）。
@@ -94,7 +96,9 @@ class ActionService:
             return
         self.play_action(name, arg)
         if name == "emote" and arg == "zzz":
-            pet.show_bubble(random.choice(pet.lines_pools["idle"] + pet.lines_pools["greedy"]))
+            # v2.1：走日常台词出口（气泡 + 可选配音朗读）
+            _say = getattr(pet, "_say_line", pet.show_bubble)
+            _say(random.choice(pet.lines_pools.get("idle", []) + pet.lines_pools.get("greedy", [])))
 
     def cpu_tick(self):
         pet = self.pet

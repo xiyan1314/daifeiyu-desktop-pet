@@ -21,15 +21,22 @@
   进度信号回主线程），UI 不阻塞、无 QApplication.processEvents。
 - class SoundPanel(QWidget)：音频片段列表（试听 / 导入 / 重命名 / 删除）+
   自定义音效组 5 行槽位（默认 / 静音 / 片段）。
-- class ResourceManagerDialog(QDialog)：QTabWidget 两页签（角色 / 音效），
-  内嵌上述两个面板；initial_tab=0/1。
+- class ResourceManagerDialog(QDialog)：QTabWidget 三页签（角色 / 音效 / 声音素材），
+  内嵌 RolePanel / SoundPanel / VoiceAssetPanel；initial_tab=0/1/2。
 - class LedgerDialog(QDialog)：今日 / 近 7 天 / 全部 三个页签 + 实时搜索 +
   记一笔（AmountNoteDialog）+ 导出 CSV。
 - class AmountNoteDialog(QDialog)：金额 QDoubleSpinBox(0.01~99999) + 备注输入。
 - class BubbleStyleDialog(QDialog)：背景 / 文字 / 描边三色 + 字号 8~18 +
   圆角 0~30 + 实时预览，保存回调 pet.apply_bubble_style。
-- class LinesDialog(QDialog)：撒娇 / 贪吃 / 开心 / 闲逛 四页台词编辑
-  （每行一条，数量与长度无限制），保存回调 pet.save_lines。
+- class LinesDialog(QDialog)：v2.1 台词自定义——「台词库 / 对白编排 / 失效引用」三页签，
+  直接读写 pet_lines.LineService（lines.json 是唯一来源；内置台词也可删、可撤销）。
+- class VoiceDialog(QDialog)：v2.1 AI 配音——「配音 / 角色绑定 / 朗读台词 / 事件音效」四页签；
+  后端参数与密钥**按后端隔离**，保存时整体深合并（不会清掉其它后端的 Key）。
+- class VoiceAssetPanel(QWidget)：声音素材（参考音）管理，嵌在资源管理第三页签。
+- class IdleDialog(QDialog)：待机设置（两触发 / 待机形态 / 待机动作列表 / 播放模式）。
+- class _VoicePickDialog(QDialog) + pick_voice_assets(pet)：导出时勾选要随包带的参考音。
+- 入口函数：open_voice / open_lines / open_resource_manager / open_idle / open_physics
+  （open_lines 与 open_resource_manager 是 v2.1 补的历史缺陷：菜单一直在调用但从未定义）。
 
 与主程序的耦合方式（全部防御性 getattr，缺省不崩）：
 - pet.cfg（配置 dict）、pet.role_lib、pet.audio_lib、pet.book（可能 None）
@@ -38,7 +45,10 @@
   wav 用 winsound；mp3 用 QMediaPlayer；失败弹提示）
 - pet.apply_sound_group(group)：保存音效组后同步进 pet_audio（主线实现）
 - pet.apply_bubble_style(style)：应用气泡样式（主线实现）
-- pet.save_lines(pool, lines)：保存自定义台词（主线实现）
+- pet.save_lines(pool, lines)：**兼容入口**（v2.0 语义：整体替换某类别文本；
+  v2.1 起数据落在台词库 lines.json，对话框直接用 pet.lines_lib）
+- pet.lines_lib / pet.voice / pet.voice_assets / pet.behaviors：v2.1 服务对象
+- pet.apply_voice(data) / pet.apply_idle_settings(data)：v2.1 设置回调（均返回 True/False）
 - pet.on_ledger_changed()：刷新挂件今日已用（主线实现）
 - pet.show_bubble(text)
 
@@ -49,7 +59,7 @@
   超大图等比缩小）。
 - 金额统一 "%.2f" 显示，表格金额列右对齐。
 
-Python 3.8+ 兼容。
+Python 3.10+（项目运行环境 3.10.2）。
 
 MIT License
 Copyright (c) 大肥鱼桌宠项目
@@ -74,6 +84,7 @@ from PySide6.QtWidgets import (
     QDialog,
     QDoubleSpinBox,
     QFileDialog,
+    QFormLayout,
     QGridLayout,
     QGroupBox,
     QHBoxLayout,
@@ -101,6 +112,8 @@ import pet_resources  # P3-5+：FRAME_MAX（帧上限用户可调）
 import pet_behaviors  # v2.0.2：行为动作白名单/序列校验（BehaviorDialog 共用口径）
 import pet_chat  # v2.0.4：服务商预设/错误归类/连通性测试（pet_chat 无 Qt 依赖，无环）
 import pet_alarm  # v2.0.5：闹钟服务（AlarmDialog 共用时间校验/铃声导入口径）
+import pet_lines  # v2.1：台词库（类别/标签单一来源；LinesDialog 直接用服务接口）
+import pet_voice  # v2.1：可插拔配音后端清单（VoiceDialog 用）
 
 # ---------------- 主题 ----------------
 DIALOG_QSS = """
@@ -2170,7 +2183,8 @@ class BehaviorDialog(QDialog):
     @staticmethod
     def _act_label(act):
         return {"play_action": "动作", "say": "台词", "voice": "语音",
-                "emote": "表情", "form": "切形态", "sleep": "入睡", "wait": "等待"}.get(act, act)
+                "emote": "表情", "form": "切形态", "sleep": "入睡", "wait": "等待",
+                "speak_line": "读台词", "speak_dialogue": "读整段对白"}.get(act, act)
 
     @staticmethod
     def _param_hint(act):
@@ -2178,40 +2192,62 @@ class BehaviorDialog(QDialog):
                 "voice": "事件：reply/feed/poke/sleep/wake",
                 "emote": "表情：note/sparkle/heart/zzz",
                 "form": "形态键（f0/f1 等内部键，见角色形态列表）", "sleep": "无需参数（终止步）",
-                "wait": "等待毫秒数（100~30000）"}.get(act, "")
+                "wait": "等待毫秒数（100~30000）",
+                "speak_line": "点「选择台词…」挑一条（用语言系统的配音朗读）",
+                "speak_dialogue": "点「选择对白…」挑一段（按顺序朗读整段对白）"}.get(act, "")
 
     @staticmethod
     def _step_text(st):
-        act = st["act"]
+        """步骤列表显示文本。v2.1 修复：支持 speak_line/speak_dialogue，并对未知动作
+        用 .get 兜底——此前落到 st["ms"] 会 KeyError，选中该行为即抛异常，
+        保存时步骤列表被清空 = 静默数据丢失。"""
+        act = st.get("act")
         if act == "play_action":
-            return "动作：%s" % st["name"]
+            return "动作：%s" % (st.get("name") or "?")
         if act == "say":
-            return "台词：%s" % st["text"]
+            return "台词：%s" % (st.get("text") or "")
         if act == "voice":
-            return "语音：%s" % st["event"]
+            return "语音：%s" % (st.get("event") or "?")
         if act == "emote":
-            return "表情：%s" % st["kind"]
+            return "表情：%s" % (st.get("kind") or "?")
         if act == "form":
-            return "切形态：%s" % st["name"]
+            return "切形态：%s" % (st.get("name") or "?")
         if act == "sleep":
             return "入睡"
-        return "等待 %d ms" % st["ms"]
+        if act == "speak_line":
+            return "读台词：%s" % (st.get("line_id") or "?")
+        if act == "speak_dialogue":
+            return "读对白：%s" % (st.get("dialogue_id") or "?")
+        if act == "wait":
+            return "等待 %d ms" % int(st.get("ms") or 0)
+        return "未知步骤：%s" % act
 
     # ---------- 待机/时长设置 ----------
     def _save_cfg_vals(self):
+        """写回行为/待机时长。v2.1：空闲秒数写新键 idle_trigger_delay（旧键只是兼容别名，
+        写入旧键不会生效——M1 修复）。"""
         cfg = getattr(self.pet, "cfg", None)
         if not isinstance(cfg, dict):
             return
-        cfg["idle_behavior_seconds"] = self._idle_secs.value()
+        cfg["idle_trigger_delay"] = self._idle_secs.value()
+        cfg["idle_behavior_seconds"] = self._idle_secs.value()  # 旧键同步（兼容旧版读取）
         cfg["transform_seconds"] = self._transform_secs.value()
         self._save_cfg(cfg)
 
     def _on_idle_pick(self, _idx):
+        """待机行为下拉（旧控件）：v2.1 起改写成**新待机配置**（idle_actions + single 模式），
+        不再写旧键 idle_behavior —— 否则旧键会把用户在待机设置里删掉的行为"复活"（M2）。"""
         cfg = getattr(self.pet, "cfg", None)
         if not isinstance(cfg, dict):
             return
-        cfg["idle_behavior"] = self._idle_combo.currentData() or ""
-        self._save_cfg(cfg)
+        bid = self._idle_combo.currentData() or ""
+        data = {"idle_actions": [], "idle_play_mode": "sequential"}
+        if bid:
+            data = {"idle_actions": [{"id": bid, "behavior_id": bid, "enabled": True,
+                                      "weight": 1.0, "order": 1}],
+                    "idle_play_mode": "single"}
+        if _call(self.pet, "apply_idle_settings", data) is None:
+            self._save_cfg(cfg)  # 兜底：老 pet 没有新入口时仍保存（不崩）
 
     # ---------- 列表 ----------
     def _refresh(self):
@@ -2226,7 +2262,10 @@ class BehaviorDialog(QDialog):
                 self._list.addItem("%s（%d 步）" % (b["name"], len(b["steps"])))
                 self._list.item(self._list.count() - 1).setData(Qt.ItemDataRole.UserRole, b["id"])
                 self._idle_combo.addItem("空闲时：" + b["name"], b["id"])
-        _cur = str(_cfg.get("idle_behavior") or "")
+        # 当前待机取自新配置：idle_actions 只有一条且模式 single 时显示它
+        _acts = _cfg.get("idle_actions") or []
+        _cur = str(_acts[0].get("behavior_id") or "") if (
+            _cfg.get("idle_play_mode") == "single" and len(_acts) == 1) else ""
         _found = self._idle_combo.findData(_cur)
         self._idle_combo.setCurrentIndex(_found if _found >= 0 else 0)
         self._idle_combo.blockSignals(False)
@@ -2290,6 +2329,16 @@ class BehaviorDialog(QDialog):
             st["name"] = raw
         elif act == "wait":
             st["ms"] = raw or "500"
+        elif act == "speak_line":
+            lid = raw or self._pick_from_lines()
+            if not lid:
+                return
+            st["line_id"] = lid
+        elif act == "speak_dialogue":
+            did = raw or self._pick_from_dialogues()
+            if not did:
+                return
+            st["dialogue_id"] = did
         norm, err = pet_behaviors.validate_steps([st])
         if norm is None:
             _warn(self, "行为编辑", err)
@@ -2298,6 +2347,39 @@ class BehaviorDialog(QDialog):
         _it.setData(Qt.ItemDataRole.UserRole, norm[0])
         self._steps.addItem(_it)
         self._param.clear()
+
+    def _pick_from_lines(self):
+        """行为步骤「读台词」：从台词库选一条（返回 line_id 或 ""）。"""
+        lib = _get(self.pet, "lines_lib")
+        if lib is None:
+            _warn(self, "行为编辑", "台词库不可用")
+            return ""
+        items = lib.lines()
+        if not items:
+            _warn(self, "行为编辑", "台词库是空的，先去「台词设置」建一条")
+            return ""
+        labels = ["[%s] %s" % (pet_lines.CATEGORY_LABELS.get(x["category"], x["category"]),
+                               x["text"].replace("\n", " ")[:24]) for x in items]
+        label, ok = QInputDialog.getItem(self, "选择台词", "这条行为要读哪句台词：", labels, 0, False)
+        if not ok:
+            return ""
+        return items[labels.index(label)]["id"]
+
+    def _pick_from_dialogues(self):
+        """行为步骤「读整段对白」：从对白列表选一段（返回 dialogue_id 或 ""）。"""
+        lib = _get(self.pet, "lines_lib")
+        if lib is None:
+            _warn(self, "行为编辑", "台词库不可用")
+            return ""
+        items = lib.dialogues()
+        if not items:
+            _warn(self, "行为编辑", "还没有对白，先去「台词设置 → 对白编排」建一段")
+            return ""
+        labels = ["%s（%d 条）" % (x["name"], len(x["line_ids"])) for x in items]
+        label, ok = QInputDialog.getItem(self, "选择对白", "这条行为要读哪段对白：", labels, 0, False)
+        if not ok:
+            return ""
+        return items[labels.index(label)]["id"]
 
     def _collect_steps(self):
         out = []
@@ -3218,21 +3300,141 @@ class SoundPanel(QWidget):
 
 
 # ---------------- c) 资源管理对话框 ----------------
+class VoiceAssetPanel(QWidget):
+    """v2.1：声音素材（参考音）管理——与音效片段**分开**管理，专供声音克隆。
+
+    导入 / 试听 / 重命名 / 删除；显示被哪些角色绑定（绑定在语音设置里改）。"""
+
+    def __init__(self, parent=None):
+        super().__init__(_qt_parent(parent))
+        self._pet = parent
+        self._lib = _get(parent, "voice_assets")
+        self.setStyleSheet(DIALOG_QSS)
+
+        root = QVBoxLayout(self)
+        root.addWidget(QLabel("声音素材（参考音）：声音克隆用，建议 3~10 秒干净人声（wav 最佳）"))
+        top = QHBoxLayout()
+        self._list = QListWidget()
+        self._list.setMinimumHeight(150)
+        top.addWidget(self._list, 1)
+        rbtns = QVBoxLayout()
+        b_preview = QPushButton("试听")
+        b_import = QPushButton("导入参考音…")
+        b_rename = QPushButton("重命名")
+        b_del = QPushButton("删除")
+        for b in (b_preview, b_import, b_rename, b_del):
+            rbtns.addWidget(b)
+        b_preview.clicked.connect(self._preview_selected)
+        b_import.clicked.connect(self._import_asset)
+        b_rename.clicked.connect(self._rename)
+        b_del.clicked.connect(self._delete_asset)
+        rbtns.addStretch(1)
+        top.addLayout(rbtns)
+        root.addLayout(top)
+        self._hint = QLabel("")
+        self._hint.setWordWrap(True)
+        root.addWidget(self._hint)
+        root.addStretch(1)
+        self._refresh()
+
+    def _parent_widget(self):
+        return self._pet if isinstance(self._pet, QWidget) else self
+
+    def _selected(self):
+        it = self._list.currentItem()
+        return it.data(Qt.ItemDataRole.UserRole) if it is not None else None
+
+    def _refresh(self):
+        self._list.clear()
+        assets = self._lib.assets() if self._lib else []
+        binds = {}
+        try:
+            binds = _get(self._pet, "voice").bindings()
+        except Exception:
+            binds = {}
+        used = {}
+        for role, vs in (binds or {}).items():
+            used.setdefault(vs, []).append(role or "默认")
+        for a in assets:
+            dur = a.get("duration")
+            dur_text = ("%.1fs" % dur) if isinstance(dur, (int, float)) else "?s"
+            who = used.get(a["id"]) or []
+            it = QListWidgetItem("%s  ·  %s%s  ·  %s" % (
+                a["name"], dur_text, ("  ·  绑定：" + "、".join(who)) if who else "", a.get("ext", "")))
+            it.setData(Qt.ItemDataRole.UserRole, a["id"])
+            self._list.addItem(it)
+        self._hint.setText("共 %d 个声音素材。绑定了角色的素材才能用于朗读（语音设置里绑定）。"
+                           % len(assets))
+
+    def _preview_selected(self):
+        sid = self._selected()
+        if not sid:
+            _warn(self._parent_widget(), "声音素材", "先选中一个素材")
+            return
+        ok, err = _get(self._pet, "voice").preview_asset(sid) if _get(self._pet, "voice") else (False, "语音服务不可用")
+        if not ok:
+            _warn(self._parent_widget(), "试听", err or "试听失败")
+
+    def _import_asset(self):
+        if self._lib is None:
+            return
+        path, _f = QFileDialog.getOpenFileName(self._parent_widget(), "导入参考音", "",
+                                               "音频 (*.wav *.mp3)")
+        if not path:
+            return
+        asset, err = self._lib.import_file(path)
+        if asset is None:
+            _warn(self._parent_widget(), "导入失败", err or "导入失败")
+            return
+        self._refresh()
+
+    def _rename(self):
+        sid = self._selected()
+        if not sid or self._lib is None:
+            return
+        cur = self._lib.get_asset(sid) or {}
+        name, ok = QInputDialog.getText(self._parent_widget(), "重命名", "新名字：",
+                                        text=cur.get("name", ""))
+        if not ok:
+            return
+        res = self._lib.rename(sid, name)
+        if res[0] is False:
+            _warn(self._parent_widget(), "重命名失败", res[1])
+            return
+        self._refresh()
+
+    def _delete_asset(self):
+        sid = self._selected()
+        if not sid or self._lib is None:
+            return
+        cur = self._lib.get_asset(sid) or {}
+        if not _confirm(self._parent_widget(), "删除声音素材",
+                        "删除「%s」吗？台词里引用它的地方会变成失效引用（会明确提示，不会静默）。"
+                        % cur.get("name", sid)):
+            return
+        res = self._lib.delete(sid)
+        if res[0] is False:
+            _warn(self._parent_widget(), "删除失败", res[1])
+            return
+        self._refresh()
+
+
 class ResourceManagerDialog(QDialog):
-    """QTabWidget 两页签（角色 / 音效），内嵌 RolePanel / SoundPanel。"""
+    """QTabWidget 三页签（角色 / 音效 / 声音素材），内嵌 RolePanel / SoundPanel / VoiceAssetPanel。"""
 
     def __init__(self, parent=None, initial_tab=0):
         super().__init__(_qt_parent(parent))
         self._pet = parent
         self.setWindowTitle("资源管理")
         self.setStyleSheet(DIALOG_QSS)
-        self.resize(680, 520)
+        self.resize(700, 560)
 
         root = QVBoxLayout(self)
         self._tabs = QTabWidget()
         self._tabs.addTab(RolePanel(parent), "角色")
         self._tabs.addTab(SoundPanel(parent), "音效")
-        self._tabs.setCurrentIndex(1 if initial_tab == 1 else 0)
+        self._tabs.addTab(VoiceAssetPanel(parent), "声音素材")  # v2.1：与音效分开
+        self._tabs.setCurrentIndex(max(0, min(2, int(initial_tab))))
         root.addWidget(self._tabs, 1)
         row = QHBoxLayout()
         row.addStretch(1)
@@ -3533,125 +3735,636 @@ class BubbleStyleDialog(QDialog):
         self._apply_preview()
 
 
-# ---------------- f) 台词设置对话框 ----------------
+# ---------------- f) 台词设置对话框（v2.1：独立台词自定义模块 UI） ----------------
 class LinesDialog(QDialog):
-    """台词设置：撒娇 / 贪吃 / 开心 / 闲逛 四页，每行一条台词。
+    """台词自定义：台词库（增删改查/排序/批量/清空/撤销）/ 对白编排 / 失效引用。
 
-    v2.0.6：台词数量与长度无限制（不截断），想写多少写多少；留空 = 使用内置台词。"""
+    v2.1：内置台词也可删（真删不留正文，只记 id 防复活）；数量与长度无限制；
+    删除走二次确认 + 可撤销（撤销最近一次删除/清空）。"""
 
     def __init__(self, parent=None):
         super().__init__(_qt_parent(parent))
         self._pet = parent
+        self._lib = _get(parent, "lines_lib")
+        self._editing = None          # 正在编辑的台词 id（None=新建）
+        self._editing_dlg = None      # 正在编辑的对白 id
         self.setWindowTitle("台词设置")
         self.setStyleSheet(DIALOG_QSS)
-        self.resize(540, 440)
+        self.resize(780, 620)
 
         root = QVBoxLayout(self)
-        root.addWidget(QLabel("每行一条台词，数量与长度不限。留空 = 使用内置台词。"))
+        self._banner = QLabel("")
+        self._banner.setWordWrap(True)
+        root.addWidget(self._banner)
         self._tabs = QTabWidget()
-        self._edits = {}
-        for label, pool in _LINE_POOLS:
-            ed = QPlainTextEdit()
-            ed.setPlaceholderText("每行一条，留空 = 使用内置「%s」台词" % label)
-            self._edits[pool] = ed
-            self._tabs.addTab(ed, label)
+        self._tabs.addTab(self._build_lines_tab(), "台词库")
+        self._tabs.addTab(self._build_dialogue_tab(), "对白编排")
+        self._tabs.addTab(self._build_invalid_tab(), "失效引用")
         root.addWidget(self._tabs, 1)
-
         row = QHBoxLayout()
-        save_btn = QPushButton("保存")
-        reset_btn = QPushButton("恢复默认")
-        cancel_btn = QPushButton("取消")
-        save_btn.setDefault(True)
-        save_btn.clicked.connect(self._save)
-        reset_btn.clicked.connect(self._reset_default)
-        cancel_btn.clicked.connect(self.reject)
+        self._count = QLabel("")
+        row.addWidget(self._count)
         row.addStretch(1)
-        row.addWidget(save_btn)
-        row.addWidget(reset_btn)
-        row.addWidget(cancel_btn)
+        close_btn = QPushButton("关闭")
+        close_btn.clicked.connect(self.accept)
+        row.addWidget(close_btn)
         root.addLayout(row)
+        self._refresh_all()
 
-        self._load_current()
-
-    # ---------- 内部 ----------
-    def _load_current(self):
-        """从 pet.cfg["lines_extra"] 读现有自定义台词；缺失则留空（= 使用内置）。"""
-        custom = {}
+    # ---------- 公共数据 ----------
+    def _role_items(self):
+        out = [("", "默认角色")]
+        lib = _get(self._pet, "role_lib")
         try:
-            cfg = _get(self._pet, "cfg") or {}
-            if isinstance(cfg, dict):
-                lines = cfg.get("lines_extra")
-                if isinstance(lines, dict):
-                    custom = lines
+            for r in (lib.list_roles() if lib is not None else []):
+                out.append((r["id"], r.get("name") or r["id"]))
         except Exception:
-            custom = {}
-        for _label, pool in _LINE_POOLS:
-            ed = self._edits[pool]
-            pool_lines = custom.get(pool)
-            text = "\n".join(str(x) for x in pool_lines) if isinstance(pool_lines, list) else ""
-            ed.setPlainText(text)
+            pass  # 有意忽略：角色列表取不到就只给默认角色（不崩）
+        return out
+
+    def _voice_items(self):
+        out = [("", "（跟随角色绑定）")]
+        lib = _get(self._pet, "voice_assets")
+        try:
+            for a in (lib.assets() if lib is not None else []):
+                out.append((a["id"], a.get("name") or a["id"]))
+        except Exception:
+            pass  # 有意忽略：声音素材取不到就只给"跟随绑定"
+        return out
 
     @staticmethod
-    def _parse(ed):
-        return [ln.strip() for ln in ed.toPlainText().splitlines() if ln.strip()]
+    def _fill_combo(combo, items, cur=None, dead_label=None):
+        """填下拉；cur 不在候选里时（引用已失效）加一条显式占位项，避免静默清空。"""
+        combo.clear()
+        for val, label in items:
+            combo.addItem(label, val)
+        want = cur if cur is not None else ""
+        if want and combo.findData(want) < 0 and dead_label:
+            combo.addItem(dead_label % str(want)[:12], want)
+        idx = combo.findData(want)
+        combo.setCurrentIndex(idx if idx >= 0 else 0)
 
-    # ---------- 动作 ----------
-    def _save(self):
-        # v2.0.6：数量/长度无限制，直接保存（空行由 _parse 剔除，留空 = 使用内置）
-        for _label, pool in _LINE_POOLS:
-            _call(self._pet, "save_lines", pool, self._parse(self._edits[pool]))
-        self.accept()
+    def _selected_ids(self):
+        return [it.data(Qt.ItemDataRole.UserRole) for it in self._list.selectedItems()]
 
-    def _reset_default(self):
-        """把当前页签的自定义台词清空（保存空列表 = 主线回落到内置台词）。"""
-        idx = self._tabs.currentIndex()
-        label, pool = _LINE_POOLS[idx]
-        self._edits[pool].clear()
-        _call(self._pet, "save_lines", pool, [])
-        _call(self._pet, "show_bubble", "「%s」台词恢复默认啦~" % label)
+    # ---------- 页签 1：台词库 ----------
+    def _build_lines_tab(self):
+        w = QWidget()
+        lay = QVBoxLayout(w)
+        top = QHBoxLayout()
+        top.addWidget(QLabel("类别"))
+        self._filter = QComboBox()
+        self._filter.addItem("全部", "")
+        for cat in pet_lines.LINE_CATEGORIES:
+            self._filter.addItem(pet_lines.CATEGORY_LABELS.get(cat, cat), cat)
+        self._filter.currentIndexChanged.connect(lambda _i: self._refresh_lines())
+        top.addWidget(self._filter)
+        top.addWidget(QLabel("搜索"))
+        self._search = QLineEdit()
+        self._search.setPlaceholderText("输入关键词过滤台词")
+        self._search.textChanged.connect(lambda _t: self._refresh_lines())
+        top.addWidget(self._search, 1)
+        lay.addLayout(top)
 
+        body = QHBoxLayout()
+        self._list = QListWidget()
+        self._list.setSelectionMode(QListWidget.SelectionMode.ExtendedSelection)
+        self._list.currentItemChanged.connect(lambda *_: self._on_pick_line())
+        body.addWidget(self._list, 3)
 
-# ---------------- P0-1：PetWindow 对话框入口函数（迁移自桌宠.py） ----------------
-# 全部鸭子类型访问 pet（show_bubble / cfg / role_lib / apply_role），不 import 桌宠。
-def open_resource_manager(pet, tab=0):
-    try:
-        dlg = ResourceManagerDialog(pet, tab)
-        modal(dlg)
-    except Exception as e:
-        pet_log.log_error("resource_manager failed: %r" % (e,))
-        pet.show_bubble("资源管理窗口打不开……")
+        editor = QVBoxLayout()
+        editor.addWidget(QLabel("台词文本（可换行，无长度限制）"))
+        self._text = QPlainTextEdit()
+        self._text.setPlaceholderText("在这里写台词；留空无法保存")
+        editor.addWidget(self._text, 2)
+        r1 = QHBoxLayout()
+        r1.addWidget(QLabel("类别"))
+        self._cat = QComboBox()
+        for cat in pet_lines.LINE_CATEGORIES:
+            self._cat.addItem(pet_lines.CATEGORY_LABELS.get(cat, cat), cat)
+        r1.addWidget(self._cat)
+        editor.addLayout(r1)
+        r2 = QHBoxLayout()
+        r2.addWidget(QLabel("角色"))
+        self._role = QComboBox()
+        r2.addWidget(self._role, 1)
+        editor.addLayout(r2)
+        r3 = QHBoxLayout()
+        r3.addWidget(QLabel("声音"))
+        self._voice = QComboBox()
+        r3.addWidget(self._voice, 1)
+        editor.addLayout(r3)
+        # L4 修复：喂食类台词要知道喂给什么食物（否则 food_texts 永远选不中它）
+        self._food_row = QWidget()
+        _fr = QHBoxLayout(self._food_row)
+        _fr.setContentsMargins(0, 0, 0, 0)
+        _fr.addWidget(QLabel("喂食对象"))
+        self._food = QComboBox()
+        for _f in ("小鱼干", "蛋糕", "钻石"):
+            self._food.addItem(_f, _f)
+        _fr.addWidget(self._food, 1)
+        editor.addWidget(self._food_row)
+        self._cat.currentIndexChanged.connect(
+            lambda _i: self._food_row.setVisible(self._cat.currentData() == "food"))
+        self._food_row.setVisible(self._cat.currentData() == "food")
+        grid = QGridLayout()
+        self._btns = {}
+        for i, (label, cb) in enumerate((("新建", self._new_line), ("保存", self._save_line),
+                                         ("上移", lambda: self._move_line(-1)),
+                                         ("下移", lambda: self._move_line(1)),
+                                         ("删除选中", self._delete_selected),
+                                         ("清空全部", self._clear_all),
+                                         ("恢复内置", self._restore_builtins),
+                                         ("撤销删除", self._undo))):
+            b = QPushButton(label)
+            b.clicked.connect(cb)
+            grid.addWidget(b, i // 2, i % 2)
+            self._btns[label] = b
+        editor.addLayout(grid)
+        editor.addStretch(1)
+        body.addLayout(editor, 2)
+        lay.addLayout(body, 1)
+        return w
 
+    def _refresh_lines(self):
+        if self._lib is None:
+            return
+        cat = self._filter.currentData() or ""
+        kw = (self._search.text() or "").strip()
+        self._list.clear()
+        for ln in self._lib.lines(cat or None):
+            if kw and kw not in ln["text"]:
+                continue
+            mark = "" if ln.get("builtin") else "✎"
+            it = QListWidgetItem("%s[%s]%s %s" % (
+                "★" if ln.get("builtin") else " ", pet_lines.CATEGORY_LABELS.get(
+                    ln["category"], ln["category"]), mark, ln["text"].replace("\n", " ")[:60]))
+            it.setData(Qt.ItemDataRole.UserRole, ln["id"])
+            self._list.addItem(it)
 
-def open_ledger(pet):
-    try:
-        dlg = LedgerDialog(pet)
-        modal(dlg)
-    except Exception as e:
-        pet_log.log_error("ledger dialog failed: %r" % (e,))
+    def _on_pick_line(self):
+        it = self._list.currentItem()
+        if it is None or self._lib is None:
+            return
+        ln = self._lib.get(it.data(Qt.ItemDataRole.UserRole))
+        if ln is None:
+            return
+        self._editing = ln["id"]
+        self._text.setPlainText(ln["text"])
+        idx = self._cat.findData(ln["category"])
+        self._cat.setCurrentIndex(idx if idx >= 0 else 0)
+        # L3 修复：失效槽位给显式占位项，避免"显示成默认/跟随绑定"→ 保存时静默清空引用
+        self._fill_combo(self._role, self._role_items(), ln.get("role_slot") or "",
+                         dead_label="（已失效：%s）")
+        self._fill_combo(self._voice, self._voice_items(), ln.get("voice_slot") or "",
+                         dead_label="（已失效：%s）")
 
+    def _move_line(self, delta):
+        """台词排序（上移/下移）：按当前列表顺序整体重排，立即落盘。"""
+        if self._lib is None:
+            return
+        row = self._list.currentRow()
+        if row < 0:
+            _warn(self, "排序", "先在列表里选中一条台词")
+            return
+        ids = [self._list.item(i).data(Qt.ItemDataRole.UserRole)
+               for i in range(self._list.count())]
+        j = max(0, min(len(ids) - 1, row + int(delta)))
+        if j == row:
+            return
+        ids[row], ids[j] = ids[j], ids[row]
+        ok, err = self._lib.reorder(ids)
+        if not ok:
+            _warn(self, "排序失败", err or "排序失败")
+            return
+        self._refresh_lines()
+        self._list.setCurrentRow(j)
 
-def open_bubble_style(pet):
-    try:
-        dlg = BubbleStyleDialog(pet)
-        modal(dlg)
-    except Exception as e:
-        pet_log.log_error("bubble_style dialog failed: %r" % (e,))
+    def _new_line(self):
+        self._editing = None
+        self._text.clear()
+        self._fill_combo(self._role, self._role_items(), "")
+        self._fill_combo(self._voice, self._voice_items(), "")
+        self._list.setCurrentRow(-1)
+        self._text.setFocus()
 
+    def _save_line(self):
+        if self._lib is None:
+            return
+        text = self._text.toPlainText().strip()
+        if not text:
+            _warn(self, "保存失败", "台词不能为空")
+            return
+        cat = self._cat.currentData() or "idle"
+        role = self._role.currentData() or ""
+        voice = self._voice.currentData() or ""
+        food = self._food.currentData() if cat == "food" else ""
+        if self._editing:
+            ok, err = self._lib.save(self._editing, text=text, category=cat,
+                                     role_slot=role, voice_slot=voice, food=food,
+                                     clear_role=not role, clear_voice=not voice)
+        else:
+            ln, err = self._lib.add(text, cat, role or None, voice or None, food=food)
+            ok = ln is not None
+            if ok:
+                self._editing = ln["id"]
+        if not ok:
+            _warn(self, "保存失败", err or "保存失败")
+            return
+        self._refresh_all()
 
-def open_lines(pet):
-    try:
-        dlg = LinesDialog(pet)
-        modal(dlg)
-    except Exception as e:
-        pet_log.log_error("lines dialog failed: %r" % (e,))
+    def _delete_selected(self):
+        if self._lib is None:
+            return
+        ids = self._selected_ids()
+        if not ids:
+            _warn(self, "删除台词", "先在列表里选中要删的台词（可多选）")
+            return
+        if not _confirm(self, "删除台词", "删除选中的 %d 条台词吗？\n"
+                        "内置台词也会被删掉（可用「恢复内置」找回）。" % len(ids)):
+            return
+        n, err = self._lib.delete_many(ids)
+        if err:
+            _warn(self, "删除失败", err)
+            return
+        self._editing = None
+        self._text.clear()
+        self._refresh_all()
 
+    def _clear_all(self):
+        if self._lib is None:
+            return
+        if not _confirm(self, "清空全部台词", "清空全部台词与对白吗？此操作可在本窗口内「撤销删除」找回。"):
+            return
+        ok, err = self._lib.clear_all()
+        if not ok:
+            _warn(self, "清空失败", err or "清空失败")
+            return
+        self._editing = None
+        self._text.clear()
+        self._refresh_all()
 
-def open_ai_settings(pet):
-    try:
-        dlg = AISettingsDialog(pet)
-        modal(dlg)
-    except Exception as e:
-        pet_log.log_error("ai settings dialog failed: %r" % (e,))
+    def _restore_builtins(self):
+        if self._lib is None:
+            return
+        n = self._lib.restore_builtins()
+        _info(self, "恢复内置台词", "已补回 %d 条内置台词。" % n)
+        self._refresh_all()
+
+    def _undo(self):
+        if self._lib is None:
+            return
+        ok, err = self._lib.undo()
+        if not ok:
+            _warn(self, "撤销", err or "没有可撤销的操作")
+            return
+        self._refresh_all()
+
+    # ---------- 页签 2：对白编排 ----------
+    def _build_dialogue_tab(self):
+        w = QWidget()
+        lay = QHBoxLayout(w)
+        left = QVBoxLayout()
+        left.addWidget(QLabel("对白（多角色按顺序朗读）"))
+        self._dlist = QListWidget()
+        self._dlist.currentItemChanged.connect(lambda *_: self._on_pick_dialogue())
+        left.addWidget(self._dlist, 1)
+        r = QHBoxLayout()
+        b_new = QPushButton("新建对白")
+        b_new.clicked.connect(self._new_dialogue)
+        b_del = QPushButton("删除对白")
+        b_del.clicked.connect(self._delete_dialogue)
+        r.addWidget(b_new)
+        r.addWidget(b_del)
+        left.addLayout(r)
+        lay.addLayout(left, 1)
+
+        right = QVBoxLayout()
+        rn = QHBoxLayout()
+        rn.addWidget(QLabel("名称"))
+        self._dname = QLineEdit()
+        self._dname.setPlaceholderText("对白名称")
+        rn.addWidget(self._dname, 1)
+        b_rename = QPushButton("保存名称")
+        b_rename.clicked.connect(self._rename_dialogue)
+        rn.addWidget(b_rename)
+        right.addLayout(rn)
+        right.addWidget(QLabel("对白内容（顺序即播放顺序，各自用自己的声音）"))
+        self._members = QListWidget()
+        right.addWidget(self._members, 1)
+        ra = QHBoxLayout()
+        self._pick_line = QComboBox()
+        ra.addWidget(self._pick_line, 1)
+        b_add = QPushButton("添加 →")
+        b_add.clicked.connect(self._add_member)
+        ra.addWidget(b_add)
+        right.addLayout(ra)
+        rb = QHBoxLayout()
+        for label, cb in (("移除", self._remove_member), ("上移", lambda: self._move_member(-1)),
+                          ("下移", lambda: self._move_member(1)),
+                          ("朗读整段", self._speak_dialogue)):
+            b = QPushButton(label)
+            b.clicked.connect(cb)
+            rb.addWidget(b)
+        right.addLayout(rb)
+        lay.addLayout(right, 2)
+        return w
+
+    def _refresh_dialogues(self):
+        if self._lib is None:
+            return
+        self._dlist.clear()
+        for d in self._lib.dialogues():
+            it = QListWidgetItem("%s（%d 条）" % (d["name"], len(d["line_ids"])))
+            it.setData(Qt.ItemDataRole.UserRole, d["id"])
+            self._dlist.addItem(it)
+        self._pick_line.clear()
+        for ln in self._lib.lines():
+            self._pick_line.addItem("[%s] %s" % (
+                pet_lines.CATEGORY_LABELS.get(ln["category"], ln["category"]),
+                ln["text"].replace("\n", " ")[:40]), ln["id"])
+
+    def _on_pick_dialogue(self):
+        it = self._dlist.currentItem()
+        if it is None or self._lib is None:
+            return
+        did = it.data(Qt.ItemDataRole.UserRole)
+        self._editing_dlg = did
+        d = self._lib.get_dialogue(did)
+        if d is None:
+            return
+        self._dname.setText(d["name"])
+        self._members.clear()
+        for ln in self._lib.dialogue_lines(did):
+            _it = QListWidgetItem("%s ｜ %s" % (
+                pet_lines.CATEGORY_LABELS.get(ln["category"], ln["category"]), ln["text"][:50]))
+            _it.setData(Qt.ItemDataRole.UserRole, ln["id"])
+            self._members.addItem(_it)
+
+    def _new_dialogue(self):
+        if self._lib is None:
+            return
+        ids = [it.data(Qt.ItemDataRole.UserRole) for it in self._list.selectedItems()]
+        if not ids:
+            ids = [x["id"] for x in self._lib.lines()[:1]]
+        d, err = self._lib.add_dialogue("新对白", ids)
+        if d is None:
+            _warn(self, "新建对白", err or "新建失败")
+            return
+        self._refresh_all()
+        for i in range(self._dlist.count()):
+            if self._dlist.item(i).data(Qt.ItemDataRole.UserRole) == d["id"]:
+                self._dlist.setCurrentRow(i)
+                break
+
+    def _delete_dialogue(self):
+        if self._lib is None or not self._editing_dlg:
+            _warn(self, "删除对白", "先选中一段对白")
+            return
+        if not _confirm(self, "删除对白", "删除这段对白吗？（台词本身不受影响）"):
+            return
+        ok, err = self._lib.delete_dialogue(self._editing_dlg)
+        if not ok:
+            _warn(self, "删除失败", err or "删除失败")
+            return
+        self._editing_dlg = None
+        self._refresh_all()
+
+    def _rename_dialogue(self):
+        if self._lib is None or not self._editing_dlg:
+            return
+        ok, err = self._lib.save_dialogue(self._editing_dlg, name=self._dname.text())
+        if not ok:
+            _warn(self, "保存失败", err or "保存失败")
+            return
+        self._refresh_all()
+
+    def _member_ids(self):
+        return [self._members.item(i).data(Qt.ItemDataRole.UserRole)
+                for i in range(self._members.count())]
+
+    def _add_member(self):
+        if self._lib is None or not self._editing_dlg:
+            _warn(self, "对白", "先新建或选中一段对白")
+            return
+        lid = self._pick_line.currentData()
+        if not lid:
+            return
+        ids = self._member_ids() + [lid]
+        ok, err = self._lib.save_dialogue(self._editing_dlg, line_ids=ids)
+        if not ok:
+            _warn(self, "添加失败", err or "添加失败")
+            return
+        self._on_pick_dialogue()
+        self._refresh_dialogues()
+
+    def _remove_member(self):
+        if self._lib is None or not self._editing_dlg:
+            return
+        row = self._members.currentRow()
+        if row < 0:
+            return
+        ids = self._member_ids()
+        ids.pop(row)
+        ok, err = self._lib.save_dialogue(self._editing_dlg, line_ids=ids)
+        if not ok:
+            _warn(self, "移除失败", err or "移除失败")
+            return
+        self._on_pick_dialogue()
+        self._refresh_dialogues()
+
+    def _move_member(self, delta):
+        if self._lib is None or not self._editing_dlg:
+            return
+        row = self._members.currentRow()
+        if row < 0:
+            return
+        ids = self._member_ids()
+        j = max(0, min(len(ids) - 1, row + int(delta)))
+        if j == row:
+            return
+        ids[row], ids[j] = ids[j], ids[row]
+        ok, _err = self._lib.save_dialogue(self._editing_dlg, line_ids=ids)
+        if not ok:
+            return
+        self._on_pick_dialogue()
+        self._members.setCurrentRow(j)
+
+    def _speak_dialogue(self):
+        if not self._editing_dlg:
+            _warn(self, "朗读对白", "先选中一段对白")
+            return
+        res = _call(self._pet, "speak_dialogue", self._editing_dlg)
+        if res is None:
+            res = _get(self._pet, "voice").speak_dialogue(self._editing_dlg) \
+                if _get(self._pet, "voice") else (False, "语音服务不可用")
+        if isinstance(res, tuple) and res and res[0] is False:
+            _warn(self, "朗读失败", res[1] or "朗读失败")
+
+    # ---------- 页签 3：失效引用 ----------
+    def _build_invalid_tab(self):
+        w = QWidget()
+        lay = QVBoxLayout(w)
+        self._bad_hint = QLabel("")
+        self._bad_hint.setWordWrap(True)
+        lay.addWidget(self._bad_hint)
+        self._bad = QTableWidget(0, 3)
+        self._bad.setHorizontalHeaderLabels(["台词", "缺失", "可能原因"])
+        self._bad.horizontalHeader().setStretchLastSection(True)
+        self._bad.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
+        lay.addWidget(self._bad, 1)
+        r1 = QHBoxLayout()
+        b_scan = QPushButton("重新扫描")
+        b_scan.clicked.connect(lambda: (self._scan(), self._refresh_invalid()))
+        b_fix_role = QPushButton("修复角色…")
+        b_fix_role.clicked.connect(self._fix_role)
+        b_fix_voice = QPushButton("修复声音…")
+        b_fix_voice.clicked.connect(self._fix_voice)
+        b_clear = QPushButton("清空引用")
+        b_clear.clicked.connect(self._clear_refs)
+        for b in (b_scan, b_fix_role, b_fix_voice, b_clear):
+            r1.addWidget(b)
+        r1.addStretch(1)
+        lay.addLayout(r1)
+        r2 = QHBoxLayout()
+        b_del = QPushButton("删除该台词")
+        b_del.clicked.connect(self._delete_bad_one)
+        b_del_all = QPushButton("一键删除所有失效台词")
+        b_del_all.clicked.connect(self._delete_all_bad)
+        r2.addStretch(1)
+        r2.addWidget(b_del)
+        r2.addWidget(b_del_all)
+        lay.addLayout(r2)
+        return w
+
+    def _scan(self):
+        # L1 修复：面板内扫描不要弹气泡（每次编辑都会重扫，否则气泡刷屏）
+        res = _call(self._pet, "_scan_invalid_refs", False)
+        return res if isinstance(res, list) else (_get(self._pet, "_invalid_refs") or [])
+
+    def _refresh_invalid(self):
+        items = self._scan()
+        self._bad.setRowCount(0)
+        for it in items:
+            row = self._bad.rowCount()
+            self._bad.insertRow(row)
+            self._bad.setItem(row, 0, QTableWidgetItem(it.get("text_preview") or it["line_id"]))
+            miss = []
+            if it.get("missing_role"):
+                miss.append("角色")
+            if it.get("missing_voice"):
+                miss.append("声音素材")
+            c1 = QTableWidgetItem("、".join(miss))
+            c1.setData(Qt.ItemDataRole.UserRole, it["line_id"])
+            self._bad.setItem(row, 1, c1)
+            self._bad.setItem(row, 2, QTableWidgetItem(it.get("reason") or ""))
+        n = len(items)
+        self._bad_hint.setText(
+            "没有失效引用，一切正常。" if n == 0 else
+            "有 %d 条台词引用的角色/声音素材不存在了。可以逐条修复、清空引用或删除；"
+            "系统不会自动删、也不会静默替换。" % n)
+
+    def _bad_selected(self, allow_behavior=False):
+        """选中的失效项。行为步骤类失效（line_id 为空）只在 allow_behavior 时返回标记。"""
+        row = self._bad.currentRow()
+        if row < 0:
+            _warn(self, "失效引用", "先在上表选中一条")
+            return None
+        item = self._bad.item(row, 1)
+        lid = item.data(Qt.ItemDataRole.UserRole) if item is not None else None
+        if not lid:
+            _warn(self, "失效引用", "这条是**行为步骤**里的引用（读台词/读对白），"
+                  "请到「行为设置…」里改这一步骤。")
+            return None
+        return lid
+
+    def _fix_role(self):
+        lid = self._bad_selected()
+        if not lid or self._lib is None:
+            return
+        items = self._role_items()
+        labels = [x[1] for x in items]
+        label, ok = QInputDialog.getItem(self, "修复角色", "选择要指向的角色：", labels, 0, False)
+        if not ok:
+            return
+        slot = items[labels.index(label)][0]
+        res = self._lib.save(lid, role_slot=slot, clear_role=not slot)
+        if res[0] is False:
+            _warn(self, "修复失败", res[1])
+        self._refresh_all()
+
+    def _fix_voice(self):
+        lid = self._bad_selected()
+        if not lid or self._lib is None:
+            return
+        items = self._voice_items()
+        labels = [x[1] for x in items]
+        label, ok = QInputDialog.getItem(self, "修复声音", "选择要指向的声音素材：", labels, 0, False)
+        if not ok:
+            return
+        slot = items[labels.index(label)][0]
+        res = self._lib.save(lid, voice_slot=slot, clear_voice=not slot)
+        if res[0] is False:
+            _warn(self, "修复失败", res[1])
+        self._refresh_all()
+
+    def _clear_refs(self):
+        lid = self._bad_selected()
+        if not lid or self._lib is None:
+            return
+        res = self._lib.save(lid, clear_role=True, clear_voice=True)
+        if res[0] is False:
+            _warn(self, "清空失败", res[1])
+        self._refresh_all()
+
+    def _delete_bad_one(self):
+        lid = self._bad_selected()
+        if not lid or self._lib is None:
+            return
+        if not _confirm(self, "删除台词", "删除这条失效台词吗？"):
+            return
+        self._lib.delete(lid)
+        self._refresh_all()
+
+    def _delete_all_bad(self):
+        if self._lib is None:
+            return
+        items = self._scan()
+        if not items:
+            _info(self, "失效引用", "当前没有失效台词。")
+            return
+        if not _confirm(self, "一键删除失效台词",
+                        "删除全部 %d 条失效台词吗？删除后可用「台词库 → 撤销删除」找回。" % len(items)):
+            return
+        self._lib.delete_many([x["line_id"] for x in items])
+        self._refresh_all()
+
+    # ---------- 刷新 ----------
+    def _refresh_all(self):
+        if self._lib is None:
+            self._banner.setText("台词库不可用（初始化失败）")
+            return
+        self._fill_combo(self._role, self._role_items(),
+                         self._role.currentData() if self._role.count() else "")
+        self._fill_combo(self._voice, self._voice_items(),
+                         self._voice.currentData() if self._voice.count() else "")
+        self._refresh_lines()
+        self._refresh_dialogues()
+        self._refresh_invalid()
+        self._count.setText("共 %d 条台词 / %d 段对白" % (
+            self._lib.count(), len(self._lib.dialogues())))
+        # 无可撤销内容时置灰（此前常亮，点了才提示）
+        try:
+            if "撤销删除" in getattr(self, "_btns", {}):
+                self._btns["撤销删除"].setEnabled(bool(self._lib.can_undo()))
+        except Exception:
+            pass  # 有意忽略：按钮态刷新失败不影响功能
+        n = len(_get(self._pet, "_invalid_refs") or [])
+        self._banner.setText("" if n == 0 else
+                             "⚠ 有 %d 条台词引用失效（见「失效引用」页签）：缺角色或声音素材，"
+                             "未修复前无法朗读。" % n)
+        self._banner.setStyleSheet("color:#ff8080;" if n else "color:#8f97c0;")
+
 
 
 class PhysicsDialog(QDialog):
@@ -3716,9 +4429,10 @@ def open_physics(pet):
 
 
 class VoiceDialog(QDialog):
-    """v2.0：语音设置——开关 / 合成方式（系统语音或 API）/ 事件片段导入试听。
+    """v2.1 语言系统（AI 配音）：可插拔克隆后端 + 角色声音绑定 + 台词朗读 + 事件片段。
 
-    片段由用户自行准备（wav/mp3）；AI 合成受限时主界面气泡明确提示原因（不静默）。"""
+    存储分工：声音素材在「资源管理 → 声音素材」（资源库），本面板只做**绑定与合成播放**；
+    台词文本在「台词设置」，本面板只**读取并朗读**。"""
 
     EVENTS = (("reply", "AI 回复"), ("feed", "喂食"), ("poke", "被戳"),
               ("sleep", "睡觉"), ("wake", "醒来"))
@@ -3726,38 +4440,396 @@ class VoiceDialog(QDialog):
     def __init__(self, parent=None):
         super().__init__(_qt_parent(parent))
         self._pet = parent
-        self.setWindowTitle("语音设置")
+        self._svc = _get(parent, "voice")
+        cfg = _get(parent, "cfg") or {}
+        self._vcfg = dict(cfg.get("voice") or {}) if isinstance(cfg, dict) else {}
+        self._assets = _get(parent, "voice_assets")
+        self._lines = _get(parent, "lines_lib")
+        self._param_widgets = {}
+        self._bind_combos = {}
+        self.setWindowTitle("语音设置（AI 配音）")
         self.setStyleSheet(DIALOG_QSS)
-        self.resize(520, 420)
-        cfg = (_get(parent, "cfg") or {}).get("voice") or {}
+        self.resize(700, 640)
+
         root = QVBoxLayout(self)
+        tabs = QTabWidget()
+        tabs.addTab(self._build_voice_tab(), "配音")
+        tabs.addTab(self._build_bind_tab(), "角色绑定")
+        tabs.addTab(self._build_play_tab(), "朗读台词")
+        tabs.addTab(self._build_event_tab(), "事件音效")
+        root.addWidget(tabs, 1)
+        btns = QHBoxLayout()
+        ok = QPushButton("保存")
+        cancel = QPushButton("关闭")
+        ok.setDefault(True)
+        ok.clicked.connect(self._save)
+        cancel.clicked.connect(self.reject)
+        btns.addStretch(1)
+        btns.addWidget(ok)
+        btns.addWidget(cancel)
+        root.addLayout(btns)
+
+    # ---------- 页 1：后端与开关 ----------
+    def _build_voice_tab(self):
+        w = QWidget()
+        lay = QVBoxLayout(w)
         self._en = QCheckBox("开启语音（默认关闭）")
-        self._en.setChecked(bool(cfg.get("enabled")))
-        root.addWidget(self._en)
-        row = QHBoxLayout()
-        row.addWidget(QLabel("AI 声音合成"))
-        self._mode = QComboBox()
-        self._mode.addItem("关闭合成（只用片段）", "off")
-        self._mode.addItem("本地系统语音（离线，无需 Key）", "sapi")
-        self._mode.addItem("API 合成（OpenAI 兼容 /audio/speech）", "api")
-        row.addWidget(self._mode, 1)
-        root.addLayout(row)  # v2.0.7 修复：布局须走 addLayout（此前误传 addWidget 致构造崩溃、对话框打不开）
-        _mi = self._mode.findData(cfg.get("tts_mode", "off"))
-        if _mi >= 0:
-            self._mode.setCurrentIndex(_mi)
-        row2 = QHBoxLayout()
-        row2.addWidget(QLabel("合成声音"))
-        self._voice = QLineEdit(cfg.get("tts_voice", ""))
-        self._voice.setPlaceholderText("留空用系统默认；如 Microsoft Huihui Desktop / alloy")
-        row2.addWidget(self._voice)
-        root.addLayout(row2)
-        row3 = QHBoxLayout()
-        row3.addWidget(QLabel("TTS 模型"))
-        self._model = QLineEdit(cfg.get("tts_model", ""))
-        self._model.setPlaceholderText("留空用 tts-1")
-        row3.addWidget(self._model)
-        root.addLayout(row3)
-        root.addWidget(QLabel("事件片段（自己准备的 wav/mp3；导入即用，可试听/清除）"))
+        self._en.setChecked(bool(self._vcfg.get("enabled")))
+        lay.addWidget(self._en)
+        self._daily = QCheckBox("日常台词也用配音朗读（气泡同时显示；关闭则只有气泡）")
+        self._daily.setChecked(bool(self._vcfg.get("speak_daily")))
+        lay.addWidget(self._daily)
+        r0 = QHBoxLayout()
+        r0.addWidget(QLabel("读台词时播放动作"))
+        self._talk = QComboBox()
+        self._talk.setEditable(True)
+        self._talk.addItem("（不用动作）", "")
+        for name in self._action_names():
+            self._talk.addItem(name, name)
+        idx = self._talk.findData(str(self._vcfg.get("talk_action") or ""))
+        self._talk.setCurrentIndex(idx if idx >= 0 else 0)
+        r0.addWidget(self._talk, 1)
+        lay.addLayout(r0)
+
+        lay.addWidget(QLabel("声音克隆后端（本地后端需先自行启动服务；云端后端需填 Key）"))
+        self._backend = QComboBox()
+        self._infos = pet_voice.backend_infos()
+        for info in self._infos:
+            self._backend.addItem(info["label"], info["id"])
+        bidx = self._backend.findData(str(self._vcfg.get("backend") or pet_voice.DEFAULT_BACKEND))
+        if bidx >= 0:
+            self._backend.setCurrentIndex(bidx)
+        self._backend.currentIndexChanged.connect(lambda _i: self._sync_backend_ui())
+        lay.addWidget(self._backend)
+
+        form = QFormLayout()
+        # v2.1 修复（S1）：每个后端的参数与密钥各自保存，切后端只换显示，不串台、不清空
+        self._all_params = {}
+        _raw_params = self._vcfg.get("backend_params") or {}
+        for info in self._infos:
+            src = _raw_params.get(info["id"]) if isinstance(_raw_params.get(info["id"]), dict) else {}
+            one = dict(info.get("default_params") or {})
+            one.pop("cloned", None)  # 云端克隆缓存不进 UI
+            one.update({k: v for k, v in src.items() if k != "cloned"})
+            self._all_params[info["id"]] = {k: str(v or "") for k, v in one.items()}
+        self._all_keys = {}
+        for info in self._infos:
+            self._all_keys[info["id"]] = str(
+                (self._vcfg.get("backend_keys") or {}).get(info["id"]) or "")
+        self._key_edited = set()  # 用户手动改过 Key 的后端（没改过就不动已存密钥）
+        for key, label in (("base_url", "服务地址"), ("api", "接口版本（v1/v2）"),
+                           ("model", "模型"), ("voice", "声音名"),
+                           ("prompt_text", "参考音文本（可选，填了更像）"),
+                           ("ref_text", "参考音文本（可选）"),
+                           ("text_lang", "朗读语言"), ("prompt_lang", "参考音语言"),
+                           ("split_method", "切句方式")):
+            ed = QLineEdit()
+            form.addRow(label, ed)
+            self._param_widgets[key] = (label, ed)
+        self._key_label = QLabel("API Key")
+        self._key = QLineEdit()
+        self._key.setEchoMode(QLineEdit.EchoMode.Password)
+        self._shown_backend = self._backend.currentData()  # 控件里当前显示的后端
+        self._key.textEdited.connect(lambda _t: self._key_edited.add(self._backend.currentData()))
+        form.addRow(self._key_label, self._key)
+        lay.addLayout(form)
+        self._hint = QLabel("")
+        self._hint.setWordWrap(True)
+        lay.addWidget(self._hint)
+        r1 = QHBoxLayout()
+        b_test = QPushButton("测试后端")
+        b_test.clicked.connect(self._test_backend)
+        b_assets = QPushButton("管理声音素材…（导入/试听/删除）")
+        b_assets.clicked.connect(self._open_assets)
+        r1.addWidget(b_test)
+        r1.addWidget(b_assets)
+        r1.addStretch(1)
+        lay.addLayout(r1)
+        # M9 修复：补回"AI 回复朗读"（旧固定音色链路）的入口——v2.0 有、v2.1 一度丢失，
+        # 导致该项只能手改 config.json。没绑声音素材时 AI 回复就走这条链路。
+        g_tts = QGroupBox("AI 回复朗读（没绑声音素材时用它念 AI 回复）")
+        f_tts = QFormLayout(g_tts)
+        self._tts_mode = QComboBox()
+        for _val, _label in (("off", "关闭（只显示文字）"), ("sapi", "Windows 系统语音（离线）"),
+                             ("api", "OpenAI 兼容 /audio/speech")):
+            self._tts_mode.addItem(_label, _val)
+        _mi = self._tts_mode.findData(str(self._vcfg.get("tts_mode") or "off"))
+        self._tts_mode.setCurrentIndex(_mi if _mi >= 0 else 0)
+        f_tts.addRow("合成方式", self._tts_mode)
+        self._tts_voice = QLineEdit(str(self._vcfg.get("tts_voice") or ""))
+        self._tts_voice.setPlaceholderText("声音名/系统语音包，如 Microsoft Huihui Desktop 或 alloy")
+        f_tts.addRow("声音", self._tts_voice)
+        self._tts_model = QLineEdit(str(self._vcfg.get("tts_model") or ""))
+        self._tts_model.setPlaceholderText("留空用 tts-1")
+        f_tts.addRow("模型", self._tts_model)
+        lay.addWidget(g_tts)
+        self._test_label = QLabel("")
+        self._test_label.setWordWrap(True)
+        lay.addWidget(self._test_label)
+        lay.addStretch(1)
+        self._load_backend_ui()  # 全部控件就绪后再按后端填值（含可见性/密钥/提示）
+        return w
+
+    def _action_names(self):
+        names = []
+        try:
+            lib = _get(self._pet, "role_lib")
+            rid = lib.active_id() if lib is not None else ""
+            if rid:
+                act = getattr(self._pet, "actions", None)
+                if act is not None and hasattr(act, "action_names"):
+                    names = list(act.action_names())
+        except Exception:
+            names = []
+        return names
+
+    def _backend_info(self):
+        bid = self._backend.currentData()
+        for info in self._infos:
+            if info["id"] == bid:
+                return info
+        return self._infos[0]
+
+    def _stash_backend_ui(self, bid=None):
+        """把控件的参数/密钥暂存回**指定后端**的槽位。
+
+        必须显式传 bid：currentIndexChanged 触发时索引已经变了，用 currentData()
+        会把旧后端的值写进新后端（这正是"切后端串台"的根因）。"""
+        bid = bid or getattr(self, "_shown_backend", None)
+        if not bid:
+            return
+        info = self._backend_info()
+        defaults = info.get("default_params") or {}
+        one = dict(self._all_params.get(bid) or {})
+        for key, (_label, ed) in self._param_widgets.items():
+            if key in defaults:
+                one[key] = ed.text().strip()
+        self._all_params[bid] = one
+        if bid in self._key_edited:
+            self._all_keys[bid] = self._key.text().strip()
+
+    def _load_backend_ui(self):
+        """把本后端的参数/密钥填进控件（含可见性）。"""
+        bid = self._backend.currentData()
+        info = self._backend_info()
+        defaults = info.get("default_params") or {}
+        one = self._all_params.get(bid) or {}
+        for key, (label, ed) in self._param_widgets.items():
+            show = key in defaults
+            ed.setVisible(show)
+            for lab in self.findChildren(QLabel, label):
+                lab.setVisible(show)
+            if show:
+                ed.setText(str(one.get(key, defaults.get(key, "")) or ""))
+        need_key = bool(info.get("needs_key"))
+        self._key.setVisible(need_key)
+        self._key_label.setVisible(need_key)
+        self._key.setText(str(self._all_keys.get(bid) or ""))
+        _hint = getattr(self, "_hint", None)
+        if _hint is not None:
+            _hint.setText(info.get("help_text") or "")
+
+    def _sync_backend_ui(self):
+        """切后端：先把"控件里当前显示的旧后端"的值存回旧槽位，再按新后端重填。
+
+        S1 修复：分别在两处踩过坑——(1) 此前完全不重载参数/密钥；(2) 用 currentData()
+        暂存，但信号触发时索引已变 → 旧值写进新后端。故用 _shown_backend 记录。"""
+        self._stash_backend_ui(getattr(self, "_shown_backend", None))
+        self._shown_backend = self._backend.currentData()
+        self._load_backend_ui()
+
+    def _test_backend(self):
+        if self._svc is None:
+            self._test_label.setText("❌ 语音服务不可用")
+            return
+        self._test_label.setText("测试中……")
+        _app_events()
+        self._save(silent=True)  # 先落配置，测试用最新参数
+        ok, msg = self._svc.test_backend(self._backend.currentData())
+        self._test_label.setText(("✅ " if ok else "❌ ") + msg)
+
+    def _open_assets(self):
+        dlg = ResourceManagerDialog(self._pet, initial_tab=2)
+        modal(dlg)
+        # 轻 12 修复：素材可能被删/改名，返回后刷新绑定下拉与朗读列表
+        self._refresh_bindings()
+        self._refresh_play_lists()
+
+    # ---------- 页 2：角色绑定 ----------
+    def _build_bind_tab(self):
+        w = QWidget()
+        lay = QVBoxLayout(w)
+        lay.addWidget(QLabel("给角色绑定声音素材（朗读台词时用它）。台词若自己指定了声音，"
+                             "以台词为准。"))
+        self._bind_area = QWidget()
+        self._bind_form = QFormLayout(self._bind_area)
+        lay.addWidget(self._bind_area, 1)
+        self._refresh_bindings()
+        return w
+
+    def _role_items(self):
+        out = [("", "默认角色（兜底声音）")]
+        try:
+            lib = _get(self._pet, "role_lib")
+            for r in (lib.list_roles() if lib is not None else []):
+                out.append((r["id"], r.get("name") or r["id"]))
+        except Exception:
+            pass  # 有意忽略：角色列表取不到就只给默认角色
+        return out
+
+    def _asset_items(self):
+        out = [("", "（不绑定）")]
+        try:
+            for a in (self._assets.assets() if self._assets is not None else []):
+                out.append((a["id"], a.get("name") or a["id"]))
+        except Exception:
+            pass  # 有意忽略：素材列表取不到就只给"不绑定"
+        return out
+
+    def _refresh_bindings(self):
+        while self._bind_form.rowCount():
+            self._bind_form.removeRow(0)
+        self._bind_combos = {}
+        cur = {}
+        try:
+            cur = self._svc.bindings() if self._svc else {}
+        except Exception:
+            cur = {}
+        for slot, label in self._role_items():
+            row = QWidget()
+            h = QHBoxLayout(row)
+            h.setContentsMargins(0, 0, 0, 0)
+            cb = QComboBox()
+            items = self._asset_items()
+            for val, text in items:
+                cb.addItem(text, val)
+            _want = cur.get(slot, "")
+            if _want and cb.findData(_want) < 0:
+                # M7/L3：槽位已失效（素材被删）——显式占位，别让用户以为"没绑定"
+                cb.addItem("（已失效：%s）" % _want[:12], _want)
+            i = cb.findData(_want)
+            cb.setCurrentIndex(i if i >= 0 else 0)
+            cb.currentIndexChanged.connect(
+                lambda _i, s=slot, c=cb: self._on_bind_changed(s, c))
+            h.addWidget(cb, 1)
+            b = QPushButton("试听")
+            b.clicked.connect(lambda _c=False, c=cb: self._preview(c.currentData()))
+            h.addWidget(b)
+            self._bind_form.addRow(label, row)
+            self._bind_combos[slot] = cb
+
+    def _on_bind_changed(self, slot, combo):
+        if self._svc is None:
+            return
+        ok, err = self._svc.bind_voice(slot, combo.currentData() or "")
+        if not ok:
+            _warn(self, "绑定失败", err or "绑定失败")
+
+    def _preview(self, vs):
+        if not vs:
+            _warn(self, "试听", "先选一个声音素材（没有就去「管理声音素材…」导入参考音）")
+            return
+        if self._svc is None:
+            return
+        self._save(silent=True)
+        ok, err = self._svc.preview_asset(vs)
+        if not ok:
+            _warn(self, "试听失败", err or "试听失败")
+
+    # ---------- 页 3：朗读台词 ----------
+    def _build_play_tab(self):
+        w = QWidget()
+        lay = QVBoxLayout(w)
+        lay.addWidget(QLabel("选一条台词或一段对白，用角色绑定的声音读出来"
+                             "（首次生成会稍慢，之后命中缓存）"))
+        r1 = QHBoxLayout()
+        self._line_combo = QComboBox()
+        self._line_combo.setMinimumWidth(320)
+        r1.addWidget(self._line_combo, 1)
+        b_speak = QPushButton("朗读")
+        b_speak.clicked.connect(self._speak_line)
+        b_regen = QPushButton("重新生成")
+        b_regen.clicked.connect(self._regen_line)
+        b_stop = QPushButton("停止")
+        b_stop.clicked.connect(self._stop)
+        for b in (b_speak, b_regen, b_stop):
+            r1.addWidget(b)
+        lay.addLayout(r1)
+        r2 = QHBoxLayout()
+        self._dlg_combo = QComboBox()
+        self._dlg_combo.setMinimumWidth(320)
+        r2.addWidget(self._dlg_combo, 1)
+        b_dspeak = QPushButton("朗读整段对白")
+        b_dspeak.clicked.connect(self._speak_dialogue)
+        r2.addWidget(b_dspeak)
+        lay.addLayout(r2)
+        b_edit = QPushButton("编辑台词/对白…（台词设置）")
+        b_edit.clicked.connect(lambda: modal(LinesDialog(self._pet)))
+        lay.addWidget(b_edit)
+        self._play_label = QLabel("")
+        self._play_label.setWordWrap(True)
+        lay.addWidget(self._play_label)
+        lay.addStretch(1)
+        self._refresh_play_lists()
+        return w
+
+    def _refresh_play_lists(self):
+        self._line_combo.clear()
+        if self._lines is not None:
+            for ln in self._lines.lines():
+                self._line_combo.addItem("[%s] %s" % (
+                    pet_lines.CATEGORY_LABELS.get(ln["category"], ln["category"]),
+                    ln["text"].replace("\n", " ")[:32]), ln["id"])
+        self._dlg_combo.clear()
+        if self._lines is not None:
+            for d in self._lines.dialogues():
+                self._dlg_combo.addItem("%s（%d 条）" % (d["name"], len(d["line_ids"])), d["id"])
+
+    def _speak_line(self):
+        if self._svc is None or self._lines is None:
+            self._play_label.setText("❌ 语音/台词服务不可用")
+            return
+        lid = self._line_combo.currentData()
+        if not lid:
+            self._play_label.setText("❌ 还没有台词（去「台词设置」新建）")
+            return
+        self._save(silent=True)
+        ok, err = self._svc.speak_line(lid)
+        self._play_label.setText(("✅ 开始朗读…" if ok else "❌ " + (err or "朗读失败")))
+
+    def _regen_line(self):
+        if self._svc is None:
+            return
+        lid = self._line_combo.currentData()
+        if not lid:
+            return
+        ok, err = self._svc.regenerate(lid)
+        if not ok:
+            self._play_label.setText("❌ " + (err or "重新生成失败"))
+            return
+        self._speak_line()
+
+    def _stop(self):
+        if self._svc is not None:
+            self._svc.stop()
+        self._play_label.setText("已停止。")
+
+    def _speak_dialogue(self):
+        if self._svc is None:
+            return
+        did = self._dlg_combo.currentData()
+        if not did:
+            self._play_label.setText("❌ 还没有对白（去「台词设置 → 对白编排」新建）")
+            return
+        self._save(silent=True)
+        ok, err = self._svc.speak_dialogue(did)
+        self._play_label.setText(("✅ 开始按顺序朗读…" if ok else "❌ " + (err or "朗读失败")))
+
+    # ---------- 页 4：事件音效（v2.0 能力，保留） ----------
+    def _build_event_tab(self):
+        w = QWidget()
+        lay = QVBoxLayout(w)
+        lay.addWidget(QLabel("事件片段（自己准备的 wav/mp3；导入即用，可试听/清除）"))
         self._row_labels = {}
         for key, label in self.EVENTS:
             r = QHBoxLayout()
@@ -3771,24 +4843,14 @@ class VoiceDialog(QDialog):
             b2.clicked.connect(lambda _c=False, k=key: self._test(k))
             b3 = QPushButton("清除")
             b3.clicked.connect(lambda _c=False, k=key: self._clear(k))
-            r.addWidget(b1)
-            r.addWidget(b2)
-            r.addWidget(b3)
-            root.addLayout(r)
+            for b in (b1, b2, b3):
+                r.addWidget(b)
+            lay.addLayout(r)
+        lay.addStretch(1)
         self._refresh_rows()
-        btns = QHBoxLayout()
-        ok = QPushButton("保存")
-        cancel = QPushButton("取消")
-        ok.setDefault(True)
-        ok.clicked.connect(self._save)
-        cancel.clicked.connect(self.reject)
-        btns.addStretch(1)
-        btns.addWidget(ok)
-        btns.addWidget(cancel)
-        root.addLayout(btns)
+        return w
 
     def _refresh_rows(self):
-        """导入/清除后即时刷新「✓ 已配 / —」标签。"""
         voice = _get(self._pet, "voice")
         for key, lbl in self._row_labels.items():
             cur = voice.clip(key) if voice is not None else None
@@ -3809,10 +4871,8 @@ class VoiceDialog(QDialog):
         if p is None:
             _warn(self, "试听", "该事件还没配片段")
             return
-        try:
-            _call(self._pet, "preview_audio", p)
-        except Exception as e:
-            _warn(self, "试听", "播放失败：%s" % e)
+        if _call(self._pet, "preview_audio", p) is not True:
+            _warn(self, "试听", "播放失败：音频文件可能已损坏")
 
     def _clear(self, key):
         ok, err = _get(self._pet, "voice").set_clip(key, None)
@@ -3821,22 +4881,372 @@ class VoiceDialog(QDialog):
             return
         self._refresh_rows()
 
+    # ---------- 保存 ----------
+    def _save(self, silent=False):
+        """保存：提交**全部后端**的参数与密钥（按后端深合并），中文占位不落脏值。
+
+        S1 修复：此前只提交当前后端 → 保存一次就清空其它后端的密钥/参数。"""
+        self._stash_backend_ui(getattr(self, "_shown_backend", None)
+                               or self._backend.currentData())
+        bid = self._backend.currentData()
+        talk = self._talk.currentData() or ""
+        if not talk:
+            _t = self._talk.currentText().strip()
+            talk = "" if _t in ("（不用动作）", "不用动作") else _t
+        data = {
+            "enabled": self._en.isChecked(),
+            "backend": bid,
+            "backend_params": {k: dict(v) for k, v in self._all_params.items()},
+            "backend_keys": dict(self._all_keys),
+            "speak_daily": self._daily.isChecked(),
+            "talk_action": talk,
+            # 旧字段（AI 回复朗读）：v2.1 起界面提供入口，不再只做透传
+            "tts_mode": self._tts_mode.currentData() if hasattr(self, "_tts_mode")
+            else self._vcfg.get("tts_mode", "off"),
+            "tts_model": self._tts_model.text().strip() if hasattr(self, "_tts_model")
+            else self._vcfg.get("tts_model", ""),
+            "tts_voice": self._tts_voice.text().strip() if hasattr(self, "_tts_voice")
+            else self._vcfg.get("tts_voice", ""),
+        }
+        res = _call(self._pet, "apply_voice", data)
+        if not silent and res is None:
+            _warn(self, "保存", "保存失败（语音服务不可用）")
+            return
+        # 合并回本地缓存，供后续"测试/试听"用最新参数
+        try:
+            self._vcfg = dict(((_get(self._pet, "cfg") or {}).get("voice")) or {})
+        except Exception:
+            pass  # 有意忽略：缓存刷新失败不影响已保存的配置
+        if not silent:
+            self.accept()
+
+
+def _app_events():
+    """处理一次事件循环（测试按钮的"测试中…"能立刻显示出来）。"""
+    try:
+        app = QApplication.instance()
+        if app is not None:
+            app.processEvents()
+    except Exception:
+        pass  # 有意忽略：无 QApplication 时跳过（不影响功能）
+
+
+# ---------------- v2.1：待机设置对话框 ----------------
+class IdleDialog(QDialog):
+    """待机设置：两个触发来源 / 待机形态 / 待机动作列表（按模式挑选）/ 播放模式。
+
+    - 触发 A：吃饱形态结束后 idle_delay_after_full 秒；触发 B：无交互 idle_trigger_delay 秒。
+    - 待机形态 idle_form 只做展示期覆盖，不改用户选定形态；留空 = 不切形态。
+    - 待机动作是**列表**（引用行为库），可增删、启停、调权重与顺序；播放模式四种。"""
+
+    def __init__(self, parent=None):
+        super().__init__(_qt_parent(parent))
+        self._pet = parent
+        self._svc = _get(parent, "behaviors")
+        cfg = _get(parent, "cfg") or {}
+        self._idle = pet_behaviors.normalize_idle_cfg(cfg if isinstance(cfg, dict) else {})
+        self.setWindowTitle("待机设置")
+        self.setStyleSheet(DIALOG_QSS)
+        self.resize(660, 560)
+
+        root = QVBoxLayout(self)
+        # 触发
+        box1 = QGroupBox("触发条件（两个来源都会触发，触发一个就重置另一个）")
+        f1 = QFormLayout(box1)
+        self._delay = QSpinBox()
+        self._delay.setRange(pet_behaviors.IDLE_TRIGGER_MIN, pet_behaviors.IDLE_TRIGGER_MAX)
+        self._delay.setSuffix(" 秒")
+        self._delay.setValue(int(self._idle["idle_trigger_delay"]))
+        f1.addRow("无交互多少秒后待机", self._delay)
+        self._after_full = QSpinBox()
+        self._after_full.setRange(pet_behaviors.IDLE_AFTER_FULL_MIN,
+                                  pet_behaviors.IDLE_AFTER_FULL_MAX)
+        self._after_full.setSuffix(" 秒")
+        self._after_full.setValue(int(self._idle["idle_delay_after_full"]))
+        f1.addRow("吃饱形态结束后延迟", self._after_full)
+        root.addWidget(box1)
+
+        # 形态
+        box2 = QGroupBox("待机形态（留空 = 保持用户选定形态，不会被待机改掉）")
+        f2 = QFormLayout(box2)
+        self._form = QComboBox()
+        self._form.addItem("（不切形态）", "")
+        for key, name in self._forms():
+            self._form.addItem("%s（%s）" % (name, key), key)
+        i = self._form.findData(self._idle["idle_form"])
+        self._form.setCurrentIndex(i if i >= 0 else 0)
+        f2.addRow("待机时展示", self._form)
+        root.addWidget(box2)
+
+        # 动作列表
+        box3 = QGroupBox("待机动作列表（每次待机按模式选一条播放）")
+        v3 = QVBoxLayout(box3)
+        self._table = QTableWidget(0, 4)
+        self._table.setHorizontalHeaderLabels(["启用", "行为", "权重", "顺序"])
+        self._table.horizontalHeader().setStretchLastSection(False)
+        self._table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
+        v3.addWidget(self._table, 1)
+        add_row = QHBoxLayout()
+        self._pick = QComboBox()
+        for b in self._behaviors():
+            self._pick.addItem("%s（%s）" % (b["name"], b["id"]), b["id"])
+        add_row.addWidget(self._pick, 1)
+        b_add = QPushButton("添加")
+        b_add.clicked.connect(self._add_action)
+        add_row.addWidget(b_add)
+        for label, cb in (("移除", self._remove_action), ("上移", lambda: self._move(-1)),
+                          ("下移", lambda: self._move(1))):
+            b = QPushButton(label)
+            b.clicked.connect(cb)
+            add_row.addWidget(b)
+        v3.addLayout(add_row)
+        root.addWidget(box3, 1)
+
+        # 模式
+        box4 = QGroupBox("播放规则")
+        f4 = QFormLayout(box4)
+        self._mode = QComboBox()
+        for m in pet_behaviors.IDLE_PLAY_MODES:
+            self._mode.addItem(pet_behaviors.IDLE_MODE_LABELS.get(m, m), m)
+        i2 = self._mode.findData(self._idle["idle_play_mode"])
+        self._mode.setCurrentIndex(i2 if i2 >= 0 else 0)
+        f4.addRow("播放模式", self._mode)
+        self._resume = QCheckBox("被打断的动作算已消费（下次不再重播它）")
+        self._resume.setChecked(bool(self._idle["idle_resume_on_interrupt"]))
+        f4.addRow("", self._resume)
+        root.addWidget(box4)
+
+        btns = QHBoxLayout()
+        ok = QPushButton("保存")
+        cancel = QPushButton("关闭")
+        ok.setDefault(True)
+        ok.clicked.connect(self._save)
+        cancel.clicked.connect(self.reject)
+        btns.addStretch(1)
+        btns.addWidget(ok)
+        btns.addWidget(cancel)
+        root.addLayout(btns)
+        self._refresh_table()
+
+    # ---------- 数据 ----------
+    def _forms(self):
+        keys = _get(self._pet, "form_keys") or []
+        names = _get(self._pet, "form_names") or {}
+        out = []
+        for k in keys:
+            out.append((k, names.get(k, k)))
+        return out
+
+    def _behaviors(self):
+        try:
+            return self._svc.list() if self._svc is not None else []
+        except Exception:
+            return []
+
+    def _refresh_table(self):
+        acts = self._idle["idle_actions"]
+        self._table.setRowCount(0)
+        names = {b["id"]: b["name"] for b in self._behaviors()}
+        for a in acts:
+            row = self._table.rowCount()
+            self._table.insertRow(row)
+            ck = QTableWidgetItem("")
+            ck.setFlags(Qt.ItemFlag.ItemIsUserCheckable | Qt.ItemFlag.ItemIsEnabled)
+            ck.setCheckState(Qt.CheckState.Checked if a.get("enabled", True)
+                             else Qt.CheckState.Unchecked)
+            ck.setData(Qt.ItemDataRole.UserRole, a["id"])
+            self._table.setItem(row, 0, ck)
+            name = names.get(a["behavior_id"])
+            self._table.setItem(row, 1, QTableWidgetItem(
+                name or ("（行为已删除：%s）" % a["behavior_id"])))
+            self._table.setItem(row, 2, QTableWidgetItem("%.2f" % float(a.get("weight", 1.0))))
+            self._table.setItem(row, 3, QTableWidgetItem(str(a.get("order", row + 1))))
+
+    def _selected_action(self):
+        row = self._table.currentRow()
+        if row < 0:
+            return None
+        item = self._table.item(row, 0)
+        return item.data(Qt.ItemDataRole.UserRole) if item is not None else None
+
+    def _collect(self):
+        """从表格收集回配置（启用/权重/顺序），保持列表顺序。"""
+        acts = []
+        for row in range(self._table.rowCount()):
+            ck = self._table.item(row, 0)
+            name_item = self._table.item(row, 1)
+            w_item = self._table.item(row, 2)
+            aid = ck.data(Qt.ItemDataRole.UserRole) if ck is not None else ""
+            src = None
+            for a in self._idle["idle_actions"]:
+                if a["id"] == aid:
+                    src = a
+                    break
+            if src is None:
+                continue
+            try:
+                weight = float(w_item.text()) if w_item is not None else 1.0
+            except (TypeError, ValueError):
+                weight = 1.0
+            acts.append({"id": src["id"], "behavior_id": src["behavior_id"],
+                         "enabled": ck.checkState() == Qt.CheckState.Checked if ck else True,
+                         "weight": max(pet_behaviors.IDLE_WEIGHT_MIN,
+                                       min(pet_behaviors.IDLE_WEIGHT_MAX, weight)),
+                         "order": row + 1})
+        self._idle["idle_actions"] = acts
+        return acts
+
+    # ---------- 操作 ----------
+    def _add_action(self):
+        bid = self._pick.currentData()
+        if not bid:
+            _warn(self, "添加待机动作", "行为库是空的，先去「行为设置…」建一个行为")
+            return
+        self._collect()
+        item, err = pet_behaviors.add_idle_action(self._idle, bid)
+        if item is None:
+            _warn(self, "添加待机动作", err or "添加失败")
+            return
+        self._refresh_table()
+
+    def _remove_action(self):
+        aid = self._selected_action()
+        if not aid:
+            _warn(self, "移除", "先选中一条待机动作")
+            return
+        self._collect()
+        ok, err = pet_behaviors.remove_idle_action(self._idle, aid)
+        if not ok:
+            _warn(self, "移除失败", err or "移除失败")
+            return
+        self._refresh_table()
+
+    def _move(self, delta):
+        aid = self._selected_action()
+        if not aid:
+            return
+        self._collect()
+        pet_behaviors.move_idle_action(self._idle, aid, delta)
+        self._refresh_table()
+        for row in range(self._table.rowCount()):
+            if self._table.item(row, 0).data(Qt.ItemDataRole.UserRole) == aid:
+                self._table.setCurrentCell(row, 0)
+                break
+
     def _save(self):
-        data = {"enabled": self._en.isChecked(),
-                "tts_mode": self._mode.currentData(),
-                "tts_voice": self._voice.text().strip(),
-                "tts_model": self._model.text().strip()}
-        _call(self._pet, "apply_voice", data)
+        self._collect()
+        data = {
+            "idle_trigger_delay": int(self._delay.value()),
+            "idle_delay_after_full": int(self._after_full.value()),
+            "idle_form": self._form.currentData() or "",
+            "idle_actions": self._idle["idle_actions"],
+            "idle_play_mode": self._mode.currentData(),
+            "idle_resume_on_interrupt": self._resume.isChecked(),
+        }
+        res = _call(self._pet, "apply_idle_settings", data)
+        if res is None or res is False:
+            _warn(self, "保存", "保存失败（配置不可用）")
+            return
         self.accept()
 
 
+
 def open_voice(pet):
-    """v2.0：语音设置对话框入口。"""
+    """v2.0：语音设置（AI 配音）对话框入口。"""
     try:
         dlg = VoiceDialog(pet)
         modal(dlg)
     except Exception as e:
         pet_log.log_error("voice dialog failed: %r" % (e,))
+
+
+def open_lines(pet):
+    """v2.1：台词设置对话框入口（菜单「💬 自定义台词…」）。
+
+    历史缺陷：菜单一直在调用本函数但从未定义（AttributeError 被 Qt 槽吞掉，
+    表现为"点了没反应"）——v2.1 一并修好。"""
+    try:
+        dlg = LinesDialog(pet)
+        modal(dlg)
+    except Exception as e:
+        pet_log.log_error("lines dialog failed: %r" % (e,))
+
+
+def open_resource_manager(pet, initial_tab=0):
+    """资源管理对话框入口（角色 / 音效 / 声音素材）。同样修复未定义的历史缺陷。"""
+    try:
+        dlg = ResourceManagerDialog(pet, initial_tab)
+        modal(dlg)
+    except Exception as e:
+        pet_log.log_error("resource manager failed: %r" % (e,))
+
+
+def open_idle(pet):
+    """v2.1：待机设置对话框入口（菜单也走 pet._open_idle_dialog）。"""
+    try:
+        dlg = IdleDialog(pet)
+        modal(dlg)
+    except Exception as e:
+        pet_log.log_error("idle dialog failed: %r" % (e,))
+
+
+class _VoicePickDialog(QDialog):
+    """导出时勾选要随包带走的声音素材（默认一个都不带）。"""
+
+    def __init__(self, pet, parent=None):
+        super().__init__(_qt_parent(parent or pet))
+        self.setWindowTitle("打包声音素材（可选）")
+        self.setStyleSheet(DIALOG_QSS)
+        self.resize(460, 380)
+        lay = QVBoxLayout(self)
+        lay.addWidget(QLabel("默认不打包参考音（体积与隐私考虑）。勾选要带上的："))
+        self._list = QListWidget()
+        assets = []
+        try:
+            assets = _get(pet, "voice_assets").assets() or []
+        except Exception:
+            assets = []
+        for a in assets:
+            it = QListWidgetItem(a.get("name") or a["id"])
+            it.setFlags(it.flags() | Qt.ItemFlag.ItemIsUserCheckable)
+            it.setCheckState(Qt.CheckState.Unchecked)
+            it.setData(Qt.ItemDataRole.UserRole, a["id"])
+            self._list.addItem(it)
+        lay.addWidget(self._list, 1)
+        row = QHBoxLayout()
+        b_all = QPushButton("全选")
+        b_all.clicked.connect(lambda: self._check_all(True))
+        b_none = QPushButton("全不选")
+        b_none.clicked.connect(lambda: self._check_all(False))
+        row.addWidget(b_all)
+        row.addWidget(b_none)
+        row.addStretch(1)
+        ok = QPushButton("确定")
+        ok.setDefault(True)
+        ok.clicked.connect(self.accept)
+        cancel = QPushButton("取消导出")
+        cancel.clicked.connect(self.reject)
+        row.addWidget(ok)
+        row.addWidget(cancel)
+        lay.addLayout(row)
+
+    def _check_all(self, on):
+        for i in range(self._list.count()):
+            self._list.item(i).setCheckState(
+                Qt.CheckState.Checked if on else Qt.CheckState.Unchecked)
+
+    def picked(self):
+        return [self._list.item(i).data(Qt.ItemDataRole.UserRole)
+                for i in range(self._list.count())
+                if self._list.item(i).checkState() == Qt.CheckState.Checked]
+
+
+def pick_voice_assets(pet):
+    """导出前勾选声音素材。返回 id 列表（可为空=不带）；用户取消返回 None。"""
+    dlg = _VoicePickDialog(pet)
+    if modal(dlg) != QDialog.DialogCode.Accepted:
+        return None
+    return dlg.picked()
 
 
 def ask_amount(pet, title, label, cur):

@@ -1,6 +1,10 @@
 # -*- coding: utf-8 -*-
 """
-大肥鱼桌宠 —— 资源库模块（角色库 + 音频库，v1.3.0 新增）。
+大肥鱼桌宠 —— 资源库模块（角色库 + 音频库 + 声音素材库）。
+
+v2.1 新增 VoiceAssetLibrary（声音素材/参考音）：与音效片段**分开存储**
+（data/voice_ref/ + voice_assets.json），专供声音克隆后端；
+RoleLibrary / VoiceAssetLibrary 都提供 on_deleted 回调，供上层清理失效引用。
 
 职责：参考 dsh-whale-widget 的「角色管理 / 音频片段管理 / 音效组」设计，把
 自定义角色（透明 PNG）与自定义音频（wav/mp3）的导入、切换、重命名、删除，
@@ -53,7 +57,7 @@
   透明通道由 pet_dialogs 用 QPixmap 把关）。
 - 槽位三态：None（默认，走内置音效）/ ""（静音）/ 片段 id（自定义音）。
 
-Python 3.8+ 兼容。
+Python 3.10+（项目运行环境 3.10.2）。
 
 MIT License
 Copyright (c) 大肥鱼桌宠项目
@@ -332,7 +336,11 @@ def _wav_duration(path):
 
 # ---------------- 角色库 ----------------
 class RoleLibrary:
-    """自定义角色管理：导入 / 切换 / 删除透明 PNG 角色，索引 roles.json。"""
+    """自定义角色管理：导入 / 切换 / 删除透明 PNG 角色，索引 roles.json。
+
+    v2.1：新增 on_deleted 回调（删除角色后通知台词/语言系统清理失效引用，
+    保持本模块零 Qt、单向依赖——回调由调用方注入）。
+    """
 
     MAX_BYTES = 10 * 1024 * 1024  # 10MB 上限
 
@@ -340,7 +348,24 @@ class RoleLibrary:
         self._dir = os.path.join(data_dir, "roles")
         self._index = os.path.join(data_dir, "roles.json")
         self._data = {"roles": [], "active": ""}
+        self._deleted_cbs = []
         self._load()
+
+    # ---------- v2.1：删除通知（轻量回调，无 Qt） ----------
+    def on_deleted(self, cb):
+        if cb not in self._deleted_cbs:
+            self._deleted_cbs.append(cb)
+
+    def off_deleted(self, cb):
+        if cb in self._deleted_cbs:
+            self._deleted_cbs.remove(cb)
+
+    def _emit_deleted(self, role_id):
+        for cb in list(self._deleted_cbs):
+            try:
+                cb(role_id)
+            except Exception as e:
+                pet_log.log_error("role deleted cb failed: %r" % (e,))  # 有意忽略：不影响其余监听者
 
     # ---------- 内部 ----------
     @staticmethod
@@ -1103,6 +1128,7 @@ class RoleLibrary:
         err = self._save()
         if err:
             return False, err
+        self._emit_deleted(role_id)  # v2.1：通知外部清理失效引用（台词/绑定）
         return True, ""
 
     def get(self, role_id):
@@ -1427,6 +1453,198 @@ class AudioLibrary:
             else:
                 out[k] = self.fragment_path(v)
         return out
+
+
+# ---------------- v2.1：声音素材库（参考音，与音效片段彻底分开） ----------------
+# 参考音用于声音克隆后端（GPT-SoVITS / F5-TTS / CosyVoice / 商业 API）：
+# 与「音效片段」语义不同（音效是播出来听的，参考音是喂给模型学音色的），
+# 因此独立目录 data/voice_ref/ 与独立索引 voice_assets.json，互不混用。
+class VoiceAssetLibrary:
+    """声音素材（参考音）库：导入 / 重命名 / 删除 / 试听路径 / 删除通知。
+
+    只负责存储与元数据，不做 TTS / 绑定 / 合成（那是语言系统 pet_voice 的职责）。
+    """
+
+    MAX_BYTES = 20 * 1024 * 1024  # 20MB 上限（克隆参考音通常 3~10 秒，远小于此）
+    _EXTS = (".wav", ".mp3")
+
+    def __init__(self, data_dir):
+        self._dir = os.path.join(data_dir, "voice_ref")
+        self._index = os.path.join(data_dir, "voice_assets.json")
+        self._assets = []
+        self._deleted_cbs = []
+        self._load()
+
+    # ---------- 内部 ----------
+    def _load(self):
+        data = _read_json(self._index)
+        raw = data.get("assets") if isinstance(data.get("assets"), list) else []
+        clean = []
+        for a in raw:
+            if not isinstance(a, dict):
+                continue
+            sid = str(a.get("id") or "").strip()
+            if not sid:
+                continue
+            ext = str(a.get("ext") or "").lower()
+            if ext and not ext.startswith("."):
+                ext = "." + ext
+            if ext not in self._EXTS:
+                continue  # 非法扩展名残留项丢弃
+            clean.append({
+                "id": sid,
+                "name": str(a.get("name") or "") or "未命名声音",
+                "file": str(a.get("file") or ""),
+                "ext": ext,
+                "added": str(a.get("added") or ""),
+                "duration": a.get("duration") if isinstance(a.get("duration"), (int, float)) else None,
+            })
+        self._assets = clean
+
+    def _save(self):
+        return _write_json(self._index, {"assets": self._assets})
+
+    def _get(self, slot):
+        slot = str(slot or "")
+        for a in self._assets:
+            if a["id"] == slot:
+                return a
+        return None
+
+    # ---------- 删除通知（轻量回调，无 Qt） ----------
+    def on_deleted(self, cb):
+        if cb not in self._deleted_cbs:
+            self._deleted_cbs.append(cb)
+
+    def off_deleted(self, cb):
+        if cb in self._deleted_cbs:
+            self._deleted_cbs.remove(cb)
+
+    def _emit_deleted(self, slot):
+        for cb in list(self._deleted_cbs):
+            try:
+                cb(slot)
+            except Exception as e:
+                pet_log.log_error("voice asset deleted cb failed: %r" % (e,))  # 有意忽略：不影响其余
+
+    # ---------- 对外 ----------
+    def assets(self):
+        """全部声音素材 [{"id","name","file","ext","added","duration"}...]。"""
+        return [dict(a) for a in self._assets]
+
+    def get_asset(self, slot):
+        """按槽位取素材元数据（副本）；不存在返回 None。"""
+        a = self._get(slot)
+        return dict(a) if a is not None else None
+
+    def asset_path(self, slot):
+        """素材绝对路径；不存在或文件缺失返回 None。"""
+        a = self._get(slot)
+        if a is None:
+            return None
+        p = a.get("file") or ""
+        if not os.path.isabs(p):
+            p = os.path.join(self._dir, p)
+        try:
+            return p if os.path.isfile(p) else None
+        except Exception:
+            return None  # 有意忽略：isfile 异常按文件不存在处理
+
+    def exists(self, slot):
+        return self.asset_path(slot) is not None
+
+    def import_file(self, src, name=None):
+        """导入参考音（复制到 voice_ref/<id>.<ext>）。仅 wav/mp3、>20MB 拒绝。"""
+        try:
+            if not src or not isinstance(src, str) or not os.path.isfile(src):
+                return None, "文件不存在"
+            ext = os.path.splitext(src)[1].lower()
+            if ext not in self._EXTS:
+                return None, "参考音仅支持 .wav / .mp3"
+            try:
+                if os.path.getsize(src) > self.MAX_BYTES:
+                    return None, "文件超过 20MB，无法导入"
+            except Exception:
+                return None, "无法读取文件大小"
+            if ext == ".wav":
+                if _wav_duration(src) is None and _probe_wav_ok(src) is False:
+                    return None, "WAV 文件损坏或不是 PCM 格式"
+            else:
+                with open(src, "rb") as f:
+                    head = f.read(10)
+                if not (head.startswith(b"ID3") or (len(head) >= 2 and head[0] == 0xFF
+                                                    and (head[1] & 0xE0) == 0xE0)):
+                    return None, "MP3 文件损坏"
+            if name is None or not str(name).strip():
+                name = os.path.splitext(os.path.basename(src))[0]
+            name = str(name).strip()[:40] or "未命名声音"
+            try:
+                os.makedirs(self._dir, exist_ok=True)
+            except Exception as e:
+                return None, "无法创建参考音目录：%s" % e
+            sid = _new_id()
+            dst = os.path.join(self._dir, sid + ext)
+            try:
+                shutil.copyfile(src, dst)
+            except Exception:
+                try:
+                    if os.path.exists(dst):
+                        os.remove(dst)  # 半截文件清理，不留孤儿
+                except Exception:
+                    pass  # 有意忽略：清理尽力而为
+                return None, "复制文件失败"
+            asset = {
+                "id": sid,
+                "name": name,
+                "file": sid + ext,
+                "ext": ext,
+                "added": time.strftime("%Y-%m-%d"),
+                "duration": _wav_duration(dst) if ext == ".wav" else None,
+            }
+            self._assets.append(asset)
+            err = self._save()
+            if err:
+                try:
+                    os.remove(dst)
+                except Exception:
+                    pass  # 有意忽略：回滚清理尽力而为
+                self._assets.pop()
+                return None, err
+            return asset, None
+        except Exception as e:
+            return None, "导入失败：%s" % e
+
+    def rename(self, slot, new_name):
+        """重命名参考音。返回 (bool, err)。"""
+        a = self._get(slot)
+        if a is None:
+            return False, "声音素材不存在"
+        name = str(new_name or "").strip()
+        if not name:
+            return False, "名字不能为空"
+        a["name"] = name[:40]
+        err = self._save()
+        return (False, err) if err else (True, "")
+
+    def delete(self, slot):
+        """删除参考音（文件 + 索引项），并发删除通知。返回 (bool, err)。"""
+        a = self._get(slot)
+        if a is None:
+            return False, "声音素材不存在"
+        try:
+            p = a.get("file") or ""
+            if not os.path.isabs(p):
+                p = os.path.join(self._dir, p)
+            if os.path.exists(p):
+                os.remove(p)
+        except Exception as e:
+            return False, "删除文件失败：%s" % e
+        self._assets = [x for x in self._assets if x["id"] != a["id"]]
+        err = self._save()
+        if err:
+            return False, err
+        self._emit_deleted(a["id"])
+        return True, ""
 
 
 # ---------------- 冒烟测试（无 GUI，可直接运行本文件） ----------------

@@ -15,7 +15,16 @@ import pet_voice  # noqa: E402
 
 def test_normalize_defaults():
     v = pet_voice.normalize_voice(None)
-    assert v == {"enabled": False, "tts_mode": "off", "tts_model": "", "tts_voice": ""}
+    # v2.0 的四个基础字段（默认关闭、固定音色合成为 off）
+    assert v["enabled"] is False and v["tts_mode"] == "off"
+    assert v["tts_model"] == "" and v["tts_voice"] == ""
+    # v2.1 新增：可插拔后端 / 绑定 / 参数（默认值单一来源 DEFAULT_VOICE）
+    assert v == pet_voice.DEFAULT_VOICE
+    assert v["backend"] == pet_voice.DEFAULT_BACKEND
+    assert v["bindings"] == {} and v["speak_daily"] is False
+    assert set(v["backend_params"]) == set(pet_voice.BACKENDS)
+    assert all(k in v["backend_params"] for k in ("gpt_sovits", "f5_tts", "cosyvoice",
+                                                  "minimax", "elevenlabs"))
 
 
 def test_normalize_whitelist_mode():

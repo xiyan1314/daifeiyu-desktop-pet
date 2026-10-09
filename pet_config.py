@@ -179,19 +179,23 @@ def normalize_cfg(cfg, defaults, persona_ids):
     cfg["physics"] = _pd
     # v2.0：语音配置归一化（默认关闭；tts_mode 白名单）
     cfg["voice"] = pet_voice.normalize_voice(cfg.get("voice"))
-    # v2.0.2：行为系统配置归一化（默认值单一来源 pet_behaviors.DEFAULT_BEHAVIOR_CFG）
+    # v2.0.2/v2.1：行为与待机配置归一化（默认值/钳制单一来源 pet_behaviors）
     _bcfg = pet_behaviors.DEFAULT_BEHAVIOR_CFG
+    # 迁移来源：旧键 idle_behavior（单条）+ idle_behavior_seconds（秒数）
     cfg["idle_behavior"] = str(cfg.get("idle_behavior", "") or "").strip()
-    # 空闲上界 = 入睡阈值（SLEEP_AFTER_SECONDS）：超过则入睡先于待机行为触发，
-    # 行为永远不可达（死配置）；钳制界限单一来源 pet_behaviors
-    try:
-        cfg["idle_behavior_seconds"] = max(
-            pet_behaviors.IDLE_SECS_MIN,
-            min(pet_behaviors.IDLE_SECS_MAX,
-                int(cfg.get("idle_behavior_seconds",
-                            _bcfg["idle_behavior_seconds"]) or _bcfg["idle_behavior_seconds"])))
-    except (TypeError, ValueError):
-        cfg["idle_behavior_seconds"] = _bcfg["idle_behavior_seconds"]
+    # v2.1：待机系统（两触发 + 多动作 + idle_form）——normalize_idle_cfg 会把上面两个旧键
+    # 迁进 idle_actions / idle_trigger_delay；反向同步旧秒数键，保证旧版读取路径兼容。
+    # （旧的 5~60 钳制块已删除：它在下面立刻被覆盖，是死路径，容易误导读者。）
+    _icfg = pet_behaviors.normalize_idle_cfg(cfg)
+    cfg["idle_trigger_delay"] = _icfg["idle_trigger_delay"]
+    cfg["idle_delay_after_full"] = _icfg["idle_delay_after_full"]
+    cfg["idle_form"] = _icfg["idle_form"]
+    cfg["idle_actions"] = _icfg["idle_actions"]
+    cfg["idle_play_mode"] = _icfg["idle_play_mode"]
+    cfg["idle_resume_on_interrupt"] = _icfg["idle_resume_on_interrupt"]
+    cfg["idle_behavior_seconds"] = _icfg["idle_trigger_delay"]
+    # M3 修复：旧键已迁移进 idle_actions，置空以防"移除待机动作"被旧键复活
+    cfg["idle_behavior"] = ""
     try:
         cfg["transform_seconds"] = max(
             pet_behaviors.TRANSFORM_SECS_MIN,
@@ -225,19 +229,14 @@ def normalize_cfg(cfg, defaults, persona_ids):
             cfg[k] = round(max(0.0, float(cfg.get(k, 0.0) or 0.0)), 2)
         except (TypeError, ValueError):
             cfg[k] = 0.0
+    # v2.1：lines_extra 已是**死键**（台词库 lines.json 是唯一来源），只作一次性迁移源。
+    # S3 修复：这里**不再做 20 条/60 字截断**——旧限制会在迁移时把用户数据吃掉，
+    # 与 v2.0.6「解除数量与长度限制」的承诺冲突。原样保留，交给迁移逻辑处理。
     le = cfg.get("lines_extra")
-    norm_le = {}
-    if isinstance(le, dict):
-        for k in ("sajiao", "greedy", "happy", "idle"):
-            v = le.get(k)
-            if isinstance(v, list):
-                norm_le[k] = [str(x).strip()[:60] for x in v if str(x).strip()][:20]
-            else:
-                norm_le[k] = []
-    else:
-        for k in ("sajiao", "greedy", "happy", "idle"):
-            norm_le[k] = []
-    cfg["lines_extra"] = norm_le
+    if not isinstance(le, dict):
+        le = {}
+    cfg["lines_extra"] = {k: [str(x).strip() for x in (v or []) if str(x).strip()]
+                          for k, v in le.items() if isinstance(v, list)}
     return cfg
 
 
