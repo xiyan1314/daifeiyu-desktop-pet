@@ -22,9 +22,10 @@ MIT License
 读台词不 import pet_voice（单向依赖）：PetWindow 收到 speak_* 步骤后转交语言系统。
 
 v2.1 待机系统（本模块负责"数据与选择规则"，执行仍在 PetWindow）：
-- 触发：**只看无交互**——距最后一次交互满 idle_trigger_delay 秒即待机（v2.1.8 起取消
-  "吃饱形态结束后延迟"这条；idle_delay_after_full 降级为遗留兼容键，仅归一化/同步/导出，不参与触发）。
-  吃饱形态展示期（消化窗口）不会被待机打断，这是形态保护，不是触发条件。
+- 触发（v2.2 最终口径）：**两个触发，满足一个就待机**——
+  ①吃饱形态结束后 idle_delay_after_full 秒（默认 2s，1s 检查保证精度）；
+  ②无交互满 idle_trigger_delay 秒（默认 8s）。
+  任一先满足即待机；吃饱形态展示期（消化窗口）不会被待机打断（形态保护，两触发都让位）。
 - idle_actions：待机动作列表（引用行为库 id + 启用开关 + 权重 + 顺序）。
 - idle_play_mode：sequential（默认，轮流）/ random / weighted / single。
 - idle_form：待机展示形态（""=不改形态，保持用户选定形态）。
@@ -77,7 +78,7 @@ DEFAULT_BEHAVIOR_CFG = {
     "idle_behavior": "",          # 旧字段：单条待机行为 id（"" = 不启用；兼容保留）
     "idle_behavior_seconds": 8,   # 旧字段（v2.0.2）：现作为 idle_trigger_delay 的兼容别名
     "idle_trigger_delay": 8,      # v2.1 触发 B：无交互多少秒触发待机（默认 8）
-    "idle_delay_after_full": 2,   # 【v2.1.8 起遗留键】不参与触发；仅归一化/同步/导出保持兼容
+    "idle_delay_after_full": 2,   # v2.2：触发 A——吃饱形态结束后延迟多少秒待机（0=形态一结束即可待机）
     "idle_form_hold": 8,          # v2.1.3：只有形态、没有动作可播时的展示期上限（秒）
     "idle_form": "",              # v2.1 待机形态（""=不改形态，保持用户选定形态）
     "idle_actions": [],           # v2.1 待机动作列表 [{id,behavior_id,enabled,weight,order}]
@@ -159,7 +160,7 @@ def normalize_idle_cfg(cfg):
     after_full = max(IDLE_AFTER_FULL_MIN, min(IDLE_AFTER_FULL_MAX, after_full))
     return {
         "idle_trigger_delay": delay,
-        "idle_delay_after_full": after_full,   # 遗留键（v2.1.8 起不参与触发）
+        "idle_delay_after_full": after_full,   # v2.2：触发 A 延迟（0~30 钳制）
         # v2.1.8：形态待机的展示期上限（此前只被读取、不在归一化里 → 实际不可配）
         "idle_form_hold": _clamp_int(src.get("idle_form_hold"),
                                      DEFAULT_BEHAVIOR_CFG["idle_form_hold"], 2, 60),

@@ -40,16 +40,19 @@ class ActionService:
         if _happy:
             _say(random.choice(_happy))
 
-    def play_action(self, name, arg=None):
+    def play_action(self, name, arg=None, force=False):
         """P3-2：按名称点播动作（闲逛加权随机与右键「动作」菜单共用同一实现）。
 
         与 idle_tick 同款门控：busy/摸摸头/跟随/散步中不播；睡眠中先醒来再表演。
+        v2.2：force=True 跳过"跟随/散步"门控（右键动作菜单、语音 talk_action 是**用户显式
+        点播**，开着跟随时点了就该表演，而不是静默没反应——此前三个入口都因此"只说不做"）。
         分派优先级：内建分支（jump/emote）→ 帧集动作（内建 + v2.0.1 自定义命名帧动作，
         播一次回待机）→ v2.0.1 程序化合成动作（呼吸/摇摆/点头）。"""
         pet = self.pet
         if name == "none":
             return
-        if pet.busy or pet._petting or self._cfg().get("follow_mouse") or self._cfg().get("wander"):
+        if pet.busy or pet._petting or ((self._cfg().get("follow_mouse") or self._cfg().get("wander"))
+                                        and not force):
             return
         if pet._sleeping:
             pet._wake()

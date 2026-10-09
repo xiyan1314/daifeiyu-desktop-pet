@@ -4401,7 +4401,8 @@ class PhysicsDialog(QDialog):
             sp = QDoubleSpinBox()
             sp.setRange(lo, hi)
             sp.setDecimals(2)
-            sp.setValue(float(cfg.get(key, 1.0)))  # norm-ok（physics 段已归一化为数值）
+            # norm-ok（physics 段已归一化为数值）
+            sp.setValue(float(cfg.get(key, 1.0)))
             row.addWidget(sp)
             row.addStretch(1)
             root.addLayout(row)
@@ -5101,10 +5102,10 @@ def _app_events():
 
 # ---------------- v2.1：待机设置对话框 ----------------
 class IdleDialog(QDialog):
-    """待机设置：待机触发（只看无交互）/ 待机形态 / 待机动作列表（按模式挑选）/ 播放模式。
+    """待机设置：双触发（满足一个就待机）/ 待机形态 / 待机动作列表（按模式挑选）/ 播放模式。
 
-    - 触发：无交互 idle_trigger_delay 秒后待机（v2.1.8 起取消"吃饱形态结束后再等 N 秒"这条；
-      吃饱形态展示期间由消化窗口挡住，形态结束后若无交互时间已满足，下一拍自然待机）。
+    - 触发 A：吃饱形态结束后 idle_delay_after_full 秒（默认 2s；0=形态一结束即可待机）。
+    - 触发 B：无交互 idle_trigger_delay 秒（默认 8s）。任一先满足即待机。
     - 待机形态 idle_form 只做展示期覆盖，不改用户选定形态；留空 = 不切形态。
     - 待机动作是**列表**（引用行为库），可增删、启停、调权重与顺序；播放模式四种。"""
 
@@ -5120,15 +5121,21 @@ class IdleDialog(QDialog):
 
         root = QVBoxLayout(self)
         # 触发
-        box1 = QGroupBox("触发条件")
+        box1 = QGroupBox("触发条件（两个来源，满足一个就待机）")
         f1 = QFormLayout(box1)
         self._delay = QSpinBox()
         self._delay.setRange(pet_behaviors.IDLE_TRIGGER_MIN, pet_behaviors.IDLE_TRIGGER_MAX)
         self._delay.setSuffix(" 秒")
         self._delay.setValue(int(self._idle["idle_trigger_delay"]))
         f1.addRow("无交互多少秒后待机", self._delay)
-        _tip = QLabel("说明：待机只看「无交互」这一个条件；吃饱形态展示期间不会被打断，"
-                      "形态结束后若无交互时间已到，下一次检查即进入待机。")
+        self._after_full = QSpinBox()
+        self._after_full.setRange(pet_behaviors.IDLE_AFTER_FULL_MIN,
+                                  pet_behaviors.IDLE_AFTER_FULL_MAX)
+        self._after_full.setSuffix(" 秒")
+        self._after_full.setValue(int(self._idle["idle_delay_after_full"]))
+        f1.addRow("吃饱形态结束后延迟", self._after_full)
+        _tip = QLabel("说明：两个条件**满足一个**就待机——①吃饱形态结束后等上格秒数（默认 2 秒）；"
+                      "②无交互满上格秒数（默认 8 秒）。吃饱形态展示期间本身不会被打断。")
         _tip.setWordWrap(True)
         f1.addRow("", _tip)
         root.addWidget(box1)
@@ -5313,8 +5320,7 @@ class IdleDialog(QDialog):
         self._collect()
         data = {
             "idle_trigger_delay": int(self._delay.value()),
-            # v2.1.8：idle_delay_after_full 已不参与触发 → **不回写**（否则旧值 0 会被静默改成 2）；
-            # 旧值由 apply_idle_settings 的 {**cfg, **data} 合并继承
+            "idle_delay_after_full": int(self._after_full.value()),  # v2.2：恢复参与触发
             "idle_form": self._form.currentData() or "",
             "idle_actions": self._idle["idle_actions"],
             "idle_play_mode": self._mode.currentData(),

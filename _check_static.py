@@ -41,10 +41,22 @@ def load_main():
 
 
 def strip_comments(src):
+    # v2.2（兼容审查 M2）：逐行 tokenize 找到**真注释**的起始列，从那里截断原文。
+    # 相比 split("#")：字符串里的 #rrggbb 不再误截（假阴性修复）；
+    # 相比整文件 tokenize：原文全部空白逐字符保留，词边界正则不受影响。
+    import io
+    import tokenize as _tk
     out = []
-    for ln in src.split("\n"):
-        s = ln.split("#", 1)[0]
-        out.append(s)
+    for raw_ln in src.split("\n"):
+        try:
+            cut = len(raw_ln)
+            for tok in _tk.generate_tokens(io.StringIO(raw_ln).readline):
+                if tok.type == _tk.COMMENT:
+                    cut = tok.start[1]  # 注释起始列（= # 的位置）
+                    break
+            out.append(raw_ln[:cut])
+        except (_tk.TokenError, IndentationError, SyntaxError):
+            out.append(raw_ln.split("#", 1)[0])  # 容错回退
     return "\n".join(out)
 
 
@@ -75,8 +87,6 @@ def main():
         for m in re.finditer(r"_call\(\s*[a-z_.]*pet[a-z_.]*\s*,\s*\"([A-Za-z_][A-Za-z0-9_]*)\"", src):
             if m.group(1) not in pet_attrs:
                 problems.append("A _call(pet,%r) 未定义 @ %s" % (m.group(1), name))
-        for m in re.finditer(r"getattr\(\s*(?:pet|self\._pet|self\.pet)\s*,\s*\"([A-Za-z_][A-Za-z0-9_]*)\"", src):
-            pass  # 防御性 getattr 允许取不到
 
     # ---------- B 配置键 ----------
     try:
@@ -96,7 +106,8 @@ def main():
                 problems.append("B cfg[%r]= 不在 DEFAULT_CONFIG（保存会被丢弃）@ %s" % (key, name))
         for m in re.finditer(r"cfg\.get\(\s*\"([a-z_][A-Za-z0-9_]*)\"", src):
             key = m.group(1)
-            if key not in defaults and key not in vkeys and key not in pkeys:
+            # v2.2：下划线前缀键（_legacy_* 等迁移中间态）与写分支同口径放行，消除既有误报
+            if key not in defaults and key not in vkeys and key not in pkeys and not key.startswith("_"):
                 notes.append("B? cfg.get(%r) 不在白名单（可能是子段键/错拼）@ %s" % (key, name))
 
     # ---------- C2 空池（AST 精确判定，质量审查 L2）----------

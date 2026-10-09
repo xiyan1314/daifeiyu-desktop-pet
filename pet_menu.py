@@ -200,10 +200,10 @@ class MenuBuilder:
         # P3-2：右键点播任意动画（与闲逛加权目录共用 play_action）
         act_menu = menu.addMenu("🎭 动作")
         jump_act = act_menu.addAction("原地小跳")
-        jump_act.triggered.connect(lambda checked=False: pet.actions.play_action("jump"))
+        jump_act.triggered.connect(lambda checked=False: pet.actions.play_action("jump", force=True))
         for _label, _arg in (("打盹 zzz", "zzz"), ("音符", "note"), ("星光", "sparkle"), ("爱心", "heart")):
             a = act_menu.addAction(_label)
-            a.triggered.connect(lambda checked=False, k=_arg: pet.actions.play_action("emote", k))
+            a.triggered.connect(lambda checked=False, k=_arg: pet.actions.play_action("emote", k, force=True))
         # v2.0.1：自定义命名动作（帧动作/程序化合成）动态列出
         _custom = pet.custom_actions()
         if _custom:
@@ -211,7 +211,7 @@ class MenuBuilder:
             for _name, _kind in _custom:
                 _label = "✦ %s（合成）" % _name if _kind == "proc" else "✦ %s" % _name
                 a = act_menu.addAction(_label)
-                a.triggered.connect(lambda checked=False, n=_name: pet.actions.play_action(n))
+                a.triggered.connect(lambda checked=False, n=_name: pet.actions.play_action(n, force=True))
 
         # v2.0.2 断点#12：变身（仅自定义角色有变身形态时显示）
         if pet.has_transform_form:

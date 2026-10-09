@@ -99,9 +99,9 @@ def check_clean_tree():
     """
     try:
         import subprocess
-        # 覆盖面＝全部需要与发布物逐字节一致的源码/版本文件（不含 assets 通配）
-        # 只有 桌宠.py + pet_*.py 会漏掉 version_info.txt / _verify_green.py 的升号未提交
-        st = subprocess.run(["git", "status", "--porcelain", "--"] + list(SYNC_FILES),
+        # v2.2：扩展为**全仓** git status（此前只盯 SYNC_FILES，根目录散落的临时 .py /
+        # 未提交脚本拦不住——发布物必须从干净的树打出去）
+        st = subprocess.run(["git", "status", "--porcelain"],
                             capture_output=True, text=True, cwd=ROOT, timeout=15)
         if st.returncode == 0 and st.stdout.strip():
             dirty = [l[3:].strip() for l in st.stdout.strip().split("\n")][:3]

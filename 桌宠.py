@@ -62,7 +62,7 @@ import pet_alarm
 
 
 APP_NAME = "大肥鱼桌宠"
-VERSION = "2.1.9"
+VERSION = "2.2.0"
 PAD = 1.25  # 窗口相对角色的透明边距（为压扁/回弹预留空间）
 IDLE_FRAME_MS = 140      # 待机帧间隔
 IDLE_FORM_HOLD_SECS = 8  # v2.1.3：只有形态、没有动作可播时的展示期上限（到期回用户形态）
@@ -309,9 +309,14 @@ def _parse_schema_version(raw):
     return v
 
 
+_FUTURE_CFG = False        # 模块级：读到未来版本配置 → True，禁写回（防降级覆盖未来键）
+_FUTURE_CFG_LOGGED = False
+
+
 def load_config():
-    global CONFIG_FIXES
+    global CONFIG_FIXES, _FUTURE_CFG
     CONFIG_FIXES = []
+    _FUTURE_CFG = False
     cfg = dict(DEFAULT_CONFIG)
     future_cfg = False  # P1-3：读到未来版本配置时禁写回（防降级覆盖未来键）
     try:
@@ -322,6 +327,7 @@ def load_config():
             if ver > CONFIG_SCHEMA_VERSION:
                 # 未来版本写出的配置：只合并认识的键，不迁移、不回写（兼容模式只读）
                 future_cfg = True
+                _FUTURE_CFG = True  # v2.2：save_config 也要遵守（此前只挡启动自动重存，用户主动保存仍会降级覆盖）
                 _log_error("load_config: schema v%d 高于当前 v%d，按兼容模式读取"
                            % (ver, CONFIG_SCHEMA_VERSION))
             elif ver < CONFIG_SCHEMA_VERSION:
@@ -376,6 +382,14 @@ def load_config():
 
 def save_config(cfg):
     # P0-1：diff 存储核心迁至 pet_config（api_key 密文特通道 + 原子替换）
+    global _FUTURE_CFG_LOGGED
+    if _FUTURE_CFG:
+        # v2.2（兼容审查 M1）：配置来自更高 schema 版本，任何写回都会把未知键丢掉
+        # （实测 v99 配置一经保存 → schema 降回 v2 且 fancy_new_key 丢失）。只读，不写盘。
+        if not _FUTURE_CFG_LOGGED:
+            _FUTURE_CFG_LOGGED = True
+            _log_error("save_config: 当前配置来自更高版本，按兼容模式只读运行（不写回，防降级覆盖未来键）")
+        return
     pet_config.write_config(CONFIG_PATH, cfg, DEFAULT_CONFIG, CONFIG_SCHEMA_VERSION,
                             _log_error, encrypt_secret)
 
@@ -713,9 +727,9 @@ class PetWindow(QWidget):
         self._idle_hold_timer = None         # v2.1.3：形态待机的展示期封顶（防永久吞用户形态）
         self._eat_watchdog = None            # v2.1.4：吃帧看门狗（防 on_finish 被顶掉后 busy 永久卡死）
         self._feed_form = ""                 # v2.1.6：本轮喂食的目标形态（消化窗口的主人判据）
+        self._idle_after_full_at = None      # v2.2：触发 A 到点时刻（吃饱形态结束后+delay；None=未挂起）
         self._idle_display_form = ""         # v2.1.7：本次待机展示期实际画上去的形态
         self._idle_check_timer = None        # v2.1.8：待机触发的高速检查（1s），由 __init__ 创建
-        self._idle_after_full_at = None      # （v2.1.8 起不再使用：待机只看无交互；保留字段兼容旧配置/测试）
         self._idle_last_action = ""          # 顺序模式记上次播到哪
         self._last_idle_at = 0.0
         self._speaking_voice = False         # 正在读台词（高优先级，待机让位）
@@ -1168,8 +1182,8 @@ class PetWindow(QWidget):
         v2.1.3 修复：漏判"变身进行中" → 待机把 idle_form 画上去（吞变身形态）。
         v2.1.5 修复：漏判"消化窗口" → 喂食后吃饱形态要保留到消化定时器到点（默认 12s），
         而这段时间 busy 已释放、anim_mode 已回 idle，无交互触发（默认 8s）会先一步开始待机，
-        把吃饱形态顶掉（用户反馈："吃饱形态被吞了"）。（v2.1.8 起没有"触发 A"了：待机只看无交互，
-        吃饱展示期只是**挡住**待机，不是触发条件。）"""
+        把吃饱形态顶掉（用户反馈："吃饱形态被吞了"）。（v2.2：触发 A 已恢复——吃饱形态结束
+        + idle_delay_after_full 秒后待机；展示期内两触发都让位。）"""
         if self.busy or self._petting or self._sleeping:
             return False
         if getattr(self, "_drag_offset", None) is not None:
@@ -1187,12 +1201,23 @@ class PetWindow(QWidget):
     def maybe_idle_behavior(self):
         """待机轮询（1s 的 _idle_check_timer 每拍调用；15s 的 idle_tick 也会顺带调一次）。
 
-        v2.1.8 按用户口径简化：**只看"无交互"一个条件**——
-        距最后一次交互 ≥ idle_trigger_delay 秒（默认 8s）且待机就绪即触发。
-        （"吃饱形态结束后再等 N 秒"这条触发已取消；吃饱形态展示期由 _idle_ready() 的
-         消化窗口判断挡住，形态结束时若无交互时间早已满足，下一拍自然进入待机。）
-        待机进行中不重复触发；被打断后计时重新开始。"""
+        v2.2 按用户最终口径恢复**两个触发、满足一个就待机**（OR 语义）：
+          触发 A：吃饱形态结束后 idle_delay_after_full 秒（默认 2s，"形态结束等 1~2 秒"）；
+          触发 B：无交互满 idle_trigger_delay 秒（默认 8s，"无交互后等几秒"）。
+        任一先满足即待机；A 挂起期间优先处理 A；待机进行中不重复；被打断后两个计时都重来。
+        吃饱形态展示期本身由 _idle_ready() 的消化窗口判断挡住（形态保护，两触发都让位）。
+        """
         now = time.monotonic()
+        # 触发 A（到点即检查；条件不满足就重试，超时 60s 才放弃，避免死等）
+        if self._idle_after_full_at is not None:
+            if now >= self._idle_after_full_at:
+                if self._idle_ready():
+                    self._start_idle("full")
+                    self._idle_after_full_at = None
+                elif now - self._idle_after_full_at > 60:
+                    self._idle_after_full_at = None
+            return
+        # 触发 B
         cfg = self._idle_cfg()
         try:
             delay = int(cfg.get("idle_trigger_delay") or 0)
@@ -1200,7 +1225,6 @@ class PetWindow(QWidget):
             delay = 0  # norm-ok：idle_config 已归一化，此处防御直改 cfg
         if delay <= 0:
             return  # 0 = 关闭"无交互触发"
-        # 条件 ①：无交互
         if now - self._last_activity < delay:
             return
         if now - getattr(self, "_last_idle_at", 0.0) < delay:
@@ -1212,7 +1236,7 @@ class PetWindow(QWidget):
     def _start_idle(self, source):
         """开始一次待机：选动作（按模式）→ 切 idle_form（展示期）→ 播行为序列。"""
         cfg = self._idle_cfg()
-        self._idle_after_full_at = None  # v2.1.8：该字段不再参与触发（兼容保留）
+        self._idle_after_full_at = None  # 触发 A 已消费（本次待机就是它触发的，或它本就没挂起）
         self._last_idle_at = time.monotonic()
         b, aid, err = self.behaviors.idle_pick(lambda: self.cfg, self._idle_last_action)
         if err:
@@ -1293,7 +1317,7 @@ class PetWindow(QWidget):
         was_active = bool(self._idle_active) or bool(getattr(self, "_idle_form_active", False))
         self._idle_active = False
         self._stop_idle_hold()
-        self._idle_after_full_at = None
+        self._idle_after_full_at = None  # 被打断：触发 A 重新计时
         if getattr(self, "_behavior_is_idle", False) and self._behavior_seq is not None:
             self._behavior_gen = getattr(self, "_behavior_gen", 0) + 1  # 顶替旧链（挂起 singleShot 失效）
             self._behavior_seq = None
@@ -1384,7 +1408,7 @@ class PetWindow(QWidget):
             if not (self.busy or self._petting):
                 # 红线：引用的动作已不存在时不静默跳过，气泡明示
                 if self._action_exists(_st["name"]):
-                    self.actions.play_action(_st["name"])
+                    self.actions.play_action(_st["name"], force=True)  # v2.2：行为步骤是用户编排的显式点播，不吞
                 else:
                     self.show_bubble("动作「%s」不见了，跳过~" % _st["name"])
         elif _act == "say":
@@ -1428,9 +1452,12 @@ class PetWindow(QWidget):
         """v2.1：行为步骤 speak_line → 语言系统朗读（引用失效时明确提示，不静默）。"""
         if not line_id:
             return
-        self._idle_speak_self = line_id if getattr(self, "_behavior_is_idle", False) else ""
+        # v2.2（找茬 M1）：started 信号由 worker 在**合成完成后**才发（真实后端秒级延迟），
+        # 此前"入队即清标记"会让 _on_voice_started 把这句误判成外部打断 → 自己腰斩自己的序列。
+        # 改为把本次朗读登记进令牌集合，started 回调时按 line_id 消费。
+        if getattr(self, "_behavior_is_idle", False):
+            getattr(self, "_idle_speak_self", set()).add(line_id)
         ok, err = self.voice.speak_line(line_id)
-        self._idle_speak_self = ""
         if not ok:
             self.show_bubble(err or "这条台词读不了")
 
@@ -1438,6 +1465,17 @@ class PetWindow(QWidget):
         """v2.1：行为步骤 speak_dialogue → 语言系统按顺序朗读整段对白。"""
         if not dialogue_id:
             return
+        # v2.2（找茬 M1）：对白的每句 started 也按行 id 记入同一令牌集合（此前完全没防 → 必打断）
+        if getattr(self, "_behavior_is_idle", False):
+            _spk = getattr(self, "_idle_speak_self", set())
+            _dlg = getattr(self, "lines_lib", None)
+            if _dlg is not None:
+                try:
+                    for _ln in _dlg.dialogue_lines(dialogue_id) or []:
+                        if _ln.get("id"):
+                            _spk.add(_ln["id"])
+                except Exception as e:
+                    _log_error("idle dialogue mark: %r" % (e,))
         ok, err = self.voice.speak_dialogue(dialogue_id)
         if not ok:
             self.show_bubble(err or "这段对白读不了")
@@ -1646,17 +1684,70 @@ class PetWindow(QWidget):
         self._scan_invalid_refs(notify=False)  # 导入后立刻刷新失效引用（不打扰，面板可见）
         return warnings
 
+    def _snapshot_import_state(self):
+        """导入前的落盘快照：config/roles/lines/behaviors/alarms/voice_assets 六个 JSON。"""
+        _snap = {}
+        for _key, _svc in (("cfg", None), ("roles", self.role_lib), ("lines", self.lines_lib),
+                           ("behaviors", self.behaviors), ("alarms", self.alarms),
+                           ("voice_assets", self.voice_assets)):
+            try:
+                _p = CONFIG_PATH if _key == "cfg" else getattr(_svc, "_path", None)
+                if not _p:
+                    _p = os.path.join(DATA_DIR, {"roles": "roles.json", "lines": "lines.json",
+                                                 "behaviors": "behaviors.json",
+                                                 "alarms": "alarms.json",
+                                                 "voice_assets": "voice_assets.json"}[_key])
+                if os.path.exists(_p):
+                    with open(_p, "rb") as _f:
+                        _snap[_key] = (_p, _f.read())
+                else:
+                    _snap[_key] = (_p, None)
+            except Exception as e:
+                _log_error("import snapshot %s: %r" % (_key, e))
+        return _snap
+
+    def _restore_import_state(self, snap):
+        """导入失败：把快照写回磁盘，并重建受影响的服务对象（与 __init__ 同款构造）。"""
+        _rebuilt = False
+        for _key, (_p, _blob) in (snap or {}).items():
+            try:
+                if _blob is None:
+                    if os.path.exists(_p):
+                        os.remove(_p)
+                else:
+                    with open(_p, "wb") as _f:
+                        _f.write(_blob)
+            except Exception as e:
+                _log_error("import restore %s: %r" % (_key, e))
+        try:
+            self.role_lib = pet_resources.RoleLibrary(DATA_DIR)
+            self.lines_lib = pet_lines.LineService(DATA_DIR, _log_error)
+            self.voice_assets = pet_resources.VoiceAssetLibrary(DATA_DIR)
+            self.behaviors = pet_behaviors.BehaviorService(DATA_DIR)
+            self.alarms = pet_alarm.AlarmService(DATA_DIR)
+            _rebuilt = True
+        except Exception as e:
+            _log_error("import restore services: %r" % (e,))
+        if _rebuilt:
+            self.cfg = load_config()  # 配置也回盘重读（快照里的 cfg 文件已恢复）
+            self._reload_sprites()
+
     def _import_role_bundle(self):
         """导入角色包：素材/行为/可分享配置落地，缺资源明确提示，成功即切换展示。"""
         _path, _f = QFileDialog.getOpenFileName(self, "导入角色包", "", "角色包 (*.dfypet.zip)")
         if not _path:
             return
+        # v2.2（找茬 M3）：导入前对全部受影响数据做落盘快照；失败时整体恢复——
+        # 此前失败只回滚"角色条目+素材"，行为/台词/闹钟/配置的半成品会残留，
+        # 且 cfg 已被改、下一次任意 save_config 就把半成品落盘。
+        _snap = self._snapshot_import_state()
         _res, _err = pet_export.import_bundle(
             self.role_lib, self.behaviors, self.cfg, _path,
             alarms_apply=self._apply_imported_alarms,
             voice_apply=self._apply_imported_voice_assets,
             lines_apply=self._apply_imported_lines)
         if _res is None:
+            self._restore_import_state(_snap)
             self.show_bubble("导入失败：%s" % _err)
             return
         # M7 修复：包内未带参考音时，绑定会指向不存在的槽位（界面还显示"未绑定"）——
@@ -2679,7 +2770,7 @@ class PetWindow(QWidget):
         self._apply_transform()
 
     def _digest(self):
-        """吃饱形态结束：回用户选定形态（v2.1.8 起不再登记"吃饱后待机"，待机只看无交互）。"""
+        """吃饱形态结束：回用户选定形态，并登记触发 A（idle_delay_after_full 秒后待机，默认 2s）。"""
         _uf = getattr(self, "_user_form", "") or self.form_keys[0]
         # v2.1.3 修复：睡眠/变身期间不做形态回位——那两个是更高优先级的"临时展示"，
         # 各自有自己的回位路径（醒来 / 变身到时）。此前会"吃饱把睡眠形态顶掉"。
@@ -2691,8 +2782,13 @@ class PetWindow(QWidget):
         if self.form != _uf and not _busy_display:
             # _set_form 内已在待机态回位；状态图展示中不掐断（state 结束时自然回待机）
             self._set_form(_uf, display_only=True)
-        # v2.1.8：不再登记"吃饱后 N 秒待机"这条触发（用户口径：只看无交互）。
-        # 消化回位后不强制立刻待机，交给"无交互"条件在下一拍自然决定（_stop_idle_hold 见上）。
+        # v2.2：恢复触发 A——吃饱形态结束后再等 idle_delay_after_full 秒（默认 2s，1s 检查保证精度）
+        try:
+            _after_delay = int(self._idle_cfg().get("idle_delay_after_full") or 0)
+        except (TypeError, ValueError):
+            _after_delay = 0  # 有意忽略：坏值按 0（形态一结束即可待机）
+        self._idle_after_full_at = time.monotonic() + max(0, _after_delay)
+        self._last_idle_at = 0.0  # 触发 A 立即生效（不受触发 B 去重窗口影响）
         self._show_emote("sparkle")
         if self._custom_role:
             # 显示形态**名字**而不是形态键（f0/f1）
@@ -3288,14 +3384,16 @@ class PetWindow(QWidget):
 
         M3 修复：**待机序列自己发起的朗读不算外部打断**——否则序列刚说出第一步，
         speaking_started 就把这条序列的 gen 顶掉，后面所有步骤都不执行。"""
-        if line_id and line_id == getattr(self, "_idle_speak_self", ""):
-            self._speaking_voice = True  # 本序列自己的朗读：只标记，不打断
+        _spk = getattr(self, "_idle_speak_self", None)
+        if line_id and _spk is not None and line_id in _spk:
+            _spk.discard(line_id)  # 消费令牌：这句是本序列自己发起的
+            self._speaking_voice = True
             return
         self._idle_interrupt("speak")
         self._speaking_voice = True
         name = str((self.cfg.get("voice") or {}).get("talk_action") or "").strip()
         if name and self._action_exists(name):
-            self.actions.play_action(name)
+            self.actions.play_action(name, force=True)  # v2.2：语音 talk 动作是用户配置的显式点播
 
     def _on_voice_finished(self, role_slot, line_id):
         """读完一条：解除说话态；无其他动作时回待机表现。"""
@@ -3519,6 +3617,7 @@ class PetWindow(QWidget):
             self.cfg.pop("_legacy_lines_extra", None)
             return
         moved = 0
+        failed = 0
         for cat, texts in le.items():
             if cat not in pet_lines.LINE_CATEGORIES or not isinstance(texts, list):
                 continue
@@ -3530,9 +3629,14 @@ class PetWindow(QWidget):
                 if self.lines_lib.add(s, cat)[0] is not None:
                     moved += 1
                     have.add(s)
-        self.cfg["lines_extra"] = {}
-        self.cfg.pop("_legacy_lines_extra", None)
-        save_config(self.cfg)
+                else:
+                    failed += 1
+        # v2.2（找茬 M4）：有任何一条迁移失败（lines.json 写失败/磁盘满）就不清键——
+        # 保留 _legacy_lines_extra 原文，下次启动重试；此前无条件清空 = 数据永久消失。
+        if failed == 0:
+            self.cfg["lines_extra"] = {}
+            self.cfg.pop("_legacy_lines_extra", None)
+            save_config(self.cfg)
         if moved:
             _log_error("lines_extra migrated: %d" % moved)
             QTimer.singleShot(2600, self, lambda: self.show_bubble(

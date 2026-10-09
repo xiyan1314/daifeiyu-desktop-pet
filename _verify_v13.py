@@ -774,7 +774,6 @@ def main_flow():
     pet.cfg["idle_actions"] = []               # 清掉上面 v2.1 段落的动作，隔离验证本条
     pet._last_activity = time.monotonic() - 10
     pet._last_idle_at = 0.0                    # 清掉去重窗口（隔离验证本场景）
-    pet._idle_after_full_at = None
     pet.anim_mode = "idle"
     pet.maybe_idle_behavior()
     check("idle behavior triggers", pet._behavior_seq is not None)
@@ -784,7 +783,6 @@ def main_flow():
     pet._last_activity = time.monotonic() - 70  # 已超入睡阈值
     _act_before = pet._last_activity
     pet._last_idle_at = 0.0
-    pet._idle_after_full_at = None
     pet.anim_mode = "idle"
     pet.maybe_idle_behavior()
     check("idle behavior keeps sleep timer", pet._last_activity == _act_before
@@ -934,7 +932,6 @@ def main_flow():
     pet.cfg["idle_form"] = "f1"
     pet._user_form = "f0"
     pet._set_form("f0", display_only=True)
-    pet._idle_after_full_at = None
     pet._idle_form_active = False
     pet.feed("小鱼干")                       # 进入吃饱形态 + 消化定时器
     _full_form = pet.form
@@ -1303,15 +1300,12 @@ def main_flow():
     _pick2, _aid2, _pe2 = pet.behaviors.idle_pick(lambda: pet.cfg, _aid1)
     check("idle pick rotates", _pick1 is not None and _pick2 is not None
           and _pick1["id"] != _pick2["id"])
-    # v2.1.8：待机只由"无交互"触发 —— 吃饱形态结束不再登记单独的待机时刻；
-    # _digest 只负责回位形态，之后由无交互条件在下一拍自然决定是否待机。
+    # v2.2：恢复双触发（OR 语义）——_digest 必须登记触发 A（吃饱形态结束后+delay）
     pet._idle_after_full_at = None
-    _last_idle_before = pet._last_idle_at
     pet._digest()
-    # v2.1.8：_digest 不得改动无交互计时（否则会变成"消化一结束就待机"或把待机推迟）
-    check("digest keeps idle timing untouched",
-          pet._idle_after_full_at is None and pet._last_idle_at == _last_idle_before)
-    # v2.1.8 正向回归：消化回位后，无交互条件满足时必须**仍然会**待机（避免"取消触发 A"变成不待机）
+    check("trigger A armed after digest", pet._idle_after_full_at is not None)
+    # 正向回归：把触发 A 视作已到点，无交互条件也满足 → 待机必须能触发
+    pet._idle_after_full_at = 0.0
     _hold_bak = pet.cfg.get("idle_form", "")
     _acts_bak = list(pet.cfg.get("idle_actions") or [])
     # 用**当前角色**的形态键（此处可能是默认角色 normal/full，写死 f1 会因不在 form_keys 而跳过）
@@ -1334,7 +1328,7 @@ def main_flow():
     pet._last_idle_at = 0.0
     check("idle ready for resume test", pet._idle_ready() is True)
     pet.maybe_idle_behavior()
-    check("idle resumes after digest",
+    check("trigger A fires idle",
           pet._idle_form_active is True and pet.form == _fk_idle,
           "form=%r flag=%r expect_idle_form=%r" % (pet.form, pet._idle_form_active, _fk_idle))
     # v2.1.8（M2）：展示期结束后**重新计时**——delay 秒内不得再次触发（否则待机形态近乎常驻）

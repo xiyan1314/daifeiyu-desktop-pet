@@ -90,6 +90,8 @@ class WanderController:
 
     def tick(self):
         pet = self.pet
+        if getattr(pet, "_sleeping", False):
+            return  # v2.2（质量审查）：睡着不再满屏漂移（v2.1.7 起跟随/散步中允许入睡，但没停 walk_timer）
         if pet.busy:
             return  # 喂食/吃帧期间暂停行走，避免「边吃边漂」（M3）
         if getattr(pet, "_flying", False):

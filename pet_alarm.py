@@ -177,10 +177,14 @@ class AlarmService:
             t = normalize_time(time_s)
             if not t:
                 return False, "时间格式应为 HH:MM"
+            if t != a.get("time"):
+                a["last_fired_date"] = ""  # v2.2（找茬 M2）：改时间=重新武装，当天到点应能再响
             a["time"] = t
         if label is not None:
             a["label"] = str(label).strip()[:ALARM_LABEL_MAX] or "闹钟"
         if enabled is not None:
+            if bool(enabled) and not a.get("enabled"):
+                a["last_fired_date"] = ""  # v2.2（找茬 M2）：重新启用=重新武装
             a["enabled"] = bool(enabled)
         if ringtone is not None:
             a["ringtone"] = str(ringtone or "")
