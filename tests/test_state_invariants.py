@@ -396,6 +396,72 @@ def test_feed_during_idle_action_sequence(pet):
     pet.cfg["idle_actions"] = []
 
 
+def test_transform_during_digest_returns_user_form(pet):
+    """v2.1.7 回归（找茬 S1）：消化窗口内变身 → 变身结束必须回**用户形态**。
+
+    此前 _transform_home 记的是当前展示形态（吃饱），而 _digest 见变身接管就跳过回位，
+    变身结束时"回"到吃饱形态 → 此后 dig/tfrm/idleF 全空 = 永久卡在吃饱形态。
+    """
+    _reset(pet)
+    pet.set_user_form("f3")                  # 选一个与"变身形态 f1"不同键的用户形态，
+    pet.feed("小鱼干")                        # 否则喂到 f1 时点变身会走"提前变回"分支
+    pet._eat_done("test")
+    assert pet._digest_pending() and pet.form != pet._user_form
+    pet._do_transform()                      # 消化窗口内变身
+    assert pet._transform_home == pet._user_form, \
+        "_transform_home 记成了展示形态（%r）" % pet._transform_home
+    pet._digest_timer.stop()
+    pet._digest()                            # 消化到点（变身接管期间跳过回位）
+    pet._end_transform()                     # 变身结束
+    assert pet.form == pet._user_form, "变身结束停在了 %r（应回用户形态）" % pet.form
+    assert getattr(pet, "_transform_home", None) is None
+
+
+def test_role_switch_keeps_user_form(pet):
+    """v2.1.7 回归（找茬 S2）：睡眠/变身/消化窗口里切角色，不得把展示形态写成用户形态。"""
+    _reset(pet)
+    _uf = pet._user_form
+    # ① 睡眠中切角色
+    pet._show_sleep()
+    assert pet.form != _uf
+    pet.apply_role("inv1")
+    assert pet._user_form == _uf, "睡眠中切角色把睡形态写成了用户形态（%r）" % pet._user_form
+    pet._wake()
+    assert pet.form == _uf, "醒来仍显示睡形态（form=%r）" % pet.form
+    # ② 变身中切角色
+    _reset(pet)
+    pet._do_transform()
+    assert pet.form != pet._user_form
+    pet.apply_role("inv1")
+    assert pet._user_form == _uf, "变身中切角色把变身形态写成了用户形态"
+    assert pet.form == _uf, "变身中切角色后仍停在变身形态（form=%r）" % pet.form
+    # ③ 消化窗口切角色
+    _reset(pet)
+    pet.feed("小鱼干")
+    pet._eat_done("test")
+    assert pet._digest_pending()
+    pet.apply_role("inv1")
+    assert pet._user_form == _uf, "消化中切角色把吃饱形态写成了用户形态"
+    assert pet.form == _uf, "消化中切角色后仍停在吃饱形态（form=%r）" % pet.form
+
+
+def test_feed_during_transform_basis_is_user_form(pet):
+    """v2.1.7 回归（找茬 M1）：变身中喂食，推进基准必须是用户形态（不能从变身形态往后推）。"""
+    _reset(pet)
+    pet._do_transform()
+    assert pet._transform_home is not None and pet.form != pet._user_form
+    _user_idx = pet.form_keys.index(pet._user_form)
+    expect = pet.form_keys[_user_idx]
+    for _step in range(1, len(pet.form_keys) + 1):
+        _cand = pet.form_keys[(_user_idx + _step) % len(pet.form_keys)]
+        if not pet._role_no_feed(_cand):
+            expect = _cand
+            break
+    pet.feed("小鱼干")
+    assert pet.form == expect, \
+        "变身中喂食的落点是 %r，应为用户形态的下一个（%r）" % (pet.form, expect)
+
+
 def test_sleep_survives_voice_finished(pet):
     """M1 回归：睡眠中「朗读完成」不得静默醒来，也不得把形态留在睡形态且无主人。"""
     _reset(pet)

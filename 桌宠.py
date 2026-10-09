@@ -62,7 +62,7 @@ import pet_alarm
 
 
 APP_NAME = "大肥鱼桌宠"
-VERSION = "2.1.6"
+VERSION = "2.1.7"
 PAD = 1.25  # 窗口相对角色的透明边距（为压扁/回弹预留空间）
 IDLE_FRAME_MS = 140      # 待机帧间隔
 IDLE_FORM_HOLD_SECS = 8  # v2.1.3：只有形态、没有动作可播时的展示期上限（到期回用户形态）
@@ -713,6 +713,8 @@ class PetWindow(QWidget):
         self._idle_hold_timer = None         # v2.1.3：形态待机的展示期封顶（防永久吞用户形态）
         self._eat_watchdog = None            # v2.1.4：吃帧看门狗（防 on_finish 被顶掉后 busy 永久卡死）
         self._feed_form = ""                 # v2.1.6：本轮喂食的目标形态（消化窗口的主人判据）
+        self._idle_full_timer = None         # v2.1.7：触发 A（吃饱后待机）的精确投递定时器
+        self._idle_display_form = ""         # v2.1.7：本次待机展示期实际画上去的形态
         self._idle_after_full_at = None      # 触发 A 到点时刻（None=无待触发）
         self._idle_last_action = ""          # 顺序模式记上次播到哪
         self._last_idle_at = 0.0
@@ -1120,7 +1122,10 @@ class PetWindow(QWidget):
         # _transform_home。顺序反了会出两个 bug：①变身期间待机形态覆盖变身形态；
         # ②_transform_home 记成待机形态 → 变身结束后"回"到待机形态，用户选定形态被吞掉。
         self._touch_activity()  # 内部 _idle_interrupt：待机让位并恢复用户形态
-        self._transform_home = self.form
+        # v2.1.7 修复（S1）：消化窗口里当前形态是"吃饱"这一**临时展示**，回切目标必须是
+        # 用户形态。否则变身结束时"回"到吃饱形态，此后 dig/tfrm/idleF 全空 = 永久卡在吃饱形态。
+        _uf0 = getattr(self, "_user_form", "") or self.form_keys[0]
+        self._transform_home = _uf0 if (self._digest_pending() and _uf0 in self.form_keys) else self.form
         self._set_form(_target, cancel_transform=False, display_only=True)  # 变身是临时展示
         self.show_bubble("变身！")
         try:
@@ -1181,7 +1186,11 @@ class PetWindow(QWidget):
             if now >= self._idle_after_full_at:
                 if self._idle_ready():
                     self._start_idle("full")
-                self._idle_after_full_at = None
+                    self._idle_after_full_at = None
+                elif now - self._idle_after_full_at > 60:
+                    # v2.1.7（M2）：到点但条件不满足时**重试**（此前直接作废，"吃饱后待机"会丢），
+                    # 只有超时 60s 才放弃，避免死等
+                    self._idle_after_full_at = None
             return
         # 触发 B
         cfg = self._idle_cfg()
@@ -1215,6 +1224,7 @@ class PetWindow(QWidget):
         if form and form in self.form_keys and form != self.form:
             self._set_form(form, cancel_transform=False, display_only=True)
             self._idle_form_active = True
+            self._idle_display_form = form  # v2.1.7：记下本次展示期实际显示形态（回位判据）
         if b is None:
             # 没有可播动作：只做「形态待机」。v2.1.3 修复：必须给展示期封顶——
             # 此前直接 return，_idle_form_active 永远挂着、_idle_end 永不被调用，
@@ -1296,12 +1306,17 @@ class PetWindow(QWidget):
             # （f3→f0，绕过吃饱形态）＝用户反馈的原症状。所以这里若画面上仍是 idle_form，
             # 就地回位到用户形态；吃帧/睡眠/变身接管时 form != idle_form，不会被误碰。
             self._idle_form_active = False
-            _idle_f = str(self._idle_cfg().get("idle_form") or "")
+            # v2.1.7（L1）：判据用"本展示期实际画上去的形态"（_idle_display_form），
+            # 而不是"当前配置里的待机形态"——展示期内改设置/切角色时后者会判错。
+            _idle_f = str(getattr(self, "_idle_display_form", "")
+                          or self._idle_cfg().get("idle_form") or "")
             uf = getattr(self, "_user_form", "") or self.form_keys[0]
             if _idle_f and self.form == _idle_f and uf in self.sprites and self.form != uf:
                 self._set_form(uf, cancel_transform=False, display_only=True)
+            self._idle_display_form = ""
             return
         self._idle_form_active = False
+        self._idle_display_form = ""
         uf = getattr(self, "_user_form", "") or self.form_keys[0]
         if uf in self.sprites and self.form != uf:
             self._set_form(uf, cancel_transform=False, display_only=True)
@@ -1871,6 +1886,9 @@ class PetWindow(QWidget):
 
     def _reload_sprites(self):
         """重建角色贴图 / 窗口尺寸 / 动画能力（角色切换与恢复默认共用）。"""
+        # v2.1.7（S2）：**必须在 _cancel_transform() 之前**判断"当前显示的是不是临时展示"
+        # （变身/睡眠/吃饱/待机展示）——cancel 之后 _transform_home 就没了，判不出来。
+        _prev_display_temp = bool(self.form != (getattr(self, "_user_form", "") or self.form))
         if self._digest_timer is not None:
             self._digest_timer.stop()  # 切换角色：作废旧角色的消化定时器（L1）
         self._stop_tween()  # v2.0.1：切角色立即停合成动作，防旧角色振荡残留到新角色
@@ -1878,6 +1896,12 @@ class PetWindow(QWidget):
         self._behavior_is_idle = False
         self._cancel_transform()       # v2.0.2：切角色取消变身回切定时器
         _was_sleeping = bool(self._sleeping)  # v2.1.4（L2）：切角色不该把睡着的鱼静默弄醒
+        # v2.1.7 修复（S2）：切角色前记下"真正的用户形态"与当时的临时展示，避免把
+        # 睡/变身/吃饱/待机展示形态当成 _user_form（那会永久吞掉用户选定形态）
+        _prev_user = getattr(self, "_user_form", "") or ""
+        _had_transform = getattr(self, "_transform_home", None) is not None
+        _had_idle_display = bool(getattr(self, "_idle_form_active", False))
+        _had_feed = getattr(self, "_feed_form", "")
         self._sleep_home = None
         # v2.1：切角色重置待机状态与用户选定形态（旧角色的形态键在新角色上无意义）
         self._idle_active = False
@@ -1890,7 +1914,15 @@ class PetWindow(QWidget):
         self.base_w, self.base_h = self._compute_base_size()
         if self.form not in self.sprites:
             self.form = self.form_keys[0]  # 角色形态数变少：回第一形态
-        self._user_form = self.form if self.form in self.form_keys else self.form_keys[0]
+        # v2.1.7（S2）：用户形态以**重载前**的值为准（旧键在新角色里不存在时回第一形态）
+        self._user_form = _prev_user if _prev_user in self.form_keys else self.form_keys[0]
+        if (self.form not in self.sprites or _had_transform or _had_idle_display
+                or _prev_display_temp
+                or (self._feed_form and self._feed_form == self.form)):
+            # 临时展示（睡/变身/吃饱/待机展示）在切角色时必须回用户形态，不能残留成"当前形态"；
+            # 睡眠由下面的 _was_sleeping 分支按新角色重新入睡
+            self.form = self._user_form
+            self._feed_form = ""
         self._wire_anim_sets()
         if self.busy and self.anim_mode == "eat":
             self.busy = False  # S1：吃帧被角色切换打断，_eat_done 不会再回调，显式释放
@@ -2648,6 +2680,19 @@ class PetWindow(QWidget):
             _delay = 0  # 有意忽略：坏值按 0（立即待机）
         self._idle_after_full_at = time.monotonic() + max(0, _delay)
         self._last_idle_at = 0.0  # 触发 A 立即生效（不受触发 B 去重窗口影响）
+        # v2.1.7（M2）：idle_timer 是 15s 粗粒度，触发 A 用它检查会晚最多 15s。
+        # 这里精确投递一次（到点即检查），tick 仍作兜底与去重。
+        if self._idle_full_timer is not None:
+            try:
+                self._idle_full_timer.stop()
+                self._idle_full_timer.deleteLater()
+            except RuntimeError:
+                pass  # 有意忽略：定时器可能已销毁（幂等）
+        self._idle_full_timer = QTimer(self)
+        self._idle_full_timer.setSingleShot(True)
+        self._idle_full_timer.timeout.connect(
+            self._gslot("idle_full_trigger", self.maybe_idle_behavior))
+        self._idle_full_timer.start(max(0, _delay) * 1000 + 50)
         self._show_emote("sparkle")
         if self._custom_role:
             # 显示形态**名字**而不是形态键（f0/f1）
@@ -2668,6 +2713,11 @@ class PetWindow(QWidget):
             self.show_bubble(random.choice(["这个形态不吃东西啦~", "本形态拒绝投喂！",
                                             "现在只想安静地当一条鱼~"]))
             return
+        # v2.1.7（M1）：临时展示（变身/睡眠/待机展示）期间的"当前形态"不是用户形态，
+        # 喂食推进必须按**用户形态**算基准，否则会从变身形态往后推、跳过吃饱形态。
+        # 注意：必须在下面 _touch_activity() 之前取（它会结束待机展示期）。
+        _temp_display = (getattr(self, "_transform_home", None) is not None
+                         or bool(self._sleeping) or bool(getattr(self, "_idle_form_active", False)))
         # v2.1.6 修复（"吃饱形态被待机吞了"的真因）：**必须在 busy=True 之前**打断待机，
         # 否则 _idle_interrupt → _restore_user_form() 被 busy 拦下（早退），于是：
         #   ① 形态推进会从"待机形态"往后算（f3→f0），**根本没有走到吃饱形态**；
@@ -2685,7 +2735,8 @@ class PetWindow(QWidget):
         self.mood.fed()
         # 喂食：形态顺次前进（多形态循环），refresh=False 先播吃帧再落新形态；
         # 临时展示语义：吃完消化回 user_selected_form，不吞掉用户选定的形态
-        cur_idx = self.form_keys.index(self.form) if self.form in self.form_keys else 0
+        _basis = self._user_form if (_temp_display and self._user_form in self.form_keys) else self.form
+        cur_idx = self.form_keys.index(_basis) if _basis in self.form_keys else 0
         # v2.1.4 修复：推进时**跳过标记「不参与喂食」的形态**——此前只拦"当前形态不能喂"，
         # 却可能把形态推进到 no_feed 形态上（表现为"吃着吃着变成睡觉形态"，且此后喂不了）。
         # 多形态角色：每次喂食**顺次前进**（正式的"形态循环"功能，f0→f1→f2→f0…），
@@ -3656,6 +3707,7 @@ class PetWindow(QWidget):
                       self._transform_timer,  # v2.1.2（L-1）：变身回切定时器此前漏停
                       self._idle_hold_timer,   # v2.1.3：形态待机展示期定时器（可能为 None，stop 前过滤）
                       self._eat_watchdog,      # v2.1.4：吃帧看门狗
+                      self._idle_full_timer,   # v2.1.7：触发 A 精确投递定时器
                       self._alarm_timer):  # v2.0.5：闹钟轮询
                 if t is not None:
                     t.stop()
