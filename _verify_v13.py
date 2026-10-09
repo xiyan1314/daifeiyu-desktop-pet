@@ -27,7 +27,7 @@ sys.path.insert(0, HERE)
 
 FAILS = []
 CHECKS = []
-EXPECT_CHECKS = 253  # v2.1.3：检查总数硬断言（每次增删检查同步更新；本检查自身不计入）
+EXPECT_CHECKS = 258  # v2.1.5：检查总数硬断言（每次增删检查同步更新；本检查自身不计入）
 
 
 def check(name, cond, extra=""):
@@ -900,6 +900,30 @@ def main_flow():
           "sleeping=%r idle_form=%r" % (pet._sleeping, pet._idle_form_active))
     pet._wake()
     check("wake after idle sleep", pet.form == "f0" and not pet._sleeping, "form=%r" % pet.form)
+    # v2.1.5 回归：消化窗口（吃饱形态保留期）内待机不得开始，否则"吃饱形态被待机吞了"
+    pet.cfg["idle_form"] = "f1"
+    pet._user_form = "f0"
+    pet._set_form("f0", display_only=True)
+    pet._idle_after_full_at = None
+    pet._idle_form_active = False
+    pet.feed("小鱼干")                       # 进入吃饱形态 + 消化定时器
+    _full_form = pet.form
+    check("feed enters full form", _full_form != "f0", "form=%r" % (pet.form,))
+    check("digest pending", pet._digest_pending() is True)
+    check("idle blocked while digesting", pet._idle_ready() is False)
+    pet._last_activity = 0.0                 # 无交互触发条件满足
+    pet._last_idle_at = 0.0
+    pet.maybe_idle_behavior()
+    check("idle not swallow full form",
+          pet.form == _full_form and pet._idle_form_active is False,
+          "form=%r idle_form=%r" % (pet.form, pet._idle_form_active))
+    pet._eat_done("test")                    # 吃帧收尾（busy 释放）
+    pet._digest_timer.stop()                 # 模拟定时器到点（单发触发后本就 inactive）
+    pet._digest()                            # 消化到点：回用户形态
+    check("digest returns user form",
+          pet.form == "f0" and pet._idle_form_active is False and not pet._digest_pending(),
+          "form=%r idle_form=%r" % (pet.form, pet._idle_form_active))
+    pet.cfg.pop("idle_form", None)
     # 场景 4：待机动作列表为空（只有形态）→ 展示期必须有上限，不能永久挂着 idle_form
     _acts_backup = list(pet.cfg.get("idle_actions") or [])
     pet.cfg["idle_form"] = "f1"

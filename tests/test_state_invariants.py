@@ -285,6 +285,27 @@ def test_after_callbacks_settle_no_stuck_form(pet):
     assert not bad, "收尾稳态失败（%d 条）：\n%s" % (len(bad), "\n".join(bad[:20]))
 
 
+def test_idle_not_swallow_full_form(pet):
+    """v2.1.5 回归：喂食后"吃饱形态"保留期（消化窗口）内，待机不得开始/不得改形态。"""
+    _reset(pet)
+    pet.cfg["idle_form"] = "f3"
+    pet.feed("小鱼干")
+    full_form = pet.form
+    assert full_form != pet._user_form, "喂食应该切到吃饱形态"
+    assert pet._digest_pending() is True, "消化定时器应处于激活态"
+    assert pet._idle_ready() is False, "消化窗口内 _idle_ready 必须为 False"
+    pet._last_activity = 0.0
+    pet._last_idle_at = 0.0
+    pet.maybe_idle_behavior()          # 无交互触发条件满足，也不该开始待机
+    assert pet.form == full_form, "待机把吃饱形态吞了（form=%r）" % pet.form
+    assert pet._idle_form_active is False
+    pet._eat_done("test")
+    pet._digest_timer.stop()           # 模拟定时器到点（单发触发后本就 inactive）
+    pet._digest()
+    assert pet.form == pet._user_form and not pet._digest_pending()
+    pet.cfg.pop("idle_form", None)
+
+
 def test_sleep_survives_voice_finished(pet):
     """M1 回归：睡眠中「朗读完成」不得静默醒来，也不得把形态留在睡形态且无主人。"""
     _reset(pet)
@@ -317,9 +338,8 @@ def test_eat_watchdog_releases_busy(pet):
     """S1 兜底：即便收尾回调真的丢了，看门狗也必须把 busy 释放掉。"""
     _reset(pet)
     pet.feed("小鱼干")
-    pet.anim.stop()
-    pet._eat_done = lambda *_a: None
-    pet._eat_watchdog_fire()
+    pet.anim.stop()          # 模拟回调被 stop 丢弃（on_finish 被清掉，没人再调 _eat_done）
+    pet._eat_watchdog_fire()  # 看门狗兜底：到点仍 busy 就强制收尾
     assert pet.busy is False, "看门狗没释放 busy"
 
 

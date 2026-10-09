@@ -31,6 +31,9 @@ def install_three_form_role(win, tmp, with_animations=True):
         f0["animations"] = {"idle": ["inv_a.png"], "eat": ["inv_eat1.png", "inv_eat2.png"],
                             "poke": ["inv_a.png"]}
         f0["anim_interval_ms"] = 80
+        # 变身形态也带吃帧：默认角色就是"吃饱形态带吃帧"，喂食后必须走吃帧路径
+        f1["animations"] = {"idle": ["inv_b.png"], "eat": ["inv_eat1.png", "inv_eat2.png"]}
+        f1["anim_interval_ms"] = 80
         f2["animations"] = {"sleep": ["inv_sleep.png"]}
         f2["anim_interval_ms"] = 80
     f3 = {"name": "待机形态", "file": "inv_b.png"}  # 专用：给 idle_form 用，避开喂食循环

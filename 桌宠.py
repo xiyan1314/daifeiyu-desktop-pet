@@ -62,7 +62,7 @@ import pet_alarm
 
 
 APP_NAME = "大肥鱼桌宠"
-VERSION = "2.1.4"
+VERSION = "2.1.5"
 PAD = 1.25  # 窗口相对角色的透明边距（为压扁/回弹预留空间）
 IDLE_FRAME_MS = 140      # 待机帧间隔
 IDLE_FORM_HOLD_SECS = 8  # v2.1.3：只有形态、没有动作可播时的展示期上限（到期回用户形态）
@@ -1137,15 +1137,23 @@ class PetWindow(QWidget):
         """归一化后的待机配置（默认值/钳制单一来源 pet_behaviors）。"""
         return self.behaviors.idle_config(lambda: self.cfg)
 
-    def _idle_ready(self):
-        """待机能否开始：不忙/不摸头/没睡/**没在变身**/处于待机表现/没在读台词/没有待机动作在播。
+    def _digest_pending(self):
+        """是否处于"吃饱形态 → 消化回位"的窗口（吃帧已结束但 12s 消化定时器还在跑）。"""
+        return getattr(self, "_digest_timer", None) is not None and self._digest_timer.isActive()
 
-        v2.1.3 修复：此前漏判"变身进行中"，导致变身期间待机会把 idle_form 画上去
-        （表现为"待机吞了变身形态"，且变身结束时回切到的是待机形态）。"""
+    def _idle_ready(self):
+        """待机能否开始：不忙/不摸头/没睡/没在变身/**不在消化窗口**/处于待机表现/没读台词。
+
+        v2.1.3 修复：漏判"变身进行中" → 待机把 idle_form 画上去（吞变身形态）。
+        v2.1.5 修复：漏判"消化窗口" → 喂食后吃饱形态要保留到消化定时器到点（默认 12s），
+        而这段时间 busy 已释放、anim_mode 已回 idle，无交互触发（默认 8s）会先一步开始待机，
+        把吃饱形态顶掉（用户反馈："吃饱形态被待机吞了"）。吃饱结束后的待机由触发 A 负责。"""
         if self.busy or self._petting or self._sleeping:
             return False
         if getattr(self, "_transform_home", None) is not None:
             return False  # 变身进行中：这是更高优先级的展示，待机必须让位
+        if self._digest_pending():
+            return False  # 消化窗口：吃饱形态是更高优先级的展示，等 _digest 回位后再待机
         if getattr(self, "_speaking_voice", False) or self.voice.is_speaking():
             return False
         if self.anim_mode not in ("idle", "form_idle"):
@@ -2604,6 +2612,9 @@ class PetWindow(QWidget):
         # v2.1.3 修复：睡眠/变身期间不做形态回位——那两个是更高优先级的"临时展示"，
         # 各自有自己的回位路径（醒来 / 变身到时）。此前会"吃饱把睡眠形态顶掉"。
         _busy_display = bool(self._sleeping) or getattr(self, "_transform_home", None) is not None
+        # v2.1.5：消化回位同时清掉"待机展示期"残留（否则 idle_form 旗标挂着，下次 _idle_end 还会再切一次）
+        self._idle_form_active = False
+        self._stop_idle_hold()
         if self.form != _uf and not _busy_display:
             # _set_form 内已在待机态回位；状态图展示中不掐断（state 结束时自然回待机）
             self._set_form(_uf, display_only=True)
