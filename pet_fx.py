@@ -46,7 +46,7 @@ Copyright (c) 大肥鱼桌宠项目
   的 RuntimeError）与用户回调异常有意静默（# 有意忽略 注释），绝不抛出打断主循环。
 - 仅依赖 PySide6.QtCore / QtGui 与 pet_anim，模块可在无 GUI 环境 import。
 
-Python 3.8 兼容。
+Python 3.10+（项目运行环境 3.10.2）。
 """
 
 from PySide6.QtCore import QObject, QTimer, Signal

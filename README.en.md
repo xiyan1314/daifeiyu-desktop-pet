@@ -8,6 +8,12 @@ Transparent frameless window, always-on-top, draggable, feedable, chatty — per
 
 中文介绍见 [README.md](README.md)。
 
+> **Note / 说明**：This English README is a short overview and **lags behind the Chinese README.md**
+> (which documents v2.1 features: AI voice-cloning dubbing, customizable lines & dialogues,
+> idle-behaviour system, local TTS-backend launcher, alarms…).
+> The Chinese [README.md](README.md) is the authoritative, up-to-date document.
+> 英文版只是概览，功能细节以中文 README.md 为准（v2.1 新增能力尚未全部翻译）。
+
 ## ✨ Features
 
 - 🖼️ **Two forms with frame animation**: Normal + Full (round belly); 10-frame idle + 7-frame eating animation

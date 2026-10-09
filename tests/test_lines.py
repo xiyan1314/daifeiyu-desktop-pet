@@ -15,7 +15,12 @@ def test_seed_and_categories(tmp_path):
     assert svc.count() == (len(pet_lines.LINES_SAJIAO) + len(pet_lines.LINES_GREEDY)
                            + len(pet_lines.LINES_SCARED) + len(pet_lines.LINES_HAPPY)
                            + len(pet_lines.LINES_IDLE) + len(pet_lines.LINES_STARTUP)
-                           + len(pet_lines.LINES_PETTING) + sum(len(v) for v in pet_lines.FOOD_LINES.values()))
+                           + len(pet_lines.LINES_PETTING)
+                           + sum(len(v) for v in pet_lines.FOOD_LINES.values())
+                           + sum(len(v) for v in pet_lines.MOOD_LINES.values()))
+    # v2.1.2：情绪台词也进库（用户可增删改），不再是写死的常量
+    assert svc.by_category("mood_puzzled") == pet_lines.LINES_MOOD_PUZZLED
+    assert "mood_cry" in svc.categories() and "mood_blush" in svc.categories()
     assert set(svc.categories()) == set(pet_lines.LINE_CATEGORIES)
     assert svc.by_category("startup") == pet_lines.LINES_STARTUP
     assert svc.food_texts("蛋糕") == pet_lines.FOOD_LINES["蛋糕"]

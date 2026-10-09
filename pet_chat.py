@@ -147,6 +147,8 @@ def read_memory(path, max_entries, log=None):
                     if isinstance(r, str) and isinstance(c, str):
                         out.append((r, c))
             return out[-max_entries:]
+    except FileNotFoundError:
+        pass  # 首次运行还没有 memory.json：不是错误，别往 error.log 写吓人记录
     except Exception as e:
         if log is not None:
             log("load_chat_memory 读取失败（从空记忆开始）: %r" % (e,))

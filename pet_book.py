@@ -41,7 +41,7 @@
   绝不向调用方抛异常（数据文件损坏/读写失败记入 error.log）。
 - 金额统一 float 并四舍五入到分（round(x, 2)）。
 
-Python 3.8+ 兼容。
+Python 3.10+（项目运行环境 3.10.2）。
 
 MIT License
 Copyright (c) 大肥鱼桌宠项目

@@ -48,6 +48,23 @@ def test_second_start_is_idempotent(tmp_path):
         ln.stop()
 
 
+def test_pid_reuse_is_detected(tmp_path):
+    """M-4：进程身份靠"创建时间指纹"核对——指纹不符（PID 被系统复用）时不得认作我们的进程。"""
+    ln = _launcher(tmp_path)
+    assert ln.start(_sleep_cmd(6), "", "gpt_sovits")[0] is True
+    try:
+        assert ln.is_running() is True
+        assert ln.status()["pid"] > 0
+        # 篡改指纹（模拟 PID 被复用成别的进程）→ 必须判定为"不是我们的"
+        ln._state["create_time"] = 1.0
+        assert ln.is_running() is False
+        # 指纹缺失（老状态文件）→ 退化为仅凭 PID 判断（兼容旧状态）
+        ln._state.pop("create_time", None)
+        assert ln.is_running() is True
+    finally:
+        ln.stop()
+
+
 def test_stale_pid_is_not_running(tmp_path):
     ln = _launcher(tmp_path)
     ln._state = {"pid": 999999, "cmd": "ghost", "backend": "x", "started_at": ""}

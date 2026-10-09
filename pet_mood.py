@@ -20,7 +20,7 @@ MIT License
 - 调皮：选型 A——PetWindow 用外部周期定时器调用 tick()，内部按 45~90 秒
   随机间隔节流，到点发射 smug + 得意台词 + sparkle。
 
-Python 3.8 兼容。
+Python 3.10+（项目运行环境 3.10.2）。
 """
 
 import random
@@ -30,55 +30,14 @@ from PySide6.QtCore import QObject, QTimer, Signal
 
 
 # ---------------- 台词库（中文，每组 3~5 条） ----------------
-LINES_PUZZLED = [
-    "咦？绳匠在戳我？",
-    "干嘛呀……人家在睡觉呢。",
-    "唔？你碰到我啦？",
-    "咦咦咦？发生什么了？",
-]
-LINES_ANGRY = [
-    "又戳！我要生气啦！",
-    "再戳我咬你哦！",
-    "哼！别闹了啦！",
-    "我、我真的会生气的！",
-    "你戳上瘾了是不是！",
-]
-LINES_HISS = [
-    "哈——！别过来！",
-    "咝——我要翻脸啦！",
-    "再戳我，我就躲进水里不出来了！",
-    "哼，喜欢的东西我可是会咬住不放的！",
-]
-LINES_DROOL = [
-    "绳匠，小鱼干在哪里！",
-    "好香呀……口水都要流下来啦！",
-    "就吃一口，就一口嘛~",
-    "我闻到了零食的味道！",
-    "那个看起来好好吃……",
-]
-LINES_CRY = [
-    "呜……绳匠都不给我吃……",
-    "人家等了好久好久……",
-    "QAQ 好委屈，我要哭给你看！",
-    "肚子咕咕叫，你却不管我……",
-    "哼……不理你了……",
-]
-LINES_SMUG = [
-    "嘿嘿，是我干的~",
-    "略略略，绳匠抓不到我~",
-    "又干了一件坏事，开心！",
-    "喜欢的，就咬住不放~",
-    "嘿嘿嘿，谁让你没看见呢~",
-]
-LINES_BLUSH = [
-    "诶？绳匠夸我了……",
-    "才、才没有很开心呢！",
-    "被绳匠夸了……嘿嘿~",
-    "别一直夸啦，脸都红了……",
-    "绳匠觉得我可爱吗？",
-]
-
-
+# v2.1.2：情绪台词改由台词库提供（用户可增删改）；这里只是"库不可用时的兜底常量"，
+# 文本单一来源在 pet_lines（它零 Qt，不会造成循环 import）。
+from pet_lines import (  # noqa: E402
+    LINES_MOOD_PUZZLED as LINES_PUZZLED, LINES_MOOD_ANGRY as LINES_ANGRY,
+    LINES_MOOD_HISS as LINES_HISS, LINES_MOOD_DROOL as LINES_DROOL,
+    LINES_MOOD_CRY as LINES_CRY, LINES_MOOD_SMUG as LINES_SMUG,
+    LINES_MOOD_BLUSH as LINES_BLUSH,
+)
 class Mood(QObject):
     """情绪状态机：戳链 / 食物 / 调皮 三条情绪线，全部经信号输出。"""
 
@@ -93,8 +52,10 @@ class Mood(QObject):
     MISCHIEF_MIN_S = 45.0       # 调皮事件最短间隔（秒）
     MISCHIEF_MAX_S = 90.0       # 调皮事件最长间隔（秒）
 
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, line_picker=None):
         super().__init__(parent)
+        # v2.1.2：line_picker(category, fallback_list) -> 台词文本（由桌宠注入台词库）
+        self._line_picker = line_picker
 
         # ---- 戳链状态 ----
         self._last_poke = 0.0
@@ -112,6 +73,26 @@ class Mood(QObject):
         # 之后每次 tick() 到点发射，再重新随机 45~90 秒的下一次间隔。
         self._next_mischief = 0.0
 
+    def _pick(self, category, fallback):
+        """情绪台词取词：优先台词库（用户可增删改）。
+
+        v2.1.2 修复：库可用但这一类被用户删空时，取词器返回空串 → 这里也返回空串
+        （由 _emit_line 跳过这句气泡），**不**回落内置常量——否则等于"删了还会念"。
+        只有取词器缺失/抛异常（库不可用）时才用兜底常量，保证气泡不会因为取词崩掉。
+        """
+        if self._line_picker is not None:
+            try:
+                return self._line_picker(category, fallback) or ""
+            except Exception:
+                pass  # 有意忽略：取词器异常 → 回落内置常量（气泡不能因为取词崩掉）
+        return random.choice(fallback) if fallback else ""
+
+    def _emit_line(self, category, fallback):
+        """取词并发射情绪气泡（空串=用户把这组删光了 → 这次不喊）。"""
+        text = self._pick(category, fallback)
+        if text:
+            self.bubble.emit(text)
+
     def prime_mischief(self):
         """把下一次调皮事件推迟到随机 45~90 秒后（启动时调用，避免刚启动就坏笑）。"""
         self._next_mischief = time.monotonic() + random.uniform(self.MISCHIEF_MIN_S, self.MISCHIEF_MAX_S)
@@ -128,22 +109,22 @@ class Mood(QObject):
 
         if self._poke_count == 1:
             self.state.emit("puzzled")
-            self.bubble.emit(random.choice(LINES_PUZZLED))
+            self._emit_line("mood_puzzled", LINES_PUZZLED)
             self.emote.emit("question")
         elif self._poke_count == 2:
             self.state.emit("angry")
-            self.bubble.emit(random.choice(LINES_ANGRY))
+            self._emit_line("mood_angry", LINES_ANGRY)
             self.emote.emit("anger")
         else:  # >= 3
             self.state.emit("hiss")
-            self.bubble.emit(random.choice(LINES_HISS))
+            self._emit_line("mood_hiss", LINES_HISS)
             self.emote.emit("anger")
 
     # ================= 食物情绪 =================
     def food_shown(self):
         """食物托盘打开 → 馋嘴；并启动 8 秒定时器，超时不给吃就委屈。"""
         self.state.emit("drool")
-        self.bubble.emit(random.choice(LINES_DROOL))
+        self._emit_line("mood_drool", LINES_DROOL)
         self.emote.emit("drool")
         self._food_timer.start()  # 重复调用会重启 8 秒窗口
 
@@ -154,7 +135,7 @@ class Mood(QObject):
     def _withhold(self):
         """8 秒没吃到 → 委屈哭泣（私有，由食物定时器超时触发）。"""
         self.state.emit("cry")
-        self.bubble.emit(random.choice(LINES_CRY))
+        self._emit_line("mood_cry", LINES_CRY)
         self.emote.emit("tear")
 
     def fed(self):
@@ -164,7 +145,7 @@ class Mood(QObject):
     def blush(self):
         """被夸 → 害羞脸红。"""
         self.state.emit("blush")
-        self.bubble.emit(random.choice(LINES_BLUSH))
+        self._emit_line("mood_blush", LINES_BLUSH)
         self.emote.emit("heart")
 
     def stop_all(self):
@@ -187,7 +168,7 @@ class Mood(QObject):
     def _do_mischief(self):
         """实际发射「做坏事得意」情绪（由 tick() 调用，也供冒烟测试直接验证）。"""
         self.state.emit("smug")
-        self.bubble.emit(random.choice(LINES_SMUG))
+        self._emit_line("mood_smug", LINES_SMUG)
         self.emote.emit("sparkle")
 
 

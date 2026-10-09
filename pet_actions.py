@@ -34,9 +34,12 @@ class ActionService:
         pet._run_anim(520, lambda v: pet.move(start + QPoint(0, -int(h * v))),
                       keyframes=[(0.5, 1.0)], end=0.0, easing=QEasingCurve.Type.InOutQuad)
         pet._show_emote("heart")
-        # v2.1：跳跃台词优先取台词库"开心"类别（用户可增删改），空则回落内置常量
+        # v2.1：跳跃台词取台词库"开心"类别；v2.1.2 修复（M-2）：**库可用时不回落内置常量**
+        # （否则用户删掉的台词会"复活"）；池子为空就这次不喊。
         _say = getattr(pet, "_say_line", pet.show_bubble)
-        _say(random.choice(pet.lines_pools.get("happy") or pet_lines.LINES_HAPPY))
+        _happy = pet.lines_pools.get("happy") or []
+        if _happy:
+            _say(random.choice(_happy))
 
     def play_action(self, name, arg=None):
         """P3-2：按名称点播动作（闲逛加权随机与右键「动作」菜单共用同一实现）。
@@ -97,8 +100,12 @@ class ActionService:
         self.play_action(name, arg)
         if name == "emote" and arg == "zzz":
             # v2.1：走日常台词出口（气泡 + 可选配音朗读）
+            # v2.1.2 修复（S-1）：用户可能把这两类台词全删掉 → 池子为空时
+            # random.choice([]) 会抛 IndexError，QTimer 槽里未捕获异常会弹模态错误框（每轮复发）
             _say = getattr(pet, "_say_line", pet.show_bubble)
-            _say(random.choice(pet.lines_pools.get("idle", []) + pet.lines_pools.get("greedy", [])))
+            _pool = pet.lines_pools.get("idle", []) + pet.lines_pools.get("greedy", [])
+            if _pool:
+                _say(random.choice(_pool))
 
     def cpu_tick(self):
         pet = self.pet

@@ -600,6 +600,15 @@ class VoiceLauncher:
         self._log_path = os.path.join(data_dir, "voice_backend.log")
         self._log = log or pet_log.log_error
         self._state = self._load_state()
+        self._log_fh = None  # 启动时打开的后端日志句柄（结束/退出时关掉）
+
+    def _close_log(self):
+        try:
+            if self._log_fh is not None:
+                self._log_fh.close()
+        except Exception:
+            pass  # 有意忽略：关句柄失败不影响后续
+        self._log_fh = None
 
     def _load_state(self):
         try:
@@ -633,13 +642,25 @@ class VoiceLauncher:
             return 0
 
     def is_running(self):
-        """我们启动的后端进程是否还活着。"""
+        """我们启动的后端进程是否还活着（**并用创建时间核对身份**，防 PID 复用误判）。
+
+        M-4 修复：Windows 会复用 PID；只凭 pid_exists 判断会把"别人的进程"当成我们的，
+        退出清理时可能误杀无关进程树。所以 start 时记录 create_time，判活时一并核对。
+        """
         pid = self.pid()
         if not pid:
             return False
         try:
             import psutil
-            return bool(psutil.pid_exists(pid))
+            if not psutil.pid_exists(pid):
+                return False
+            want = self._state.get("create_time")
+            if want:
+                try:
+                    return abs(float(psutil.Process(pid).create_time()) - float(want)) < 1.0
+                except Exception:
+                    return False  # 取不到创建时间（进程刚消失/无权限）→ 保守认定不是我们的
+            return True
         except Exception:
             try:
                 os.kill(pid, 0)
@@ -665,7 +686,9 @@ class VoiceLauncher:
             _dir = os.path.dirname(self._log_path)
             if _dir:
                 os.makedirs(_dir, exist_ok=True)
+            self._close_log()
             f = open(self._log_path, "a", encoding="utf-8", errors="replace")
+            self._log_fh = f
             f.write("\n===== %s 启动：%s（%s）=====\n"
                     % (time.strftime("%Y-%m-%d %H:%M:%S"), cmd, backend_id or "-"))
             f.flush()
@@ -676,8 +699,16 @@ class VoiceLauncher:
                 kwargs["creationflags"] = 0x00000200  # CREATE_NEW_PROCESS_GROUP
             proc = subprocess.Popen(cmd, **kwargs)
         except Exception as e:
+            self._close_log()  # M-5：Popen 抛异常也要关句柄，别泄漏
             return False, "启动失败：%s" % e
+        _ct = None
+        try:
+            import psutil
+            _ct = psutil.Process(proc.pid).create_time()  # M-4：身份指纹（防 PID 复用）
+        except Exception:
+            _ct = None  # 有意忽略：取不到指纹时退化为"仅凭 PID"判断
         self._state = {"pid": int(proc.pid), "cmd": cmd, "backend": str(backend_id or ""),
+                       "create_time": _ct,
                        "started_at": time.strftime("%Y-%m-%d %H:%M:%S")}
         self._save_state()
         return True, "已启动（PID %d），正在等它就绪…" % proc.pid
@@ -686,6 +717,7 @@ class VoiceLauncher:
         """结束我们启动的后端（含子进程树）；没启动过视为已完成。"""
         pid = self.pid()
         if not pid:
+            self._close_log()
             return True, "没有需要结束的后端（桌宠没启动过后端）"
         try:
             import psutil
@@ -693,6 +725,7 @@ class VoiceLauncher:
                 proc = psutil.Process(pid)
             except Exception:
                 self._clear_state()
+                self._close_log()  # M-5
                 return True, "后端进程已经不在了"
             try:
                 kids = proc.children(recursive=True)
@@ -710,14 +743,17 @@ class VoiceLauncher:
                 except Exception:
                     pass  # 有意忽略：强杀失败只能交给用户手动关
             self._clear_state()
+            self._close_log()
             return True, "已结束后端（PID %d）" % pid
         except Exception as e:
             try:
                 subprocess.run(["taskkill", "/PID", str(pid), "/T", "/F"],
                                capture_output=True, timeout=15)
                 self._clear_state()
+                self._close_log()  # M-5
                 return True, "已结束后端（PID %d）" % pid
             except Exception as e2:
+                self._close_log()  # M-5
                 return False, "结束后端失败：%s / %s" % (e, e2)
 
     def wait_ready(self, base_url, timeout=30):
@@ -1199,11 +1235,11 @@ class VoiceService:
             try:
                 with self._lock:
                     self._speaking = True
+                if job.get("gen") != self._gen:
+                    continue  # 已被 stop/清空：丢弃（对白收尾也算，避免 stop 后还报"读完"）
                 if job.get("kind") == "dialogue_end":
                     self._emit("dialogue")
                     continue
-                if job.get("gen") != self._gen:
-                    continue  # 已被 stop/清空：丢弃
                 self._process_job(job)
             except Exception as e:
                 self._log("voice queue job failed: %r" % (e,))
@@ -1444,7 +1480,9 @@ def normalize_voice(v):
         ks, vs = str(k or "")[:64], str(val or "")[:64]
         if vs:
             binds[ks] = vs
-    # v2.1.1：本地后端启动配置（每个本地服务一份；auto_start/kill_on_exit 默认开启自动、默认退出清理）
+    # v2.1.1：本地后端启动配置（每个本地服务一份）。
+    # 默认值口径：auto_start=False（**默认不自动拉起，和以前一样，用户自己启动**）、
+    # kill_on_exit=True（一旦桌宠自己拉起了后端，退出时清理它）。
     raw_ls = v.get("local_services") if isinstance(v.get("local_services"), dict) else {}
     services = {}
     for pbid, backend in BACKENDS.items():

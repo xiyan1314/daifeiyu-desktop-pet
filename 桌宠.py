@@ -62,7 +62,7 @@ import pet_alarm
 
 
 APP_NAME = "大肥鱼桌宠"
-VERSION = "2.1.1"
+VERSION = "2.1.2"
 PAD = 1.25  # 窗口相对角色的透明边距（为压扁/回弹预留空间）
 IDLE_FRAME_MS = 140      # 待机帧间隔
 EAT_FRAME_MS = 110       # 进食帧间隔
@@ -337,6 +337,10 @@ def load_config():
             # 迁移必须用原始值，否则 20 条/60 字的旧限制会在迁移时把数据吃掉（S3）。
             if isinstance(data.get("lines_extra"), dict):
                 cfg["_legacy_lines_extra"] = data.get("lines_extra")
+    except FileNotFoundError:
+        # 兼容审查 L4：**首次运行**（还没有 config.json）不是错误，不该往 error.log 里写
+        # 吓人的"读取失败"。与 pet_resources._read_json 的"首次无文件=静默"口径保持一致。
+        set_redact_key("")
     except Exception as e:
         _log_error("load_config 读取失败（按默认值运行）: %r" % (e,))
         set_redact_key("")  # 配置读不到=没有 key：同步脱敏缓存，阻断 _redact 兜底重读的日志环
@@ -718,7 +722,8 @@ class PetWindow(QWidget):
         self._state_timer.timeout.connect(self._state_done)
 
         # ---- 阶段2：情绪状态机 ----
-        self.mood = pet_mood.Mood(self)
+        # v2.1.2：情绪台词也走台词库（用户可增删改）；库为空/不可用时 pet_mood 回落内置常量
+        self.mood = pet_mood.Mood(self, line_picker=self._mood_line)
         self.mood.state.connect(self._on_mood_state)
         self.mood.bubble.connect(self._mood_bubble)  # busy 门控：喂食/跳跃中不覆盖互动气泡
         self.mood.emote.connect(self._mood_emote)
@@ -2047,7 +2052,10 @@ class PetWindow(QWidget):
         self._place_fx("petpet")
         self.fx.play(self._fx_petpet, interval_ms=80, loops=-1)
         self._pet_max.start(15000)  # 看门狗：release 丢失时 15s 自停（M2 修复）
-        self._say_line(random.choice(self.lines_pools.get("petting") or LINES_PETTING))
+        # v2.1.2（M-2）：库可用时不回落内置常量（删掉的台词不复活）；空池就这次不喊
+        _pet_lines_pool = self.lines_pools.get("petting") or []
+        if _pet_lines_pool:
+            self._say_line(random.choice(_pet_lines_pool))
 
     def _on_pet_watchdog(self):
         """看门狗超时结束摸摸头：标记后收尾，随后的松手不再算「戳一下」。"""
@@ -3239,11 +3247,30 @@ class PetWindow(QWidget):
             _empty = True
         for cat, builtin in self._LINE_FALLBACK.items():
             try:
-                texts = self.lines_lib.by_category(cat)
+                texts = self.lines_lib.texts_by_category(cat)  # 免深拷贝（几千条时明显更快）
             except Exception:
                 texts = []
             pools[cat] = (texts or list(builtin)) if _empty else texts
         self.lines_pools = pools
+
+    def _mood_line(self, category, fallback):
+        """情绪台词取词（pet_mood 注入）。
+
+        v2.1.2 修复（S2/M-2）：**库可用时永不回落内置常量**——用户把这组情绪台词删光后
+        就不该再念（否则"删了还会念"，与「内置可删」矛盾）。只有整个台词库为空
+        （首次运行/数据损坏）时才用内置兜底；该类为空则返回空串，pet_mood 跳过这句气泡。"""
+        try:
+            texts = self.lines_lib.texts_by_category(category)  # 免深拷贝（戳/托盘/调皮都会调）
+        except Exception:
+            texts = []
+        if texts:
+            return random.choice(texts)
+        try:
+            if self.lines_lib.count() == 0:
+                return random.choice(fallback) if fallback else ""
+        except Exception:
+            return random.choice(fallback) if fallback else ""
+        return ""
 
     def _pick_line(self, cats, fallback=None):
         """从若干类别池随机取一句；池子为空时给中性兜底（不崩、不复活已删台词）。"""
@@ -3413,6 +3440,7 @@ class PetWindow(QWidget):
                       self._state_timer, self._drag_timer, self._digest_timer,
                       self._fly_timer, self._save_scale_timer, self._food_shown_timer,
                       self._hold_timer, self._pet_max, self._flight_timer,  # P1-手感
+                      self._transform_timer,  # v2.1.2（L-1）：变身回切定时器此前漏停
                       self._alarm_timer):  # v2.0.5：闹钟轮询
                 if t is not None:
                     t.stop()
@@ -3437,6 +3465,13 @@ class PetWindow(QWidget):
                            os.path.join(DATA_DIR, "ledger_archive.json.tmp"),
                            os.path.join(DATA_DIR, "roles.json.tmp"),
                            os.path.join(DATA_DIR, "audio.json.tmp"),
+                           # v2.1.2（L-3）：v2.0/v2.1 新增的索引也要清残留（崩溃后可能留半截 tmp）
+                           os.path.join(DATA_DIR, "lines.json.tmp"),
+                           os.path.join(DATA_DIR, "behaviors.json.tmp"),
+                           os.path.join(DATA_DIR, "alarms.json.tmp"),
+                           os.path.join(DATA_DIR, "voice.json.tmp"),
+                           os.path.join(DATA_DIR, "voice_assets.json.tmp"),
+                           os.path.join(DATA_DIR, "voice_backend.json.tmp"),
                            MEMORY_PATH + ".tmp"))  # P1-6：退出清记忆原子写残留
         except Exception:
             pass  # 有意忽略：退出清理环节任何失败都不阻塞退出
@@ -3453,6 +3488,14 @@ def _excepthook(exc_type, exc_value, tb):
         pass  # 有意忽略：异常钩子自身写盘失败，无处可记（尽力而为）
     try:
         if threading.current_thread() is threading.main_thread():
+            # v2.1.2（L-6）：同一条异常 60 秒内只弹一次框——此前 QTimer 槽里反复触发
+            # （例如空台词池）会一次次弹模态框，把桌宠卡住且用户无从下手。
+            _key = "%s:%s" % (getattr(exc_type, "__name__", "?"), str(exc_value)[:80])
+            _now = time.monotonic()
+            _seen = globals().setdefault("_EXC_BOX_SEEN", {})
+            if _now - float(_seen.get(_key, 0.0)) < 60:
+                return
+            _seen[_key] = _now
             # 父窗口优先取桌宠本体（顶层可见窗口顺序不契约，可能先匹配到气泡等小窗）
             parent = None
             app = QApplication.instance()

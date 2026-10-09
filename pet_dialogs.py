@@ -114,6 +114,8 @@ import pet_chat  # v2.0.4：服务商预设/错误归类/连通性测试（pet_c
 import pet_alarm  # v2.0.5：闹钟服务（AlarmDialog 共用时间校验/铃声导入口径）
 import pet_lines  # v2.1：台词库（类别/标签单一来源；LinesDialog 直接用服务接口）
 import pet_voice  # v2.1：可插拔配音后端清单（VoiceDialog 用）
+from pet_widgets import BUBBLE_STYLE as _BUBBLE_STYLE  # v2.1.2：气泡默认样式单一来源
+# （pet_widgets 只依赖 pet_screen + Qt，不反向依赖本模块，无循环）
 
 # ---------------- 主题 ----------------
 DIALOG_QSS = """
@@ -192,12 +194,12 @@ QMessageBox, QInputDialog, QFileDialog { background-color: #1e2234; color: #e8ec
 _SLOT_LABELS = (("press", "戳一下"), ("release", "松开"), ("feed", "喂食"),
                 ("reply", "AI 回复"), ("coin", "金币"))
 
-# 台词池：页签名 -> pool 名（与主程序 save_lines 的 pool 约定一致）
-_LINE_POOLS = (("撒娇", "sajiao"), ("贪吃", "greedy"), ("开心", "happy"), ("闲逛", "idle"))
+# （v2.0 的 _LINE_POOLS 常量已删除：v2.1 起台词类别与标签统一由 pet_lines 提供，
+#   避免"两处维护类别名"的漂移风险）
 
-# 气泡默认样式（与现有 Bubble.paintEvent 一致：#ffffff 底、#203170 描边/文字）
-_DEFAULT_BUBBLE_STYLE = {"bg": "#ffffff", "fg": "#203170", "border": "#203170",
-                         "font_size": 10, "radius": 16}
+# 气泡默认样式：单一来源 pet_widgets.BUBBLE_STYLE（v2.1.2 质量审查 L2：此前是两份同值常量，
+# 改真源不会跟着改）。这里保留别名只为可读性，值直接引用真源。
+_DEFAULT_BUBBLE_STYLE = dict(_BUBBLE_STYLE)
 
 # QMediaPlayer 保活引用（异步播放期间防 GC 回收，最多保留 4 个）
 _MEDIA_KEEPALIVE = []
@@ -2356,7 +2358,7 @@ class BehaviorDialog(QDialog):
             return ""
         items = lib.lines()
         if not items:
-            _warn(self, "行为编辑", "台词库是空的，先去「台词设置」建一条")
+            _warn(self, "行为编辑", "台词库是空的，先去「💬 自定义台词…」建一条")
             return ""
         labels = ["[%s] %s" % (pet_lines.CATEGORY_LABELS.get(x["category"], x["category"]),
                                x["text"].replace("\n", " ")[:24]) for x in items]
@@ -2373,7 +2375,7 @@ class BehaviorDialog(QDialog):
             return ""
         items = lib.dialogues()
         if not items:
-            _warn(self, "行为编辑", "还没有对白，先去「台词设置 → 对白编排」建一段")
+            _warn(self, "行为编辑", "还没有对白，先去「💬 自定义台词… → 对白编排」建一段")
             return ""
         labels = ["%s（%d 条）" % (x["name"], len(x["line_ids"])) for x in items]
         label, ok = QInputDialog.getItem(self, "选择对白", "这条行为要读哪段对白：", labels, 0, False)
@@ -3739,7 +3741,8 @@ class BubbleStyleDialog(QDialog):
 class LinesDialog(QDialog):
     """台词自定义：台词库（增删改查/排序/批量/清空/撤销）/ 对白编排 / 失效引用。
 
-    v2.1：内置台词也可删（真删不留正文，只记 id 防复活）；数量与长度无限制；
+    v2.1：内置台词也可删（真删不留正文，只记 id 防复活）；条数不限，
+    单条长度上限见 pet_lines.TEXT_MAX（超出明确报错，不静默截断）；
     删除走二次确认 + 可撤销（撤销最近一次删除/清空）。"""
 
     def __init__(self, parent=None):
@@ -3833,7 +3836,8 @@ class LinesDialog(QDialog):
         body.addWidget(self._list, 3)
 
         editor = QVBoxLayout()
-        editor.addWidget(QLabel("台词文本（可换行，无长度限制）"))
+        editor.addWidget(QLabel("台词文本（可换行；单条最长 %d 字，超出会明确提示）"
+                                % pet_lines.TEXT_MAX))
         self._text = QPlainTextEdit()
         self._text.setPlaceholderText("在这里写台词；留空无法保存")
         editor.addWidget(self._text, 2)
@@ -4132,6 +4136,7 @@ class LinesDialog(QDialog):
 
     def _rename_dialogue(self):
         if self._lib is None or not self._editing_dlg:
+            _warn(self, "对白", "先选中一段对白再改名")
             return
         ok, err = self._lib.save_dialogue(self._editing_dlg, name=self._dname.text())
         if not ok:
@@ -4160,9 +4165,11 @@ class LinesDialog(QDialog):
 
     def _remove_member(self):
         if self._lib is None or not self._editing_dlg:
+            _warn(self, "对白", "先选中一段对白")
             return
         row = self._members.currentRow()
         if row < 0:
+            _warn(self, "移除台词", "先在对白内容里选中一条台词")
             return
         ids = self._member_ids()
         ids.pop(row)
@@ -4175,9 +4182,11 @@ class LinesDialog(QDialog):
 
     def _move_member(self, delta):
         if self._lib is None or not self._editing_dlg:
+            _warn(self, "对白", "先选中一段对白")
             return
         row = self._members.currentRow()
         if row < 0:
+            _warn(self, "排序", "先在对白内容里选中一条台词")
             return
         ids = self._member_ids()
         j = max(0, min(len(ids) - 1, row + int(delta)))
@@ -4186,6 +4195,7 @@ class LinesDialog(QDialog):
         ids[row], ids[j] = ids[j], ids[row]
         ok, _err = self._lib.save_dialogue(self._editing_dlg, line_ids=ids)
         if not ok:
+            _warn(self, "移动失败", _err or "移动失败")  # M3：err 不再被吞掉
             return
         self._on_pick_dialogue()
         self._members.setCurrentRow(j)
@@ -4706,17 +4716,26 @@ class VoiceDialog(QDialog):
             self._lcwd.setText(path)
 
     def _start_backend_now(self):
-        if self._svc is None:
-            self._lstatus.setText("❌ 语音服务不可用")
-            return
+        """立即启动本地后端。
+
+        M-1 修复：不再在本函数里 spawn 工作线程去调 show_bubble（那会在子线程碰 Qt 控件），
+        统一走 PetWindow.start_voice_backend()——它负责起进程 + 用 Qt 信号把就绪结果送回主线程。
+        """
         self._stash_local_ui()
         self._save(silent=True)  # 先落配置，启动用最新命令
-        ok, msg = self._svc.start_backend()
-        self._lstatus.setText(("✅ " if ok else "❌ ") + msg)
+        res = _call(self._pet, "start_voice_backend")
+        if res is None:  # 桌宠没有该方法（老版本/异常）：退回直接调服务，不起线程
+            if self._svc is None:
+                self._lstatus.setText("❌ 语音服务不可用")
+                return
+            ok, msg = self._svc.start_backend()
+            self._lstatus.setText(("✅ " if ok else "❌ ") + msg)
+            self._refresh_launch_status()
+            return
+        ok, msg = res if isinstance(res, tuple) else (False, "启动失败")
+        self._lstatus.setText(("✅ " if ok else "❌ ") + msg
+                              + ("（后台等就绪，稍后气泡告知）" if ok else ""))
         self._refresh_launch_status()
-        if ok and self._svc.is_local_backend():
-            self._lstatus.setText(self._lstatus.text() + "（后台等就绪，稍后气泡告知）")
-            self._wait_ready_async()
 
     def _stop_backend_now(self):
         if self._svc is None:
@@ -4724,22 +4743,6 @@ class VoiceDialog(QDialog):
         ok, msg = self._svc.stop_backend()
         self._lstatus.setText(("✅ " if ok else "❌ ") + msg)
         self._refresh_launch_status()
-
-    def _wait_ready_async(self):
-        """后台线程等后端就绪，结果经信号回主线程（不阻塞设置界面）。"""
-        import threading as _th
-
-        def _work():
-            try:
-                ok, msg = self._svc.wait_backend_ready()
-            except Exception as e:
-                ok, msg = False, "等待后端就绪出错：%s" % e
-            try:
-                _call(self._pet, "show_bubble", ("✅ " if ok else "⚠ ") + msg)
-            except Exception:
-                pass  # 有意忽略：气泡失败不影响结果
-
-        _th.Thread(target=_work, daemon=True).start()
 
     def _stash_backend_ui(self, bid=None):
         """把控件的参数/密钥暂存回**指定后端**的槽位。
@@ -4951,7 +4954,7 @@ class VoiceDialog(QDialog):
             return
         lid = self._line_combo.currentData()
         if not lid:
-            self._play_label.setText("❌ 还没有台词（去「台词设置」新建）")
+            self._play_label.setText("❌ 还没有台词（去「💬 自定义台词…」新建）")
             return
         self._save(silent=True)
         ok, err = self._svc.speak_line(lid)
@@ -4979,7 +4982,7 @@ class VoiceDialog(QDialog):
             return
         did = self._dlg_combo.currentData()
         if not did:
-            self._play_label.setText("❌ 还没有对白（去「台词设置 → 对白编排」新建）")
+            self._play_label.setText("❌ 还没有对白（去「💬 自定义台词… → 对白编排」新建）")
             return
         self._save(silent=True)
         ok, err = self._svc.speak_dialogue(did)
@@ -5164,6 +5167,9 @@ class IdleDialog(QDialog):
             b.clicked.connect(cb)
             add_row.addWidget(b)
         v3.addLayout(add_row)
+        self._perf_hint = QLabel("")
+        self._perf_hint.setWordWrap(True)
+        v3.addWidget(self._perf_hint)
         root.addWidget(box3, 1)
 
         # 模式
@@ -5210,6 +5216,12 @@ class IdleDialog(QDialog):
     def _refresh_table(self):
         acts = self._idle["idle_actions"]
         self._table.setRowCount(0)
+        if len(acts) > pet_behaviors.IDLE_ACTIONS_MAX:
+            # 只做性能提示（不拦用户：规格要求"不写死数量"）
+            self._perf_hint.setText("提示：待机动作已有 %d 条，太多会让选动作变慢"
+                                    % len(acts))
+        else:
+            self._perf_hint.setText("")
         names = {b["id"]: b["name"] for b in self._behaviors()}
         for a in acts:
             row = self._table.rowCount()
@@ -5321,7 +5333,7 @@ def open_voice(pet):
         dlg = VoiceDialog(pet)
         modal(dlg)
     except Exception as e:
-        pet_log.log_error("voice dialog failed: %r" % (e,))
+        _dialog_failed(pet, "语音设置", e)
 
 
 def open_lines(pet):
@@ -5333,7 +5345,7 @@ def open_lines(pet):
         dlg = LinesDialog(pet)
         modal(dlg)
     except Exception as e:
-        pet_log.log_error("lines dialog failed: %r" % (e,))
+        _dialog_failed(pet, "台词设置", e)
 
 
 def open_resource_manager(pet, initial_tab=0):
@@ -5342,7 +5354,38 @@ def open_resource_manager(pet, initial_tab=0):
         dlg = ResourceManagerDialog(pet, initial_tab)
         modal(dlg)
     except Exception as e:
-        pet_log.log_error("resource manager failed: %r" % (e,))
+        _dialog_failed(pet, "资源管理", e)
+
+
+def _dialog_failed(pet, name, err):
+    """对话框打不开时的统一兜底：既写日志，也给用户一句中文（M4：别"点了没反应"）。"""
+    pet_log.log_error("%s dialog failed: %r" % (name, err))
+    try:
+        _warn(pet if isinstance(pet, QWidget) else None, name,
+              "「%s」打不开：%s\n（详情见数据目录的 error.log）" % (name, err))
+    except Exception:
+        pass  # 有意忽略：连提示框都弹不出来时只能靠日志
+
+
+def open_ai_settings(pet):
+    """AI 设置对话框入口（菜单「🤖 AI设置…」→ pet.ai.open_ai_settings → 这里）。
+
+    历史缺陷：本函数从未定义而菜单一直在调用（AttributeError 被 Qt 槽吞掉，
+    表现为 AI 设置点了没反应）——v2.1.2 补齐，并加进 v13 的入口解析检查。"""
+    try:
+        dlg = AISettingsDialog(pet)
+        modal(dlg)
+    except Exception as e:
+        _dialog_failed(pet, "AI 设置", e)
+
+
+def open_bubble_style(pet):
+    """气泡样式对话框入口（菜单「🎨 气泡样式…」）。同样修复未定义的历史缺陷。"""
+    try:
+        dlg = BubbleStyleDialog(pet)
+        modal(dlg)
+    except Exception as e:
+        _dialog_failed(pet, "气泡样式", e)
 
 
 def open_idle(pet):
@@ -5351,7 +5394,7 @@ def open_idle(pet):
         dlg = IdleDialog(pet)
         modal(dlg)
     except Exception as e:
-        pet_log.log_error("idle dialog failed: %r" % (e,))
+        _dialog_failed(pet, "待机设置", e)
 
 
 class _VoicePickDialog(QDialog):

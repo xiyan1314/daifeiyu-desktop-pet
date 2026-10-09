@@ -11,7 +11,7 @@ MIT License
 - 帧集只保存 QPixmap 引用、不复制像素（list() 浅拷贝仍指向同一批 QPixmap 对象）。
 - 内部由单个 QTimer 驱动；重复 play 先停旧再开新；stop 只停定时器、保持当前帧不变。
 
-Python 3.8 兼容。
+Python 3.10+（项目运行环境 3.10.2）。
 """
 
 import os

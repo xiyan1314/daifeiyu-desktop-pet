@@ -52,7 +52,7 @@ STEPS_MAX = 20  # 单个行为最多 20 步
 
 # v2.0.2：空闲/变身时长钳制界限（单一来源：normalize_cfg / 对话框 / 运行时共用；
 # 空闲上界 60 = 入睡阈值，超过则入睡先于待机行为触发 → 死配置）
-IDLE_SECS_MIN, IDLE_SECS_MAX = 5, 60
+# （旧的 IDLE_SECS_MIN/MAX 常量已挪到 IDLE_TRIGGER_* 之后，做真别名——见下方 v2.1.2 注）
 TRANSFORM_SECS_MIN, TRANSFORM_SECS_MAX = 3, 60
 
 # v2.1：待机播放模式（单一来源：归一化 / 选择逻辑 / 编辑 UI 共用）
@@ -64,6 +64,9 @@ IDLE_MODE_LABELS = {
     "single": "只播指定的一条",
 }
 IDLE_TRIGGER_MIN, IDLE_TRIGGER_MAX = 3, 60      # 无交互触发延迟（上界=入睡阈值内）
+# v2.1.2（质量审查 M2）：旧的空闲秒数口径做**真别名**——此前是 5~60 与 3~60 两套并存，
+# 行为设置对话框的旧旋钮会把 cfg=3 静默改写成 5。现在两处同口径，怎么改都不会互相覆盖。
+IDLE_SECS_MIN, IDLE_SECS_MAX = IDLE_TRIGGER_MIN, IDLE_TRIGGER_MAX
 IDLE_AFTER_FULL_MIN, IDLE_AFTER_FULL_MAX = 0, 30  # 吃饱形态结束后的延迟
 IDLE_ACTIONS_MAX = 200                          # 只做性能提示用（不做硬性限制的拦截上限）
 IDLE_WEIGHT_MIN, IDLE_WEIGHT_MAX = 0.1, 10.0
@@ -99,7 +102,10 @@ def normalize_idle_cfg(cfg):
     """待机配置归一化（纯函数，单一来源）：返回 dict（不改入参）。
 
     兼容：旧键 idle_behavior_seconds 存在且新键缺失时，迁移为 idle_trigger_delay；
-    旧键 idle_behavior（单条）会被补进 idle_actions（single 模式），保证老配置不丢。
+    旧键 idle_behavior（单条）会被补进 idle_actions，保证老配置不丢。
+    注意（兼容审查 L3）：经 pet_config 走的真实路径里 idle_play_mode 已由默认值存在，
+    迁移后模式是 sequential（单条动作时与 single 完全等价，无功能差异）；
+    只有直接调用本函数且入参没带 idle_play_mode 时才落到 single。
     """
     src = cfg if isinstance(cfg, dict) else {}
     raw_actions = src.get("idle_actions")

@@ -110,8 +110,68 @@ FOOD_LINES = {
     "钻石": ["亮晶晶！我的！", "咬住不放了哦~", "发财啦发财啦！"],
 }
 
+# v2.1.2：情绪台词也纳入台词库（此前写死在 pet_mood，用户改不了）
+LINES_MOOD_PUZZLED = [
+    "咦？绳匠在戳我？",
+    "干嘛呀……人家在睡觉呢。",
+    "唔？你碰到我啦？",
+    "咦咦咦？发生什么了？",
+]
+LINES_MOOD_ANGRY = [
+    "又戳！我要生气啦！",
+    "再戳我咬你哦！",
+    "哼！别闹了啦！",
+    "我、我真的会生气的！",
+    "你戳上瘾了是不是！",
+]
+LINES_MOOD_HISS = [
+    "哈——！别过来！",
+    "咝——我要翻脸啦！",
+    "再戳我，我就躲进水里不出来了！",
+    "哼，喜欢的东西我可是会咬住不放的！",
+]
+LINES_MOOD_DROOL = [
+    "绳匠，小鱼干在哪里！",
+    "好香呀……口水都要流下来啦！",
+    "就吃一口，就一口嘛~",
+    "我闻到了零食的味道！",
+    "那个看起来好好吃……",
+]
+LINES_MOOD_CRY = [
+    "呜……绳匠都不给我吃……",
+    "人家等了好久好久……",
+    "QAQ 好委屈，我要哭给你看！",
+    "肚子咕咕叫，你却不管我……",
+    "哼……不理你了……",
+]
+LINES_MOOD_SMUG = [
+    "嘿嘿，是我干的~",
+    "略略略，绳匠抓不到我~",
+    "又干了一件坏事，开心！",
+    "喜欢的，就咬住不放~",
+    "嘿嘿嘿，谁让你没看见呢~",
+]
+LINES_MOOD_BLUSH = [
+    "诶？绳匠夸我了……",
+    "才、才没有很开心呢！",
+    "被绳匠夸了……嘿嘿~",
+    "别一直夸啦，脸都红了……",
+    "绳匠觉得我可爱吗？",
+]
+MOOD_LINES = {
+    "mood_puzzled": LINES_MOOD_PUZZLED,
+    "mood_angry": LINES_MOOD_ANGRY,
+    "mood_hiss": LINES_MOOD_HISS,
+    "mood_drool": LINES_MOOD_DROOL,
+    "mood_cry": LINES_MOOD_CRY,
+    "mood_smug": LINES_MOOD_SMUG,
+    "mood_blush": LINES_MOOD_BLUSH,
+}
+
 # 类别（顺序即 UI 页签顺序）；标签单一来源
-LINE_CATEGORIES = ("sajiao", "greedy", "scared", "happy", "idle", "startup", "petting", "food")
+LINE_CATEGORIES = ("sajiao", "greedy", "scared", "happy", "idle", "startup", "petting", "food",
+                   "mood_puzzled", "mood_angry", "mood_hiss", "mood_drool", "mood_cry",
+                   "mood_smug", "mood_blush")
 CATEGORY_LABELS = {
     "sajiao": "撒娇",
     "greedy": "贪吃",
@@ -121,6 +181,13 @@ CATEGORY_LABELS = {
     "startup": "开场",
     "petting": "摸摸头",
     "food": "喂食",
+    "mood_puzzled": "戳·疑惑",
+    "mood_angry": "戳·生气",
+    "mood_hiss": "戳·炸毛",
+    "mood_drool": "饿了",
+    "mood_cry": "委屈",
+    "mood_smug": "得意",
+    "mood_blush": "被夸",
 }
 TEXT_MAX = 2000         # 单条台词长度上限（**超出明确报错**，不静默截断；数量不限）
 DEFAULT_CATEGORY = "idle"
@@ -133,6 +200,9 @@ def _seed_source():
                      ("scared", LINES_SCARED), ("happy", LINES_HAPPY),
                      ("idle", LINES_IDLE), ("startup", LINES_STARTUP),
                      ("petting", LINES_PETTING)):
+        for i, t in enumerate(lst, 1):
+            src.append(("bi_%s_%02d" % (cat, i), t, cat, ""))
+    for cat, lst in MOOD_LINES.items():
         for i, t in enumerate(lst, 1):
             src.append(("bi_%s_%02d" % (cat, i), t, cat, ""))
     for food, lst in FOOD_LINES.items():
@@ -178,7 +248,7 @@ class LineService:
         self._lines, self._dialogues, self._deleted = [], [], []
         if isinstance(data, dict):
             for ln in (data.get("lines") or []):
-                nl = self._norm_line(ln)
+                nl = self._norm_line_checked(ln)  # 超长截断会留痕（不静默砍数据）
                 if nl is not None:
                     self._lines.append(nl)
             for d in (data.get("dialogues") or []):
@@ -227,6 +297,16 @@ class LineService:
             return "台词保存失败：%s" % e
 
     # ---------------- 归一化 ----------------
+    def _norm_line_checked(self, ln):
+        """_norm_line + 超长截断留痕（手改 lines.json 的超长行会被截断，但必须可追溯）。"""
+        out = self._norm_line(ln)
+        if out is not None:
+            raw = str((ln or {}).get("text") or "").strip()
+            if len(raw) > TEXT_MAX:
+                self._log("line %s text truncated %d -> %d chars"
+                          % (out.get("id"), len(raw), TEXT_MAX))
+        return out
+
     @staticmethod
     def _norm_line(ln):
         if not isinstance(ln, dict):
@@ -317,6 +397,13 @@ class LineService:
     def by_category(self, category):
         """类别文本列表（随机抽取用；无条目返回空列表，调用方自行兜底）。"""
         return [ln["text"] for ln in self.lines(category)]
+
+    def texts_by_category(self, category):
+        """类别文本列表（**免深拷贝**版，供刷新台词池等高频路径用）。
+
+        与 by_category 的差别：不 deepcopy 每条台词（几千条时明显更快）。
+        返回的是新列表（可安全持有），但元素是内部字符串（不可变，无副作用）。"""
+        return [ln["text"] for ln in self._lines if ln["category"] == category]
 
     def food_texts(self, food):
         """某食物的喂食台词。

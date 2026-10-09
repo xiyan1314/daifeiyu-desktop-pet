@@ -507,9 +507,16 @@ class RoleLibrary:
         }
 
     def _load(self):
-        """读索引并归一化；active 指向已不存在的角色时重置为默认。"""
+        """读索引并归一化；active 指向已不存在的角色时重置为默认。
+
+        兼容审查 L1 修复：**只有 roles 确实是 list 时**才做"修复 active"的写回；
+        若 roles 是坏结构（dict/字符串等），先备份成 .bak 再重建空索引——
+        避免把用户可恢复的元数据直接覆盖成空表（PNG 还在 roles/，索引没了就找不回）。
+        """
         data = _read_json(self._index)
-        roles = data.get("roles") if isinstance(data.get("roles"), list) else []
+        raw_roles = data.get("roles")
+        roles_ok = isinstance(raw_roles, list)
+        roles = raw_roles if roles_ok else []
         clean = []
         for r in roles:
             nr = self._normalize_role(r)
@@ -519,8 +526,15 @@ class RoleLibrary:
         if active and not any(r["id"] == active for r in clean):
             active = ""
         self._data = {"roles": clean, "active": active}
-        if active != str(data.get("active") or ""):
-            _write_json(self._index, self._data)  # 修复损坏的 active 引用（失败静默）
+        if not roles_ok and os.path.isfile(self._index):
+            try:
+                shutil.copyfile(self._index, self._index + ".bak")  # 坏结构：留一份原样备份
+                pet_log.log_error("roles.json 结构异常，已备份为 roles.json.bak 后重建索引")
+            except Exception as e:
+                pet_log.log_error("roles.json 备份失败：%r" % (e,))  # 有意忽略：备份失败也要保证能启动
+            _write_json(self._index, self._data)
+        elif active != str(data.get("active") or ""):
+            _write_json(self._index, self._data)  # 修复失效的 active 引用（失败静默）
 
     def _save(self):
         """原子落盘；返回错误字符串或 None。"""

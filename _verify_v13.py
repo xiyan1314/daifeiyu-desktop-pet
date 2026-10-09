@@ -5,8 +5,10 @@
 新菜单构建、6 个对话框、托盘/退出路径。运行时数据全部落到临时目录，
 不污染真实 DATA_DIR；退出时清理。用法：python _verify_v13.py
 """
+import io
 import json
 import os
+import re
 import sys
 import shutil
 import tempfile
@@ -25,7 +27,7 @@ sys.path.insert(0, HERE)
 
 FAILS = []
 CHECKS = []
-EXPECT_CHECKS = 237  # v2.1.1：检查总数硬断言（每次增删检查同步更新；本检查自身不计入）
+EXPECT_CHECKS = 241  # v2.1.2：检查总数硬断言（每次增删检查同步更新；本检查自身不计入）
 
 
 def check(name, cond, extra=""):
@@ -1104,6 +1106,35 @@ def main_flow():
     finally:
         pet.cfg.update(_cfg_backup2)
         main.save_config(pet.cfg)
+    # v2.1.2 回归：空台词池不得崩（此前 random.choice([]) 会弹模态错误框，每轮复发）
+    _pool_backup = pet.lines_pools
+    try:
+        pet.lines_pools = {"idle": [], "greedy": [], "happy": [], "petting": []}
+        _fb = pet._pick_line(("idle", "greedy"), fallback="……")
+        check("empty line pool safe", _fb == "……")
+    except Exception as e:
+        check("empty line pool safe", False, repr(e))
+    finally:
+        pet.lines_pools = _pool_backup
+    # v2.1.2 回归：情绪台词删光后不得复活（库可用时不回落内置常量）
+    try:
+        _mood_ids = [x["id"] for x in pet.lines_lib.lines("mood_puzzled")]
+        pet.lines_lib.delete_many(_mood_ids)
+        import pet_lines as _pl2
+        _mood_gone = pet._mood_line("mood_puzzled", _pl2.LINES_MOOD_PUZZLED) == ""
+        pet.lines_lib.restore_builtins()  # 恢复内置（清删除名单）
+        _mood_back = pet._mood_line("mood_puzzled", _pl2.LINES_MOOD_PUZZLED) != ""
+        check("mood deletion not revived", _mood_gone and _mood_back,
+              "gone=%r back=%r" % (_mood_gone, _mood_back))
+    except Exception as e:
+        check("mood deletion not revived", False, repr(e))
+    # v2.1.2：免深拷贝取词接口存在且与 deepcopy 版一致（文档声称的性能项必须有实现）
+    try:
+        _a = pet.lines_lib.texts_by_category("sajiao")
+        _b = pet.lines_lib.by_category("sajiao")
+        check("texts_by_category exists", _a == _b and isinstance(_a, list))
+    except Exception as e:
+        check("texts_by_category exists", False, repr(e))
     # v2.1.1 回归：本地后端启动器（默认不自动启动 = 和以前一样；手动可启动；云端后端拒绝启动）
     _lsvc = pet.cfg.get("voice", {}).get("local_services") or {}
     check("local service default off",
@@ -1286,6 +1317,32 @@ def main_flow():
         check("menu behavior entry", any("行为设置" in t for t in texts))
         check("menu alarm entry", any("闹钟" in t for t in texts))
         check("menu lines entry", any("自定义台词" in t for t in texts))
+        # v2.1.2：入口解析检查——历史上「语音设置/自定义台词/资源管理/AI设置/气泡样式」
+        # 都因为入口函数没定义而"点了没反应"（异常被 Qt 槽吞掉），这里逐个解析防复发
+        _missing = []
+        _pet_attrs = set(dir(main.PetWindow))
+        # L2 修复：用**绝对路径**读源码；读不到就判 FAIL（此前相对路径 + continue 会在
+        # 非仓库根目录启动时静默退化成"空检查"，永远 PASS）
+        _here = os.path.dirname(os.path.abspath(__file__))
+        _mods = ["pet_menu.py", "pet_ai.py", "桌宠.py"] + [
+            _f for _f in sorted(os.listdir(_here)) if _f.startswith("pet_") and _f.endswith(".py")]
+        _unreadable = []
+        for _mod in _mods:
+            try:
+                _src = io.open(os.path.join(_here, _mod), encoding="utf-8").read()
+            except Exception as _e:
+                _unreadable.append("%s:%r" % (_mod, _e))
+                continue
+            # L-9 修复：先剥掉注释行，避免"注释里提到的旧名字"被误判为缺失入口
+            _src = "\n".join(_ln.split("#", 1)[0] for _ln in _src.split("\n"))
+            for _m in re.finditer(r"pet_dialogs\.([A-Za-z_][A-Za-z0-9_]*)", _src):
+                if not hasattr(pet_dialogs, _m.group(1)):
+                    _missing.append("%s -> pet_dialogs.%s" % (_mod, _m.group(1)))
+            for _m in re.finditer(r"\bpet\.(_?[a-z][A-Za-z0-9_]*)\s*\(", _src):
+                if _m.group(1) not in _pet_attrs:
+                    _missing.append("%s -> pet.%s" % (_mod, _m.group(1)))
+        check("ui entry points resolve", not _missing and not _unreadable,
+              "missing=%r unreadable=%r" % (sorted(set(_missing))[:3], _unreadable[:2]))
         check("menu idle entry", any("待机设置" in t for t in texts))
         check("menu resource entry", any("资源管理" in t or "音频片段" in t for t in texts))
         check("menu transform hidden default", not any(t == "🐡 变身" for t in texts))
