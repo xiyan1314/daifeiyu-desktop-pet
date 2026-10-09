@@ -534,6 +534,26 @@ def test_random_wander_action_blocked_during_full_form(pet):
         pet.actions._pick = _real_pick
 
 
+def test_mood_suppressed_during_full_form(pet):
+    """v2.2.1 回归（用户反馈"吃饱形态期间一直出待机动作"）：消化窗口内调皮情绪
+    （state/emote/bubble）不得覆盖吃饱形态；消化结束后恢复。"""
+    _reset(pet)
+    pet.feed("小鱼干")
+    pet._eat_done("test")
+    assert pet._digest_pending() is True
+    _anim_before = pet.anim_mode
+    pet._on_mood_state("smug")
+    assert pet.anim_mode == _anim_before, "消化窗口内情绪表情覆盖了吃饱形态"
+    # bubble/emote 路径同样被挡：直接调用处理函数不抛且不改变展示
+    pet._mood_bubble("嘻嘻")
+    pet._mood_emote("sparkle")
+    pet._digest_timer.stop()
+    pet._digest()
+    # 消化结束后情绪恢复可显示（状态图会切到 state 展示）
+    pet._on_mood_state("smug")
+    assert pet.anim_mode == "state", "消化结束后情绪表情没恢复"
+
+
 def test_sleep_survives_voice_finished(pet):
     """M1 回归：睡眠中「朗读完成」不得静默醒来，也不得把形态留在睡形态且无主人。"""
     _reset(pet)

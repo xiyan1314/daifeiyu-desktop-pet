@@ -62,7 +62,7 @@ import pet_alarm
 
 
 APP_NAME = "大肥鱼桌宠"
-VERSION = "2.2.0"
+VERSION = "2.2.1"
 PAD = 1.25  # 窗口相对角色的透明边距（为压扁/回弹预留空间）
 IDLE_FRAME_MS = 140      # 待机帧间隔
 IDLE_FORM_HOLD_SECS = 8  # v2.1.3：只有形态、没有动作可播时的展示期上限（到期回用户形态）
@@ -2285,15 +2285,19 @@ class PetWindow(QWidget):
             self._wake()
         if self.busy or self._petting:
             return  # 动画进行中 / 摸摸头中：丢弃情绪展示（S3 补全）
+        if self._digest_pending():
+            # v2.2.1（用户反馈"吃饱形态期间一直出待机动作"）：吃饱形态保留期是最优先展示，
+            # 调皮事件（smug+sparkle+得意台词，45~90s 一次）也会插到吃饱形态上——一律让位。
+            return
         self._show_state(state, self.MOOD_STATE_DURATION_MS.get(state, STATE_DURATION_MS))
 
     def _mood_bubble(self, text):
-        if not self.busy:
+        if not self.busy and not self._digest_pending():
             self.show_bubble(text)
 
     def _mood_emote(self, kind):
-        if not self.busy and not self._petting:  # 摸摸头期间抑制 heart 等（S3 修复）
-            self._show_emote(kind)
+        if not self.busy and not self._petting and not self._digest_pending():
+            self._show_emote(kind)  # v2.2.1：吃饱形态期间情绪符号也让位
 
     def _mood_tick(self):
         if not self._sleeping and not self.busy and not self._petting:
