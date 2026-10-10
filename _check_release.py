@@ -184,7 +184,9 @@ def check_zip(zip_path, version=None):
         # v2.3.0（兼容审查 S1）：need 必须覆盖**所有运行时 .py**——此前漏了 pet_tools.py，
         # 出包时白名单漏拷该文件会静默放行一个"双击即 ModuleNotFoundError"的包。
         # 正向校验：凡仓库里被 SYNC_FILES 列为运行时 .py 的，包里必须存在同名条目。
-        _runtime_py = sorted(n for n in SYNC_FILES if n.endswith(".py") and "/" not in n)
+        # 注意排除 _verify_green.py：它随绿色版目录同步，但**按设计不进发布包**（自检脚本）
+        _runtime_py = sorted(n for n in SYNC_FILES
+                             if n.endswith(".py") and "/" not in n and n != "_verify_green.py")
         need = _runtime_py + ["python.exe", "assets/"]
         lack = [n for n in need if not any(x == n or x.startswith(n) for x in names)]
         if lack:
