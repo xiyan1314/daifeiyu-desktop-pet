@@ -523,7 +523,8 @@ def test_random_wander_action_blocked_during_full_form(pet):
         pet.actions._pick = _real_pick
     pet._digest_timer.stop()
     pet._digest()
-    # 消化结束后，随机动作应恢复可播
+    pet._idle_after_full_at = 0.0                # v2.2.3：等待期已过（触发 A 已消费）才恢复
+    # 消化结束后（且等待期已过），随机动作应恢复可播
     pet.actions._pick = lambda: ("jump", None)
     pet.actions.play_action = lambda name, arg=None: played.append(name)
     try:
@@ -556,6 +557,32 @@ def test_mood_during_full_form_blocks_only_internal_mischief(pet):
     pet._digest()
     pet._mood_tick()
     assert called == [1], "消化结束后调皮调度没恢复"
+
+
+def test_random_action_waits_after_full_form(pet):
+    """v2.2.3 回归（对照 v1.4.2 实测基线：吃饱结束→常态→安静一段时间才 zzz/跳）：
+    随机跳/zzz 必须与触发 A 同一规矩——吃饱结束后 idle_delay_after_full 秒内不得插播，
+    否则吃饱形态一结束、下一个 15s 节拍（可能 <1s）就把"常态"压没了。"""
+    _reset(pet)
+    pet.feed("小鱼干")
+    pet._eat_done("test")
+    pet._digest_timer.stop()
+    pet._digest()                       # 吃饱结束：触发 A 挂起到 +2s
+    assert pet._idle_after_full_at is not None
+    played = []
+    _pa = pet.actions.play_action
+    _pick = pet.actions._pick
+    pet.actions._pick = lambda: ("jump", None)
+    pet.actions.play_action = lambda n, a=None, f=False: played.append(n)
+    try:
+        pet.actions.idle_tick()         # A 未到点：随机动作必须被压住（保持常态）
+        assert played == [], "吃饱刚结束随机动作就跳出来了（常态被压没）"
+        pet._idle_after_full_at = 0.0   # 等待期已过（触发 A 已消费）
+        pet.actions.idle_tick()
+        assert "jump" in played, "等待期过后随机动作没恢复"
+    finally:
+        pet.actions.play_action = _pa
+        pet.actions._pick = _pick
 
 
 def test_sleep_survives_voice_finished(pet):

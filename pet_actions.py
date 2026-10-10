@@ -88,11 +88,15 @@ class ActionService:
         _maybe_idle = getattr(pet, "maybe_idle_behavior", None)
         if _maybe_idle is not None:
             _maybe_idle()
-        # v2.1.9：吃饱形态（消化窗口）/变身/待机展示期间**不入睡**，也不插播随机闲逛动作——
-        # 否则 jump/zzz 会在"吃饱形态"保留期里播放（用户从头到尾反馈的"吃饱形态被待机吞了"
-        # 正是这个内置随机动作，而不是 v2.1 待机系统：默认配置下 v2.1 待机是空操作）。
+        # v2.1.9：吃饱形态（消化窗口）/变身/待机展示期间**不入睡**，也不插播随机闲逛动作。
+        # v2.2.3（用户反馈"吃饱结束→直接待机，常态被压没了"）：随机跳/zzz 按自己的 15s 节拍走，
+        # 吃饱形态一结束下一个节拍（可能 <1s）就跳出来——它也必须**等吃饱结束后
+        # idle_delay_after_full 秒**（与触发 A 同一规矩）。_idle_after_full_at 就是触发 A
+        # 挂起的到点时刻：到点前一律安静，到点后（触发 A 已消费=None）才允许随机动作。
+        _after_full_at = getattr(pet, "_idle_after_full_at", None)
         _high_priority_display = (
             getattr(pet, "_digest_pending", lambda: False)()
+            or (_after_full_at is not None and time.monotonic() < _after_full_at)
             or getattr(pet, "_transform_home", None) is not None
             or bool(getattr(pet, "_idle_form_active", False)))
         if _high_priority_display:
