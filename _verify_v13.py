@@ -800,6 +800,12 @@ def main_flow():
     pet._show_sleep = lambda: _sleep_calls.append(1)
     pet._last_activity = time.monotonic() - 70
     pet.anim_mode = "idle"
+    # v2.2.5：饭点小盹/安静期/消化窗口都会让 idle_tick 提前 return（节拍不插动作）——
+    # 本项验的是"睡眠判定照常"，先把这三道新门控清掉
+    if getattr(pet, "_digest_timer", None) is not None:
+        pet._digest_timer.stop()
+    pet._digest_zzz_timer.stop()
+    pet._nap_zzz_timer.stop()
     try:
         pet.actions.idle_tick()
     finally:
