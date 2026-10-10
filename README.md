@@ -111,6 +111,15 @@ python main.py        # 规范入口（桌宠.py 为兼容壳）；或双击 启
   待机永远是最低优先级——说话、读台词、拖拽、喂食、手动切形态随时打断，待机绝不覆盖你选定的形态
 - 所有自定义数据保存在程序目录（config.json、ledger.json / ledger_archive.json、roles/ + roles.json、audio/ + audio.json、lines.json、voice_assets.json + voice_ref/），换机器/升级时拷贝这些文件即可迁移
 
+## 💬 社区（晒角色 · 晒台词 · 提需求）
+
+到 **GitHub Discussions** 一起玩：[晒角色](https://github.com/xiyan1314/daifeiyu-desktop-pet/discussions/1) ·
+[晒台词](https://github.com/xiyan1314/daifeiyu-desktop-pet/discussions/2) ·
+[需求与建议](https://github.com/xiyan1314/daifeiyu-desktop-pet/discussions/3)
+
+分享角色：右键桌宠 → 角色 → **导出角色包**（得到 `.dfypet.zip`）→ 回复「晒角色」帖附上角色包 + 预览图。
+下载别人做的：右键桌宠 → 角色 → **导入角色包**。
+
 ## 🛡️ 杀软误报说明
 
 PyInstaller 打包的无签名 exe 会被杀软机器学习引擎误报（实测 Defender 报
