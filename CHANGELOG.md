@@ -4,6 +4,10 @@
 > 发布节奏：v1.5.x 每批按「三轮审查 → 全面检查 → 绿色版检测 → Release」流水线交付。
 > v1.3.0 起才有逐版说明；更早的 v1.0 / v1.2.0 见 git 历史（bfb1aa6 / 35e9d1a）。
 
+## v2.2.4（2026-10-10）
+- 修「刚吃完显示常态、点一下才显示吃饱」的真因：用户选定形态=吃饱时，喂食的"顺次前进"把 full→normal。2 形态角色改为喂食永远落吃饱形态（再喂保持+大笑），多形态角色保留循环语义
+- 回归：test_feed_from_full_user_form_stays_full；护栏 pytest 253 例
+
 ## v2.2.3（2026-10-10）
 - 吃饱结束后的安静期：随机跳/zzz 与待机同规矩——吃饱结束后 idle_delay_after_full 秒内不得插播（此前 15s 节拍一撞上就把常态压没；对照 v1.4.2 实测基线修复）
 - 回归：test_random_action_waits_after_full_form；护栏 pytest 252 例

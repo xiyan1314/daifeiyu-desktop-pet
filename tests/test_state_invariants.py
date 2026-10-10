@@ -585,6 +585,28 @@ def test_random_action_waits_after_full_form(pet):
         pet.actions._pick = _pick
 
 
+def test_feed_from_full_user_form_stays_full(pet):
+    """v2.2.4 回归（用户反馈"刚吃完显示常态、点一下才显示吃饱"的真因）：
+    用户选定形态 = 吃饱形态时，喂食**必须保持吃饱**（旧逻辑从当前形态顺次前进，
+    full→normal，刚吃完反而变常态；点击又恢复 full，造成"点一下才吃饱"）。"""
+    _reset(pet)
+    pet.apply_role("")            # 切回默认角色（normal/full 两形态，2 形态规则生效）
+    try:
+        _reset(pet)
+        _full = pet.form_keys[-1]     # full = 吃饱形态
+        pet.set_user_form(_full)
+        assert pet.form == _full and pet._user_form == _full
+        pet.feed("小鱼干")
+        assert pet.form == _full, "用户选定形态=吃饱时，喂食后却显示常态（应保持吃饱）"
+        pet._digest_timer.stop()
+        pet._digest()
+        assert pet.form == _full, "消化结束没回到用户形态（吃饱）"
+    finally:
+        # 夹具是 module 级的：必须还原 4 形态角色，否则污染后续测试（睡形态 f2 等）
+        pet.apply_role("inv1")
+        _reset(pet)
+
+
 def test_sleep_survives_voice_finished(pet):
     """M1 回归：睡眠中「朗读完成」不得静默醒来，也不得把形态留在睡形态且无主人。"""
     _reset(pet)

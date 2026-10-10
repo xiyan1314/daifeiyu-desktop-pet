@@ -732,7 +732,9 @@ def main_flow():
         app.processEvents()
         time.sleep(0.02)
     check("feed during proc releases busy", not pet.busy and pet.anim_mode == "idle"
-          and abs(pet.squash_x - 1.0) < 1e-6 and pet._proc_offset_y == 0)
+          and abs(pet.squash_x - 1.0) < 1e-6 and pet._proc_offset_y == 0,
+          "busy=%r anim=%r sx=%.4f oy=%.4f" % (pet.busy, pet.anim_mode, pet.squash_x,
+                                               pet._proc_offset_y))
     # 审查修复回归：角色切换立即停掉在途合成动作（新角色无残留振荡）
     pet.actions.play_action("sway")
     pet.apply_role("")

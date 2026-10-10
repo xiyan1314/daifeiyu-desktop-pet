@@ -16,12 +16,12 @@ VSVersionInfo(
         '040904B0',
         [StringStruct('CompanyName', 'DaFeiYuPet'),
          StringStruct('FileDescription', 'DaFeiYu Desktop Pet (PySide6)'),
-         StringStruct('FileVersion', '2.2.3'),
+         StringStruct('FileVersion', '2.2.4'),
          StringStruct('InternalName', 'DaFeiYuDesktopPet'),
          StringStruct('LegalCopyright', 'MIT License'),
          StringStruct('OriginalFilename', 'DaFeiYuDesktopPet.exe'),
          StringStruct('ProductName', 'DaFeiYu Desktop Pet'),
-         StringStruct('ProductVersion', '2.2.3')])
+         StringStruct('ProductVersion', '2.2.4')])
     ]),
     VarFileInfo([VarStruct('Translation', [1033, 1200])])
   ]

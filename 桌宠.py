@@ -62,7 +62,7 @@ import pet_alarm
 
 
 APP_NAME = "大肥鱼桌宠"
-VERSION = "2.2.3"
+VERSION = "2.2.4"
 PAD = 1.25  # 窗口相对角色的透明边距（为压扁/回弹预留空间）
 IDLE_FRAME_MS = 140      # 待机帧间隔
 IDLE_FORM_HOLD_SECS = 8  # v2.1.3：只有形态、没有动作可播时的展示期上限（到期回用户形态）
@@ -2835,17 +2835,29 @@ class PetWindow(QWidget):
         # 临时展示语义：吃完消化回 user_selected_form，不吞掉用户选定的形态
         _basis = self._user_form if (_temp_display and self._user_form in self.form_keys) else self.form
         cur_idx = self.form_keys.index(_basis) if _basis in self.form_keys else 0
-        # v2.1.4 修复：推进时**跳过标记「不参与喂食」的形态**——此前只拦"当前形态不能喂"，
-        # 却可能把形态推进到 no_feed 形态上（表现为"吃着吃着变成睡觉形态"，且此后喂不了）。
-        # 多形态角色：每次喂食**顺次前进**（正式的"形态循环"功能，f0→f1→f2→f0…），
-        # 推进时跳过标记「不参与喂食」的形态（判定单一来源：_role_no_feed）。
-        # 注意：这是循环语义，2 形态角色会 normal↔full 交替。
-        next_idx = (cur_idx + 1) % len(self.form_keys)
-        for _step in range(1, len(self.form_keys) + 1):
-            _cand = (cur_idx + _step) % len(self.form_keys)
-            if not self._role_no_feed(self.form_keys[_cand]):
-                next_idx = _cand
-                break
+        # v2.2.4（用户反馈"刚吃完显示常态、点一下才显示吃饱"的真因）：用户选定的形态可能
+        # 就是吃饱形态（full）本身。旧逻辑从"当前形态"顺次前进：在 full 喂食 → 前进到
+        # normal，刚吃完反而变常态；之后任何点击又恢复用户形态 full，造成"点一下才吃饱"。
+        # 2 形态角色（常态/吃饱）：喂食**永远落吃饱形态**（form_keys[1]）；已在吃饱形态 =
+        # 再喂保持 + 大笑。多形态角色保留原有的形态循环语义（f0→f1→f2→f0）。
+        _two_form = (len(self.form_keys) == 2 and not self._role_no_feed(self.form_keys[1]))
+        if _two_form:
+            next_idx = 1
+        else:
+            next_idx = (cur_idx + 1) % len(self.form_keys)
+            for _step in range(1, len(self.form_keys) + 1):
+                _cand = (cur_idx + _step) % len(self.form_keys)
+                if not self._role_no_feed(self.form_keys[_cand]):
+                    next_idx = _cand
+                    break
+        # v2.2.4：2 形态角色的"再喂"（已在吃饱形态）——保持形态、不重播吃帧、并像形态切换
+        # 一样停掉在途合成动作（sway 等 proc 残留会让形变不复位）。仅 2 形态路径生效，
+        # 单形态/多形态角色保持原有语义（吃帧照播）。
+        _refeed = _two_form and self.form == self.form_keys[next_idx]
+        if _refeed:
+            _stop = getattr(self, "_stop_tween", None)
+            if _stop is not None:
+                _stop()
         # v2.1.6：打断待机已提前到 busy 设置之前（见函数开头），这里直接切喂食形态
         self._feed_form = self.form_keys[next_idx]  # v2.1.6：记录本轮喂食目标形态（测试判据/自检用）
         self._set_form(self.form_keys[next_idx], refresh=False, display_only=True)
@@ -2863,7 +2875,7 @@ class PetWindow(QWidget):
         # 有就播；没有才用大笑表达）。此前先按"源形态==用户形态"判定，no_feed 跳步时会错位；
         # 我先改成"目标是首形态"，又把默认角色（常态→吃饱，吃帧在吃饱形态上）的吃帧弄丢了。
         _eat_pool = self.anim._sets.get("eat") or []
-        if self.has_frames and _eat_pool:
+        if self.has_frames and _eat_pool and not _refeed:
             # 目标形态有吃帧：错峰 120ms 启动；busy 在 _eat_done 释放
             QTimer.singleShot(120, self, self._play_eat)  # 带 context：窗口销毁自动取消
         elif self.has_frames:
