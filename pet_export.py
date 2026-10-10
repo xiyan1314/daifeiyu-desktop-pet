@@ -153,7 +153,7 @@ def _strip_url_creds(url):
 
 
 def build_manifest(role, behaviors, cfg, alarms=None, lines=None, dialogues=None,
-                   voice_assets=None):
+                   voice_assets=None, meta=None):
     """构造导出 manifest。返回 (manifest, err)；角色缺文件引用报错。
 
     role=role_lib.get(rid)；behaviors=行为 dict 列表；cfg=当前配置 dict；
@@ -170,6 +170,9 @@ def build_manifest(role, behaviors, cfg, alarms=None, lines=None, dialogues=None
     manifest = {
         "format": BUNDLE_FORMAT,
         "version": BUNDLE_VERSION,
+        # v2.3.0：角色包"身份证"（作者/简介/标签/许可…）——纯展示信息，
+        # **不参与校验**：缺 meta 的旧包照常导入，未知键原样透传不丢。
+        "meta": dict(meta) if isinstance(meta, dict) else {},
         "role": dict(role),
         "behaviors": [dict(b) for b in (behaviors or []) if isinstance(b, dict)],
         "config": config,
@@ -192,7 +195,7 @@ def build_manifest(role, behaviors, cfg, alarms=None, lines=None, dialogues=None
 
 def export_bundle(role_lib, behaviors_svc, cfg, out_path, alarms_getter=None,
                   lines_getter=None, dialogues_getter=None,
-                  voice_assets_getter=None, include_voice_ids=None):
+                  voice_assets_getter=None, include_voice_ids=None, meta=None):
     """导出角色包到 out_path（zip）。返回 (ok, err)。
 
     收集 role_lib 当前角色的全部素材文件进 roles/ 子目录；缺文件明确报错。
@@ -234,7 +237,9 @@ def export_bundle(role_lib, behaviors_svc, cfg, out_path, alarms_getter=None,
                 _vmeta.append({"id": str(a.get("id")), "name": str(a.get("name") or ""),
                                "ext": _ext, "file": "voice_ref/%s%s" % (a.get("id"), _ext)})
                 _vfiles.append(("voice_ref/%s%s" % (a.get("id"), _ext), _p))
-        manifest, err = build_manifest(role, _behaviors, cfg or {}, _alarms, _lines, _dlgs, _vmeta)
+        meta = meta or {}  # v2.3.0：角色信息（作者/简介/标签），由导出对话框收集
+        manifest, err = build_manifest(role, _behaviors, cfg or {}, _alarms, _lines, _dlgs,
+                                       _vmeta, meta)
         if manifest is None:
             return False, err
         tmp = out_path + ".tmp"
@@ -534,8 +539,12 @@ def import_bundle(role_lib, behaviors_svc, cfg, zip_path, alarms_apply=None,
                         warnings.append("闹钟设置应用失败，已跳过：%s" % e)
                 else:
                     warnings.append("包内含闹钟设置，当前版本尚未支持，已忽略")
+            # v2.3.0：把角色包自带的展示信息带回调用方（"作者/简介"），供导入完成气泡展示；
+            # 缺 meta（旧包）→ 空 dict，不报错、不影响导入
+            _meta = manifest.get("meta")
             return {"role_id": role["id"], "behavior_map": behavior_map,
-                    "voice_map": _voice_map, "warnings": warnings}, ""
+                    "voice_map": _voice_map, "warnings": warnings,
+                    "meta": dict(_meta) if isinstance(_meta, dict) else {}}, ""
     except Exception as e:
         # 非事务回滚：清理本次已入索引的角色条目与已解包文件（尽力而为）
         if role_appended:

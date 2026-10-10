@@ -62,7 +62,7 @@ import pet_alarm
 
 
 APP_NAME = "大肥鱼桌宠"
-VERSION = "2.2.7"
+VERSION = "2.3.0"
 PAD = 1.25  # 窗口相对角色的透明边距（为压扁/回弹预留空间）
 IDLE_FRAME_MS = 140      # 待机帧间隔
 IDLE_FORM_HOLD_SECS = 8  # v2.1.3：只有形态、没有动作可播时的展示期上限（到期回用户形态）
@@ -371,7 +371,9 @@ def load_config():
         _log_error("load_config: api_key DPAPI 解密失败，本次按空 Key 运行（不改写磁盘）")
     before = copy.deepcopy(cfg)  # P1-3：归一化前快照，用于检测「被自动修正的字段」
     # P0-1：归一化逻辑迁至 pet_config（纯逻辑、无模块全局依赖）
-    pet_config.normalize_cfg(cfg, DEFAULT_CONFIG, frozenset(PERSONA_PRESETS))
+    # v2.3.0：人设白名单 = 内置 + prompts/custom/*.txt（否则用户自建人设会被归一化打回默认）
+    pet_config.normalize_cfg(cfg, DEFAULT_CONFIG,
+                             frozenset(PERSONA_PRESETS) | persona_file_ids())
     # P1-3：坏值修正检测——与快照对比。软归一化（合法值美化）静默重存不弹提示；
     # 硬修正（越界/类型非法）记入 CONFIG_FIXES 供启动气泡提示一次
     soft_changed = False
@@ -418,6 +420,69 @@ SYSTEM_PROMPT = (
     "回答必须中文、俏皮贱萌、不超过%d个字。"
     "喜欢说：喜欢的，就咬住不放~"
 ) % MAX_REPLY_LEN
+
+# v2.3.0：人设提示词外置——内置人设会在首次启动时写成可编辑的 txt 文件：
+#   <数据目录>/prompts/default.txt · sheshe.txt · tsundere.txt   （改这里就换人设，不用改代码）
+#   <数据目录>/prompts/custom/我的毒舌版.txt                      （文件名=预设名，自动出现在 AI 设置里）
+PROMPTS_DIRNAME = "prompts"
+
+
+def _prompts_dir():
+    return os.path.join(DATA_DIR, PROMPTS_DIRNAME)
+
+
+def ensure_persona_files():
+    """首次启动把内置人设写成文件（**仅当文件不存在时写**，绝不覆盖用户修改）。"""
+    try:
+        os.makedirs(os.path.join(_prompts_dir(), "custom"), exist_ok=True)
+    except Exception as e:
+        _log_error("prompts dir: %r" % (e,))
+        return
+    for _pid, _text in PERSONA_PRESETS.items():
+        _p = os.path.join(_prompts_dir(), _pid + ".txt")
+        if os.path.exists(_p):
+            continue
+        try:
+            with open(_p, "w", encoding="utf-8") as f:
+                f.write(_text.strip() + "\n")
+        except Exception as e:
+            _log_error("persona write %s: %r" % (_pid, e))
+
+
+def _persona_file_text(pid):
+    """人设文件文本；custom/ 下的文件用 "file:<文件名>" 作 id。读不到返回 None。"""
+    pid = str(pid or "")
+    _p = (os.path.join(_prompts_dir(), "custom", pid[5:] + ".txt")
+          if pid.startswith("file:") else os.path.join(_prompts_dir(), pid + ".txt"))
+    try:
+        with open(_p, "r", encoding="utf-8") as f:
+            return f.read().strip() or None
+    except Exception:
+        return None
+
+
+def persona_file_ids():
+    """prompts/custom/*.txt → {"file:<文件名>"}（配置白名单与下拉列表共用）。"""
+    out = set()
+    try:
+        for _n in os.listdir(os.path.join(_prompts_dir(), "custom")):
+            if _n.lower().endswith(".txt") and len(_n) > 4:
+                out.add("file:" + _n[:-4])
+    except Exception:
+        pass  # 有意忽略：目录不存在=还没有人设文件
+    return out
+
+
+def persona_choices():
+    """人设下拉项：(id, 显示名)。内置三个 + prompts/custom/*.txt + 自定义。"""
+    out = [("default", "内置大肥鱼（又娇又赖，默认）"),
+           ("sheshe", "啥子蛇（毒舌腹黑「本专员」）"),
+           ("tsundere", "傲娇系（嘴硬心软）")]
+    for _pid in sorted(persona_file_ids()):
+        out.append((_pid, "我的：%s" % _pid[5:]))
+    out.append(("custom", "自定义（自己写人设）"))
+    return out
+
 
 # P1-10+：人设预设库——用户可在「AI设置」里换人设，或选「自定义」完全自己写。
 # 注：定义在 load_config 之后但只在其运行时引用（模块加载完成后才调用），无 NameError。
@@ -545,7 +610,8 @@ def _build_ai_sys_prompt(cfg):
     if persona == "custom":
         sys_prompt = (cfg.get("ai_system_prompt") or "").strip() or SYSTEM_PROMPT
     else:
-        sys_prompt = PERSONA_PRESETS.get(persona, SYSTEM_PROMPT)
+        # v2.3.0：**文件优先**——prompts/<id>.txt 存在就用它（用户可编辑），否则回退内置常量
+        sys_prompt = _persona_file_text(persona) or PERSONA_PRESETS.get(persona, SYSTEM_PROMPT)
     return sys_prompt + "\n" + _EMOTE_INSTRUCTION
 
 # ---------------- 主窗口 ----------------
@@ -589,6 +655,8 @@ class PetWindow(QWidget):
             detail = "、".join(fixes[:2]) + ("…" if n > 2 else "")
             QTimer.singleShot(1500, self, lambda: self.show_bubble(
                 "配置有 %d 处坏值，已自动修正：%s" % (n, detail)))
+        # v2.3.0：人设文件（首次启动写内置人设，不覆盖用户已改的）
+        ensure_persona_files()
         # ---- v1.3：角色库 / 音频库 / 记账账本 ----
         # P3-5+：帧上限用户可调（配置已在 load_config 归一化，这里再兜一层，坏值不阻断启动）
         try:
@@ -1599,6 +1667,10 @@ class PetWindow(QWidget):
             _log_error("alarm dialog: %r" % (e,))  # 有意忽略：对话框失败只记日志不崩主程序
 
     # ---------- v2.0.3：角色导出/导入（分享包） ----------
+    def persona_choices(self):
+        """v2.3.0：AI 设置的人设下拉项（内置 + data_dir/prompts/custom/*.txt）。"""
+        return persona_choices()
+
     def _export_role(self):
         """导出当前自定义角色（素材+行为+可分享配置）为 .dfypet.zip。"""
         if not self._custom_role:
@@ -1615,6 +1687,11 @@ class PetWindow(QWidget):
             _voice_ids = pet_dialogs.pick_voice_assets(self)
             if _voice_ids is None:
                 return  # 用户取消整个导出
+        # v2.3.0：先填"角色信息"（作者/简介/标签），会写进角色包的 meta（留空也行）
+        _rrec = self.role_lib.get(str(self.cfg.get("role") or "")) or {}
+        _meta = pet_dialogs.pick_role_meta(self, _rrec.get("name") or "")
+        if _meta is None:
+            return  # 用户取消
         _ok, _err = pet_export.export_bundle(
             self.role_lib, self.behaviors, self.cfg, _path,
             alarms_getter=self.alarms.list,
@@ -1622,7 +1699,7 @@ class PetWindow(QWidget):
             lines_getter=lambda: [x for x in self.lines_lib.lines() if not x.get("builtin")],
             dialogues_getter=self.lines_lib.dialogues,  # v2.1：对白随包
             voice_assets_getter=self._voice_asset_files,
-            include_voice_ids=_voice_ids)
+            include_voice_ids=_voice_ids, meta=_meta)
         if _ok:
             _extra = ("（含 %d 个参考音）" % len(_voice_ids)) if _voice_ids else ""
             self.show_bubble("角色包已导出%s，可以分享给朋友啦~" % _extra)
@@ -1823,6 +1900,10 @@ class PetWindow(QWidget):
             self._set_sound_group(self.cfg["sound_group"])
         self.apply_role(_res["role_id"])  # 导入即切换展示
         _msg = "角色包导入成功！"
+        # v2.3.0：角色包自带作者/简介时一并显示（旧包没有 meta → 这段跳过）
+        _meta = _res.get("meta") or {}
+        if _meta.get("author") or _meta.get("name"):
+            _msg += "来自「%s」" % (_meta.get("author") or _meta.get("name"))
         if _res["warnings"]:
             _msg += "（%s）" % "；".join(_res["warnings"][:2])
         self.show_bubble(_msg)

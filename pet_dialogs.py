@@ -2715,10 +2715,15 @@ class AISettingsDialog(QDialog):
         root.addLayout(test_row)
         root.addWidget(QLabel("人设预设（选「自定义」可完全自己写）"))
         self._persona = QComboBox()
-        self._persona.addItem("内置大肥鱼（又娇又赖，默认）", "default")
-        self._persona.addItem("啥子蛇（毒舌腹黑「本专员」）", "sheshe")
-        self._persona.addItem("傲娇系（嘴硬心软）", "tsundere")
-        self._persona.addItem("自定义（自己写人设）", "custom")
+        # v2.3.0：人设列表由桌宠给（内置 + prompts/custom/*.txt）；拿不到就回退内置四项
+        _choices = _call(parent, "persona_choices")
+        if not _choices:
+            _choices = [("default", "内置大肥鱼（又娇又赖，默认）"),
+                        ("sheshe", "啥子蛇（毒舌腹黑「本专员」）"),
+                        ("tsundere", "傲娇系（嘴硬心软）"),
+                        ("custom", "自定义（自己写人设）")]
+        for _pid, _label in _choices:
+            self._persona.addItem(str(_label), str(_pid))
         root.addWidget(self._persona)
         self._persona.currentIndexChanged.connect(self._on_persona_changed)
         cur_persona = str(cfg.get("ai_persona", "default") or "default")
