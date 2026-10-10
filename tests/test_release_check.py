@@ -48,8 +48,11 @@ def test_check_zip_flags_missing_and_stale(tmp_path):
 
 def test_check_zip_passes_clean(tmp_path):
     p = str(tmp_path / "ok.zip")
-    _make_zip(p, ["桌宠.py", "main.py", "pet_voice.py", "pet_lines.py", "pet_dialogs.py",
-                  "python.exe", "assets/char.png", "Lib/x.py"],
+    # v2.3.0：check_zip 的 need 改为"SYNC_FILES 里全部运行时 .py 正向校验"（修 S1：漏检
+    # pet_tools.py 会静默放行一个启动即崩的包），所以合成包必须覆盖这份清单，不能再手写几项。
+    _runtime = sorted(n for n in chk.SYNC_FILES
+                      if n.endswith(".py") and "/" not in n and n != "_verify_green.py")
+    _make_zip(p, _runtime + ["python.exe", "assets/char.png", "Lib/x.py"],
               version=chk.repo_version(), real_main=True)
     assert chk.check_zip(p, chk.repo_version()) == []
 
