@@ -3652,11 +3652,16 @@ class BubbleStyleDialog(QDialog):
         grid.addWidget(QLabel("字号"), 3, 0)
         self._font_spin = QSpinBox()
         self._font_spin.setRange(8, 18)
+        # v2.2.5（P0）：必须回填当前值——QSpinBox 初值=minimum，此前不回填会让构造末尾的
+        # _apply_preview() 把用户字号覆盖成 8；点一次"保存"就把 12pt 写成 8pt（无提示）。
+        self._font_spin.setValue(max(8, min(18, int(self._style.get("font_size") or 10))))
         self._font_spin.valueChanged.connect(lambda _v: self._apply_preview())
         grid.addWidget(self._font_spin, 3, 1)
         grid.addWidget(QLabel("圆角"), 4, 0)
         self._radius_spin = QSpinBox()
         self._radius_spin.setRange(0, 30)
+        _r0 = self._style.get("radius")
+        self._radius_spin.setValue(max(0, min(30, int(_r0 if _r0 is not None else 16))))
         self._radius_spin.valueChanged.connect(lambda _v: self._apply_preview())
         grid.addWidget(self._radius_spin, 4, 1)
         root.addLayout(grid)
@@ -3923,6 +3928,10 @@ class LinesDialog(QDialog):
                          dead_label="（已失效：%s）")
         self._fill_combo(self._voice, self._voice_items(), ln.get("voice_slot") or "",
                          dead_label="（已失效：%s）")
+        # v2.2.5（P0）：喂食对象也要回填——此前漏了 → 保存时用下拉当前值（默认第 1 项）
+        # 覆盖掉原值，food_texts("蛋糕") 再也选不中这条台词（只闻其声不见其食）。
+        _fi = self._food.findData(ln.get("food") or "")
+        self._food.setCurrentIndex(_fi if _fi >= 0 else 0)
 
     def _move_line(self, delta):
         """台词排序（上移/下移）：按当前列表顺序整体重排，立即落盘。"""
@@ -3950,6 +3959,7 @@ class LinesDialog(QDialog):
         self._text.clear()
         self._fill_combo(self._role, self._role_items(), "")
         self._fill_combo(self._voice, self._voice_items(), "")
+        self._food.setCurrentIndex(0)  # v2.2.5：新建台词时重置喂食对象（防上一轮编辑残留）
         self._list.setCurrentRow(-1)
         self._text.setFocus()
 

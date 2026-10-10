@@ -1117,22 +1117,39 @@ class RoleLibrary:
         except Exception as e:
             return None, "导入失败：%s" % e
 
+    def _inside_dir(self, path):
+        """v2.2.5：路径归属校验——只允许删除数据目录内的文件/目录（防路径穿越）。"""
+        try:
+            base = os.path.realpath(self._dir)
+            tgt = os.path.realpath(path)
+            return tgt == base or tgt.startswith(base + os.sep)
+        except Exception:
+            return False
+
     def delete(self, role_id):
         """删除角色（文件 + 索引项）；若为当前角色则重置为默认。返回 (bool, err)。
 
         边界：素材文件被占用时可能删第一张成功、第二张失败——此时索引未动，
         该角色仍在列表里但部分文件已消失（预览会提示文件缺失，重试删除即可）。"""
         role_id = str(role_id or "")
+        # v2.2.5：id 净化——roles.json 被手改/恶意角色带 "../" 时，删除会越出数据目录
+        # （导出侧早就拒绝含分隔符的引用，删除侧此前没有校验，同项目两套标准）。
+        if not role_id or role_id in (".", "..") or "/" in role_id or "\\" in role_id:
+            return False, "角色 id 非法"
         r = self.get(role_id)
         if r is None:
             return False, "角色不存在"
         try:
             for p in self._role_paths(r):
-                if os.path.exists(p):
-                    os.remove(p)
+                if not os.path.exists(p):
+                    continue
+                if not self._inside_dir(p):
+                    pet_log.log_error("role delete: 跳过数据目录外的素材 %r（角色 %s）" % (p, role_id))
+                    continue
+                os.remove(p)
             # P2-6：保留的原图目录（roles/<id>/source/）一并清理，不留孤儿
             src_dir = os.path.join(self._dir, role_id, "source")
-            if os.path.isdir(src_dir):
+            if os.path.isdir(src_dir) and self._inside_dir(src_dir):
                 shutil.rmtree(src_dir, ignore_errors=True)
         except Exception as e:
             return False, "删除文件失败：%s" % e

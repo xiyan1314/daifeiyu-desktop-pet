@@ -320,13 +320,20 @@ class LineService:
         cat = str(ln.get("category") or DEFAULT_CATEGORY)
         if cat not in LINE_CATEGORIES:
             cat = DEFAULT_CATEGORY
+        # v2.2.5：字段级类型容错——手改 lines.json 的 "order": "abc" 此前会让
+        # LineService.__init__ 抛 ValueError → 程序启动直接失败（docstring 承诺的"损坏走种子"
+        # 只覆盖 JSON 解析失败，不覆盖字段类型错误）。此处逐字段兜底，坏值按 0 处理。
+        try:
+            order = int(ln.get("order") or 0)
+        except (TypeError, ValueError):
+            order = 0
         return {
             "id": lid,
             "text": text[:TEXT_MAX],
             "category": cat,
             "role_slot": (str(ln["role_slot"]) if ln.get("role_slot") else None),
             "voice_slot": (str(ln["voice_slot"]) if ln.get("voice_slot") else None),
-            "order": int(ln.get("order") or 0),
+            "order": order,
             "builtin": bool(ln.get("builtin")),
             "food": str(ln.get("food") or ""),
         }

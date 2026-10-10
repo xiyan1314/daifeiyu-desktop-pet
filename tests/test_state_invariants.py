@@ -513,23 +513,37 @@ def test_random_wander_action_blocked_during_full_form(pet):
     played = []
     _real_pa = pet.actions.play_action
     _real_pick = pet.actions._pick
-    pet.actions._pick = lambda: ("jump", None)   # 强制抽到动作，验证门控
-    pet.actions.play_action = lambda name, arg=None: (played.append(name), _real_pa(name, arg))[1]
+    pet.actions._pick = lambda: ("jump", None)   # 强制抽到带动画的动作，验证门控
+    pet.actions.play_action = lambda name, arg=None, force=False: (
+        played.append((name, arg)), _real_pa(name, arg, force))[1]
     try:
         pet.actions.idle_tick()                  # 模拟 15s tick 在消化窗口内到点
+        # v2.2.5 口径（时间轴解耦）：消化窗口内**任何**随机动作都不插播（jump/zzz 都不行）——
+        # 窗口内的小盹改由事件定时器 _digest_zzz_timer 负责（喂食 +10s），节拍不再承担它。
         assert played == [], "消化窗口内仍插播了随机动作：%r" % played
     finally:
         pet.actions.play_action = _real_pa
         pet.actions._pick = _real_pick
+    # 事件时钟侧：饭点小盹必须是"吃饱形态上的 zzz 叠加"（force=True 不受跟随/散步门控）
+    zzz = []
+    pet.actions.play_action = lambda name, arg=None, force=False: zzz.append((name, arg, force))
+    try:
+        pet._on_meal_zzz()
+        assert ("emote", "zzz", True) in zzz, "饭点小盹没有叠加 zzz：%r" % zzz
+    finally:
+        pet.actions.play_action = _real_pa
     pet._digest_timer.stop()
     pet._digest()
-    pet._idle_after_full_at = 0.0                # v2.2.3：等待期已过（触发 A 已消费）才恢复
-    # 消化结束后（且等待期已过），随机动作应恢复可播
+    pet._idle_after_full_at = 0.0                # 等待期已过（触发 A 已消费）
+    pet._nap_zzz_timer.stop()                    # 饭后安静期已过（小盹另有专测）
+    pet._meal_zzz_at = 0.0                       # 清掉"刚打过小盹"的抑制窗口
+    pet.busy = False                             # 吃帧已结束（本测只验证随机动作恢复）
+    played.clear()
     pet.actions._pick = lambda: ("jump", None)
-    pet.actions.play_action = lambda name, arg=None: played.append(name)
+    pet.actions.play_action = lambda name, arg=None, force=False: played.append((name, arg))
     try:
         pet.actions.idle_tick()
-        assert "jump" in played, "消化结束后随机动作没恢复"
+        assert any(n == "jump" for n, _ in played), "消化结束后随机动作没恢复：%r" % played
     finally:
         pet.actions.play_action = _real_pa
         pet.actions._pick = _real_pick
@@ -573,13 +587,27 @@ def test_random_action_waits_after_full_form(pet):
     _pa = pet.actions.play_action
     _pick = pet.actions._pick
     pet.actions._pick = lambda: ("jump", None)
-    pet.actions.play_action = lambda n, a=None, f=False: played.append(n)
+    # 注意签名必须带 force（_idle_zzz 用 force=True 调用；写成 f= 会 TypeError 被守卫吞掉）
+    pet.actions.play_action = lambda n, a=None, force=False: played.append((n, a))
     try:
-        pet.actions.idle_tick()         # A 未到点：随机动作必须被压住（保持常态）
-        assert played == [], "吃饱刚结束随机动作就跳出来了（常态被压没）"
-        pet._idle_after_full_at = 0.0   # 等待期已过（触发 A 已消费）
+        # v2.2.5：饭后安静期由 _nap_zzz_timer（消化结束 +13s）标记，期内节拍一律不插播
+        assert pet._nap_zzz_timer.isActive(), "消化结束没有起饭后小盹定时器"
         pet.actions.idle_tick()
-        assert "jump" in played, "等待期过后随机动作没恢复"
+        assert played == [], "饭后安静期内插播了随机动作：%r" % played
+        pet.busy = False                # 吃帧已结束，才能叠加小盹
+        pet._on_meal_zzz()              # 小盹到点（事件时钟）
+        assert ("emote", "zzz") in played, "小盹到点没有 zzz：%r" % played
+        # 越过"刚打过小盹"的 3s 抑制窗口，并清掉可能由其它用例残留的待机配置/在途序列
+        played.clear()
+        pet._nap_zzz_timer.stop()       # 小盹那一刻已过（安静期结束）
+        pet._meal_zzz_at = 0.0
+        pet._idle_after_full_at = None
+        pet.cfg["idle_actions"] = []
+        pet.cfg["idle_form"] = ""
+        pet._idle_active = False
+        pet._behavior_seq = None
+        pet.actions.idle_tick()         # 小盹之后恢复加权随机目录（强制抽到 jump）
+        assert ("jump", None) in played, "小盹之后随机目录没恢复：%r" % played
     finally:
         pet.actions.play_action = _pa
         pet.actions._pick = _pick

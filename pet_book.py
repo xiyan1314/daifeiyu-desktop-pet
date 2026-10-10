@@ -49,6 +49,7 @@ Copyright (c) 大肥鱼桌宠项目
 
 import datetime
 import json
+import math
 import os
 import time
 
@@ -115,7 +116,8 @@ def _normalize_record(r):
     if not isinstance(amount, (int, float)):
         return None
     amount = round(float(amount), 2)
-    if amount <= 0:
+    # v2.2.5：NaN/Inf 的 <= 0 都是 False，此前会绕过校验 → 参与 sum() 后统计全变 NaN
+    if not math.isfinite(amount) or amount <= 0:
         return None
     ts = r.get("ts")
     if not isinstance(ts, (int, float)):
@@ -225,7 +227,15 @@ class Book:
         """原子写两个数据文件；返回错误字符串或 None（调用方按需消费）。"""
         e1 = _write_json(self._ledger_path, self._ledger)
         e2 = _write_json(self._archive_path, self._archive)
-        return e1 or e2
+        err = e1 or e2
+        if err:
+            # v2.2.5：失败必须留痕。此前错误串返回后被 5 个调用点全部丢弃 → 磁盘满/只读时
+            # 内存已改、磁盘没落，重启即静默丢账（唯一检查返回值的是 _ensure_today）。
+            try:
+                self._log("ledger 落盘失败：%s" % err)
+            except Exception:
+                pass  # 有意忽略：日志通道自身异常不影响主流程
+        return err
 
     def _migrate_usage(self):
         """旧 usage.json → ledger 迁移：仅当 ledger.json 不存在时执行一次。

@@ -10,6 +10,12 @@ import base64
 import ctypes
 import json
 import os
+import threading
+
+# v2.2.5：配置写盘互斥锁 + 唯一临时名。语音 worker 线程（云端 TTS 首次克隆出 voice_id 时
+# 会就地改共享 cfg 并保存）与主线程（约 20 个保存点）此前共用同一个 "config.json.tmp"，
+# os.replace 可能因共享冲突抛 PermissionError 被 except 吞掉 → 该次配置写入静默丢失。
+_CFG_WRITE_LOCK = threading.Lock()
 
 import pet_log  # P1-手感：物理参数非法时记日志（pet_log 无任何依赖，安全）
 import pet_physics  # P1-手感：默认值单一来源（pet_physics 无 Qt 依赖，无环）
@@ -148,14 +154,15 @@ def normalize_cfg(cfg, defaults, persona_ids):
     # ---- v1.3 新增配置归一化 ----
     cfg["role"] = str(cfg.get("role", "") or "")
     cfg["scale_compensated_role"] = str(cfg.get("scale_compensated_role", "") or "")
-    try:
-        cfg["chat_memory_rounds"] = max(0, min(10, int(cfg.get("chat_memory_rounds", 3) or 3)))
-        cfg["ai_max_tokens"] = max(16, min(512, int(cfg.get("ai_max_tokens", 60) or 60)))
-        cfg["ai_reply_len"] = max(4, min(50, int(cfg.get("ai_reply_len", 25) or 25)))
-    except (TypeError, ValueError):
-        cfg["chat_memory_rounds"] = 3
-        cfg["ai_max_tokens"] = 60
-        cfg["ai_reply_len"] = 25
+    # v2.2.5：三个键**各自独立** try——此前共用一个 except，任一键坏值会把另外两个用户
+    # 有效设置一起重置（与下方 role_frame_max 的独立 try 口径也不一致）。
+    for _k, _lo, _hi, _d in (("chat_memory_rounds", 0, 10, 3),
+                             ("ai_max_tokens", 16, 512, 60),
+                             ("ai_reply_len", 4, 50, 25)):
+        try:
+            cfg[_k] = max(_lo, min(_hi, int(cfg.get(_k, _d) or _d)))
+        except (TypeError, ValueError):
+            cfg[_k] = _d
     cfg["ai_base_url"] = str(cfg.get("ai_base_url", "") or "").strip().rstrip("/")
     cfg["ai_model"] = str(cfg.get("ai_model", pet_chat.DEFAULT_MODEL) or pet_chat.DEFAULT_MODEL).strip()
     cfg["ai_system_prompt"] = str(cfg.get("ai_system_prompt", "") or "")
@@ -262,9 +269,19 @@ def write_config(path, cfg, defaults, schema_version, log, encrypt_fn):
                 out["api_key"] = old_key if old_key.startswith("dpapi:") else ""
             except Exception:
                 out["api_key"] = ""
-        tmp = path + ".tmp"
-        with open(tmp, "w", encoding="utf-8") as f:
-            json.dump(out, f, ensure_ascii=False, indent=2)
-        os.replace(tmp, path)
+        # v2.2.5：整段写盘加锁 + 临时文件带线程标识，避免两个线程抢同一个 tmp
+        with _CFG_WRITE_LOCK:
+            tmp = "%s.%d.tmp" % (path, threading.get_ident())
+            try:
+                with open(tmp, "w", encoding="utf-8") as f:
+                    json.dump(out, f, ensure_ascii=False, indent=2)
+                os.replace(tmp, path)
+            except Exception:
+                try:
+                    if os.path.exists(tmp):
+                        os.remove(tmp)  # 失败清理自己的 tmp（与 pet_book._write_json 同口径）
+                except Exception:
+                    pass  # 有意忽略：清理失败不影响主流程
+                raise
     except Exception as e:
         log("save_config failed: %r" % (e,))

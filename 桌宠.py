@@ -62,11 +62,17 @@ import pet_alarm
 
 
 APP_NAME = "大肥鱼桌宠"
-VERSION = "2.2.4"
+VERSION = "2.2.5"
 PAD = 1.25  # 窗口相对角色的透明边距（为压扁/回弹预留空间）
 IDLE_FRAME_MS = 140      # 待机帧间隔
 IDLE_FORM_HOLD_SECS = 8  # v2.1.3：只有形态、没有动作可播时的展示期上限（到期回用户形态）
 DIGEST_MS = 12000         # v2.1.6：吃饱形态保留（消化）时长——吃饱形态展示期，期间不待机
+# v2.2.5（时间轴解耦）：饭点 zzz 全部改挂**喂食事件时钟**，不再依赖"程序启动起算的 15s 节拍"——
+# 后者只有喂食恰好落在启动后 3~15s 时相位才对（实测 T=0.5s 时 zzz 掉到常态上、T=16s 时整个
+# 消化期一个 zzz 都没有）。现在：喂食 +10s 打第一个小盹（在消化窗口内），
+# 消化结束 +13s 打第二个小盹（"吃饱后安静一会儿"），与何时喂食无关。
+MEAL_ZZZ_MS = 10000       # 喂食后第一个小盹（= 消化窗口内，DIGEST_MS 前 2s）
+MEAL_QUIET_MS = 13000     # 消化结束后的安静时长，期满打第二个小盹
 EAT_FRAME_MS = 110       # 进食帧间隔
 SLEEP_AFTER_SECONDS = 60 # 无交互多久入睡
 STATE_DURATION_MS = 2500 # 状态图默认展示时长
@@ -320,7 +326,9 @@ def load_config():
     cfg = dict(DEFAULT_CONFIG)
     future_cfg = False  # P1-3：读到未来版本配置时禁写回（防降级覆盖未来键）
     try:
-        with open(CONFIG_PATH, "r", encoding="utf-8") as f:
+        # v2.2.5（兼容审查）：用 utf-8-sig 读——历史上出现过带 BOM 的 config.json，
+        # 那会让**全部用户设置静默回落默认值**（error.log 里留有该记录）。
+        with open(CONFIG_PATH, "r", encoding="utf-8-sig") as f:
             data = json.load(f)
         if isinstance(data, dict):
             ver = _parse_schema_version(data.get("schema_version"))
@@ -584,7 +592,9 @@ class PetWindow(QWidget):
         # ---- v1.3：角色库 / 音频库 / 记账账本 ----
         # P3-5+：帧上限用户可调（配置已在 load_config 归一化，这里再兜一层，坏值不阻断启动）
         try:
-            pet_resources.FRAME_MAX = max(2, min(64, int(self.cfg.get("role_frame_max", 24) or 24)))
+            # v2.2.5：上界与归一化（pet_config 60）和设置对话框（"2~60"）统一为 60——
+            # 此前这里 64，是三处口径不一致的第三份（改一处漏一处的直接实证）。
+            pet_resources.FRAME_MAX = max(2, min(60, int(self.cfg.get("role_frame_max", 24) or 24)))
         except (TypeError, ValueError):
             pet_resources.FRAME_MAX = 24  # norm-ok
         self.role_lib = pet_resources.RoleLibrary(DATA_DIR)
@@ -728,6 +738,14 @@ class PetWindow(QWidget):
         self._eat_watchdog = None            # v2.1.4：吃帧看门狗（防 on_finish 被顶掉后 busy 永久卡死）
         self._feed_form = ""                 # v2.1.6：本轮喂食的目标形态（消化窗口的主人判据）
         self._idle_after_full_at = None      # v2.2：触发 A 到点时刻（吃饱形态结束后+delay；None=未挂起）
+        # v2.2.5：饭点 zzz 的两个事件定时器（喂食事件时钟，与 15s 节拍解耦）
+        self._digest_zzz_timer = QTimer(self)
+        self._digest_zzz_timer.setSingleShot(True)
+        self._digest_zzz_timer.timeout.connect(self._gslot('meal_zzz_digest', self._on_meal_zzz))
+        self._nap_zzz_timer = QTimer(self)
+        self._nap_zzz_timer.setSingleShot(True)
+        self._nap_zzz_timer.timeout.connect(self._gslot('meal_zzz_nap', self._on_meal_zzz))
+        self._meal_zzz_at = 0.0              # 最近一次饭点 zzz 的时刻（用于抑制同刻随机动作）
         self._idle_display_form = ""         # v2.1.7：本次待机展示期实际画上去的形态
         self._idle_check_timer = None        # v2.1.8：待机触发的高速检查（1s），由 __init__ 创建
         self._idle_last_action = ""          # 顺序模式记上次播到哪
@@ -1365,9 +1383,27 @@ class PetWindow(QWidget):
         self._idle_interrupt("user_form")
         self._set_form(form)
 
+    def _on_meal_zzz(self):
+        """饭点小盹：头顶 zzz 小表情（纯叠加，不换形态、不设 busy），走喂食事件时钟。"""
+        # 守卫与 pet_actions.idle_tick 同口径：吃帧/摸头/睡眠/变身/待机展示/行为序列在途 →
+        # 这次小盹跳过（不打断更高优先级展示，也不覆盖行为气泡）
+        if (self._closing or self.busy or self._petting or self._sleeping
+                or getattr(self, "_transform_home", None) is not None
+                or bool(getattr(self, "_idle_form_active", False))
+                or getattr(self, "_behavior_seq", None) is not None):
+            return
+        self._meal_zzz_at = time.monotonic()
+        try:
+            self.actions._idle_zzz()
+        except Exception as e:
+            _log_error("meal zzz: %r" % (e,))
+
     def _touch_activity(self):
         """记一次「用户交互」：重置无交互计时 + 打断待机（两触发重新计时）。"""
         self._last_activity = time.monotonic()
+        # v2.2.5（兼容审查）：饭点小盹**不因轻交互取消**——zzz 是纯头顶叠加，点击不影响叠加语义；
+        # 此前一点就走取消分支，导致"喂完顺手点一下"的用户永远看不到小盹（且无提示）。
+        # 到点那刻若在吃/被摸/睡着/变身/待机展示中，由 _on_meal_zzz 的守卫跳过（见那里）。
         self._idle_interrupt("activity")
 
     def _run_behavior(self, bid, as_idle=False):
@@ -2071,9 +2107,15 @@ class PetWindow(QWidget):
         interval = IDLE_FRAME_MS
         if self._custom_role:
             interval = self._cur_form_anim().get("interval_ms") or IDLE_FRAME_MS
-        if self.form != self.form_keys[0] and not idle_frames:
-            # 非首形态且该形态无待机帧：显示该形态静态图（P1-7 之前非首形态永远静态；
-            # 现在 forms[i].animations.idle 存在时走下方帧动画分支）
+        # v2.2.5（画面级修复）：**默认角色**的 "idle" 帧集是"常态"形象素材（assets/idle_f*），
+        # 与当前形态无关——form=full 时若继续播它，吃饱静态图（character_full.png）永远被常态
+        # 动画盖住（用户看到"吃完还显示常态/待机、点一下才见吃饱"）。因此默认角色的**非首形态**
+        # 一律走静态形态图分支；首形态照旧播 idle 动画；自定义角色语义不变（帧集按「形态×动作」
+        # 查：有 idle 帧就播该形态的帧，没有才静态）。
+        _static_form = (self.form != self.form_keys[0]
+                        and (not self._custom_role or not idle_frames))
+        if _static_form:
+            # 非首形态显示该形态静态图（默认角色=吃饱静态图；自定义角色=无帧形态静态图）
             if self.anim_mode != "form_idle":
                 self.anim.stop()
                 self.anim_mode = "form_idle"
@@ -2791,6 +2833,9 @@ class PetWindow(QWidget):
             _after_delay = 0  # 有意忽略：坏值按 0（形态一结束即可待机）
         self._idle_after_full_at = time.monotonic() + max(0, _after_delay)
         self._last_idle_at = 0.0  # 触发 A 立即生效（不受触发 B 去重窗口影响）
+        # v2.2.5：饭点小盹 #2 挂事件时钟——消化结束 +13s（"吃饱后安静一会儿"），
+        # 不再等"下一个 15s 节拍"（那样间隔会在 0~15s 间乱跳；T=0.5s 喂食时还会掉到常态上）
+        self._nap_zzz_timer.start(MEAL_QUIET_MS)
         self._show_emote("sparkle")
         if self._custom_role:
             # 显示形态**名字**而不是形态键（f0/f1）
@@ -2871,6 +2916,9 @@ class PetWindow(QWidget):
         self._digest_timer.setSingleShot(True)
         self._digest_timer.timeout.connect(self._gslot('_digest', self._digest, recover=True))
         self._digest_timer.start(DIGEST_MS)
+        # v2.2.5：饭点小盹 #1 挂**喂食事件时钟**（喂食 +10s，落在 12s 消化窗口内）——
+        # 与"程序启动起算的 15s 节拍"解耦，任何喂食时刻都能稳定看到吃饱形态上的 zzz
+        self._digest_zzz_timer.start(MEAL_ZZZ_MS)
         # v2.1.4（S2 修复）：判据 = **目标形态有没有 eat 帧集**（吃帧素材挂在形态上，
         # 有就播；没有才用大笑表达）。此前先按"源形态==用户形态"判定，no_feed 跳步时会错位；
         # 我先改成"目标是首形态"，又把默认角色（常态→吃饱，吃帧在吃饱形态上）的吃帧弄丢了。
@@ -3826,6 +3874,8 @@ class PetWindow(QWidget):
                       self._transform_timer,  # v2.1.2（L-1）：变身回切定时器此前漏停
                       self._idle_hold_timer,   # v2.1.3：形态待机展示期定时器（可能为 None，stop 前过滤）
                       self._eat_watchdog,      # v2.1.4：吃帧看门狗
+                      self._digest_zzz_timer,  # v2.2.5：饭点小盹 #1（喂食事件时钟）
+                      self._nap_zzz_timer,     # v2.2.5：饭点小盹 #2（消化结束+13s）
                       self._idle_check_timer,  # v2.1.8：待机触发高速检查
                       self._alarm_timer):  # v2.0.5：闹钟轮询
                 if t is not None:

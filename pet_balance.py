@@ -12,6 +12,7 @@ from PySide6.QtCore import QEasingCurve, QTimer, QVariantAnimation
 from PySide6.QtWidgets import QDialog
 
 import pet_dialogs  # 账本 / 记一笔对话框（pet_dialogs 不 import 桌宠，无循环）
+import pet_log  # v2.2.5：start() 里用 pet_log.guard_slot 包轮询槽，此前漏 import → 开启余额监控直接 NameError
 
 
 class BalanceService:

@@ -77,6 +77,22 @@ class ActionService:
                 # v2.0.1：程序化合成动作（呼吸/摇摆/点头）
                 pet._play_proc(name, procs[name])
 
+    def _idle_zzz(self):
+        """打个小盹：头顶 zzz 小表情（纯叠加，不换形态、不设 busy）+ 一句待机台词。
+
+        v2.2.5：走 force=True——zzz 是纯表情叠加，开着「跟随鼠标/散步」时此前被门控吞掉，
+        只剩台词不见表情（只闻其声不见 zzz）。
+        """
+        pet = self.pet
+        self.play_action("emote", "zzz", force=True)
+        # v2.1：走日常台词出口（气泡 + 可选配音朗读）
+        # v2.1.2 修复（S-1）：用户可能把这两类台词全删掉 → 池子为空时
+        # random.choice([]) 会抛 IndexError，QTimer 槽里未捕获异常会弹模态错误框（每轮复发）
+        _say = getattr(pet, "_say_line", pet.show_bubble)
+        _pool = pet.lines_pools.get("idle", []) + pet.lines_pools.get("greedy", [])
+        if _pool:
+            _say(random.choice(_pool))
+
     def idle_tick(self):
         pet = self.pet
         cfg = self._cfg()
@@ -89,17 +105,22 @@ class ActionService:
         if _maybe_idle is not None:
             _maybe_idle()
         # v2.1.9：吃饱形态（消化窗口）/变身/待机展示期间**不入睡**，也不插播随机闲逛动作。
-        # v2.2.3（用户反馈"吃饱结束→直接待机，常态被压没了"）：随机跳/zzz 按自己的 15s 节拍走，
-        # 吃饱形态一结束下一个节拍（可能 <1s）就跳出来——它也必须**等吃饱结束后
-        # idle_delay_after_full 秒**（与触发 A 同一规矩）。_idle_after_full_at 就是触发 A
-        # 挂起的到点时刻：到点前一律安静，到点后（触发 A 已消费=None）才允许随机动作。
+        # v2.2.3：随机跳/zzz 也要**等吃饱结束后 idle_delay_after_full 秒**（与触发 A 同一规矩）。
+        # v2.2.5（用户时间轴）：消化窗口内**只允许 zzz 这类纯表情叠加**——zzz 是头顶小表情，
+        # 不换形态、不设 busy、不打断消化；jump 这类带动画的动作与入睡仍然禁止，
+        # 保证吃饱形态不被顶掉。此前整条 return 把 15s 的 zzz 一起吞了。
         _after_full_at = getattr(pet, "_idle_after_full_at", None)
-        _high_priority_display = (
-            getattr(pet, "_digest_pending", lambda: False)()
-            or (_after_full_at is not None and time.monotonic() < _after_full_at)
-            or getattr(pet, "_transform_home", None) is not None
-            or bool(getattr(pet, "_idle_form_active", False)))
-        if _high_priority_display:
+        if getattr(pet, "_digest_pending", lambda: False)():
+            # v2.2.5（时间轴解耦）：消化窗口内一律不插播随机动作；窗口内的小盹由
+            # PetWindow 的**事件定时器**（喂食 +10s）负责，节拍不再承担它——
+            # 此前"每拍都发 zzz"只因 12s 窗口 vs 15s 节拍最多命中一次才没连发。
+            return
+        _nap = getattr(pet, "_nap_zzz_timer", None)
+        if _nap is not None and _nap.isActive():
+            return  # 饭后安静期（消化结束 → +13s 小盹）内保持常态安静，不插播随机动作
+        if ((_after_full_at is not None and time.monotonic() < _after_full_at)
+                or getattr(pet, "_transform_home", None) is not None
+                or bool(getattr(pet, "_idle_form_active", False))):
             return
         if pet.anim_mode in ("idle", "form_idle") and (time.monotonic() - pet._last_activity) > self._sleep_after:
             pet._show_sleep()
@@ -112,19 +133,17 @@ class ActionService:
         # v2.0.2：行为序列播放中不插播闲逛动作（防随机 jump/emote 与行为步骤互踩）
         if getattr(pet, "_behavior_seq", None) is not None:
             return
+        # v2.2.5：刚打过饭点小盹的那一拍不再叠加随机动作（两颗定时器可能同刻到点）
+        if time.monotonic() - getattr(pet, "_meal_zzz_at", 0.0) < 3.0:
+            return
         # P3-2：加权动作目录替代 0.35/0.65 魔法数（可扩展、可点播，共用 play_action）
         name, arg = self._pick()
         if name == "none":
             return
-        self.play_action(name, arg)
         if name == "emote" and arg == "zzz":
-            # v2.1：走日常台词出口（气泡 + 可选配音朗读）
-            # v2.1.2 修复（S-1）：用户可能把这两类台词全删掉 → 池子为空时
-            # random.choice([]) 会抛 IndexError，QTimer 槽里未捕获异常会弹模态错误框（每轮复发）
-            _say = getattr(pet, "_say_line", pet.show_bubble)
-            _pool = pet.lines_pools.get("idle", []) + pet.lines_pools.get("greedy", [])
-            if _pool:
-                _say(random.choice(_pool))
+            self._idle_zzz()
+            return
+        self.play_action(name, arg)
 
     def cpu_tick(self):
         pet = self.pet

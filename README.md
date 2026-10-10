@@ -42,7 +42,8 @@ Windows 桌面宠物，基于 **PySide6（Qt6）+ Python 3.10** 开发，MIT 开
 
 **方式一：免安装绿色版（推荐，无需 Python）**
 
-到 [Releases](https://github.com/xiyan1314/daifeiyu-desktop-pet/releases) 下载附件 `daifeiyu-desktop-pet.zip`（解压后是 `大肥鱼桌宠_绿色版` 文件夹）→ 双击 `启动桌宠.vbs`。
+到 [Releases](https://github.com/xiyan1314/daifeiyu-desktop-pet/releases) 下载附件 `daifeiyu-desktop-pet.zip`（**解压到任意文件夹**，包内直接是程序文件）→ 双击 `启动桌宠.vbs`。
+（v2.2.5：文案与产物对齐——zip 内没有外层目录，此前 README 写成"解压后是 大肥鱼桌宠_绿色版 文件夹"与实际不符。）
 （绿色版使用微软签名的 pythonw.exe + 完整运行库，不含易被杀软误报的自解压 exe。）
 
 **方式二：源码运行**

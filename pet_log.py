@@ -16,11 +16,14 @@ tests 调用）。pet_dialogs / pet_resources / pet_book / pet_fx 等模块
 import os
 import re
 import sys
+import threading
 
 # ---------------- 模块级状态 ----------------
 _data_dir = None      # 日志目录（桌宠.set_data_dir 同步；未同步时按 _default_dir 规则取）
 _redact_key = None    # 脱敏 key 缓存（未同步 = None；桌宠.set_redact_key 同步）
-_logging = False      # log_error 重入标志（防日志路径内部异常再打日志的套环）
+_tls = threading.local()  # v2.2.5：重入标志改为**线程局部**——原为进程级 bool，
+# 多个后台线程（chat/voice/balance/weather）同时报错时后到的线程会被误判"重入"而只写
+# stderr；pythonw.exe 下 stderr 不可见 → 这些错误彻底消失。
 
 # P0-2：DEBUG 开关——DFY_DEBUG=1 时 log_error 内部异常直抛，便于排障
 DEBUG = os.environ.get("DFY_DEBUG") == "1"
@@ -117,15 +120,14 @@ def log_error(msg, data_dir=None):
     对 main.DATA_DIR 的 monkeypatch 隔离仍然生效）；其余模块不传，按
     set_data_dir 同步值或 _default_dir() 规则取目录。
     """
-    global _logging
-    if _logging:
+    if getattr(_tls, "logging", False):
         # 重入：直写 stderr 立即返回，阻断套环；外层调用会正常走完整脱敏+落盘
         try:
             sys.stderr.write("[DFY] %s\n" % msg)
         except Exception:
             pass  # 有意忽略：stderr 不可写时无从记录
         return
-    _logging = True
+    _tls.logging = True
     try:
         msg = redact(msg)
         path = os.path.join(data_dir or _data_dir or _default_dir(), "error.log")
@@ -152,4 +154,4 @@ def log_error(msg, data_dir=None):
         except Exception:
             pass  # 有意忽略：stderr 不可写时无从记录
     finally:
-        _logging = False
+        _tls.logging = False  # 线程局部：只清本线程的重入标志
