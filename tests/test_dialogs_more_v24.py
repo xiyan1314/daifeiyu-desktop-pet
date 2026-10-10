@@ -32,11 +32,79 @@ import pet_book  # noqa: E402
 import pet_dialogs  # noqa: E402
 import pet_resources  # noqa: E402
 
-from PySide6.QtCore import Qt, QTime  # noqa: E402
-from PySide6.QtWidgets import QApplication, QDialog  # noqa: E402
+from PySide6.QtCore import Qt, QTime, QTimer  # noqa: E402
+from PySide6.QtWidgets import QApplication, QDialog, QWidget  # noqa: E402
 
 
 # ---------------- 隔离：真 PetWindow + 临时数据目录 ----------------
+
+def _boot_application():
+    """进程里必须有**真正的 QApplication**（不是 QCoreApplication）——没有就现在建。
+
+    实测坑（v2.4.1 顺序污染收口，可复现）：`pytest tests/test_mood.py tests/test_dialogs_more_v24.py`
+    会以退出码 **0xC0000409**（Qt fatal）**整进程 abort**——test_mood 的模块级 qapp fixture
+    先建了 QCoreApplication，而 `QApplication.instance()` 会把这个（truthy 的）对象返回，
+    于是本模块"复用"了它，随后 new PetWindow() 造 QWidget 时没有 QApplication → Qt 直接
+    终止进程：没有 traceback、没有失败用例名，看起来就是"随机红/无 traceback"。
+    Qt 不允许在 QCoreApplication 之后再建 QApplication（RuntimeError: Please destroy the
+    QCoreApplication singleton before creating a new QApplication instance），所以只能抢时间：
+    **导入期**就把它建出来（pytest 先收集全部模块、再跑用例，导入期一定早于任何"运行期才建
+    事件对象"的模块；tests/test_anim.py 也是同一个套路）。
+    """
+    app = QApplication.instance()
+    if app is None:
+        return QApplication([])
+    return app
+
+
+# 导入期建好（全局引用持住，防止被 GC 掉导致 Qt 单例销毁）
+_APP = _boot_application()
+
+
+def _ensure_qapplication():
+    """返回可用的 QApplication；只剩 QCoreApplication 时给**可读结论**而不是崩进程。"""
+    app = QApplication.instance()
+    if isinstance(app, QApplication):
+        return app
+    pytest.fail(
+        "进程里只有 QCoreApplication（不是 QApplication），QWidget 无法构造，Qt 会直接 abort"
+        "（退出码 0xC0000409、无 traceback）。常见来源：tests/test_mood.py 的 qapp fixture"
+        "（QCoreApplication.instance() or QCoreApplication([])）在导入期先建了它。"
+        "修法：把那个模块改成 QApplication，或让本模块在它之前被收集/单独跑。",
+        pytrace=False)
+
+
+def _shutdown_pet(win):
+    """拆真 PetWindow：**先停掉全部 QTimer**，再 hide/close/deleteLater。
+
+    v2.4.1（顺序污染收口）：只做 hide()+deleteLater() 时，实测真窗口在拆完之后
+    **仍有 6 个 QTimer 活跃**（3.2s/1s/15s/15s/1s/6s）——deleteLater 要等事件循环真正
+    处理 DeferredDelete 才会销毁对象，在那之前窗口是"活的"：后续任何用例只要 pump 一次
+    事件循环，这些定时器就会回调产品代码（写配置/气泡/报警/心情），是"单跑绿、全量红"
+    这类顺序污染的常见来源。停表之后不再有任何回调。
+
+    对手上没有 _closing / voice 的普通 QWidget 也必须安全（供下面那条用例钉住）。
+    """
+    try:
+        win._closing = True
+    except Exception:
+        pass  # 有意忽略：测试收尾尽力而为
+    try:
+        win.voice.stop()
+    except Exception:
+        pass  # 有意忽略：没有语音服务（普通控件）时跳过
+    for _t in win.findChildren(QTimer):
+        try:
+            _t.stop()
+        except Exception:
+            pass  # 有意忽略：单个定时器停不掉不影响其余
+    try:
+        win.hide()
+        win.close()
+        win.deleteLater()
+    except Exception:
+        pass  # 有意忽略：测试收尾尽力而为
+
 
 @pytest.fixture(scope="module")
 def pet(tmp_path_factory):
@@ -52,24 +120,23 @@ def pet(tmp_path_factory):
     main.USAGE_PATH = str(tmp / "usage.json")
     main.MEMORY_PATH = str(tmp / "memory.json")
     pet_log.set_data_dir(str(tmp))
-    QApplication.instance() or QApplication([])
+    _ensure_qapplication()          # 必须是 QApplication，否则下面造 QWidget 会 fatal
     win = main.PetWindow()
     from helpers_roles import install_three_form_role
     install_three_form_role(win, tmp)
     yield win
-    try:
-        win._closing = True
-        win.voice.stop()
-        win.hide()
-        win.deleteLater()
-    except Exception:
-        pass  # 有意忽略：测试收尾
+    _shutdown_pet(win)
+    QApplication.processEvents()
     (main.DATA_DIR, main.CONFIG_PATH, main.USAGE_PATH,
      main.MEMORY_PATH) = _snap[0], _snap[1], _snap[2], _snap[3]
     pet_log.set_data_dir(_snap[4])
     main.set_redact_key(_snap[5] or "")
     if _snap[6] is not None:
         _pr.FRAME_MAX = _snap[6]
+    # 自检（会真失败）：拆完必须一个活跃定时器都不剩——谁把 _shutdown_pet 的停表删了，
+    # 本模块每条用例都会在收尾时报这个错，而不是变成别处的随机红。
+    _left = [t for t in win.findChildren(QTimer) if t.isActive()]
+    assert not _left, "fixture 拆窗口后仍有活跃 QTimer（顺序污染源）：%r" % (_left,)
 
 
 @pytest.fixture
@@ -942,6 +1009,25 @@ def test_dialog_entry_points_open_and_failure_is_reported(pet, ui, monkeypatch):
     monkeypatch.setattr(pet_dialogs, "PhysicsDialog", _boom)
     pet_dialogs.open_physics(pet)
 
+def test_shutdown_pet_helper_stops_child_timers(pet, ui):
+    """收尾帮手：把窗口上的 QTimer 全部停掉，且对手上没有 _closing/voice 的控件也不抛。
+
+    背景（实测，不是推测）：真 PetWindow 只做 hide()+deleteLater() 之后**仍有 6 个 QTimer
+    活跃**（3.2s/1s/15s/15s/1s/6s）——deleteLater 要等事件循环真正处理 DeferredDelete 才
+    销毁对象，在那之前窗口是活的：后续用例 pump 一次事件循环就会被它回调产品代码。
+    所以 fixture 收尾改成 _shutdown_pet()，这里用一个带子定时器的普通 QWidget 钉住
+    "停表"这一步（真 PetWindow 的那 6 个表由 probe 与 fixture 自检共同钉住）。
+    """
+    w = QWidget()
+    t1 = QTimer(w)
+    t2 = QTimer(w)
+    t1.start(50)
+    assert t1.isActive() and not t2.isActive(), "用例前提不成立"
+    _shutdown_pet(w)        # 普通 QWidget：没有 _closing / voice，不能抛
+    assert not t1.isActive() and not t2.isActive(), "收尾没有停掉子定时器"
+    w.deleteLater()
+
+
 # ================= 8) 降级与失败分支补齐（v2.4.1） =================
 #
 # 1)~7) 覆盖的是"打开→改值→保存→落盘"的正反闭环；这一节补**失败/降级**分支：
@@ -1087,6 +1173,7 @@ def test_alarm_dialog_update_failure_and_delete_without_selection(pet, ui):
         assert len(ui["warn"]) == warns, "未选中删除不该弹提示"
     finally:
         dlg.hide()
+        _clear_alarms(pet)      # 收尾：别留一个"到点会响"的闹钟给后面的用例（定时器一响就写盘/弹气泡）
 
 
 def test_alarm_dialog_without_service_is_inert(pet, ui):

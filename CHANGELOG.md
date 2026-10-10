@@ -4,6 +4,13 @@
 > 发布节奏：v1.5.x 每批按「三轮审查 → 全面检查 → 绿色版检测 → Release」流水线交付。
 > v1.3.0 起才有逐版说明；更早的 v1.0 / v1.2.0 见 git 历史（bfb1aa6 / 35e9d1a）。
 
+## v2.4.1（2026-10-10）
+- 界面：帧解码三层（指纹缓存 + 单帧缓存 _frame_pix + 12ms 首片预算与主线程分片接力）——**最长连续阻塞 456.8ms -> 约 60ms，界面不再假死；总耗时基本不变（真就绪约 267-407ms）**，`_play_idle` 热路径 690.2ms -> 10.1ms；分片仍在主线程，不引入跨线程风险
+- 数据安全与一致性：愈合环统一走 pet_io.heal_json/read_json_ex（坏文件只读一遍磁盘、.bak 与回写同锁）· due_alarms 改分钟数结构化比较（旧代码 now=7:59 会误响 23:59）· export_csv 走 atomic_write_bytes · 修复"读旧配置失败静默清空 api_key" · prompts/*.txt 停止 git 跟踪（运行时首启生成，与仓库样本逐字节相同）
+- 发布门：脏条目全量报告 · **数字版本 filevers/prodvers 纳入判据**（抓出 exe 属性停在 2.2.0.0 的漂移）· VERSION 必须大于 CHANGELOG 次条 · memory.log.old 残留判据 · 发布包禁止混入 _dev/
+- 语音：6 后端 27 条契约测试 + 三条降级路径 · 修复 MiniMax "HTTP 200 但 body 带 base_resp 报错"时吞掉服务端原因（现透出 status_msg/code）· v2.0 扁平 voice.json 在 clips 治愈后不再丢绑定
+- 技术债：静默 except 审计收紧（A 19 -> 4，逐条判定见 _dev/audit_A_tier_review.md）· pet_tools/pet_lines 82 个函数补注解（含返回形状对拍，变异 8/8 被抓）· 死代码与未用导入清理（QWidgetAction 为护栏再导出，保留）· 重复测试合并 3 对（未丢覆盖）
+- 回归：pytest **566** 例；护栏 v13 273 项 0 FAILS / 静态 0 问题 0 待确认
 ## v2.4.0（2026-10-10）
 - 用户可见：吃饱形态从完全静止变成专属 10 帧呼吸动画（assets/idle_full_f00~09.png，256x256，±1.6%，缺帧/自定义角色回退静态图）· ai_rag_enabled 隐私开关补上界面入口（此前只有配置键、README 说能关实际关不掉）· error.log 坏文件隔离为 .bad（清理日志/清 Key 也会清它）· 注销/关机时真正退出（关窗仍是收进托盘）
 - 数据安全：新增 pet_io.py 统一原子写（并发丢写盘实测 885/2000 -> 0）· 修 BOM/GBK 的 lines.json 被清成种子库（上一轮引入的回归）· 账本读失败改为写前重读合并、持续失败放弃落盘 · 跨天归档与并发记账竞态丢账已加锁 · 愈合前统一留 .bak
