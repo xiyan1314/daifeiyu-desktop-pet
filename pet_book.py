@@ -51,6 +51,7 @@ import datetime
 import json
 import math
 import os
+import threading
 import time
 
 import pet_log
@@ -75,16 +76,26 @@ def _read_json(path, factory=dict):
     return factory()
 
 
+# v2.3.0（兼容审查 M5）：账本此前假定"只有主线程写"。1.2/1.3 之后 worker 线程每条消息都会
+# 读账本（AI 摘要/工具摘要），跨天时 today_usage() → _ensure_today() 会走归档写盘路径，
+# 与主线程 _save_all 抢同一个 "<file>.tmp"。这里加一把可重入锁 + 线程唯一临时名。
+_BOOK_WRITE_LOCK = threading.RLock()
+
+
 def _write_json(path, data):
-    """原子写 JSON（临时文件 + os.replace）；成功返回 None，失败返回错误字符串。"""
-    tmp = path + ".tmp"
+    """原子写 JSON（临时文件 + os.replace）；成功返回 None，失败返回错误字符串。
+
+    v2.3.0：临时文件名带线程号 + 写盘段互斥（避免两个线程抢同一 .tmp 后各自 replace）。
+    """
+    tmp = "%s.%d.tmp" % (path, threading.get_ident())
     try:
         d = os.path.dirname(path)
         if d:
             os.makedirs(d, exist_ok=True)
-        with open(tmp, "w", encoding="utf-8") as f:
-            json.dump(data, f, ensure_ascii=False, indent=2)
-        os.replace(tmp, path)
+        with _BOOK_WRITE_LOCK:
+            with open(tmp, "w", encoding="utf-8") as f:
+                json.dump(data, f, ensure_ascii=False, indent=2)
+            os.replace(tmp, path)
         return None
     except Exception as e:
         try:

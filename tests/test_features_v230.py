@@ -155,3 +155,41 @@ def test_ai_context_switch_and_content(tmp_path, monkeypatch):
                                   {"preferences": ["喜欢吃蛋糕"]})
     txt2 = main.PetWindow._build_ai_context(s, {"ai_rag_enabled": True})
     assert "【关于绳匠的记忆】" in txt2 and "喜欢吃蛋糕" in txt2, txt2
+
+def test_clear_history_keeps_long_term(tmp_path):
+    """S1（找茬审查）：清理日志/清 Key 只清 history，**长期记忆必须留下**（此前整文件删）。"""
+    import pet_chat
+    p = str(tmp_path / "memory.json")
+    pet_chat.write_long_term(p, {"user_name": "小明", "preferences": ["吃辣"]})
+    pet_chat.write_memory(p, [("user", "hi"), ("assistant", "嗨")], 6)
+    pet_chat.write_memory(p, [], 6)          # 等价于「清理日志」的动作
+    assert pet_chat.read_memory(p, 10) == [], "对话历史没清掉"
+    lt = pet_chat.read_long_term(p)
+    assert lt["user_name"] == "小明" and lt["preferences"] == ["吃辣"], \
+        "清历史把长期记忆一起删了（S1 回归）"
+
+
+def test_extract_polarity_likes_vs_dislikes():
+    """M4（找茬审查）："我讨厌X"不能落进 preferences——否则会被渲染成"喜好：X"反着推荐。"""
+    import pet_chat
+    r = pet_chat.extract_long_term("我讨厌香菜")
+    assert "香菜" in r.get("dislikes", []), r
+    assert "香菜" not in r.get("preferences", []), "讨厌的东西被记成了喜好：%r" % r
+    r2 = pet_chat.extract_long_term("我不喜欢吃甜食")
+    assert r2.get("dislikes") and not r2.get("preferences"), r2
+    r3 = pet_chat.extract_long_term("我最喜欢吃蛋糕")
+    assert "吃蛋糕" in r3.get("preferences", []) and not r3.get("dislikes"), r3
+    assert pet_chat.sanitize_long_term({"dislikes": ["香菜"]})["dislikes"] == ["香菜"]
+
+
+def test_tool_call_missing_id_gets_generated():
+    """M1（找茬审查）：tool_call 缺 id 时必须补一个非空 id（空 id 会构造非法报文）。"""
+    import pet_tools
+    _n, _a, _cid = pet_tools.parse_call({"function": {"name": "check_balance", "arguments": "{}"}})
+    assert _cid, "缺 id 时没有补 uuid → tool_call_id 会是空串（非法报文）"
+    _n2, _a2, _cid2 = pet_tools.parse_call({"id": "keep-me",
+                                            "function": {"name": "check_balance", "arguments": "{}"}})
+    assert _cid2 == "keep-me", "模型给的 id 不该被覆盖"
+    # 非 dict 的调用必须被拒（M2 同源：坏结构不能变出调用）
+    assert pet_tools.parse_call("abc") == ("", {}, "")
+    assert pet_tools.parse_call({"x": 1})[0] == ""

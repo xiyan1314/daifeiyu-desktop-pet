@@ -376,9 +376,15 @@ def load_config():
         _log_error("load_config: api_key DPAPI 解密失败，本次按空 Key 运行（不改写磁盘）")
     before = copy.deepcopy(cfg)  # P1-3：归一化前快照，用于检测「被自动修正的字段」
     # P0-1：归一化逻辑迁至 pet_config（纯逻辑、无模块全局依赖）
-    # v2.3.0：人设白名单 = 内置 + prompts/custom/*.txt（否则用户自建人设会被归一化打回默认）
+    # v2.3.0（找茬 M5）：人设白名单 = 内置 + prompts/custom/*.txt（否则用户自建人设会被归一化
+    # 打回默认）。ai_persona 仍是"软键"（不弹配置修正提示），但**人设文件被删/改名**属于用户
+    # 可见的行为变化，这里记一笔，启动时用气泡明确告知，避免"桌宠人设自己变了"的困惑。
+    _persona_before = str(cfg.get("ai_persona") or "")
     pet_config.normalize_cfg(cfg, DEFAULT_CONFIG,
                              frozenset(PERSONA_PRESETS) | persona_file_ids())
+    if _persona_before.startswith("file:") and cfg.get("ai_persona") != _persona_before:
+        globals()["_PERSONA_LOST_NOTE"] = _persona_before[5:]
+        _log_error("persona file missing: %s（已回退内置人设）" % _persona_before[5:])
     # P1-3：坏值修正检测——与快照对比。软归一化（合法值美化）静默重存不弹提示；
     # 硬修正（越界/类型非法）记入 CONFIG_FIXES 供启动气泡提示一次
     soft_changed = False
@@ -470,8 +476,11 @@ def persona_file_ids():
     """prompts/custom/*.txt → {"file:<文件名>"}（配置白名单与下拉列表共用）。"""
     out = set()
     try:
-        for _n in os.listdir(os.path.join(_prompts_dir(), "custom")):
-            if _n.lower().endswith(".txt") and len(_n) > 4:
+        _cdir = os.path.join(_prompts_dir(), "custom")
+        for _n in os.listdir(_cdir):
+            # v2.3.0（找茬 L1）：必须真是文件——目录名伪装成 *.txt 会被下拉选中、
+            # 选中后读不到内容再静默回退内置人设，用户只会觉得"人设自己变了"
+            if _n.lower().endswith(".txt") and len(_n) > 4 and os.path.isfile(os.path.join(_cdir, _n)):
                 out.add("file:" + _n[:-4])
     except Exception:
         pass  # 有意忽略：目录不存在=还没有人设文件
@@ -667,6 +676,11 @@ class PetWindow(QWidget):
                 "配置有 %d 处坏值，已自动修正：%s" % (n, detail)))
         # v2.3.0：人设文件（首次启动写内置人设，不覆盖用户已改的）
         ensure_persona_files()
+        # v2.3.0（找茬 M5）：人设文件被删/改名过 → 明确告诉用户（否则只会觉得"人设自己变了"）
+        if globals().get("_PERSONA_LOST_NOTE"):
+            _lost = globals().pop("_PERSONA_LOST_NOTE")
+            QTimer.singleShot(2600, lambda: self.show_bubble(
+                "人设文件「%s」找不到了，已经回到内置大肥鱼人设~" % _lost))
         # ---- v1.3：角色库 / 音频库 / 记账账本 ----
         # P3-5+：帧上限用户可调（配置已在 load_config 归一化，这里再兜一层，坏值不阻断启动）
         try:
@@ -1740,11 +1754,20 @@ class PetWindow(QWidget):
             _log_error("tool call %s: 请求已超时，结果丢弃" % name)  # 有意忽略：迟到结果丢弃
 
     def _on_tool_ui(self, name, args_json):
-        """worker 线程只投递（对话框类工具：账本/记一笔/预算）——不等结果，对话框自己给反馈。"""
+        """worker 线程只投递（对话框类工具：账本/记一笔/预算）——不等结果，对话框自己给反馈。
+
+        v2.3.0（找茬 M6）：补关闭/重入守卫——此前无任何检查，主线程正卡在模态 exec() 里时
+        嵌套事件循环会重入执行（实测模态嵌套深度可达 2，账本可以叠两层）。
+        """
+        if self._closing or getattr(self, "_tool_ui_busy", False):
+            return
+        self._tool_ui_busy = True
         try:
             self._tool_main_dispatch(name, pet_tools.parse_args(args_json))
         except Exception as e:
             _log_error("tool ui %s failed: %r" % (name, e))  # 有意忽略：对话框失败不拖累对话线程
+        finally:
+            self._tool_ui_busy = False
 
     def _on_tool_confirm_required(self, req_id, name, args_json):
         """AI 想写数据（记账/预算/闹钟/提醒）：主线程弹确认框，答复交回 worker。"""
@@ -1864,7 +1887,8 @@ class PetWindow(QWidget):
             _bits = []
             if lt.get("user_name"):
                 _bits.append("称呼：%s" % lt["user_name"])
-            for _k, _label in (("nicknames", "别名"), ("preferences", "喜好"), ("recent_topics", "近况")):
+            for _k, _label in (("nicknames", "别名"), ("preferences", "喜好"),
+                               ("dislikes", "不喜欢"), ("recent_topics", "近况")):
                 _v = lt.get(_k) or []
                 if _v:
                     _bits.append("%s：%s" % (_label, "、".join(_v[-3:])))
@@ -1892,6 +1916,16 @@ class PetWindow(QWidget):
         except Exception as e:
             _log_error("ai context ledger: %r" % (e,))
         return "\n".join(parts)
+
+    def clear_long_term_memory(self):
+        """v2.3.0（兼容 M2）：清除长期记忆（保留对话历史）。返回 True/False。"""
+        try:
+            pet_chat.write_long_term(MEMORY_PATH, {}, log=_log_error)
+            self.show_bubble("长期记忆清掉啦，它不记得你的称呼和喜好喽~")
+            return True
+        except Exception as e:
+            _log_error("clear long_term: %r" % (e,))
+            return False
 
     def persona_choices(self):
         """v2.3.0：AI 设置的人设下拉项（内置 + data_dir/prompts/custom/*.txt）。"""
@@ -4068,15 +4102,31 @@ class PetWindow(QWidget):
         self.ai.apply_settings(data)
 
     def _clear_logs(self):
-        """清理 error.log(.old) / memory.log / 对话记忆文件（P2-1 日志卫生）。"""
+        """清理 error.log(.old) / memory.log / **对话记忆**（P2-1 日志卫生）。
+
+        v2.3.0（找茬 S1）：这里以前把 memory.json 整个删掉。1.1 之后 memory.json 里还存着
+        长期记忆（称呼/别名/喜好/不喜欢/近况）——整文件删 = 用户点一次「清理日志」就**永久
+        丢掉身份与偏好**、无提示无撤销。现在只清 history，long_term 原样保留。
+        """
         removed = _remove_files((os.path.join(DATA_DIR, "error.log"),
                                  os.path.join(DATA_DIR, "error.log.old"),
-                                 os.path.join(DATA_DIR, "memory.log"),
-                                 MEMORY_PATH, MEMORY_PATH + ".tmp"))
+                                 os.path.join(DATA_DIR, "memory.log")))
+        kept = False
+        try:
+            lt = pet_chat.read_long_term(MEMORY_PATH, _log_error)
+            kept = bool(lt.get("user_name") or lt.get("nicknames") or lt.get("preferences")
+                        or lt.get("dislikes") or lt.get("recent_topics"))
+            # 只写回空 history（_write_memory_file 会保留 long_term 段）
+            pet_chat.write_memory(MEMORY_PATH, [], max(1, int(self.cfg.get("chat_memory_rounds", 3) or 3) * 2),
+                                  log=_log_error)
+            removed = removed or kept
+        except Exception as e:
+            _log_error("clear memory: %r" % (e,))
         with self._history_lock:
             self._chat_history.clear()
             self._mem_epoch += 1  # 代次 +1：在途 AI 回复不再把本次对话写回记忆
-        self.show_bubble("日志和对话记忆都清干净啦~" if removed else "本来就干干净净的~")
+        _tail = "（长期记忆保留着，想一起清就去 AI 设置里点「清除长期记忆」）" if kept else ""
+        self.show_bubble(("日志和对话记忆都清干净啦~" if removed else "本来就干干净净的~") + _tail)
 
     def _ask_amount(self, title, label, cur):
         """数值输入（预算/余额预警共用，BalanceService 注入调用）。"""

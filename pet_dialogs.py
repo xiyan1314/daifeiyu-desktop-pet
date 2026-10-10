@@ -2761,6 +2761,18 @@ class AISettingsDialog(QDialog):
         _tool_hint = QLabel("本地模型（Ollama 等）不支持工具调用，会自动退化为纯聊天。")
         _tool_hint.setWordWrap(True)
         root.addWidget(_tool_hint)
+        # v2.3.0（1.1/兼容 M2）：长期记忆的查看/清除入口——此前"清理日志"的提示让用户来这里，
+        # 但这里根本没有这个控件（长期记忆无法在应用内删除）
+        _lt_row = QHBoxLayout()
+        _lt_btn = QPushButton("清除长期记忆（称呼/别名/喜好/不喜欢/近况）")
+        _lt_btn.clicked.connect(self._clear_long_term)
+        _lt_row.addWidget(_lt_btn)
+        _lt_row.addStretch(1)
+        root.addLayout(_lt_row)
+        _lt_hint = QLabel("长期记忆存在 memory.json 的 long_term 段，与对话历史分开；"
+                          "「清理日志」只清对话历史，不会动它。")
+        _lt_hint.setWordWrap(True)
+        root.addWidget(_lt_hint)
         btns = QHBoxLayout()
         ok = QPushButton("保存")
         cancel = QPushButton("取消")
@@ -2831,6 +2843,20 @@ class AISettingsDialog(QDialog):
             except (TypeError, RuntimeError):
                 pass  # 有意忽略：已断开或槽不存在（幂等）
         super().closeEvent(event)
+
+    def _clear_long_term(self):
+        """v2.3.0（1.1/兼容 M2）：清除长期记忆（memory.json 的 long_term 段，对话历史保留）。"""
+        from PySide6.QtWidgets import QMessageBox
+        if QMessageBox.question(
+                self, "清除长期记忆",
+                "确定要让它忘掉你的称呼、别名、喜好、不喜欢和近况吗？\n"
+                "（对话历史不受影响；此操作不可撤销）") != QMessageBox.StandardButton.Yes:
+            return
+        ok = _call(self._pet, "clear_long_term_memory")
+        if ok:
+            QMessageBox.information(self, "清除长期记忆", "已经忘掉啦~")
+        else:
+            QMessageBox.warning(self, "清除长期记忆", "清除失败，详情见 error.log")
 
     def _save(self):
         data = {

@@ -199,7 +199,9 @@ TOOL_SPECS = (
         _h_show_emote, True, label="显示表情"),
     ToolSpec(
         "play_action",
-        "播放一个动作：jump（跳一下）/ emote / breath（呼吸）/ sway（摇摆）/ nod（点头），"
+        # v2.3.0（兼容审查 L1）：描述必须与真实可用动作一致——此前承诺 breath/sway/nod，
+        # 内置角色全部会被拒（且内部名是 breathe），模型白跑一轮
+        "播放一个动作：jump（跳一下）/ emote（表情）/ breathe（呼吸）,"
         "或当前角色自带的帧动作名。",
         _schema({"name": {"type": "string", "description": "动作名，例如 jump"}}, ("name",)),
         _h_play_action, True, label="播动作"),
@@ -248,7 +250,10 @@ def parse_call(call):
     fn = call.get("function")
     fn = fn if isinstance(fn, dict) else {}
     name = str(fn.get("name") or "")
-    call_id = str(call.get("id") or "")
+    # v2.3.0（找茬 M1）：模型偶尔不给 id → 空 tool_call_id 的报文非法，下一轮必 400，
+    # 而工具其实已经执行完（用户看不到任何回复）。这里补 uuid；调用方把同一 id 写回
+    # assistant 那条 calls 元素（pet_chat 已同步），保证 tool 消息能配对。
+    call_id = str(call.get("id") or "").strip() or uuid.uuid4().hex
     raw = fn.get("arguments")
     if isinstance(raw, dict):
         return name, dict(raw), call_id

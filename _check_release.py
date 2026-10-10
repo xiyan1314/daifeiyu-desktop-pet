@@ -104,7 +104,10 @@ def check_clean_tree():
         st = subprocess.run(["git", "status", "--porcelain"],
                             capture_output=True, text=True, cwd=ROOT, timeout=15)
         if st.returncode == 0 and st.stdout.strip():
-            dirty = [l[3:].strip() for l in st.stdout.strip().split("\n")][:3]
+            # v2.3.0（兼容审查 L7）：用 splitlines + 去状态前缀——此前 strip() 吃掉首行
+            # 前导空格后再 [3:] 会把首字符切掉（实测输出 "et_ai.py"）
+            dirty = [(l[3:] if len(l) > 3 else l).strip()
+                     for l in st.stdout.splitlines() if l.strip()][:3]
             return ["运行时代码有未提交改动（发布前先提交并定版）：%s" % ", ".join(dirty)]
     except Exception:
         pass  # 无 git（绿色版/离线环境）：跳过
@@ -178,8 +181,11 @@ def check_zip(zip_path, version=None):
                or any(n.startswith(d + "/") for d in USER_DATA_DIRS)]
         if bad:
             fails.append("发布包含运行时数据/开发文件：%s" % ", ".join(sorted(bad)[:8]))
-        need = ["桌宠.py", "main.py", "pet_voice.py", "pet_lines.py", "pet_dialogs.py",
-                "python.exe", "assets/"]
+        # v2.3.0（兼容审查 S1）：need 必须覆盖**所有运行时 .py**——此前漏了 pet_tools.py，
+        # 出包时白名单漏拷该文件会静默放行一个"双击即 ModuleNotFoundError"的包。
+        # 正向校验：凡仓库里被 SYNC_FILES 列为运行时 .py 的，包里必须存在同名条目。
+        _runtime_py = sorted(n for n in SYNC_FILES if n.endswith(".py") and "/" not in n)
+        need = _runtime_py + ["python.exe", "assets/"]
         lack = [n for n in need if not any(x == n or x.startswith(n) for x in names)]
         if lack:
             fails.append("发布包缺关键内容：%s" % ", ".join(lack))

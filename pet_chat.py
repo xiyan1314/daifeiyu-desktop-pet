@@ -181,7 +181,7 @@ def read_memory(path, max_entries, log=None):
 
 # v2.3.0（1.1 长期记忆）：memory.json 增加 long_term 段，跨会话记住偏好/昵称/近期话题。
 LONG_TERM_MAX = 50                 # 每个列表最多留多少条（FIFO）
-LONG_TERM_KEYS = ("user_name", "nicknames", "preferences", "recent_topics")
+LONG_TERM_KEYS = ("user_name", "nicknames", "preferences", "dislikes", "recent_topics")
 
 
 def _read_memory_raw(path, log=None):
@@ -223,7 +223,7 @@ def write_memory(path, hist, max_entries, log=None):
 
 def sanitize_long_term(lt):
     """长期记忆归一化：只要认识的键；列表去重、截断长度、FIFO 限量；总量控制在 4KB 内。"""
-    out = {"user_name": "", "nicknames": [], "preferences": [], "recent_topics": []}
+    out = {"user_name": "", "nicknames": [], "preferences": [], "dislikes": [], "recent_topics": []}
     if not isinstance(lt, dict):
         return out
     out["user_name"] = str(lt.get("user_name") or "")[:24]
@@ -261,15 +261,23 @@ def write_long_term(path, long_term, max_entries=3, log=None):
 
 
 # 规则抽取：零 API 成本、可测。命中即记一条偏好/称呼/话题（首版不做 LLM 抽取，避免多花一次额度）
+# v2.3.0（找茬 M4）：**区分极性**——此前"我讨厌香菜"会落成 preferences:["香菜"]，
+# 再被渲染成"喜好：香菜"，模型反而会主动推荐用户讨厌的东西。
 _EXTRACT_RULES = (
-    ("preferences", ("我喜欢", "我爱吃", "我爱喝", "我不喜欢", "我讨厌", "我最爱", "我爱")),
-    ("user_name", ("我叫", "我是")),
+    ("dislikes", ("我最讨厌", "最讨厌", "我不喜欢", "我不爱吃", "我受不了", "我讨厌")),
+    ("preferences", ("我最喜欢", "我最爱吃", "我喜欢", "我爱吃", "我爱喝", "我最爱", "我爱")),
+    # v2.3.0（兼容审查 M3）：去掉"我是"——它是口语高频词（"我是说真的"→ 称呼"说真的"），
+    # 只保留明确的自我介绍口径
+    ("user_name", ("我叫", "我的名字是", "我的名字叫")),
     ("nicknames", ("可以叫我", "叫我")),
 )
 
 
-def extract_long_term(user_msg, reply="", limit=2):
-    """从一轮对话里抽长期记忆（规则式）。返回 {"preferences": [...], ...}（可能为空）。"""
+def extract_long_term(user_msg):
+    """从一轮对话里抽长期记忆（规则式）。返回 {字段: 值/列表}（可能为空）。
+
+    v2.3.0（找茬 L4）：去掉此前没被使用的 reply/limit 两个死参数。
+    """
     out = {}
     text = str(user_msg or "").strip()
     if not text or len(text) > 200:
@@ -285,7 +293,12 @@ def extract_long_term(user_msg, reply="", limit=2):
                 if j >= 0:
                     frag = frag[:j]
             frag = frag.strip()[:40]
-            if 1 <= len(frag) <= 40:
+            # v2.3.0（质量 M3）：形状约束——口语高频词不该被当成身份长期记住
+            # （实测："我是说这个不对"曾是 user_name="说这个不对"）
+            if key in ("user_name", "nicknames"):
+                if len(frag) < 2 or len(frag) > 6 or frag[0] in "说问想在没的不把被让给和跟对是从就会要与": 
+                    break
+            if 1 <= len(frag):
                 if key == "user_name":
                     out[key] = frag
                 else:
@@ -462,6 +475,7 @@ class ChatService:
                          and tools_supported(base_url))
             confirm_writes = bool(cfg.get("ai_tools_confirm", True))
             tool_rounds = 0
+            _exhausted = False  # v2.3.0：工具轮数用尽 → 文案兜底且本次不入记忆（兼容审查 M4）
             message = {}
             while True:
                 payload = {"model": model, "messages": messages,
@@ -494,15 +508,32 @@ class ChatService:
                     return
                 data = resp.json()
                 message = data["choices"][0]["message"] or {}
-                calls = message.get("tool_calls") or []
-                if not calls or tool_rounds >= pet_tools.MAX_TOOL_ROUNDS:
-                    break  # 没有工具调用（或轮数用完）：这条 message 就是最终回复
+                # v2.3.0（找茬 M2）：非 list 会被当可迭代对象——"abc" 会迭代出 3 个空名调用、
+                # 追加 3 条 tool_call_id:"" 的非法消息，还把坏结构原样回灌。这里只认 list[dict]。
+                _calls_raw = message.get("tool_calls")
+                calls = [c for c in _calls_raw if isinstance(c, dict)] \
+                    if isinstance(_calls_raw, list) else []
+                if not calls:
+                    break  # 没有工具调用：这条 message 就是最终回复
+                if tool_rounds >= pet_tools.MAX_TOOL_ROUNDS:
+                    # v2.3.0（兼容审查 M4）：轮数用尽但模型还想调工具——此前直接 break，把带
+                    # tool_calls 的空正文当回复 → 用户只看到"…"，还会被写进对话记忆。
+                    # 现在给一句明确文案，并标记本次不入记忆（避免污染下一轮上下文）。
+                    _exhausted = True  # 见下方：本次不入记忆
+                    message = {"content": "（这次要做的事情有点多，先到这儿~ 再说一次我接着弄）"}
+                    break
                 tool_rounds += 1
                 # 助手这条消息（含 tool_calls）必须原样放回上下文，否则下一轮请求不合法
                 messages.append({"role": "assistant", "content": message.get("content") or "",
                                  "tool_calls": calls})
                 for _i, _call in enumerate(calls):
                     _name, _args, _cid = pet_tools.parse_call(_call)
+                    # v2.3.0（找茬 M1）：模型没给 id 时 parse_call 补了 uuid，必须同步写回
+                    # assistant 这条 calls 元素，否则 tool 消息的 tool_call_id 无处对应 → 下一轮 400
+                    # v2.3.0（质量 L1）：判据必须与 parse_call 的归一化一致——纯空白 "   " 或
+                    # 整数 id 也会被归一化，用 not call.get("id") 会漏掉，导致 id 对不上 → 下一轮 400
+                    if _cid and _call is not None and _call.get("id") != _cid:
+                        _call["id"] = _cid
                     if _i >= pet_tools.MAX_CALLS_PER_ROUND:
                         _res = {"ok": False, "error": "一次最多执行 %d 个工具，这个先跳过"
                                 % pet_tools.MAX_CALLS_PER_ROUND}
@@ -540,10 +571,10 @@ class ChatService:
                 self._save_memory(snapshot)  # P1-6：锁外落盘，原子写不阻塞其他线程
             # v2.3.0（1.1 长期记忆）：回复成功后**规则抽取**一条记忆并合并落盘。
             # 用规则而不是再调一次模型：零 API 成本、可单测，也不会因为额度和网络多一次失败面。
-            if snapshot is not None and self._mem_path:
+            if snapshot is not None and self._mem_path and not _exhausted:
                 try:
                     _lt = read_long_term(self._mem_path, self._log)
-                    _new = extract_long_term(msg, text)
+                    _new = extract_long_term(msg)
                     _changed = False
                     if _new.get("user_name"):
                         _lt["user_name"] = _new["user_name"]

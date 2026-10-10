@@ -92,9 +92,18 @@ class AIService:
             book.reset_balance_baseline()  # 只清余额基准，手动记账保留
         pet._usage = book.today_usage() if book is not None else 0.0
         self._remove_files((usage_path, os.path.join(data_dir, "error.log"),
-                            config_path + ".tmp", usage_path + ".tmp",
-                            memory_path, memory_path + ".tmp"))  # P1-6：清 Key 连带清对话记忆文件
-        pet.show_bubble("API Key 已清空，余额基准和日志擦干净啦（手动记账保留）~")
+                            config_path + ".tmp", usage_path + ".tmp"))  # P1-6：清 Key 连带清对话记忆
+        # v2.3.0（找茬 S1）：这里以前把 memory.json 整个删掉。1.1 之后该文件还存着长期记忆
+        # （称呼/别名/喜好/不喜欢/近况），整删 = 清一次 Key 就把"它记得你"一起抹掉。
+        # 现在只清 history，long_term 保留。
+        try:
+            import pet_chat as _pc
+            _pc.write_memory(memory_path, [], 6, log=self._log)
+        except Exception as _e:
+            if self._log is not None:
+                self._log("clear memory on key clear: %r" % (_e,))
+        pet.show_bubble("API Key 已清空，余额基准和日志擦干净啦（手动记账保留；"
+                        "它还记得你的称呼和喜好，可在「AI 设置」里清除长期记忆）~")
 
     # ---- 和它说话 ----
     def talk(self):
