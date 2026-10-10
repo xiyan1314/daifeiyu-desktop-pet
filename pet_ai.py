@@ -91,7 +91,10 @@ class AIService:
         if book is not None:
             book.reset_balance_baseline()  # 只清余额基准，手动记账保留
         pet._usage = book.today_usage() if book is not None else 0.0
-        self._remove_files((usage_path, os.path.join(data_dir, "error.log")))  # P1-6：清 Key 连带清对话记忆
+        # P1-6：清 Key 连带清对话记忆。v2.4（M2）：error.log.bad（pet_log._quarantine
+        # 隔离出的坏/满日志）此前不在名单里 → 里面可能留着脱敏前的现场，清 Key 清不掉。
+        self._remove_files((usage_path, os.path.join(data_dir, "error.log"),
+                            os.path.join(data_dir, "error.log.bad")))
         # L4：临时名现在带线程号（"<p>.<tid>.tmp"），只删固定名扫不到真正会残留的文件。
         # clean_tmp_files 对每个目标取同一把路径锁 → 不会删掉在途写者正在用的 tmp。
         try:

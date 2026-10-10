@@ -64,7 +64,7 @@ import pet_io  # v2.3.1：原子写/清扫临时文件（P2-B 导入恢复、L4 
 
 
 APP_NAME = "大肥鱼桌宠"
-VERSION = "2.3.1"
+VERSION = "2.4.0"
 PAD = 1.25  # 窗口相对角色的透明边距（为压扁/回弹预留空间）
 IDLE_FRAME_MS = 140      # 待机帧间隔
 IDLE_FORM_HOLD_SECS = 8  # v2.1.3：只有形态、没有动作可播时的展示期上限（到期回用户形态）
@@ -1053,6 +1053,11 @@ class PetWindow(QWidget):
         self._show_state("laugh", 3200)  # 开场第一个表情：开心大笑
         # v2.1：开场台词也来自台词库（用户可增删改「开场」类别），空池兜底
         self._say_line(self._pick_line(("startup",), fallback="绳匠，你来啦！"))
+        # v2.4（M4）：lines.json 在磁盘上却没读到（记事本「ANSI」另存成 GBK / 共享占用）时，
+        # 台词库静默退回内置种子——用户只会觉得"我的台词没了"，必须明说一次。延后 8s，
+        # 不顶掉开场台词。（备份发生在下一次保存前，见 pet_lines._save）
+        if self.lines_lib.dirty_read:
+            QTimer.singleShot(8000, self, lambda: self.show_bubble(pet_lines.DIRTY_READ_NOTICE))
 
         # ---- 托盘图标（窗口被遮挡/找不到时的兜底入口）----
         self.tray = QSystemTrayIcon(self)
@@ -2337,22 +2342,9 @@ class PetWindow(QWidget):
             return []
         return frames
 
-    def _role_frames(self):
-        """自定义角色的动画帧 [QPixmap]；无帧动画角色返回 []。"""
-        rid = self.cfg.get("role", "")
-        if not rid:
-            return []
-        try:
-            paths = self.role_lib.frames_for(rid)
-            frames = []
-            for p in paths:
-                pix = QPixmap(p)
-                if pix.isNull():
-                    return []  # 坏帧：整体回退静态
-                frames.append(self._cap_role_pix(pix, p))  # 与静态底图同一尺寸口径
-            return frames
-        except Exception:
-            return []
+    # v2.4（L4）：原 _role_frames() 已删除——v2.4 把 "idle" 槽改成**按形态**注册
+    # （_wire_anim_sets → _default_idle_frames / _pix_frames），它失去了唯一调用点，
+    # 全仓（含 tests/_verify_v13/_check_static）已无任何引用，留着只会误导后来者。
 
     def _form_idle_frames(self, form):
         """默认角色某形态的**专属** idle 帧集；没有专属帧集返回 []。
@@ -4217,8 +4209,12 @@ class PetWindow(QWidget):
         with self._history_lock:
             self._chat_history.clear()
             self._mem_epoch += 1  # 代次 +1：在途 AI 回复不再把本次对话写回记忆
+        # v2.4（M2）：轮转 .old 之外还要删**隔离文件** error.log.bad——pet_log._quarantine
+        # 把坏/满日志改名成它（可能 512KB+），此前清日志只删前两个 → 用户以为擦干净了，
+        # 隔离出的那份却永久留在数据目录里。
         removed = _remove_files((os.path.join(DATA_DIR, "error.log"),
                                  os.path.join(DATA_DIR, "error.log.old"),
+                                 os.path.join(DATA_DIR, "error.log.bad"),
                                  os.path.join(DATA_DIR, "memory.log")))
         kept = False
         try:
@@ -4301,19 +4297,31 @@ class PetWindow(QWidget):
         return _run
 
     def _slot_recover(self, name):
-        """状态机终结器失败后的幂等收尾：释放卡住的状态并回用户形态（尽力而为）。"""
+        """状态机终结器失败后的幂等收尾：释放卡住的状态并回用户形态（尽力而为）。
+
+        v2.4（审查 M4）：anim_mode 置空而不是 "idle"。置 "idle" 会**谎报**"待机帧动画
+        正在播"，而 _show_state/_play_eat 等入口已经 anim.stop() 把帧定时器停了：
+        下一次 _play_idle() 看到 anim_mode == "idle" 就整段跳过 → 画面冻在当前那一帧，
+        要等一次表情/吃帧/切形态才自愈（v2.2.x 就有此写法，v2.4 重写 _play_idle 的
+        "该形态有没有专属 idle 帧集"分支后更容易命中）。置空 = "当前没有已知的动画
+        模式"，_play_idle 会按当前形态重新起播（有帧走帧、无帧静态，两条都对）。
+        """
         try:
             self.busy = False
             self._cancel_transform()
             self._stop_idle_hold()
             self._idle_active = False
             self._idle_form_active = False
-            self.anim_mode = "idle"
+            self.anim_mode = ""
             self._sleeping = False
             self._sleep_home = None
             _uf = getattr(self, "_user_form", "") or self.form_keys[0]
             if _uf in self.sprites and self.form != _uf:
                 self._set_form(_uf, cancel_transform=False, display_only=True)
+            # 收尾最后一步：把待机表现重新起播（form 本来就是用户形态时上面不会走
+            # _set_form，这里就是唯一的重启入口）。_play_idle 有 busy 守卫，此刻 busy
+            # 已释放 → 正常走"有帧播帧 / 无帧贴静态形态图"两条路。
+            self._play_idle()
         except Exception as _e:  # noqa: BLE001
             _log_slot_error(name + ":recover", _e)  # 收尾再失败只能放弃了（已记日志）
 

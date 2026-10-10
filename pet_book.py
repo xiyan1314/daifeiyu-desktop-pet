@@ -247,6 +247,7 @@ class Book:
         }
         self._archive = {"days": {}}
         self._read_failed = False   # P0-B：本次启动有没有"文件在但读不到"
+        self._date_inferred = False  # M1（v2.4）：ledger 的日界是"读不到、按今天兜底"推出来的
         self._load()
         self._migrate_usage()
         self._ensure_today()
@@ -276,8 +277,14 @@ class Book:
         lb = led.get("last_balance")
         if not isinstance(lb, (int, float)):
             lb = None
+        # M1（v2.4 审查）：磁盘上（或这次没读到）没有 date 时，日界只能按"今天"推断——
+        # 把这个事实记下来：_recover_from_disk 读回来之后必须把磁盘日界采回来，否则
+        # 磁盘上的"昨日账本"会被整体当成今日（昨日既不归档、又被算进 today_usage()，
+        # 日图把昨天画进今天）。
+        _date_raw = str(led.get("date") or "")
+        self._date_inferred = not _date_raw
         self._ledger = {
-            "date": str(led.get("date") or "") or _today(),
+            "date": _date_raw or _today(),
             "last_balance": round(float(lb), 2) if lb is not None else None,
             "records": clean,
             "alerted_budget": str(led.get("alerted_budget") or ""),
@@ -314,6 +321,22 @@ class Book:
         arc, _arc_corrupt, arc_unreadable = _read_json(self._archive_path)
         if led_unreadable or arc_unreadable:
             return "账本读不到（已放弃本次落盘，避免用空账本覆盖磁盘）"
+        # M1（v2.4 审查）：日界也要采回来（不只并 records）。读不到时 date 兜底成 _today()，
+        # 这里若只并 records 不并 date，磁盘上的"昨日账本"就整体被当成今日。采回日界之后
+        # **必须重走一次 _ensure_today()**——否则这批旧记录会顶着"昨天"的日界留在 ledger 里
+        # 继续当今天用（today_usage() 偏大、日图失真）。
+        carry = []
+        if self._date_inferred:
+            self._date_inferred = False
+            disk_date = str(led.get("date") or "")
+            if disk_date:
+                # 内存里本次新增的记录各自带 date（_new_record 写的是"当时推断的今天"）：
+                # 与磁盘日界同日的那部分并进磁盘日界一起归档，其余（推断日）等归档完再放回。
+                mem = self._ledger["records"]
+                carry = [r for r in mem if str(r.get("date") or "") != disk_date]
+                self._ledger["records"] = [r for r in mem
+                                           if str(r.get("date") or "") == disk_date]
+                self._ledger["date"] = disk_date
         self._ledger["records"] = _merge_records(_clean_records(led.get("records")),
                                                  self._ledger["records"])
         # 标量字段：内存里"本次真的动过"的值优先，否则沿用磁盘上原有的
@@ -330,6 +353,11 @@ class Book:
         self._archive["days"] = days
         self._trim_archive()
         self._read_failed = False
+        if carry:
+            # 采回日界后重走一次跨天归档（内部自己会再取一次 _recover_from_disk，
+            # 此刻 _read_failed 已清 → 是空操作，不会递归），再把"推断日"的记录放回 ledger。
+            self._ensure_today()
+            self._ledger["records"] = _merge_records(self._ledger["records"], carry)
         try:
             pet_log.log_error("ledger 读取恢复：磁盘记录与本次新增已合并（共 %d 条）"
                               % len(self._ledger["records"]))
@@ -338,27 +366,33 @@ class Book:
         return None
 
     def _save_all(self):
-        """原子写两个数据文件；返回错误字符串或 None（调用方按需消费）。"""
-        err = self._recover_from_disk()
-        if err:
-            try:
-                pet_log.log_error("ledger 本次不落盘：%s" % err)
-            except Exception:
-                pass  # 有意忽略：日志通道自身异常不影响主流程
+        """原子写两个数据文件；返回错误字符串或 None（调用方按需消费）。
+
+        v2.4（审查 S1）：整段（读失败恢复 + 两个文件的快照落盘）都在 _BOOK_WRITE_LOCK
+        内完成。此前只锁了"单次写盘"，另一个线程的跨天归档可以插在"写 ledger"与
+        "写 archive"之间，把两份文件写成互相矛盾的快照（一边已清空、另一边还没收到）。
+        """
+        with _BOOK_WRITE_LOCK:
+            err = self._recover_from_disk()
+            if err:
+                try:
+                    pet_log.log_error("ledger 本次不落盘：%s" % err)
+                except Exception:
+                    pass  # 有意忽略：日志通道自身异常不影响主流程
+                return err
+            e1 = _write_json(self._ledger_path, self._ledger)
+            e2 = _write_json(self._archive_path, self._archive)
+            err = e1 or e2
+            if err:
+                # v2.2.5：失败必须留痕（5 个调用点此前把错误串全部丢弃 → 磁盘满/只读时内存已改、
+                # 磁盘没落，重启即静默丢账；唯一检查返回值的是 _ensure_today）。
+                try:
+                    # v2.2.5（质量审查 A1）：必须用 pet_log.log_error——此前写的 self._log 是一个
+                    # **不存在的方法**，AttributeError 又被下面的 except 吞掉 → "留痕"成了死代码
+                    pet_log.log_error("ledger 落盘失败：%s" % err)
+                except Exception:
+                    pass  # 有意忽略：日志通道自身异常不影响主流程
             return err
-        e1 = _write_json(self._ledger_path, self._ledger)
-        e2 = _write_json(self._archive_path, self._archive)
-        err = e1 or e2
-        if err:
-            # v2.2.5：失败必须留痕（5 个调用点此前把错误串全部丢弃 → 磁盘满/只读时内存已改、
-            # 磁盘没落，重启即静默丢账；唯一检查返回值的是 _ensure_today）。
-            try:
-                # v2.2.5（质量审查 A1）：必须用 pet_log.log_error——此前写的 self._log 是一个
-                # **不存在的方法**，AttributeError 又被下面的 except 吞掉 → "留痕"成了死代码
-                pet_log.log_error("ledger 落盘失败：%s" % err)
-            except Exception:
-                pass  # 有意忽略：日志通道自身异常不影响主流程
-        return err
 
     def _migrate_usage(self):
         """旧 usage.json → ledger 迁移：仅当 ledger.json 不存在时执行一次。
@@ -406,31 +440,52 @@ class Book:
             pet_log.log_error("pet_book._migrate_usage: usage.json 改名失败（下次启动可能重复迁移）: %r" % (e,))
 
     def _ensure_today(self):
-        """跨天处理：先落盘归档，成功后才清 ledger 昨日记录（防写序丢数据）。"""
-        today = _today()
-        if self._ledger["date"] == today:
-            return
-        # P0-B 补：这条路径也直接写盘（归档 + ledger），同样要先过"读失败恢复"闸门：
-        # 读不到就整个跳过本次跨天归档（内存保持原状，等下一次写再试），绝不用空归档覆盖磁盘。
-        err = self._recover_from_disk()
-        if err:
-            try:
-                pet_log.log_error("ledger 跨天归档跳过：%s" % err)
-            except Exception:
-                pass  # 有意忽略：日志通道自身异常不影响主流程
-            return
-        old_date, records = self._ledger["date"], self._ledger["records"]
-        self._archive_day(old_date, records)
-        if _write_json(self._archive_path, self._archive) is not None:
-            return  # 归档落盘失败：保持内存原状，下次再试（昨日记录不丢）
-        self._ledger["records"] = []
-        self._ledger["date"] = today
-        _write_json(self._ledger_path, self._ledger)
+        """跨天处理：先落盘归档，成功后才清 ledger 昨日记录（防写序丢数据）。
+
+        v2.4（审查 S1）：整段「读内存态 → 归档 → 重绑 records/date」都在 _BOOK_WRITE_LOCK
+        内。此前只锁了写盘（_write_json），内存态的读-改-写是裸的：worker 线程的
+        today_usage() 走到这里、与主线程 add_manual 的 append 交错时，A 取走旧 records
+        引用 → B 记一笔（落进新列表）→ A 重绑 self._ledger["records"] = []，把 B 那笔
+        整个丢掉（归档与 ledger 都查不到，随后落盘 = 永久丢账）。
+        """
+        with _BOOK_WRITE_LOCK:
+            today = _today()
+            if self._ledger["date"] == today:
+                return
+            # P0-B 补：这条路径也直接写盘（归档 + ledger），同样要先过"读失败恢复"闸门：
+            # 读不到就整个跳过本次跨天归档（内存保持原状，等下一次写再试），绝不用空归档覆盖磁盘。
+            err = self._recover_from_disk()
+            if err:
+                try:
+                    pet_log.log_error("ledger 跨天归档跳过：%s" % err)
+                except Exception:
+                    pass  # 有意忽略：日志通道自身异常不影响主流程
+                return
+            if self._ledger["date"] == today:
+                # M1（v2.4）：_recover_from_disk 采回磁盘日界后内部已经推过一次日界——此时
+                # 再按"旧日界"归档一次会把恢复放回的今日记录错记进归档并清空 ledger。
+                return
+            old_date, records = self._ledger["date"], self._ledger["records"]
+            self._archive_day(old_date, records)
+            if _write_json(self._archive_path, self._archive) is not None:
+                return  # 归档落盘失败：保持内存原状，下次再试（昨日记录不丢）
+            self._ledger["records"] = []
+            self._ledger["date"] = today
+            _write_json(self._ledger_path, self._ledger)
 
     def _archive_day(self, date, records):
-        """把记录并入某日归档（合并排序、截断单日上限），随后统一裁剪天数。"""
+        """把记录并入某日归档（合并排序、截断单日上限），随后统一裁剪天数。
+
+        v2.4（审查 S1）：归档也是内存态的读-改-写（days[date] 由现有内容 + 新记录算出），
+        与 _ensure_today 共用 _BOOK_WRITE_LOCK（可重入，嵌套调用不额外阻塞）。
+        """
         if not date or not records:
             return
+        with _BOOK_WRITE_LOCK:
+            self._archive_day_locked(date, records)
+
+    def _archive_day_locked(self, date, records):
+        """_archive_day 的锁内实现（调用方必须已持有 _BOOK_WRITE_LOCK）。"""
         days = self._archive["days"]
         existing = days.get(date)
         if existing:
@@ -472,18 +527,21 @@ class Book:
             total = round(float(total), 2)
         except Exception:
             return None  # 有意忽略：非法余额输入放弃本次观测（防御性）
-        self._ensure_today()
-        last = self._ledger.get("last_balance")
-        note = None
-        if last is not None and total < last:
-            amount = round(last - total, 2)
-            if amount > 0:
-                if amount > max(5.0, last * 0.2):
-                    note = "余额一下少了 ¥%.2f（可能是平台调整，未计入消费）" % amount
-                else:
-                    self._ledger["records"].append(_new_record(amount, "api", "API 余额差"))
-        self._ledger["last_balance"] = total
-        self._save_all()
+        # v2.4（审查 S1）：_ensure_today 的跨天归档 + 这里的账目读改写 + 落盘必须在
+        # 同一把锁内完成（否则另一线程重绑 self._ledger["records"] 会吞掉本次追加）。
+        with _BOOK_WRITE_LOCK:
+            self._ensure_today()
+            last = self._ledger.get("last_balance")
+            note = None
+            if last is not None and total < last:
+                amount = round(last - total, 2)
+                if amount > 0:
+                    if amount > max(5.0, last * 0.2):
+                        note = "余额一下少了 ¥%.2f（可能是平台调整，未计入消费）" % amount
+                    else:
+                        self._ledger["records"].append(_new_record(amount, "api", "API 余额差"))
+            self._ledger["last_balance"] = total
+            self._save_all()
         return note
 
     def add_manual(self, amount, note=""):
@@ -494,9 +552,12 @@ class Book:
             return  # 有意忽略：非法金额静默忽略（docstring 约定）
         if amount <= 0:
             return
-        self._ensure_today()
-        self._ledger["records"].append(_new_record(amount, "manual", note))
-        self._save_all()
+        # v2.4（审查 S1）：跨天归档与本次 append 必须在同一把锁内——归档成功后会**整体重绑**
+        # self._ledger["records"]，两段分开做时中间插进来的那笔会被重绑丢掉（见 _ensure_today）。
+        with _BOOK_WRITE_LOCK:
+            self._ensure_today()
+            self._ledger["records"].append(_new_record(amount, "manual", note))
+            self._save_all()
 
     # ---------- 统计 ----------
     def today_usage(self):

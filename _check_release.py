@@ -46,8 +46,9 @@ USER_DATA_DIRS = ("roles", "voice", "voice_ref", "audio", "alarms", "__pycache__
 #   <名字>.bak      愈合前备份（pet_io.backup_before_heal）
 #   <名字>.migrated pet_book 迁移旧 usage.json 时改的名
 #   <名字>.old      pet_log 512KB 轮转出来的上一份日志（error.log.old）
+#   <名字>.bad      pet_log._quarantine 隔离出来的坏/满日志（error.log.bad，v2.4 M2 补）
 # 单独写成一个判据函数（单一来源），check_zip（发布包）与 check_green_dir（绿色版目录）共用。
-_RESIDUE_RE = re.compile(r"^(?P<stem>.+?)\.(?:(?:[0-9]+\.){0,2}tmp|bak|migrated|old)$")
+_RESIDUE_RE = re.compile(r"^(?P<stem>.+?)\.(?:(?:[0-9]+\.){0,2}tmp|bak|migrated|old|bad)$")
 
 
 def residue_hit(base):
@@ -76,8 +77,16 @@ def user_data_hit(base):
 
 
 # 发布包**额外**禁止的开发/验证文件（绿色版目录里做检测时允许存在）
-ZIP_EXTRA_NAMES = {"_verify_green.py", "_check_release.py", "_check_static.py", "_g_out.txt"}
+# v2.4（M2/M3）：repro_quiet.py 是排障脚本——实测真包根目录里混进过一份
+# （5820B，来自绿色版根目录的残留），而 ZIP_EXTRA_NAMES 不含它 → 门禁不报。
+ZIP_EXTRA_NAMES = {"_verify_green.py", "_check_release.py", "_check_static.py", "_g_out.txt",
+                   "repro_quiet.py"}
 ZIP_EXTRA_PREFIX = ("_verify_assets/",)
+
+# v2.4（M3）：绿色版**根目录**不许留下的开发脚本（_dev/ 里的同名前缀脚本不算——
+# 那是绿色版的开发目录，按设计存在）。实测真包根目录混进过 repro_quiet.py。
+# 只判根目录一层：os.walk 到子目录会误伤 _dev/。
+_GREEN_ROOT_DEV_RE = re.compile(r"^(?:(?:repro_|e2e_).*|.*_dev.*\.py)$", re.IGNORECASE)
 
 _VERSION_RE = re.compile(r'VERSION\s*=\s*"([^"]+)"')
 
@@ -171,8 +180,25 @@ def green_residue(root=None):
     return sorted(out)
 
 
+def green_root_dev_leftovers(root=None):
+    """绿色版**根目录**里残留的开发/排障脚本（相对名，排序）；_dev/ 内的不算。
+
+    v2.4（M3）：实测真包根目录混进过 repro_quiet.py（来自绿色版根目录那份），
+    而 check_zip 的 ZIP_EXTRA_NAMES 此前不含它 → 门禁放行。这里在**源头**（绿色版目录）
+    点名：打包脚本按"根目录白名单/整目录复制"两种做法都会把它带进包。
+    """
+    base = os.path.abspath(root or GREEN)
+    out = []
+    if not os.path.isdir(base):
+        return out
+    for f in sorted(os.listdir(base)):
+        if os.path.isfile(os.path.join(base, f)) and _GREEN_ROOT_DEV_RE.match(f):
+            out.append(f)
+    return out
+
+
 def check_green_dir():
-    """绿色版**目录**是否可打包（目录存在 + 没有用户数据残留）。
+    """绿色版**目录**是否可打包（目录存在 + 没有用户数据残留 + 根目录没有开发脚本）。
 
     v2.2.2 安全修复：绿色版目录**同时是用户正在使用的实时副本**——此前本检查把
     config.json/roles.json/ledger/roles 等**用户数据**当"打包前必须清"，
@@ -181,16 +207,26 @@ def check_green_dir():
     因此**常规用户数据文件名永不作为失败项**（config.json/roles.json/账本…照旧留着）。
 
     v2.3.1（一致性收口）：只说"目录存在"还不够——残留形态（<名字>.tmp /
-    <名字>.<pid>.<tid>.tmp / <名字>.bak / <名字>.migrated / <名字>.old）是崩溃与自愈的
-    中间产物，混进绿色版目录就可能被一起打包 → 这里点名（只报不移）。
+    <名字>.<pid>.<tid>.tmp / <名字>.bak / <名字>.migrated / <名字>.old / <名字>.bad）是崩溃
+    与自愈的中间产物，混进绿色版目录就可能被一起打包 → 这里点名（只报不移）。
+
+    v2.4（M2/M3）：再加两类——① .bad（pet_log 隔离出的坏/满日志）；② 根目录的
+    repro_*/e2e_*/*_dev*.py 排障脚本（_dev/ 内的不算）。两项都是实测真包里出现过的东西。
     """
     if not os.path.isdir(GREEN):
         return ["绿色版目录不存在：%s" % GREEN]
+    fails = []
     residue = green_residue()
     if residue:
-        return ["绿色版目录里有用户数据残留（临时文件/愈合备份/轮转日志，打包前请移出）：%s"
-                % ", ".join(residue[:8])]
-    return []
+        fails.append("绿色版目录里有用户数据残留（临时文件/愈合备份/轮转日志，打包前请移出）：%s"
+                     % ", ".join(residue[:8]))
+    # v2.4（M3）：根目录的开发/排障脚本同样是"会随包发出去"的东西（实测 repro_quiet.py
+    # 进过真包）。_dev/ 里的同名脚本按设计保留，不算。
+    dev = green_root_dev_leftovers()
+    if dev:
+        fails.append("绿色版根目录有开发/排障脚本残留（_dev/ 内的不算，打包前请移出）：%s"
+                     % ", ".join(dev[:8]))
+    return fails
 
 
 def _sync_pairs():
@@ -248,11 +284,12 @@ def check_zip(zip_path, version=None):
             fails.append("发布包含运行时数据/残留/开发文件：%s" % ", ".join(sorted(bad)[:8]))
         # v2.3.0（兼容审查 S1）：need 必须覆盖**所有运行时 .py**——此前漏了 pet_tools.py，
         # 出包时白名单漏拷该文件会静默放行一个"双击即 ModuleNotFoundError"的包。
-        # 正向校验：凡仓库里被 SYNC_FILES 列为运行时 .py 的，包里必须存在同名条目。
-        # 注意排除 _verify_green.py：它随绿色版目录同步，但**按设计不进发布包**（自检脚本）
-        _runtime_py = sorted(n for n in SYNC_FILES
-                             if n.endswith(".py") and "/" not in n and n != "_verify_green.py")
-        need = _runtime_py + ["python.exe", "assets/"]
+        # v2.4（M2/M3）：need 改成**全量正向校验**——直接用 _sync_pairs()（SYNC_FILES +
+        # assets/ 下每一个文件）。此前只查 "assets/" 这个**前缀**存不存在 → 实测真包里
+        # idle_full 帧条目 0 个、assets 只有 140/150 也照样放行：素材漏拷能一路发出去。
+        # 唯一的例外仍是 _verify_green.py：它随绿色版目录同步，但**按设计不进发布包**
+        # （自检脚本，进包反而会被 ZIP_EXTRA_NAMES 判为不干净）。
+        need = [n for n in _sync_pairs() if n != "_verify_green.py"] + ["python.exe"]
         lack = [n for n in need if not any(x == n or x.startswith(n) for x in names)]
         if lack:
             fails.append("发布包缺关键内容：%s" % ", ".join(lack))
@@ -275,6 +312,17 @@ def check_zip(zip_path, version=None):
     return fails
 
 
+# v2.4（L1）：静态体检 stdout 里"失败条目"的行前缀（单一来源，供下面的解析与单测共用）。
+# M 类（Signal 参数一致性）此前不在表里 → 它失败时解析不出条目，只能退化打印 stdout 尾巴。
+STATIC_FAIL_PREFIXES = ("A ", "B ", "C ", "D ", "F ", "G ", "L ", "M ")
+
+
+def _static_fail_lines(stdout):
+    """静态体检 stdout → 失败条目行（去空白、按前缀过滤）。"""
+    return [x.strip() for x in (stdout or "").split("\n")
+            if x.strip().startswith(STATIC_FAIL_PREFIXES)]
+
+
 def check_static():
     """跑静态体检（_check_static.py），有问题就带进发布检测结果。"""
     import subprocess
@@ -293,7 +341,7 @@ def check_static():
         return ["静态体检跑不起来：%r" % (e,)]
     if r.returncode == 0:
         return []
-    lines = [x.strip() for x in (r.stdout or "").split("\n") if x.strip().startswith(("A ", "B ", "C ", "D ", "F ", "G ", "L "))]
+    lines = _static_fail_lines(r.stdout)
     if lines:
         return ["静态体检有问题：%s" % "; ".join(lines[:5])]
     # 没解析出条目时把 stdout/stderr 尾巴都带上（否则只有一句"退出码 1"，没法排障；

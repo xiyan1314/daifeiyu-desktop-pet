@@ -4,6 +4,12 @@
 > 发布节奏：v1.5.x 每批按「三轮审查 → 全面检查 → 绿色版检测 → Release」流水线交付。
 > v1.3.0 起才有逐版说明；更早的 v1.0 / v1.2.0 见 git 历史（bfb1aa6 / 35e9d1a）。
 
+## v2.4.0（2026-10-10）
+- 用户可见：吃饱形态从完全静止变成专属 10 帧呼吸动画（assets/idle_full_f00~09.png，256x256，±1.6%，缺帧/自定义角色回退静态图）· ai_rag_enabled 隐私开关补上界面入口（此前只有配置键、README 说能关实际关不掉）· error.log 坏文件隔离为 .bad（清理日志/清 Key 也会清它）· 注销/关机时真正退出（关窗仍是收进托盘）
+- 数据安全：新增 pet_io.py 统一原子写（并发丢写盘实测 885/2000 -> 0）· 修 BOM/GBK 的 lines.json 被清成种子库（上一轮引入的回归）· 账本读失败改为写前重读合并、持续失败放弃落盘 · 跨天归档与并发记账竞态丢账已加锁 · 愈合前统一留 .bak
+- 护栏：_verify_v13 267 -> 273 项（工具权限/拒绝不改数据/隐私开关/记忆往返/工具封顶/人设文件优先，带正例对照）· _check_static 新增 Signal 参数一致性与线程裸写盘 · 新增 _dev/repro_io_conflict.py 与 _dev/verify_guardrails_can_fail.py（变异 9/9 被抓）
+- 技术债：新增 _dev/audit_silent_except.py（511 handler：A19/B189/C124，A 档含误报）· pet_dialogs._call 用户回调失败留痕 · 删死代码 ask_amount/_role_frames · requirements 加上界、CI 补 Pillow · null 配置值回退默认
+- 回归：pytest 446 例；护栏 v13 273 项 0 FAILS / 静态 0 问题 0 待确认
 ## v2.3.1（2026-10-10）
 - **数据持久化收口**（据用户两份评审报告）：新增 `pet_io.py` 统一原子写——按路径分锁（RLock）+ **线程唯一临时名** + `os.replace` 共享冲突**重试**（此前 PermissionError 被 except 吞掉 = 静默丢写盘，实测旧版 183/180/173/180/154 次 → 新版 0）；迁移全部固定 `.tmp` 写盘点（memory/索引/闹钟/行为/语音/台词/账本/配置/导出）
 - **读损坏回写愈合**：memory.json / alarms.json / behaviors.json / lines.json / 索引文件读到损坏时自动重建并回写（此前坏文件每次启动重复报错：实测同一个坏文件旧版每轮 5 条日志、新版第 2 轮 0 条）

@@ -521,6 +521,132 @@ def test_lines_transient_read_failure_does_not_overwrite(tmp_path, monkeypatch):
     assert svc2.text_of("u_keep") == "我的台词"
 
 
+# ---- v2.4（M4）：脏读之后**第一次编辑**必须留 .bak（此前是"下次一改就永久覆盖"） ----
+
+ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+
+def _gbk_lines_json(path, text="用户的台词，记事本 ANSI 另存"):
+    """写一个 GBK（记事本「ANSI」）另存的 lines.json，返回原始字节。"""
+    raw = json.dumps({"version": 1,
+                      "lines": [{"id": "u_gbk", "text": text, "category": "idle", "order": 1}]},
+                     ensure_ascii=False).encode("gbk")
+    path.write_bytes(raw)
+    return raw
+
+
+def test_lines_gbk_dirty_read_backs_up_before_first_edit_v24(tmp_path):
+    """M4：GBK lines.json 启动不动磁盘，但**用户下一次编辑**不许把原文永久覆盖掉。
+
+    修复前实测：启动后字节不变 ✓、日志一条 ✓，但 svc.lines() 只有 88 条内置种子，
+    随后一次 svc.add(...) 就把 UTF-8 种子库整体盖上去，GBK 原文永久消失、无 .bak。
+    """
+    p = tmp_path / "lines.json"
+    raw = _gbk_lines_json(p)
+    logs = []
+    svc = pet_lines.LineService(str(tmp_path), log=logs.append)
+    assert svc._dirty_read is True, "没有打脏读标记 → 下一次编辑会无备份覆盖"
+    assert svc.dirty_read is True, "对外只读属性与内部标记不一致"
+    assert p.read_bytes() == raw, "启动阶段就不该动文件（v2.3.1 口径）"
+    assert not (tmp_path / "lines.json.bak").exists(), "启动阶段留 .bak 是多余的写盘"
+    assert svc.get("u_gbk") is None, "前提不成立：用户台词本次确实看不见"
+
+    ln, err = svc.add("新加的台词", "happy")
+    assert ln is not None and not err, err
+    bak = tmp_path / "lines.json.bak"
+    assert bak.is_file(), "覆盖 GBK 原文之前没留 .bak —— 用户数据永久消失"
+    assert bak.read_bytes() == raw, "备份的必须是 GBK 原文（逐字节）"
+    assert svc._dirty_read is False, "保存成功后没有清脏读标记"
+    assert svc.get(ln["id"]) is not None, "新台词没写进去"
+    assert _read(p)["lines"], "新内容没落盘"
+
+
+def test_lines_dirty_read_flag_lifecycle_v24(tmp_path, monkeypatch):
+    """M4：写盘失败保持脏标记（保护不中断），恢复后清标记且 .bak 只留一份。"""
+    p = tmp_path / "lines.json"
+    raw = _gbk_lines_json(p)
+    svc = pet_lines.LineService(str(tmp_path), log=lambda m: None)
+    assert svc._dirty_read is True
+    real = pet_io.atomic_write_json
+    monkeypatch.setattr(pet_io, "atomic_write_json", lambda *a, **kw: "磁盘满了")
+    _ln, err = svc.add("第一次写盘会失败", "happy")
+    assert err, "注入的写盘失败没有被上报"
+    assert svc._dirty_read is True, "写盘失败后脏标记被误清 → 下一次保存失去备份保护"
+    bak = tmp_path / "lines.json.bak"
+    assert bak.is_file() and bak.read_bytes() == raw, ".bak 没留下或被写坏"
+    assert p.read_bytes() == raw, "写盘失败竟然改了原文"
+
+    monkeypatch.setattr(pet_io, "atomic_write_json", real)
+    _ln2, err2 = svc.add("这次能写", "happy")
+    assert not err2, err2
+    assert svc._dirty_read is False
+    assert bak.read_bytes() == raw, "恢复写入时又覆盖了一次 .bak"
+    svc.add("第二条", "idle")   # 标记已清 → 不该再备份
+    assert bak.read_bytes() == raw, \
+        "脏标记清了还在备份：.bak 被新内容盖掉，GBK 原文反而没了"
+
+
+def test_lines_clean_file_is_not_dirty_v24(tmp_path):
+    """M4 反例对照：正常 UTF-8 lines.json 既不打脏标记，也不产生 .bak。"""
+    p = tmp_path / "lines.json"
+    p.write_text(json.dumps({"version": 1, "lines": [
+        {"id": "u1", "text": "正常台词", "category": "idle", "order": 1}]}, ensure_ascii=False),
+        encoding="utf-8")
+    svc = pet_lines.LineService(str(tmp_path), log=lambda m: None)
+    assert svc._dirty_read is False
+    assert svc.get("u1") is not None, "前提：正常文件必须读得出来"
+    svc.add("新台词", "happy")
+    assert not (tmp_path / "lines.json.bak").exists(), "没脏读却留了 .bak"
+
+
+def test_lines_read_failure_also_marks_dirty_v24(tmp_path, monkeypatch):
+    """M4：读取失败（PermissionError）同样是脏读——之后编辑也不能无备份覆盖。"""
+    p = tmp_path / "lines.json"
+    raw = json.dumps({"version": 1, "lines": [
+        {"id": "u_keep", "text": "我的台词", "category": "happy", "order": 1}]},
+        ensure_ascii=False).encode("utf-8")
+    p.write_bytes(raw)
+    _deny_open(monkeypatch, "lines.json")          # 只挡构造时那一次读
+    svc = pet_lines.LineService(str(tmp_path), log=lambda m: None)
+    assert svc._dirty_read is True
+    svc.add("新台词", "happy")
+    bak = tmp_path / "lines.json.bak"
+    assert bak.is_file() and bak.read_bytes() == raw, "读失败路径没有留备份"
+
+
+def test_lines_corrupt_heal_keeps_single_bak_v24(tmp_path):
+    """M4 边界：真损坏走愈合路径（已经留过 .bak），不该再打脏读标记、不该二次覆盖。"""
+    p = tmp_path / "lines.json"
+    p.write_text("{ 这不是合法 json", encoding="utf-8")
+    logs = []
+    svc = pet_lines.LineService(str(tmp_path), log=logs.append)
+    assert svc._dirty_read is False, "真损坏走的是愈合路径，不该同时打脏读标记"
+    assert (tmp_path / "lines.json.bak").read_text(encoding="utf-8") == "{ 这不是合法 json"
+    assert not any("旧备份已被本次愈合覆盖" in x for x in logs), logs
+
+
+def test_lines_dirty_read_bubble_is_wired_v24(tmp_path):
+    """M4：脏读必须在**启动时**提示一次；文案要与事实一致（此刻还没有 .bak）。"""
+    with _REAL_OPEN(os.path.join(ROOT_DIR, "桌宠.py"), "r", encoding="utf-8") as f:
+        src = f.read()
+    assert "self.lines_lib.dirty_read" in src, "启动没有检查脏读 → 用户以为台词被删了"
+    assert "pet_lines.DIRTY_READ_NOTICE" in src, "提示文案没有接到气泡上"
+    notice = pet_lines.DIRTY_READ_NOTICE
+    assert "lines.json" in notice and "UTF-8" in notice and ".bak" in notice
+    assert "已备份" not in notice, \
+        "文案声称『已备份』，但 .bak 是下一次保存前才落的——启动时还没有，不能这么写"
+
+
+def test_lines_hidden_until_edit_premise_v24(tmp_path):
+    """M4 前提复核：脏读实例的台词确实只有内置种子（用户条目一条都看不见）。"""
+    p = tmp_path / "lines.json"
+    _gbk_lines_json(p)
+    svc = pet_lines.LineService(str(tmp_path), log=lambda m: None)
+    assert svc.count() == len(pet_lines._seed_source()), \
+        "脏读时台词库不只有种子（%d 条），M4 的动机描述需要复核" % svc.count()
+    assert all(x["builtin"] for x in svc.lines()), "脏读时竟然读出了非内置条目"
+
+
 def test_lines_corrupt_file_heals_with_bak(tmp_path):
     """P0-A/C：真损坏才愈合，且愈合**之前**留 .bak（判错可恢复）。"""
     p = tmp_path / "lines.json"

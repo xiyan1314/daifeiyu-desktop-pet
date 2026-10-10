@@ -386,10 +386,17 @@ def extract_long_term(user_msg):
 
 
 def _accepts_epoch_kwargs(fn):
-    """注入的记忆落盘函数是否接受 expect_epoch/epoch_of（P1-A）。
+    """注入的记忆落盘函数是否**同时**接受 expect_epoch 与 epoch_of（P1-A）。
 
     旧注入契约（含测试替身）只收 1 个参数；这里在构造时判定一次，避免运行时用
     TypeError 猜（那会把落盘函数**内部**的 TypeError 也误判成"不支持"）。
+
+    v2.4（审查 M3）：判据从"两个 kwarg 有一个就行"收紧成"**两个都在** 或 有
+    VAR_KEYWORD 变参"。此前只看 expect_epoch：def saver(hist, expect_epoch=None)
+    被判 True → _save_snapshot 调它时多传的 epoch_of 触发 TypeError → 被 _worker
+    末尾的兜底 except 吞掉 → 用户看到"网络不好，听不清啦……"且本轮记忆不落盘
+    （契约半开：判定说支持、调用说不行）。宁可走旧口径（少一层代次守卫），也不能
+    把一个合法的落盘调用打成异常。
     """
     try:
         params = inspect.signature(fn).parameters
@@ -397,7 +404,7 @@ def _accepts_epoch_kwargs(fn):
         return False
     if any(p.kind is inspect.Parameter.VAR_KEYWORD for p in params.values()):
         return True
-    return "expect_epoch" in params
+    return "expect_epoch" in params and "epoch_of" in params
 
 
 class ChatService:

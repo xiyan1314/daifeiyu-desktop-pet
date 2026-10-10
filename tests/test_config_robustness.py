@@ -89,6 +89,36 @@ def test_load_config_survives_every_poisoned_key(app):
     assert not bad, "配置坏值未兜住：\n" + "\n".join(bad[:20])
 
 
+def test_null_bool_keys_fall_back_to_default(app):
+    """L7（v2.4）：键值是 JSON null 时必须走**默认值**。
+
+    此前 _to_bool(None) 落到 bool(None)=False——"默认开"的 ai_rag_enabled /
+    ai_tools_enabled / ai_tools_confirm（以及 always_on_top / sound）被静默关掉，
+    界面上看不出任何变化，用户只会觉得"功能怎么没了"。
+    """
+    bool_keys = {k: d for k, d in main.DEFAULT_CONFIG.items() if isinstance(d, bool)}
+    on_defaults = sorted(k for k, d in bool_keys.items() if d)
+    off_defaults = sorted(k for k, d in bool_keys.items() if not d)
+    assert on_defaults and off_defaults, "布尔键的默认值结构变了，用例前提不成立"
+
+    _write({k: None for k in bool_keys})
+    cfg = main.load_config()
+    for k in on_defaults:
+        assert cfg[k] is True, "%s=null 被静默关掉了（应走默认值 True）" % k
+    for k in off_defaults:
+        assert cfg[k] is False, "%s=null 应保持默认 False" % k
+
+    # 正例对照：显式 false / true 必须照样生效（修复不能把"用户主动设置"一起吃掉）
+    _write({k: False for k in bool_keys})
+    cfg_off = main.load_config()
+    for k in on_defaults:
+        assert cfg_off[k] is False, "%s 显式关不掉了" % k
+    _write({k: True for k in bool_keys})
+    cfg_on = main.load_config()
+    for k in off_defaults:
+        assert cfg_on[k] is True, "%s 显式开不掉了" % k
+
+
 def test_window_boots_with_fully_poisoned_config(app):
     """所有键同时灌坏值：主窗口必须能起来（这是最狠的一发）。"""
     cfg = {}

@@ -44,8 +44,8 @@ def normalize_physics(ph):
             pd[k] = min(v, _PHYS_MAX[k])
         except (TypeError, ValueError):
             bad.append(k)
-    pd["enabled"] = _to_bool(ph.get("enabled", False))
-    pd["ceilingBounce"] = _to_bool(ph.get("ceilingBounce", True))
+    pd["enabled"] = _to_bool(ph.get("enabled", False), False)
+    pd["ceilingBounce"] = _to_bool(ph.get("ceilingBounce", True), True)
     if bad:
         pd["_fixed"] = bad
     return pd
@@ -126,7 +126,16 @@ def decrypt_secret(stored):
     return stored  # 兼容旧版明文（仅读取，不再写入）
 
 
-def _to_bool(v):
+def _to_bool(v, default=False):
+    """配置值 → bool。v is None（手改 config.json 写成 null）时用 default。
+
+    v2.4（兼容审查 L7）：此前 None 落到 bool(None)=False——把**默认开**的开关静默关掉：
+    "ai_rag_enabled": null 之后用户数据摘要不再注入，"ai_tools_enabled"/"ai_tools_confirm"
+    同款（关掉工具调用/写入确认），界面上看不出任何变化，只有把 config.json 翻出来才知道。
+    always_on_top/sound/ceilingBounce 也是"默认 True"的键，同一口径一起修。
+    """
+    if v is None:
+        return bool(default)
     if isinstance(v, bool):
         return v
     if isinstance(v, str):
@@ -148,19 +157,21 @@ def normalize_cfg(cfg, defaults, persona_ids):
         cfg["scale"] = max(0.2, min(4.0, _sc)) if math.isfinite(_sc) else 1.0
     except (TypeError, ValueError):
         cfg["scale"] = 1.0
-    cfg["always_on_top"] = _to_bool(cfg.get("always_on_top", True))
-    cfg["ai_enabled"] = _to_bool(cfg.get("ai_enabled", False))
-    cfg["follow_mouse"] = _to_bool(cfg.get("follow_mouse", False))
-    cfg["wander"] = _to_bool(cfg.get("wander", False))
+    # v2.4（L7）：每个键都把"默认值"一起传进 _to_bool——config.json 里的 null 必须走默认值，
+    # 不能静默变 False（"默认开"的四个键尤其致命）。第二个参数与 .get 的默认值必须一致。
+    cfg["always_on_top"] = _to_bool(cfg.get("always_on_top", True), True)
+    cfg["ai_enabled"] = _to_bool(cfg.get("ai_enabled", False), False)
+    cfg["follow_mouse"] = _to_bool(cfg.get("follow_mouse", False), False)
+    cfg["wander"] = _to_bool(cfg.get("wander", False), False)
     cfg["city"] = str(cfg.get("city", "北京") or "北京")
-    cfg["sound"] = _to_bool(cfg.get("sound", True))
-    cfg["ai_rag_enabled"] = _to_bool(cfg.get("ai_rag_enabled", True))  # v2.3.0（1.3）：用户数据摘要注入开关
+    cfg["sound"] = _to_bool(cfg.get("sound", True), True)
+    cfg["ai_rag_enabled"] = _to_bool(cfg.get("ai_rag_enabled", True), True)  # v2.3.0（1.3）：用户数据摘要注入开关
     # v2.3.0（1.2 Function Calling）：工具调用总开关 + 写入确认开关。
     # 坏值一律按 bool 兜底——tests/test_config_robustness.py 对 DEFAULT_CONFIG 逐键灌坏值，
     # 归一化后类型必须仍然是 bool。
-    cfg["ai_tools_enabled"] = _to_bool(cfg.get("ai_tools_enabled", True))
-    cfg["ai_tools_confirm"] = _to_bool(cfg.get("ai_tools_confirm", True))
-    cfg["badge"] = _to_bool(cfg.get("badge", False))
+    cfg["ai_tools_enabled"] = _to_bool(cfg.get("ai_tools_enabled", True), True)
+    cfg["ai_tools_confirm"] = _to_bool(cfg.get("ai_tools_confirm", True), True)
+    cfg["badge"] = _to_bool(cfg.get("badge", False), False)
     # ---- v1.3 新增配置归一化 ----
     cfg["role"] = str(cfg.get("role", "") or "")
     cfg["scale_compensated_role"] = str(cfg.get("scale_compensated_role", "") or "")
@@ -179,7 +190,7 @@ def normalize_cfg(cfg, defaults, persona_ids):
     cfg["ai_persona"] = str(cfg.get("ai_persona", "default") or "default")
     if cfg["ai_persona"] not in persona_ids and cfg["ai_persona"] != "custom":
         cfg["ai_persona"] = "default"  # 未知预设 id：回退内置人设
-    cfg["click_through"] = _to_bool(cfg.get("click_through", False))
+    cfg["click_through"] = _to_bool(cfg.get("click_through", False), False)
     try:
         cfg["role_frame_max"] = max(2, min(60, int(cfg.get("role_frame_max", 24) or 24)))
     except (TypeError, ValueError):

@@ -24,17 +24,21 @@ def _make_zip(path, names, version="9.9.9", real_main=False):
 
 
 def test_check_zip_flags_runtime_data(tmp_path):
-    """包里混进运行时数据/开发文件必须被点名。"""
+    """包里混进运行时数据/开发文件必须被点名（含 v2.4 M2 的 .bad / M3 的 repro_quiet.py）。
+
+    脏条目**恰好放 8 条**：失败报告只列前 8 条（sorted(bad)[:8]），多放一条就会把
+    排序靠后的挤出去，断言会变成"测截断"而不是"测判据"。
+    """
     p = str(tmp_path / "bad.zip")
-    _make_zip(p, ["桌宠.py", "main.py", "pet_voice.py", "pet_lines.py", "pet_dialogs.py",
-                  "python.exe", "assets/", "config.json", "ledger.json", "error.log",
-                  "_verify_green.py", "_check_static.py", "_check_release.py", "roles/x.png"])
+    _make_zip(p, ["桌宠.py", "main.py", "python.exe", "assets/",
+                  "config.json", "ledger.json", "error.log.old", "error.log.bad",
+                  "repro_quiet.py", "_verify_green.py", "_check_release.py", "roles/x.png"])
     fails = chk.check_zip(p, chk.repo_version())
     joined = " ".join(fails)
-    assert "config.json" in joined and "ledger.json" in joined
-    assert "error.log" in joined and "_verify_green.py" in joined
-    assert "_check_static.py" in joined and "_check_release.py" in joined
-    assert any("roles/" in f for f in fails)
+    for n in ("config.json", "ledger.json", "error.log.old", "error.log.bad",
+              "repro_quiet.py", "_verify_green.py", "_check_release.py"):
+        assert n in joined, "%s 没被点名：%s" % (n, joined)
+    assert "roles/x.png" in joined, "子目录里的用户数据没被点名：%s" % joined
 
 
 def test_check_zip_flags_missing_and_stale(tmp_path):
@@ -48,12 +52,11 @@ def test_check_zip_flags_missing_and_stale(tmp_path):
 
 def test_check_zip_passes_clean(tmp_path):
     p = str(tmp_path / "ok.zip")
-    # v2.3.0：check_zip 的 need 改为"SYNC_FILES 里全部运行时 .py 正向校验"（修 S1：漏检
-    # pet_tools.py 会静默放行一个启动即崩的包），所以合成包必须覆盖这份清单，不能再手写几项。
-    _runtime = sorted(n for n in chk.SYNC_FILES
-                      if n.endswith(".py") and "/" not in n and n != "_verify_green.py")
-    _make_zip(p, _runtime + ["python.exe", "assets/char.png", "Lib/x.py"],
-              version=chk.repo_version(), real_main=True)
+    # v2.4（M3）：need 改成 _sync_pairs() 全量正向校验（SYNC_FILES + assets/ 每一个文件）——
+    # 此前只查 "assets/" 前缀存不存在，真包 assets 140/150、idle_full 0 个也放行。
+    # 合成包必须覆盖这份清单，不能再手写几项。
+    names = [n for n in chk._sync_pairs() if n != "_verify_green.py"] + ["python.exe", "Lib/x.py"]
+    _make_zip(p, names, version=chk.repo_version(), real_main=True)
     assert chk.check_zip(p, chk.repo_version()) == []
 
 

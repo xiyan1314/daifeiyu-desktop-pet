@@ -192,6 +192,11 @@ CATEGORY_LABELS = {
 TEXT_MAX = 2000         # 单条台词长度上限（**超出明确报错**，不静默截断；数量不限）
 DEFAULT_CATEGORY = "idle"
 
+# v2.4（M4）："脏读"（lines.json 在磁盘上却读不到——记事本「ANSI」另存成 GBK、共享占用）
+# 时启动弹一次的文案。措辞必须与事实一致：.bak 是**下一次保存前**才落的，此刻还没有。
+DIRTY_READ_NOTICE = ("lines.json 不是 UTF-8（记事本另存成 ANSI 了？），本次已忽略原文件；"
+                     "改台词前会先把它备份成 lines.json.bak")
+
 
 def _seed_source():
     """内置种子表：[(id, text, category, food)]（id 稳定，供删除名单与去重）。"""
@@ -235,7 +240,17 @@ class LineService:
         self._undo = None         # 最近一次破坏性操作的快照（内存，会话内可撤销）
         self._changed_cbs = []
         self._invalid_cbs = []
+        # v2.4（M4）：本次启动"文件在磁盘上但没读到"（编码不是 UTF-8 / 共享占用）——
+        # 内存里只有内置种子。此时一个字节都不写是 v2.3.1 定下的口径，但用户**下一次编辑**
+        # 就会把原文整体覆盖成 UTF-8 种子库，所以写前必须留 .bak（见 _save）。
+        self._dirty_read = False
+        self._dirty_backed = False
         self._load()
+
+    @property
+    def dirty_read(self):
+        """启动时 lines.json 在磁盘上却没读到 → True（调用方据此弹一次提示气泡）。"""
+        return self._dirty_read
 
     # ---------------- 持久化 ----------------
     def _load(self):
@@ -254,6 +269,10 @@ class LineService:
                                               log=self._log)
         # data is None 且不是"损坏" → 要么文件不存在（首次运行），要么这次没读到（不写）
         _unreadable = data is None and os.path.exists(self._path)
+        # v2.4（M4）：脏读标记。corrupted 那条路径下面已经留了 .bak 并主动愈合，
+        # 不算脏读（否则 _save 会再覆盖一次 .bak 并多记一行"旧备份被覆盖"）。
+        self._dirty_read = bool(_unreadable and not corrupted)
+        self._dirty_backed = False
         self._lines, self._dialogues, self._deleted = [], [], []
         if isinstance(data, dict):
             for ln in (data.get("lines") or []):
@@ -307,10 +326,22 @@ class LineService:
             "dialogues": self._dialogues,
             "deleted_builtins": self._deleted,
         }
+        # v2.4（M4）：本次启动是脏读时，内存里只有内置种子——这一写就把用户原文永久覆盖了。
+        # 与 pet_book._read_failed 同口径：**写前**先留一份 .bak（一次脏读只留一份，写失败
+        # 重试不重复覆盖），保存成功后清标记回到正常路径。
+        if self._dirty_read and not self._dirty_backed:
+            if pet_io.backup_before_heal(self._path, self._log):
+                self._dirty_backed = True
         # v2.3.1：统一走 pet_io（分锁 + 线程唯一临时名 + replace 重试）——
         # 此前固定 "<lines>.tmp" 且无锁，两个保存点交错会互相截断
         err = pet_io.atomic_write_json(self._path, data, log=self._log)
         if err is None:
+            if self._dirty_read:
+                _had_bak = self._dirty_backed   # 备份失败时日志不能谎称已留证
+                self._dirty_read = False
+                self._dirty_backed = False
+                self._log("lines.json 已按 UTF-8 重建（原文件此前不是 UTF-8 或读不到；%s）"
+                          % ("原文已留 .bak" if _had_bak else "**备份失败**，原文已被覆盖"))
             return ""
         return "台词保存失败：%s" % err
 
