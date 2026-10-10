@@ -62,7 +62,7 @@ import pet_alarm
 
 
 APP_NAME = "大肥鱼桌宠"
-VERSION = "2.2.5"
+VERSION = "2.2.6"
 PAD = 1.25  # 窗口相对角色的透明边距（为压扁/回弹预留空间）
 IDLE_FRAME_MS = 140      # 待机帧间隔
 IDLE_FORM_HOLD_SECS = 8  # v2.1.3：只有形态、没有动作可播时的展示期上限（到期回用户形态）
@@ -2917,7 +2917,10 @@ class PetWindow(QWidget):
         self._digest_timer.timeout.connect(self._gslot('_digest', self._digest, recover=True))
         self._digest_timer.start(DIGEST_MS)
         # v2.2.5：饭点小盹 #1 挂**喂食事件时钟**（喂食 +10s，落在 12s 消化窗口内）——
-        # 与"程序启动起算的 15s 节拍"解耦，任何喂食时刻都能稳定看到吃饱形态上的 zzz
+        # 与"程序启动起算的 15s 节拍"解耦，任何喂食时刻都能稳定看到吃饱形态上的 zzz。
+        # 同时**复位上一轮的饭后小盹**（质量审查 B1）：此前只有 _touch_activity 顺手停过它，
+        # 而"轻交互不取消小盹"的改动把那处停了 → 连喂时上一轮的 nap 会落进本轮消化窗口。
+        self._nap_zzz_timer.stop()
         self._digest_zzz_timer.start(MEAL_ZZZ_MS)
         # v2.1.4（S2 修复）：判据 = **目标形态有没有 eat 帧集**（吃帧素材挂在形态上，
         # 有就播；没有才用大笑表达）。此前先按"源形态==用户形态"判定，no_feed 跳步时会错位；

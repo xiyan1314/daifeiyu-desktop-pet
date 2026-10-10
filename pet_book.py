@@ -229,10 +229,12 @@ class Book:
         e2 = _write_json(self._archive_path, self._archive)
         err = e1 or e2
         if err:
-            # v2.2.5：失败必须留痕。此前错误串返回后被 5 个调用点全部丢弃 → 磁盘满/只读时
-            # 内存已改、磁盘没落，重启即静默丢账（唯一检查返回值的是 _ensure_today）。
+            # v2.2.5：失败必须留痕（5 个调用点此前把错误串全部丢弃 → 磁盘满/只读时内存已改、
+            # 磁盘没落，重启即静默丢账；唯一检查返回值的是 _ensure_today）。
             try:
-                self._log("ledger 落盘失败：%s" % err)
+                # v2.2.5（质量审查 A1）：必须用 pet_log.log_error——此前写的 self._log 是一个
+                # **不存在的方法**，AttributeError 又被下面的 except 吞掉 → "留痕"成了死代码
+                pet_log.log_error("ledger 落盘失败：%s" % err)
             except Exception:
                 pass  # 有意忽略：日志通道自身异常不影响主流程
         return err

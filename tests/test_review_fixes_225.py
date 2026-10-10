@@ -41,8 +41,12 @@ def test_dialog_p0_backfills_are_present():
     """
     root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     src = open(os.path.join(root, "pet_dialogs.py"), encoding="utf-8").read()
-    assert "_font_spin.setValue(" in src, "气泡样式：字号未回填（点保存会把用户字号重置为 8）"
-    assert "_radius_spin.setValue(" in src, "气泡样式：圆角未回填（点保存会把圆角重置为 0）"
+    # 必须匹配"构造期那一整行"——裸 setValue( 在 _reset_default() 里也有（默认 10/16），
+    # 只查裸子串会恒真（质量审查 D1 实测：删掉构造期回填断言仍通过）。
+    assert 'self._font_spin.setValue(max(8, min(18, int(self._style.get("font_size") or 10))))' in src, \
+        "气泡样式：字号未按当前设置回填（点保存会把用户字号重置为 8）"
+    assert 'self._radius_spin.setValue(max(0, min(30, int(_r0 if _r0 is not None else 16))))' in src, \
+        "气泡样式：圆角未按当前设置回填（点保存会把圆角重置为 0）"
     assert 'self._food.findData(ln.get("food")' in src, \
         "台词编辑：喂食对象未回填（保存会把 food 改成下拉默认值）"
 
@@ -66,9 +70,8 @@ def test_lines_bad_order_does_not_crash(tmp_path):
         "dialogues": []}, ensure_ascii=False), encoding="utf-8")
     svc = pet_lines.LineService(str(tmp_path), lambda m: None)  # 不得抛异常
     items = svc.lines("idle")
+    # 真正的回归点就是"构造不抛异常且条目仍在"（isinstance(int) 恒真，已删——质量审查 D2）
     assert any(x["id"] == "a1" for x in items), "坏 order 的条目不该被整库丢弃"
-    # 坏值兜底为整数即可（服务可能在保存时按位置重排 order，重排也算自愈）
-    assert isinstance(svc.get("a1")["order"], int), "order 未被归一化为整数"
 
 
 def test_role_delete_rejects_traversal(tmp_path):
@@ -82,6 +85,35 @@ def test_role_delete_rejects_traversal(tmp_path):
     ok, err = lib.delete("..")
     assert ok is False and err, "越界 id 的删除必须被拒绝"
     assert outside.exists(), "数据目录外的文件被删了（路径穿越）"
+
+
+def test_role_delete_inside_dir_guard(tmp_path):
+    """⑥b 直接覆盖 _inside_dir 防线（质量审查 D3）：id 合法但 file 越界时，
+    数据目录外的文件必须保留（此前这条分支零覆盖——删掉 _inside_dir 测试也照样绿）。"""
+    lib = pet_resources.RoleLibrary(str(tmp_path))
+    outside = tmp_path.parent / "victim2.png"
+    outside.write_bytes(b"y")
+    lib._data["roles"] = [{"id": "okid", "name": "ok",
+                           "file": "../../victim2.png", "file_front": "",
+                           "file_full": "", "file_full_front": ""}]
+    lib.delete("okid")                     # id 合法 → 走到 _inside_dir 分支
+    assert outside.exists(), "数据目录外的文件被删了（_inside_dir 防线失效）"
+
+
+def test_book_save_failure_is_logged(tmp_path):
+    """④b 记账落盘失败必须留痕（质量审查 A1/D4）：此前调用了不存在的 self._log，
+    异常被吞 → "留痕"是死代码，7 条护栏又恰好没覆盖它。"""
+    pet_log.set_data_dir(str(tmp_path))
+    book = pet_book.Book(str(tmp_path))
+    real = pet_book._write_json
+    pet_book._write_json = lambda path, data: "disk full"
+    try:
+        err = book._save_all()
+    finally:
+        pet_book._write_json = real
+    assert err, "写盘失败应返回错误串"
+    txt = (tmp_path / "error.log").read_text(encoding="utf-8")
+    assert "ledger 落盘失败" in txt, "落盘失败没有留痕：%r" % txt[-200:]
 
 
 def test_config_bad_ai_key_keeps_others(tmp_path):
