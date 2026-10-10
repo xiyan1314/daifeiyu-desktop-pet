@@ -112,23 +112,17 @@ def check_clean_tree():
 
 
 def check_green_dir():
-    """绿色版**目录**里是否混入**用户运行时数据**。
+    """绿色版**目录**是否可打包（只查目录存在性）。
 
-    注意（兼容审查 S1）：_verify_green.py / _verify_assets/ 是**检测资产**，跑绿色版检测时
-    必须在该目录里存在——它们只在**发布包**中被禁止（见 check_zip 的 ZIP_EXTRA_*）。
-    此前把两者混在同一个黑名单里，导致本检查在任何状态下都不可能通过（自相矛盾）。
+    v2.2.2 安全修复：绿色版目录**同时是用户正在使用的实时副本**——此前本检查把
+    config.json/roles.json/ledger/roles 等**用户数据**当"打包前必须清"，
+    导致每次发布都把用户的自定义角色（roles.json + roles 素材）删掉（真实事故）。
+    打包安全其实不依赖这个检查：zip 从**白名单暂存目录**构建，用户数据根本进不了包。
+    因此本检查只保留"目录存在"，用户数据永不要求清除。
     """
-    bad = []
     if not os.path.isdir(GREEN):
         return ["绿色版目录不存在：%s" % GREEN]
-    for name in sorted(USER_DATA_NAMES):
-        if os.path.exists(os.path.join(GREEN, name)):
-            bad.append(name)
-    for name in USER_DATA_DIRS:
-        if os.path.isdir(os.path.join(GREEN, name)):
-            bad.append(name + "/")
-    return ["绿色版目录里有用户运行时数据（打包前必须清）：%s" % ", ".join(sorted(bad))] \
-        if bad else []
+    return []
 
 
 def _sync_pairs():
@@ -242,7 +236,7 @@ def main():
     fails += check_version()
     fails += check_clean_tree()  # v2.1.4：发布时运行时代码必须已提交（定版）
     fails += check_static()  # v2.1.4：静态体检（入口解析/配置键/空池/类型转换/定时器/线程…）
-    fails += check_green_dir()  # L7：绿色版目录本身也不能有运行时数据
+    fails += check_green_dir()  # v2.2.2：只查目录存在；用户数据是用户实时数据，永不要求清除
     missing, diff = check_sync()
     print("[2] 绿色版同步：%d 个文件（缺失 %d，不一致 %d）"
           % (len(SYNC_FILES), len(missing), len(diff)))

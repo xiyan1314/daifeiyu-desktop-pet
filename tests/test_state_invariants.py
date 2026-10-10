@@ -534,24 +534,28 @@ def test_random_wander_action_blocked_during_full_form(pet):
         pet.actions._pick = _real_pick
 
 
-def test_mood_suppressed_during_full_form(pet):
-    """v2.2.1 回归（用户反馈"吃饱形态期间一直出待机动作"）：消化窗口内调皮情绪
-    （state/emote/bubble）不得覆盖吃饱形态；消化结束后恢复。"""
+def test_mood_during_full_form_blocks_only_internal_mischief(pet):
+    """v2.2.2 回归：吃饱形态期间——**用户点击/戳的反应必须照常**（v2.2.1 曾连这都禁，
+    变成"吃饱后点了没反应"）；**只挡内部自动调皮**（smug 调度）。"""
     _reset(pet)
     pet.feed("小鱼干")
     pet._eat_done("test")
     assert pet._digest_pending() is True
-    _anim_before = pet.anim_mode
-    pet._on_mood_state("smug")
-    assert pet.anim_mode == _anim_before, "消化窗口内情绪表情覆盖了吃饱形态"
-    # bubble/emote 路径同样被挡：直接调用处理函数不抛且不改变展示
-    pet._mood_bubble("嘻嘻")
-    pet._mood_emote("sparkle")
+    # ① 用户戳的反应照常显示
+    pet._on_mood_state("puzzled")
+    assert pet.anim_mode == "state", "吃饱形态期间点击毫无反应（v2.2.1 过激门控复发）"
+    pet._play_idle()
+    pet._mood_emote("question")
+    pet._mood_bubble("咦？")
+    # ② 内部调皮调度被挡
+    called = []
+    pet.mood.tick = lambda: called.append(1)
+    pet._mood_tick()
+    assert called == [], "消化窗口内内部调皮事件没被挡（会插到吃饱形态上）"
     pet._digest_timer.stop()
     pet._digest()
-    # 消化结束后情绪恢复可显示（状态图会切到 state 展示）
-    pet._on_mood_state("smug")
-    assert pet.anim_mode == "state", "消化结束后情绪表情没恢复"
+    pet._mood_tick()
+    assert called == [1], "消化结束后调皮调度没恢复"
 
 
 def test_sleep_survives_voice_finished(pet):
