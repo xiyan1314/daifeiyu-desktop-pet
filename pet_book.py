@@ -461,7 +461,8 @@ class Book:
 
         原子写（临时文件 + os.replace）。成功返回 (True, "")，失败 (False, err)。
         """
-        tmp = str(path) + ".tmp"
+        # v2.3.1（评审报告根因 A 的同类遗留）：固定 .tmp 在多写者/共享冲突下会丢写盘
+        tmp = "%s.%d.tmp" % (str(path), threading.get_ident())
         try:
             def esc(v):
                 v = str(v)

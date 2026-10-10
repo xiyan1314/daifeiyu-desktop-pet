@@ -146,7 +146,10 @@ class AlarmService:
         t = normalize_time(a.get("time", ""))
         if not t:
             return None, "时间格式应为 HH:MM"
-        out = {
+        # v2.3.1（兼容审查 M1）：**先复制原条目**再覆盖已知键——否则任何未知键
+        # （用户手加的备注、未来版本写入的新字段）都会在"读取时归一化回写"这一步被永久删掉
+        out = dict(a)
+        out.update({
             "id": str(a.get("id") or uuid.uuid4().hex[:8]),
             "time": t,
             "label": str(a.get("label") or "闹钟").strip()[:ALARM_LABEL_MAX] or "闹钟",
@@ -157,7 +160,7 @@ class AlarmService:
             # 预留：贪睡（本版不使用但保留；仅非负 int 透传，坏值落 0）
             "snooze_min": a.get("snooze_min") if (isinstance(a.get("snooze_min"), int)
                                                   and a.get("snooze_min") >= 0) else 0,
-        }
+        })
         if out["ringtone"] and not out["ringtone"].lower().endswith(RINGTONE_EXTS):
             out["ringtone"] = ""  # 坏扩展：清洗为默认提示音
         # 拒绝含路径分隔符/上级目录的铃声引用（防播放 alarms/ 目录外文件）

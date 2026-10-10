@@ -354,3 +354,32 @@ def test_legacy_act_alias_mapped_in_validate_steps():
     assert pet_behaviors.validate_steps([{"act": "fly"}])[0] is None
     # act 是不可哈希的坏值也不能崩（手改 JSON 会出现 list/dict）
     assert pet_behaviors.validate_steps([{"act": ["jump"]}])[0] is None
+
+def test_io_bom_and_gbk_are_not_treated_as_corrupt(tmp_path):
+    """S1（兼容审查）：UTF-8 with BOM / GBK 的文件内容完好，绝不能被"愈合"清空。
+
+    回归点：read_json_or 当初用 encoding="utf-8" + except Exception 判损坏，
+    于是记事本另存为 BOM/ANSI 的用户文件会被空结构原地覆盖（旧版一个字节都不动）。
+    """
+    import json as _json
+    import pet_io
+    # ① UTF-8 with BOM：内容完好，必须原样读出且**不触发愈合**
+    p = tmp_path / "bom.json"
+    p.write_bytes("\ufeff".encode("utf-8") + _json.dumps({"alarms": [{"id": "a1"}]}).encode("utf-8"))
+    data, corrupted = pet_io.read_json_or(str(p), dict, log=lambda m: None)
+    assert corrupted is False, "带 BOM 的完好文件被判成损坏（会被清空）"
+    assert data["alarms"][0]["id"] == "a1", "带 BOM 的内容没读出来：%r" % (data,)
+    # ② GBK：解码失败 ≠ 损坏 → 不得回写
+    g = tmp_path / "gbk.json"
+    g.write_bytes(_json.dumps({"name": "中文"}, ensure_ascii=False).encode("gbk"))
+    before = g.read_bytes()
+    data2, corrupted2 = pet_io.read_json_or(str(g), dict, log=lambda m: None)
+    assert corrupted2 is False, "GBK 文件被判成损坏（会被清空）"
+    pet_io.heal_json(str(g), dict, log=lambda m: None)
+    assert g.read_bytes() == before, "GBK 文件被愈合写盘覆盖了（旧版不会动它）"
+    # ③ 真损坏仍然要愈合，并且**留一份 .bak**
+    bad = tmp_path / "bad.json"
+    bad.write_text("{ oops", encoding="utf-8")
+    pet_io.heal_json(str(bad), lambda: {"ok": True}, log=lambda m: None)
+    assert _json.loads(bad.read_text(encoding="utf-8")) == {"ok": True}, "真损坏没有愈合"
+    assert (tmp_path / "bad.json.bak").exists(), "愈合前没有留备份（判错就无法恢复）"

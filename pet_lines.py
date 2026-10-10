@@ -241,11 +241,19 @@ class LineService:
     # ---------------- 持久化 ----------------
     def _load(self):
         data = None
+        _read_failed_hard = False
         try:
             with open(self._path, "r", encoding="utf-8") as f:
                 data = json.load(f)
+        except FileNotFoundError:
+            data = None  # 首次运行：走种子（随后 _save 会写出来）
+        except (ValueError, UnicodeDecodeError):
+            data = None  # 内容坏了 → 允许下面的愈合回写
+        except OSError:
+            # 只是暂时打不开（Windows 共享冲突/句柄占用）→ 判为"不是坏文件"，绝不回写覆盖
+            _read_failed_hard = True
         except Exception:
-            data = None  # 有意忽略：首次运行/损坏 → 走种子（首次运行常态）
+            data = None  # 有意忽略：其余异常按首次运行处理
         self._lines, self._dialogues, self._deleted = [], [], []
         if isinstance(data, dict):
             for ln in (data.get("lines") or []):
@@ -264,6 +272,14 @@ class LineService:
             # 有删除记录说明是用户自己删光的 → 尊重用户，不自动复活。
             self._merge_builtins(force=True)
         self._reindex()
+        # v2.3.1（评审报告根因 B 的同类遗留）：之前这里是"坏 lines.json 只报错、被动等下次
+        # 写盘才愈合"。现在与 memory/alarms/behaviors/索引 同口径——**读到坏就回写一次愈合文件**，
+        # 让坏数据不再每次启动重报（read 失败=OSError 时不写，避免覆盖只是暂时打不开的好文件）。
+        if data is None and _read_failed_hard is False:
+            try:
+                self._save()
+            except Exception as _e:
+                _log_error("lines heal save failed: %r" % (_e,))
 
     def _merge_builtins(self, force=False):
         """补入缺失的内置台词：跳过用户删过的 id（防复活）；force=首次种子化。"""

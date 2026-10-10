@@ -63,7 +63,7 @@ import pet_tools  # v2.3.0（1.2）：工具注册表/执行器（Qt-free，无�
 
 
 APP_NAME = "大肥鱼桌宠"
-VERSION = "2.3.0"
+VERSION = "2.3.1"
 PAD = 1.25  # 窗口相对角色的透明边距（为压扁/回弹预留空间）
 IDLE_FRAME_MS = 140      # 待机帧间隔
 IDLE_FORM_HOLD_SECS = 8  # v2.1.3：只有形态、没有动作可播时的展示期上限（到期回用户形态）
@@ -2941,16 +2941,25 @@ class PetWindow(QWidget):
         self._position_food_tray()
 
     def closeEvent(self, event):
-        """v2.3.1（P2-4）：窗口被关闭（Alt+F4 / 任务栏关闭 / close()）也走统一退出清理。
+        """v2.3.1：关闭窗口 = **收进托盘**（不是退出程序）。
 
-        setQuitOnLastWindowClosed(False) 下 Qt 不会自动退出，此前 close 只等于隐藏窗口，
-        退出清理（停全部定时器、清残留 tmp、结束后端进程）全部被跳过。_quit 幂等。
+        兼容审查（M2）指出：初版这里直接走 _quit，会把用户"Alt+F4 收起来、托盘再叫回"
+        的习惯改成"直接杀进程"（而托盘里原本还有个"显示桌宠"，几乎成死入口）。
+        因此恢复旧语义——close 只隐藏窗口；真正退出仍然只有托盘「⏹ 退出」这一条路
+        （以及系统注销/关机时的 aboutToQuit 兜底）。首次关闭给一次气泡提示，避免用户
+        以为程序没关掉。
         """
         try:
-            event.accept()
+            event.ignore()   # 不真的销毁窗口：只隐藏，托盘菜单"显示桌宠"随时叫回来
         except Exception:
-            pass  # 有意忽略：事件对象异常也不能挡住退出
-        self._quit()
+            pass  # 有意忽略：事件对象异常也不能挡住隐藏
+        try:
+            self.hide()
+            if not globals().get("_HIDE_TIP_SHOWN"):
+                globals()["_HIDE_TIP_SHOWN"] = True
+                self.show_bubble("我先收进托盘啦，右键托盘图标可以叫我出来~")
+        except Exception as e:
+            _log_error("closeEvent hide: %r" % (e,))
 
     def _position_badge(self):
         if not self.badge.isVisible():

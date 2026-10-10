@@ -51,10 +51,9 @@ BEHAVIOR_ACTS = ("play_action", "say", "voice", "emote", "form", "sleep", "wait"
 # 而不是用户乱填。这类 act 一律映射成 play_action（动作名照旧透传），而不是丢弃。
 # 值 = (现用 act, 迁移后要补的默认参数值)。
 _LEGACY_ACT_ALIASES = {
+    # 兼容审查 L4：只保留有实测证据的 jump；breathe/sway/nod 历史数据没有实据，
+    # 映射后在内置角色上必然"静默无效果"，不如照旧丢弃并记日志（口径更诚实）
     "jump": ("play_action", "jump"),        # 内建跳跃动作：play_action 的 name 就叫 jump
-    "breathe": ("play_action", "breathe"),  # 程序化合成动作（角色定义了同名 procs 时生效）
-    "sway": ("play_action", "sway"),
-    "nod": ("play_action", "nod"),
 }
 # 语音事件白名单（与 pet_voice.VOICE_EVENTS 同值；pet_behaviors 不依赖 pet_voice 的私有实现）
 BEHAVIOR_VOICE_EVENTS = ("reply", "feed", "poke", "sleep", "wake")
@@ -447,7 +446,11 @@ class BehaviorService:
         steps, err = validate_steps(b.get("steps"))
         if steps is None:
             return None, err
-        return {"id": bid, "name": name, "steps": steps}, ""
+        # v2.3.1（兼容审查 M1）：保留未知键（复制原条目后覆盖已知键），
+        # 避免"读取时归一化回写"把用户手加字段/未来字段永久删掉
+        out = dict(b)
+        out.update({"id": bid, "name": name, "steps": steps})
+        return out, ""
 
     # ---------- 查改 ----------
     def list(self):

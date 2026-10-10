@@ -40,6 +40,7 @@ v2.3.0 只给 pet_book/pet_config 修了"固定 .tmp + 无锁"这一处同款 bu
 """
 import json
 import os
+import shutil
 import threading
 import time
 
@@ -171,15 +172,23 @@ def read_json_or(path, factory=dict, *, expect=dict, log=None):
       绝不据此回写（否则可能用空结构覆盖掉别人的好文件）
     """
     try:
-        with open(str(path), "r", encoding="utf-8") as f:
+        # v2.3.1（兼容审查 S1）：用 utf-8-sig——用户用记事本另存为「UTF-8 with BOM」时
+        # 内容其实完好，用 utf-8 读会抛 JSONDecodeError 被判"损坏"→ 被空结构覆盖清空。
+        with open(str(path), "r", encoding="utf-8-sig") as f:
             data = json.load(f)
     except FileNotFoundError:
         return factory(), False
     except OSError as e:
         _log(log, "pet_io 读取失败（按默认值继续）%s: %r" % (path, e))
         return factory(), False
+    except UnicodeDecodeError as e:
+        # v2.3.1（兼容审查 S1）：解码失败 ≠ 内容损坏。GBK/ANSI 另存的文件内容完全可读，
+        # 旧版对它一个字节都不动；把它判成"坏"再回写 = 原地销毁用户数据。
+        # 与 OSError 同口径：不能证明损坏 → 不回写，只记一行日志。
+        _log(log, "pet_io 编码不是 UTF-8（按默认值继续，不覆盖原文件）%s: %r" % (path, e))
+        return factory(), False
     except Exception as e:
-        # 其余（JSONDecodeError / UnicodeDecodeError / RecursionError…）= 文件内容坏了
+        # 其余（JSONDecodeError / RecursionError…）= 文件内容确实坏了
         _log(log, "pet_io 解析失败（按默认值重建）%s: %r" % (path, e))
         return factory(), True
     if expect is not None and not isinstance(data, expect):
@@ -205,6 +214,13 @@ def heal_json(path, factory=dict, *, expect=dict, log=None, retries=3):
     with lock:
         data, corrupted = read_json_or(path, factory, expect=expect, log=log)
         if corrupted:
+            # v2.3.1（兼容审查 S1）：愈合前先把原文件另存 .bak——万一判错了（未来又出现
+            # 某种"内容可读但被判坏"的假阳性），用户的数据还在，可手工恢复。
+            try:
+                if os.path.exists(str(path)):
+                    shutil.copyfile(str(path), str(path) + ".bak")
+            except Exception as e:
+                _log(log, "pet_io 愈合备份失败（继续愈合）%s: %r" % (path, e))
             # 锁还在手上：此刻没有本进程写者能在"读到坏"与"回写"之间插入新数据
             atomic_write_json(path, factory(), lock=lock, retries=retries, log=log)
     return data, corrupted

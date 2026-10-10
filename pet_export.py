@@ -23,6 +23,7 @@ import json
 import os
 import shutil
 import tempfile
+import threading
 import uuid
 import zipfile
 
@@ -242,7 +243,8 @@ def export_bundle(role_lib, behaviors_svc, cfg, out_path, alarms_getter=None,
                                        _vmeta, meta)
         if manifest is None:
             return False, err
-        tmp = out_path + ".tmp"
+        # v2.3.1（同类遗留）：线程唯一临时名，避免与其它写者抢同一个 .tmp
+        tmp = "%s.%d.tmp" % (out_path, threading.get_ident())
         try:
             with zipfile.ZipFile(tmp, "w", zipfile.ZIP_DEFLATED) as zf:
                 zf.writestr(MANIFEST_NAME, json.dumps(manifest, ensure_ascii=False, indent=2))
