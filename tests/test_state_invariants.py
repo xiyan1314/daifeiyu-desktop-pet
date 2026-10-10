@@ -41,13 +41,12 @@ def pet(tmp_path_factory):
     from helpers_roles import install_three_form_role
     install_three_form_role(win, tmp)
     yield win
-    try:
-        win._closing = True
-        win.voice.stop()
-        win.hide()
-        win.deleteLater()
-    except Exception:
-        pass  # 有意忽略：测试收尾
+    # L4（v2.4.1）：统一收尾——**先停掉全部 QTimer** 再 hide/close/deleteLater。只 hide() 时
+    # 实测拆完仍有 6 个定时器活跃（deleteLater 要等事件循环处理 DeferredDelete），
+    # 后续用例一 pump 就会回调产品代码（顺序污染的常见来源）。
+    from helpers_roles import active_timer_count, shutdown_pet
+    shutdown_pet(win)
+    assert active_timer_count(win) == 0, "拆完还有 %d 个活跃定时器" % active_timer_count(win)
     main.DATA_DIR, main.CONFIG_PATH, main.USAGE_PATH, main.MEMORY_PATH = _snap[0], _snap[1], _snap[2], _snap[3]
     pet_log.set_data_dir(_snap[4])
     main.set_redact_key(_snap[6] or "")

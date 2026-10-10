@@ -3,14 +3,18 @@
 import time
 
 import pytest
-from PySide6.QtCore import QCoreApplication
+# N4（v2.4.1）：**必须是 QApplication**，不能是 QCoreApplication——其它模块用
+# "QApplication.instance() or QApplication([])" 复用进程里已有的 app，而这个 truthy 的
+# QCoreApplication 会被当成"已有 app"收下，之后任何模块建 QWidget 都会 Qt fatal 崩进程
+# （退出码 0xC0000409、无 traceback，表现为"单跑绿、全量崩"）。
+from PySide6.QtWidgets import QApplication
 
 import pet_mood
 
 
 @pytest.fixture(scope="module")
 def qapp():
-    app = QCoreApplication.instance() or QCoreApplication([])
+    app = QApplication.instance() or QApplication([])
     yield app
 
 

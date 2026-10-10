@@ -262,6 +262,59 @@ def test_read_json_ex_separates_missing_corrupt_and_unreadable(tmp_path, monkeyp
     assert g.read_bytes() == gb, "GBK 文件被当成损坏清空了"
 
 
+def test_read_json_ex_never_normalizes_an_unreadable_file(tmp_path, monkeypatch):
+    """S1（找茬）：文件"在盘上但这次读不到"时，判据一次都不许跑、一个字节都不许写。
+
+    HEAD 实测：unreadable=True 时 data 是 factory() 默认值，normalize 却照样跑 → 判据对
+    默认值报"脏" → backup_before_heal + 覆盖写：{"k":1,"original":"KEEP ME"} 被改成
+    {"k":1,"fixed":true}（连 .bak 一起产生）。这与 read_json_ex 自己"unreadable=True 时
+    调用方据此跳过整体回写"的承诺直接矛盾，是把"这次读不到"变成"永久改写用户文件"。
+    能真失败：把 `and not unreadable` 去掉，前两条断言立刻红。
+    """
+    p = tmp_path / "unreadable.json"
+    original = b'{"k":1,"original":"KEEP ME"}'
+    p.write_bytes(original)
+    calls = []
+
+    def norm(data):
+        calls.append(dict(data))
+        return {"k": data.get("k", 0), "fixed": True}, "判据认为脏"
+
+    def fake_status(path, factory, **kw):
+        return factory(), False, True          # 在盘上，但这次读不到
+
+    with monkeypatch.context() as m:
+        m.setattr(pet_io, "_read_json_status", fake_status)
+        assert pet_io.read_json_ex(str(p), lambda: {"k": 1}, normalize=norm,
+                                   log=lambda _m: None) == ({"k": 1}, False, True)
+    assert calls == [], "读不到时判据被调用了（拿到的是 factory 默认值，不是文件内容）：%r" % (calls,)
+    assert p.read_bytes() == original, "读不到却把用户文件覆盖写了：%r" % (p.read_bytes(),)
+    assert not (tmp_path / "unreadable.json.bak").exists(), "没写盘就不该有 .bak"
+    # ② 非 UTF-8（GBK）同"读不到"口径：内容完好，判据同样不许跑
+    g = tmp_path / "gbk_norm.json"
+    g.write_bytes(json.dumps({"名": "中文"}, ensure_ascii=False).encode("gbk"))
+    gb = g.read_bytes()
+    calls[:] = []
+    assert pet_io.read_json_ex(str(g), dict, normalize=norm,
+                               log=lambda _m: None) == ({}, False, True)
+    assert calls == [] and g.read_bytes() == gb, "GBK 文件被当成内容判脏了"
+    # ③ 正例对照：**真读到内容且脏**时必须照常跑判据 + 留 .bak + 回写
+    #    （证明上面两条不是"判据整个坏掉了"的空转）
+    h = tmp_path / "dirty.json"
+    h.write_text('{"history": {"坏": 1}}', encoding="utf-8")
+    calls[:] = []
+
+    def norm_dirty(data):
+        calls.append(dict(data))
+        return {"history": []}, "内层非法"
+
+    got = pet_io.read_json_ex(str(h), dict, normalize=norm_dirty, log=lambda _m: None)
+    assert got == ({"history": []}, False, False), got
+    assert calls and calls[0] == {"history": {"坏": 1}}, "可读且脏时判据没跑：%r" % (calls,)
+    assert _read(h) == {"history": []}, "可读且脏时必须回写归一化结构"
+    assert (tmp_path / "dirty.json.bak").is_file(), "愈合前必须留 .bak"
+
+
 def test_read_json_ex_reads_corrupt_file_once(tmp_path, monkeypatch):
     """v2.4.1（A 区）：真损坏只读**一遍**磁盘（旧写法 read_json_or + heal_json 读两遍）。
 
@@ -1350,6 +1403,10 @@ def test_persona_samples_are_ignored_and_do_not_dirty_the_release_gate():
         return r.stdout or ""
 
     assert _git("ls-files", "prompts").split() == [], "prompts 下还有被跟踪的文件（生成物不该进仓库）"
+    # M1（fresh clone）：这三份是运行时生成物，新克隆的树里没有 → 先走产品首启路径生成，
+    # 再断言"停止跟踪只该停跟踪、不该删本地文件"（此前直接断言 isfile，CI fresh checkout 必红）
+    import 桌宠 as _main
+    _main.ensure_persona_files()
     sample = os.path.join(here, "prompts", "default.txt")
     assert os.path.isfile(sample), "git rm --cached 只该停止跟踪，不该删本地文件"
     raw = open(sample, "rb").read()

@@ -142,9 +142,14 @@ def test_m2_clear_logs_removes_bad_quarantine():
     """M2：桌宠「清理日志」的删除名单必须含 error.log.bad。"""
     names = _clear_logs_names(_read("桌宠.py"))
     # 正例对照：提取器必须真的拿到了现有名单（拿不到就说明它失效了，断言会失败而不是空转）
-    assert {"error.log", "error.log.old", "memory.log"} <= names, "提取器没拿到真实名单：%r" % names
+    # L4（v2.4.1 质量审查）：memory.log 的轮转产物 memory.log.old 也必须在名单里
+    # （pet_main 在 memory.log 超 512KB 时把它改名成 .old，此前"清理日志"扫不到它）
+    assert {"error.log", "error.log.old", "memory.log", "memory.log.old"} <= names, \
+        "提取器没拿到真实名单：%r" % names
     assert "error.log.bad" in names, \
         "清理日志漏了 pet_log 隔离出的 .bad（可能 512KB+，用户以为擦干净了却永久留存）：%r" % names
+    assert "memory.log.old" in names, \
+        "清理日志漏了 memory.log 的轮转产物 .old（同样 512KB 级、同样永久留存）：%r" % names
 
 
 def test_m2_clear_logs_extractor_can_fail():
@@ -154,7 +159,8 @@ def test_m2_clear_logs_extractor_can_fail():
     assert mutated != src, "变异没生效（源码形态变了？），控制组失去意义"
     names = _clear_logs_names(mutated)
     assert "error.log.bad" not in names
-    assert {"error.log", "error.log.old", "memory.log"} <= names, "变异把别的项一起弄坏了"
+    assert {"error.log", "error.log.old", "memory.log", "memory.log.old"} <= names, \
+        "变异把别的项一起弄坏了"
 
 
 def test_m2_clear_api_key_removes_bad_quarantine(tmp_path):
@@ -202,7 +208,7 @@ def _full_zip_names():
     return [n for n in chk._sync_pairs() if n != "_verify_green.py"] + ["python.exe"]
 
 
-def _make_zip(path, names, version=None, real_main=True):
+def _make_zip(path, names, version=None, real_main=True, vi_text=None):
     real = ""
     if real_main:
         with open(os.path.join(chk.ROOT, "桌宠.py"), "rb") as f:
@@ -211,6 +217,8 @@ def _make_zip(path, names, version=None, real_main=True):
         for n in names:
             if n == "桌宠.py":
                 z.writestr(n, real if real_main else 'VERSION = "%s"\n' % (version,))
+            elif n == "version_info.txt" and vi_text is not None:
+                z.writestr(n, vi_text)     # L2：包内那份 version_info.txt 的内容可控
             else:
                 z.writestr(n, "x")
 
@@ -248,6 +256,30 @@ def test_m3_zip_flags_repro_quiet(tmp_path):
     assert "repro_quiet.py" in joined, joined
 
 
+def test_m1_zip_numeric_version_is_read_from_inside_the_package(tmp_path):
+    """L2（质量审查）：数字版本判据必须覆盖**包内**那份 version_info.txt。
+
+    version_problems() 读的是 ROOT 那份，而真正发出去的是包内那份——包里停在 (2,2,0,0)
+    也照样能装出去（exe 属性显示旧版本号）。能真失败：把 check_zip 里那段包内比对删掉，
+    第二条断言立刻红。
+    """
+    names = _full_zip_names()
+    want = chk.repo_version()
+    good_nums = ", ".join(str(x) for x in chk._ver_key(want))
+    ok = tmp_path / "vi_ok.zip"
+    _make_zip(ok, names, vi_text=_vi_text(want, "(%s)" % good_nums, "(%s)" % good_nums))
+    assert chk.check_zip(str(ok), want) == [], "包内数字版本正确必须放行（反例对照）"
+    bad = tmp_path / "vi_bad.zip"
+    _make_zip(bad, names, vi_text=_vi_text(want, "(2, 2, 0, 0)", "(2, 2, 0, 0)"))
+    joined = " ".join(chk.check_zip(str(bad), want))
+    assert "数字版本" in joined and "2, 2, 0, 0" in joined, joined
+    # 只有一项错（filevers 对、prodvers 停旧版）也要报
+    half = tmp_path / "vi_half.zip"
+    _make_zip(half, names, vi_text=_vi_text(want, "(%s)" % good_nums, "(2, 2, 0, 0)"))
+    joined_half = " ".join(chk.check_zip(str(half), want))
+    assert "prodvers" in joined_half and "2, 2, 0, 0" in joined_half, joined_half
+
+
 def test_m3_green_root_dev_scripts_named_but_dev_dir_exempt(tmp_path, monkeypatch):
     """M3：绿色版**根目录**的 repro_*/e2e_*/*_dev*.py 要点名；_dev/ 内的不算。"""
     monkeypatch.setattr(chk, "GREEN", str(tmp_path))
@@ -269,6 +301,22 @@ def test_m3_green_root_dev_scripts_named_but_dev_dir_exempt(tmp_path, monkeypatc
     for n in ("repro_quiet.py", "e2e_full_form.py", "build_dev_tool.py"):
         (tmp_path / n).unlink()
     assert chk.check_green_dir() == []
+
+
+def test_l3_zip_flags_dev_dir_leftovers(tmp_path):
+    """L3（质量审查）：整目录打包时 _dev/（开发脚本 + 审计报告）会整体进包，必须被点名。
+
+    现包安全（3878 条里没有 _dev/），但黑名单此前只有 _verify_assets/ → 拦不住。
+    能真失败：把 ZIP_EXTRA_PREFIX 里的 "_dev/" 去掉，第二条断言红。
+    """
+    names = _full_zip_names()
+    ok = tmp_path / "nodev.zip"
+    _make_zip(ok, names)
+    assert chk.check_zip(str(ok), chk.repo_version()) == [], "反例对照：不含 _dev/ 必须放行"
+    bad = tmp_path / "withdev.zip"
+    _make_zip(bad, names + ["_dev/repro_frame_freeze.py", "_dev/audit_A_tier_review.md"])
+    joined = " ".join(chk.check_zip(str(bad), chk.repo_version()))
+    assert "_dev/repro_frame_freeze.py" in joined and "_dev/audit_A_tier_review.md" in joined, joined
 
 
 def test_m3_need_covers_every_synced_file():
@@ -333,6 +381,46 @@ def test_l9_untracked_runtime_prompts_are_ignored():
     assert rc2 == 1, "prompts/custom/*.txt 不该被一起忽略（用户自建人设要能进仓库）"
 
 
+def _persona_sample(name):
+    """护栏用：拿到人设样本文件（**fresh clone 里就地生成**）。
+
+    v2.4.1（质量审查 M1）：prompts/*.txt 本轮起是运行时生成物（git rm --cached +
+    .gitignore 的 prompts/*.txt），新克隆的树里没有它们——护栏直接断言"文件在"会在 CI 的
+    fresh checkout（发布流水线就是 fresh checkout）上必红（审查实测 2 failed）。这里先走
+    产品自己的首启路径 ensure_persona_files() 生成，再返回路径；"停止跟踪不该删本地文件"
+    这条语义由调用方断言。生成物与仓库里那三份逐字节相同（内置常量就是它们的来源）。
+    """
+    import 桌宠 as main
+    main.ensure_persona_files()
+    return os.path.join(chk.ROOT, "prompts", name)
+
+
+def test_m1_persona_guard_survives_a_fresh_clone(tmp_path, monkeypatch):
+    """M1（本轮回归）：fresh checkout 里那两条护栏必须仍然绿。
+
+    把 DATA_DIR 与 chk.ROOT 同时指到一个**空目录**（= 刚 clone 出来、还没启动过产品的树），
+    复现审查实测的失败前提（prompts/*.txt 不在），再原样跑护栏用的取文件函数。
+    能真失败：把 _persona_sample 换回 os.path.isfile(chk.ROOT/prompts/<name>) 直接断言，
+    这条立刻红（空目录里没有那三份）。
+    """
+    import 桌宠 as main
+    fresh = tmp_path / "fresh_clone"
+    fresh.mkdir()
+    monkeypatch.setattr(main, "DATA_DIR", str(fresh), raising=False)
+    monkeypatch.setattr(chk, "ROOT", str(fresh), raising=False)
+    assert not os.path.isdir(os.path.join(str(fresh), "prompts")), "模拟目录不空，用例没有区分力"
+    for name in ("default.txt", "sheshe.txt", "tsundere.txt"):
+        p = _persona_sample(name)
+        assert os.path.isfile(p), "fresh clone 里没生成出 %s" % name
+        pid = name[:-4]
+        assert open(p, encoding="utf-8").read().strip() == main.PERSONA_PRESETS[pid].strip(),             "生成物与内置预设不一致：%s" % name
+    # 只写不覆盖：用户改过的人设不许被这次"护栏生成"冲掉
+    d = os.path.join(str(fresh), "prompts", "default.txt")
+    open(d, "w", encoding="utf-8").write("我改过的")
+    _persona_sample("default.txt")
+    assert open(d, encoding="utf-8").read() == "我改过的"
+
+
 def test_l9_prompts_are_untracked_so_editing_them_no_longer_dirties_the_tree():
     """L9 收口（v2.4.1 / A9）：三份人设**不再被跟踪**——它们是运行时生成物。
 
@@ -346,7 +434,8 @@ def test_l9_prompts_are_untracked_so_editing_them_no_longer_dirties_the_tree():
     for name in ("default.txt", "sheshe.txt", "tsundere.txt"):
         rc_i, _ = _git("check-ignore", "-q", "prompts/" + name)
         assert rc_i == 0, "prompts/%s 没被忽略：它会作为未跟踪文件弄脏 git status" % name
-        assert os.path.isfile(os.path.join(chk.ROOT, "prompts", name)), \
+        # M1：不依赖"仓库里本来就有那三份"——fresh clone 里就地生成（运行时生成物）
+        assert os.path.isfile(_persona_sample(name)), \
             "git rm --cached 只该停止跟踪，不该删本地文件：prompts/%s 不见了" % name
     rc_s, out_s = _git("status", "--porcelain", "--", "prompts")
     # 本次"停止跟踪"会留下一次性的已暂存删除（D）直到提交；除此之外**不许**再有任何条目：
@@ -434,6 +523,12 @@ def test_全量脏条目报告(tmp_path):
     assert "config.json.11.tmp" in chk._full_list(names), "第 12 条被截断了"
     assert "共 12 条" in chk._full_list(names)
     assert chk._full_list(["a", "b"]) == "a, b"        # 少条目时不加尾巴（别噪音化）
+    # v2.4.1（找茬 L3）：无上限全量在脏包上会刷屏 → 上限 _FULL_LIST_MAX 条，超出只给计数
+    many = ["f%03d.json" % i for i in range(chk._FULL_LIST_MAX + 300)]
+    rep = chk._full_list(many)
+    assert len(rep.split(",")) == chk._FULL_LIST_MAX, "报告没有按上限截断：%d 条" % len(rep.split(","))
+    assert "共 %d 条" % len(many) in rep and "只列前 %d 条" % chk._FULL_LIST_MAX in rep, rep[-70:]
+    assert "f000.json" in rep and "f499.json" not in rep, "截断的头部/尾部不对"
     # 绿色版目录真跑：11 个残留必须全部点名，常规用户数据一个都不点名
     for n in ["memory.log.old", "error.log.bad", "config.json.12345.678.tmp", "roles.json.bak",
               "usage.json.migrated"] + ["lines.json.%d.tmp" % i for i in range(6)]:

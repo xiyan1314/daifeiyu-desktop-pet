@@ -30,13 +30,13 @@
 
 | # | 原条目（审计当时） | 当前行 | 函数 | 判定 | 依据 |
 |---|---|---|---|---|---|
-| 1 | pet_book.py:693 | pet_book.py:682 | Book.export_csv | **误报（旧实现已消失）** | 早前 A 区收口已把"自建 tmp + os.replace"换成 `pet_io.atomic_write_bytes(log=pet_log.log_error)`，且 handler `return False, str(e)` 上报调用方。**领地外，只判定** |
+| 1 | pet_book.py:693 | pet_book.py:689-691 | Book.export_csv | **误报（旧实现已消失）** | 早前 A 区收口已把"自建 tmp + os.replace"换成 `pet_io.atomic_write_bytes(log=pet_log.log_error)`，且 handler `return False, str(e)` 上报调用方。（v2.4.1 找茬 M1 又把 **CSV 正文**也挪进同一个 try，handler 因此下移到 689-691。）**领地外，只判定** |
 | 2 | pet_config.py:291 | pet_config.py:291 | write_config | **真问题 → 已修** | 加密失败后要读磁盘旧值保住密文；读失败时 `out["api_key"] = ""` → 用户的 Key 被**静默清空**。已补 `log("read old config for api_key failed, api_key cleared: %r")` |
 | 3 | pet_export.py:256 | pet_export.py:256 | export_bundle | 误报 | handler `return False, "写入失败：%s" % e`（界面弹"导出失败"）；tmp 清理尽力而为且已有注释 |
 | 4 | pet_export.py:378 | pet_export.py:378 | import_bundle | 误报 | 同 try 只做 `(cfg or {}).get("voice")` 取字段，失败就当"没有本地密钥"；注释已写明 |
 | 5 | pet_export.py:454 | pet_export.py:452 | import_bundle | 误报 | `int(manifest["version"])` 的常量兜底；最坏是少弹一句"包版本高于当前支持"，不丢数据。**本轮补注释** |
 | 6 | pet_export.py:550 | pet_export.py:550 | import_bundle | 误报 | 外层 handler `return None, "导入失败：%s" % e` + 尽力回滚，已有注释 |
-| 7 | pet_export.py:556 | pet_export.py:556 | import_bundle | 误报（有意保留） | 只是"回滚时把已入索引的角色删掉"的尽力而为；最坏=下次启动看到一个没有素材的空角色。要给 pet_export 引 pet_log，收益不抵改动面 |
+| 7 | pet_export.py:556 | pet_export.py:559 | import_bundle | 误报（有意保留） | 只是"回滚时把已入索引的角色删掉"的尽力而为；**最坏后果 = 留一个空角色条目**（索引里有、素材已被删），已写进 `pet_export.py:559` 的代码注释。要给 pet_export 引 pet_log，收益不抵改动面 |
 | 8 | pet_io.py:270 | pet_io.py:275-288 | atomic_write_bytes | 误报 | 重试**耗尽**后 `raise last` → 外层 `_log(log, "pet_io 写盘失败 …")` + `return str(e)`。**领地外，只判定** |
 | 9 | pet_main.py:31 | pet_main.py:31 | check_memory | 良性（已注释） | 512KB 轮转失败 → 日志继续追加变大，不丢数据、不影响功能；注释写明"体积检查失败直接追加" |
 | 10 | pet_resources.py:886 | pet_resources.py:868 | RoleLibrary 导入单图 | 误报 | `return None, "复制文件失败"` 上报调用方；except 里只删半截文件。**本轮补注释** |
@@ -45,12 +45,17 @@
 | 13 | pet_resources.py:1124 | pet_resources.py:1106 | RoleLibrary（保留原图） | 良性（已注释） | "体积优化开关"的尽力而为路径，失败不影响导入结果 |
 | 14 | pet_resources.py:1398 | pet_resources.py:1380 | AudioLibrary.import_fragment | 误报 | `return None, "复制文件失败"`。**本轮补注释** |
 | 15 | pet_resources.py:1637 | pet_resources.py:1619 | VoiceAssetLibrary.import_file | 误报 | 同上。**本轮补注释** |
-| 16 | pet_voice.py:711 | pet_voice.py:720 | VoiceLauncher.is_running | 误报 | 进程探针：内层取不到 create_time → `return False`（保守认定"不是我们的进程"）；外层兜底 `os.kill(pid, 0)` → 失败也 False。对探针来说 False 是**安全答案**。**领地外，只判定** |
-| 17 | pet_voice.py:819 | pet_voice.py:828 | VoiceLauncher.wait_ready | 误报 | 同一个 try 的三个 handler（收紧①）；每个只写 `last`，循环后 `return False, "…（等了 N 秒…）" % (last…)` 已上报。**领地外，只判定** |
-| 18 | pet_voice.py:821 | pet_voice.py:830 | 同上 | 误报 | 同上 |
-| 19 | pet_voice.py:823 | pet_voice.py:832 | 同上 | 误报 | 同上 |
+| 16 | pet_voice.py:711 | pet_voice.py:726 | VoiceLauncher.is_running | 误报 | 进程探针：内层取不到 create_time → `return False`（保守认定"不是我们的进程"）；外层兜底 `os.kill(pid, 0)` → 失败也 False。对探针来说 False 是**安全答案**。**领地外，只判定** |
+| 17 | pet_voice.py:819 | pet_voice.py:834 | VoiceLauncher.wait_ready | 误报 | 同一个 try 的三个 handler（收紧①）；每个只写 `last`，循环后 `return False, "…（等了 N 秒…）" % (last…)` 已上报。**领地外，只判定** |
+| 18 | pet_voice.py:821 | pet_voice.py:836 | 同上 | 误报 | 同上 |
+| 19 | pet_voice.py:823 | pet_voice.py:838 | 同上 | 误报 | 同上 |
 
-**统计：真 1（已修）· 误报 15 · 良性 3。** 没有第 4 类。
+**统计：真 1（已修）· 误报 16 · 良性 2。** 没有第 4 类。
+
+计数口径（照上表 19 行明细逐条数，别照抄旧结论）：`真` = 第 2 行（pet_config 静默清 Key）；
+`良性` = 第 9、13 行（轮转失败 / 体积优化开关，注释已写明"失败不影响功能"）；
+其余 16 行一律 `误报`（重试耗尽后已 raise+上报、handler 已有返回值或日志、注释明说尽力而为）。
+v2.4.1 找茬复算时旧文写的是"误报 15 · 良性 3"，与它自己的明细对不上，这里按明细更正。
 
 ## 3. 领地内 13 处的落地清单（本轮实际改动）
 
@@ -62,12 +67,13 @@
 | pet_main.py | 31 | 无需改（既有注释已说明） |
 | pet_resources.py | 1106 | 无需改（既有注释已说明） |
 
-`pet_export.py:556` **有意保留**：给 pet_export 引 pet_log 会扩大改动面，而最坏后果只是一个空角色
-条目，性价比不成立（已在代码注释里说明）。
+`pet_export.py:559` **有意保留**：给 pet_export 引 pet_log 会扩大改动面，而最坏后果只是
+**留一个空角色条目**（索引里有角色、素材已被回滚删掉 → 下次启动看到一个没素材的形态），
+性价比不成立。这一句现在**真的写在代码注释里**（v2.4.1 找茬 M3 补）。
 
 ## 4. 领地外 6 处（只判定，未改；交回主代理转派）
 
-`pet_voice.py` 720 / 828 / 830 / 832、`pet_book.py` 682、`pet_io.py` 275-288 —— 全部判为 **误报**，
+`pet_voice.py` 726 / 834 / 836 / 838、`pet_book.py` 689-691、`pet_io.py` 275-288 —— 全部判为 **误报**，
 依据见上表第 1/8/16/17/18/19 行。**未改动任何一行代码。**
 
 ## 5. 怎么复跑

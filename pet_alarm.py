@@ -84,6 +84,24 @@ def _now_minutes(now):
     return _hhmm_minutes(t) if t else None
 
 
+_NOW_INVALID_WARNED = False
+
+
+def _warn_invalid_now(now):
+    """now 非法时记**一次**日志（due_alarms 每 15s 被闹钟轮询调一次，逐次记会刷爆 error.log）。
+
+    v2.4.1（找茬 L5）：非法 now 从"全响"改成"一个都不响"是对的，但新失败模式是**静默**的
+    ——调用方格式传错只会觉得"闹钟莫名其妙不响了"，error.log 里一个字都没有。
+    生产路径（now_hhmm()）永远走不到这里，所以只记一次就够定位。
+    """
+    global _NOW_INVALID_WARNED
+    if _NOW_INVALID_WARNED:
+        return
+    _NOW_INVALID_WARNED = True
+    pet_log.log_error("闹钟到点判定：now 非法（%r），本次一个都不响（检查调用方传入的格式）"
+                      % (now,))
+
+
 def due_alarms(alarms, now, today):
     """到点判定（纯函数）：返回 [(alarm, normalized_time), ...]。
 
@@ -94,9 +112,11 @@ def due_alarms(alarms, now, today):
     恰好等于时间序（两侧都补零），但 API 很脆：调用方传未补零的 now（"7:59"）时
     "7:59" >= "08:00" 为真 → 07:59 就把 08:00 的闹钟响了；传 "abc" 更是全表齐响。
     现在两侧都先归一化成分钟数：now 非法 → 一个都不响（宁可少响一次，也不误响一整天）。
+    v2.4.1（找茬 L5）：这条新失败模式不许静默——非法 now 记一次日志（见 _warn_invalid_now）。
     """
     now_min = _now_minutes(now)
     if now_min is None:
+        _warn_invalid_now(now)
         return []
     out = []
     for a in alarms:
@@ -254,9 +274,14 @@ class AlarmService:
                 a["last_fired_date"] = ""  # v2.2（找茬 M2）：重新启用=重新武装
             a["enabled"] = bool(enabled)
         if ringtone is not None:
-            a["ringtone"] = str(ringtone or "")
-            if a["ringtone"] and not a["ringtone"].lower().endswith(RINGTONE_EXTS):
+            # N1（v2.4.1）：**先校验再赋值**。此前是"先写进内存、校验失败直接 return False"
+            # （只跳过 _save）——内存里的闹钟已经被改成非法铃声，之后任何一次成功保存
+            # （改别的字段 / mark_fired / 新增闹钟）都会把它写进 alarms.json：
+            # 失败路径不但没挡住，反而污染了持久化。
+            rt = str(ringtone or "")
+            if rt and not rt.lower().endswith(RINGTONE_EXTS):
                 return False, "铃声仅支持 wav/mp3"
+            a["ringtone"] = rt
         self._save()
         return True, ""
 

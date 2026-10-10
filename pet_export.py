@@ -557,7 +557,10 @@ def import_bundle(role_lib, behaviors_svc, cfg, zip_path, alarms_apply=None,
                 role_lib._data["roles"].remove(role)
                 role_lib._save()
             except Exception:
-                pass  # 有意忽略：回滚保存尽力而为
+                # 有意忽略：回滚保存尽力而为。**最坏后果 = 留一个空角色条目**（索引里有角色、
+                # 素材已被下面的 written 循环删掉 → 下次启动看到一个没有素材的形态）。
+                # 不引 pet_log 上报是对的取舍：为一个"回滚中的回滚"引入依赖，收益不抵改动面。
+                pass
         for p in written:
             try:
                 if os.path.isfile(p):

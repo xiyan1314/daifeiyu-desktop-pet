@@ -104,6 +104,40 @@ def test_csv_export_goes_through_pet_io(tmpdir_book, tmp_path, monkeypatch):
     assert not [f for f in os.listdir(str(tmp_path)) if f.endswith(".tmp")]
 
 
+def test_csv_export_body_failure_returns_false_never_raises(tmpdir_book, tmp_path, monkeypatch):
+    """M1（找茬）：CSV **正文**抛异常也必须返回 (False, err)，绝不穿透到调用方。
+
+    HEAD 实测：try 只包住 atomic_write_bytes，正文（all_records / r["date"] /
+    "%.2f" % r["amount"]）在 try 外 → 账本里一条脏记录就让异常穿透；pet_dialogs._export
+    没有自己的 try，异常会走 Qt 槽 → 全局 excepthook 弹"出错了"模态框，而不是 3696 行
+    那句友好提示。656 行"失败返回 (False,err)"、662 行"不抛异常"的承诺就是靠这条钉住的。
+    能真失败：把 try 缩回 atomic_write_bytes 那一段之前，本用例红。
+    """
+    tmpdir_book.add_manual(3.5, "午饭")
+    p = str(tmp_path / "out.csv")
+
+    def boom():
+        raise RuntimeError("boom")
+
+    # ① 账本整体读不出来（all_records 抛）
+    with monkeypatch.context() as m:
+        m.setattr(tmpdir_book, "all_records", boom)
+        assert tmpdir_book.export_csv(p) == (False, "boom")
+    assert not os.path.exists(p), "正文都失败了还写出了 CSV"
+    assert not [f for f in os.listdir(str(tmp_path)) if f.endswith(".tmp")], "留下临时文件"
+    # ② 不是"整体抛"而是**单条记录缺字段**（r["date"] → KeyError）同样只报错
+    with monkeypatch.context() as m:
+        m.setattr(tmpdir_book, "all_records",
+                  lambda: [{"kind": "api", "time": "08:00", "amount": 1.0, "note": ""}])
+        ok2, err2 = tmpdir_book.export_csv(p)
+    assert ok2 is False and err2, (ok2, err2)
+    assert not os.path.exists(p)
+    # ③ 反例对照：健康账本照旧成功（证明上面不是"导出整个坏掉了"）
+    ok3, err3 = tmpdir_book.export_csv(p)
+    assert ok3 is True and err3 == "", (ok3, err3)
+    assert open(p, "rb").read().startswith(b"\xef\xbb\xbf")
+
+
 def test_corrupt_rebuild(tmp_path):
     (tmp_path / "ledger.json").write_text("{ not json", encoding="utf-8")
     b = pet_book.Book(str(tmp_path))

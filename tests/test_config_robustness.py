@@ -140,10 +140,8 @@ def test_window_boots_with_fully_poisoned_config(app):
         assert win.form in win.sprites
     finally:
         if win is not None:
-            try:
-                win._closing = True
-                win.voice.stop()
-                win.hide()
-                win.deleteLater()
-            except Exception:
-                pass  # 有意忽略：测试收尾
+            # L4（v2.4.1）：统一收尾——先停掉全部 QTimer 再 hide/close/deleteLater
+            from helpers_roles import active_timer_count, shutdown_pet
+            shutdown_pet(win)
+            assert active_timer_count(win) == 0, \
+                "拆完还有 %d 个活跃定时器" % active_timer_count(win)

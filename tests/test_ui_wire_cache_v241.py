@@ -19,6 +19,7 @@ PNG 构造次数作为第二口径一起钉。这不是放宽断言——见 tes
 """
 import os
 import sys
+import time
 
 import pytest
 
@@ -45,16 +46,16 @@ def pet(tmp_path_factory):
     pet_log.set_data_dir(str(tmp))
     QApplication.instance() or QApplication([])
     win = main.PetWindow()
-    from helpers_roles import install_three_form_role
+    from helpers_roles import install_three_form_role, quiet_pet_timers
     install_three_form_role(win, tmp)
+    quiet_pet_timers(win)   # 用例要确定性的起播计数：停掉会自行调 _play_idle 的周期表
     yield win
-    try:
-        win._closing = True
-        win.voice.stop()
-        win.hide()
-    finally:
-        (main.DATA_DIR, main.CONFIG_PATH, main.USAGE_PATH, main.MEMORY_PATH,
-         pet_log._data_dir) = snap
+    # L4（v2.4.1）：统一收尾——先停掉全部 QTimer 再 hide/close/deleteLater
+    from helpers_roles import active_timer_count, shutdown_pet
+    shutdown_pet(win)
+    assert active_timer_count(win) == 0, "拆完还有 %d 个活跃定时器" % active_timer_count(win)
+    (main.DATA_DIR, main.CONFIG_PATH, main.USAGE_PATH, main.MEMORY_PATH,
+     pet_log._data_dir) = snap
 
 
 def _counters(monkeypatch):
@@ -183,3 +184,106 @@ def test_role_change_still_re_wires(pet, monkeypatch):
     assert decodes == [], "默认角色重复注册又解码了 %d 帧" % (len(decodes),)
     win.apply_role("inv1")
     assert decodes, "切回自定义角色没有重新取帧"
+
+
+# ---------------- v2.4.1 找茬 M2/M5：素材换名/换内容与缓存上界 ----------------
+
+def _center_rgb(pix):
+    """QPixmap 中心像素 (r, g, b)——比较素材内容用（不看对象身份）。"""
+    img = pix.toImage()
+    return img.pixelColor(img.width() // 2, img.height() // 2).getRgb()[:3]
+
+
+def _write_png(path, color, w=64, h=64):
+    """原地重写一张纯色 PNG（同路径、同尺寸：只靠 mtime 判别时也能测出来）。"""
+    from PySide6.QtGui import QColor, QImage
+    img = QImage(w, h, QImage.Format.Format_ARGB32)
+    img.fill(QColor(*color))
+    img.save(path)
+
+
+def test_in_place_material_swap_is_re_decoded_and_replayed(pet, monkeypatch):
+    """M2（找茬）：同一路径原地换素材必须**重解**并**重新起播**。
+
+    HEAD 实测：指纹只含路径 → 原地重写 roles/inv_a.png（改成绿色）后 _play_idle() 取帧 0 次、
+    解码 0 次、画面仍旧；把 _wire_key=None 才变绿。用户直接替换数据目录里的 PNG 是既有用法。
+    能真失败：① _wire_anim_key 里去掉 mtime/大小（退回纯路径）→ 取帧 0 次；
+              ② _play_idle 里去掉 "anim._frames is not idle_frames" 那一句 → 帧集换了却不起播。
+    """
+    win = pet
+    win.apply_role("inv1")
+    win._set_form("f0", display_only=True)
+    win._wire_key = None
+    win._wire_anim_sets()
+    win._play_idle()
+    old = list(win.anim._sets.get("idle") or [])
+    assert old, "idle 帧集是空的，用例前提不成立"
+    path = win.role_lib.form_animations("inv1")[0]["idle"][0]
+    assert os.path.isfile(path), path
+    old_rgb = _center_rgb(old[0])
+    assert old_rgb != (0, 255, 0), "原素材本来就是绿的，用例没有区分力：%r" % (old_rgb,)
+    _write_png(path, (0, 255, 0, 255))
+    time.sleep(0.02)
+    st = os.stat(path)
+    os.utime(path, ns=(st.st_atime_ns + 10 ** 9, st.st_mtime_ns + 10 ** 9))  # 时间戳粒度兜底
+    fetches = []
+    real_fetch = main.PetWindow._frame_pix
+
+    def spy(self, p, *a, **k):
+        fetches.append(p)
+        return real_fetch(self, p, *a, **k)
+
+    monkeypatch.setattr(main.PetWindow, "_frame_pix", spy)
+    win._play_idle()
+    new = list(win.anim._sets.get("idle") or [])
+    assert fetches, "同路径换素材后一帧都没重取：指纹没把 mtime/大小算进去"
+    assert new and new[0] is not old[0], "重新注册拿到的还是旧 QPixmap 对象"
+    assert _center_rgb(new[0]) == (0, 255, 0), "画面还是旧素材（没重解）"
+    assert win.anim._frames is win.anim._sets.get("idle"), "新帧集没被起播（画面挂在旧列表上）"
+
+
+def test_frame_cache_is_bounded_by_bytes_not_entries(pet, monkeypatch):
+    """M5（找茬）：缓存上界必须是**字节预算**——512 条 × 单帧最大 1MB = 最坏 512MB 常驻。
+
+    实测（审查）：24 帧 512px 角色跑完 len=25 ≈ 25MB。这里把预算压到 4MB，看 8 张 512px 帧
+    （每张 512×512×4 = 1MB）是否真的只留下 4 张、且计数器与实际内容一致。
+    能真失败：把 _frame_pix 里的字节淘汰去掉（只留条目数上限），第一条断言红。
+    """
+    from helpers_roles import install_big_frame_role, drain_anim_slices
+    win = pet
+    rid, paths = install_big_frame_role(win, win.role_lib._dir, n=8, rid="bigcache1")
+    win.apply_role(rid)
+    drain_anim_slices(win)
+    win._clear_frame_cache()
+    monkeypatch.setattr(main, "_FRAME_CACHE_MAX_BYTES", 4 * 1024 * 1024)
+    for p in paths:
+        win._frame_pix(p)
+    assert len(win._frame_cache) == 4, \
+        "字节预算没生效：留下 %d 条（每张 1MB、预算 4MB）" % len(win._frame_cache)
+    assert win._frame_cache_bytes <= 4 * 1024 * 1024, win._frame_cache_bytes
+    assert win._frame_cache_bytes == sum(
+        int(pix.width()) * int(pix.height()) * 4 for pix in win._frame_cache.values()), \
+        "字节计数器与实际缓存内容不符"
+    # 反例对照：预算放大到装得下 → 8 条全在（证明上面不是"根本没缓存"）
+    monkeypatch.setattr(main, "_FRAME_CACHE_MAX_BYTES", 64 * 1024 * 1024)
+    win._clear_frame_cache()
+    for p in paths:
+        win._frame_pix(p)
+    assert len(win._frame_cache) == 8, len(win._frame_cache)
+
+
+def test_role_change_drops_the_old_roles_frame_keys(pet):
+    """M5（找茬）：换角色要清掉旧角色的键——旧素材不可能再命中，留着只占预算。
+
+    能真失败：把 _reload_sprites 里的 _clear_frame_cache() 删掉，第二条断言红。
+    """
+    from helpers_roles import install_big_frame_role, drain_anim_slices
+    win = pet
+    rid, paths = install_big_frame_role(win, win.role_lib._dir, n=4, size=256, rid="bigclear1")
+    win.apply_role(rid)
+    drain_anim_slices(win)
+    keys = {k[0] for k in win._frame_cache}
+    assert keys & set(paths), "旧角色的帧没进缓存，用例前提不成立"
+    win.apply_role("inv1")
+    keys2 = {k[0] for k in win._frame_cache}
+    assert not (keys2 & set(paths)), "换角色后旧角色的键还在缓存里：%r" % sorted(keys2 & set(paths))

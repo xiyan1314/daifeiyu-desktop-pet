@@ -381,6 +381,8 @@ def read_json_ex(path: str | os.PathLike, factory: Callable[[], Any] = dict, *,
       调用方据此**跳过整体回写**：一次瞬时 PermissionError 不许把完好数据清空。
     · normalize(data) -> (fixed, reason)：顶层合法但内层类型非法时的判据（见 _safe_normalize，
       判据自己坏了就一个字节都不写）；真损坏时走 factory() 重建、不看 normalize。
+      **unreadable=True 时判据一次都不跑**：那时手里的 data 是 factory() 默认值、不是文件内容，
+      拿它判“脏”就是对着没读到过的文件回写（v2.4.1 找茬 S1）。
     """
     lock = path_lock(path)
     with lock:
@@ -391,7 +393,11 @@ def read_json_ex(path: str | os.PathLike, factory: Callable[[], Any] = dict, *,
                 # 某种"内容可读但被判坏"的假阳性），用户的数据还在，可手工恢复。
                 backup_before_heal(path, log)
                 atomic_write_json(path, data, lock=lock, retries=retries, log=log, indent=indent)
-        elif normalize is not None:
+        elif normalize is not None and not unreadable:
+            # v2.4.1（找茬 S1）：unreadable=True 时 data 是 **factory() 默认值**，不是文件内容。
+            # 拿默认值去跑判据 = 对着一个从没读到过的用户文件报"内层结构脏" → backup_before_heal
+            # + 覆盖写，把"这次读不到"变成"永久改写"。读不到就一个字节都不写（与 380 行承诺一致），
+            # 判据只在**真读到内容**时才跑（见 _safe_normalize）。
             fixed, reason = _safe_normalize(normalize, data, log, path)
             if reason:
                 backup_before_heal(path, log)
@@ -429,6 +435,10 @@ def _safe_normalize(normalize: Callable[[Any], Any] | None, data: Any,
         安全重建"的结构，本模块据此记日志 + 留 .bak + 回写。
     判据自己抛异常、或返回值不是二元组（写错了 API）时按"没坏"处理——**宁可少写一次，
     也不能因为判据写错就把用户的文件洗掉**。
+
+    调用条件（v2.4.1 找茬 S1）：判据**只在真读到文件内容时才跑**。文件不存在 / 这次读不到
+    （unreadable=True）时 data 是 factory() 默认值，把它当内容判脏会直接覆盖用户文件——
+    read_json_ex 的分支已经挡掉这两种情况，本函数只负责"跑起来了就绝不抛、绝不误写"。
     """
     try:
         fixed, reason = normalize(data)

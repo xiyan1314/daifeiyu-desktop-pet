@@ -81,7 +81,10 @@ def user_data_hit(base):
 # （5820B，来自绿色版根目录的残留），而 ZIP_EXTRA_NAMES 不含它 → 门禁不报。
 ZIP_EXTRA_NAMES = {"_verify_green.py", "_check_release.py", "_check_static.py", "_g_out.txt",
                    "repro_quiet.py"}
-ZIP_EXTRA_PREFIX = ("_verify_assets/",)
+# v2.4.1（质量审查 L3）：整目录打包时 _dev/（开发脚本 + 审计报告 + 探针）会整体进包，
+# 此前只有 _verify_assets/ 一条前缀黑名单拦不住 → 补 "_dev/"。（SYNC_FILES **不要**加
+# _dev/ 里的报告文件：绿色版目录里没有它们，会让 check_sync 假红。）
+ZIP_EXTRA_PREFIX = ("_verify_assets/", "_dev/")
 
 # v2.4（M3）：绿色版**根目录**不许留下的开发脚本（_dev/ 里的同名前缀脚本不算——
 # 那是绿色版的开发目录，按设计存在）。实测真包根目录混进过 repro_quiet.py。
@@ -200,20 +203,31 @@ def check_clean_tree():
             # v2.3.0（兼容审查 L7）：用 splitlines + 去状态前缀——此前 strip() 吃掉首行
             # 前导空格后再 [3:] 会把首字符切掉（实测输出 "et_ai.py"）
             dirty = [(l[3:] if len(l) > 3 else l).strip()
-                     for l in st.stdout.splitlines() if l.strip()][:3]
-            return ["运行时代码有未提交改动（发布前先提交并定版）：%s" % ", ".join(dirty)]
+                     for l in st.stdout.splitlines() if l.strip()]
+            # v2.4.1（质量审查 L1）：与 _full_list 同口径——此前只列前 3 条、且**不提示还有多少**，
+            # 用户看到 3 条就以为只有 3 条（"看不见"正是发布门最不该有的失败模式）。
+            return ["运行时代码有未提交改动（发布前先提交并定版）：%s" % _full_list(dirty)]
     except Exception:
         pass  # 无 git（绿色版/离线环境）：跳过
     return []
 
 
-def _full_list(items):
-    """报告用：**全量**列出条目（v2.4.1：此前 [:8] 截断，第 9 条起永远看不见）。
+_FULL_LIST_MAX = 200   # 报告里最多列出的条目数（超出只给计数，不静默）
 
-    条目多时在末尾附总数，便于一眼判断规模；一条都不省略——发布门的意义就是"看得见"。
+
+def _full_list(items):
+    """报告用：列出条目（v2.4.1：此前 [:8] 截断，第 9 条起永远看不见）。
+
+    条目多时在末尾附总数，便于一眼判断规模。v2.4.1（找茬 L3）：这里此前是**无上限**全量，
+    脏包/脏目录一旦有成千条残留，失败行会长得没法看（发布门要的是"看得见"，不是刷屏）
+    → 上限 _FULL_LIST_MAX 条，超出部分**只给计数**（总数照报，不算静默）。
     """
     items = [str(x) for x in items]
-    tail = "（共 %d 条）" % len(items) if len(items) > 8 else ""
+    total = len(items)
+    if total > _FULL_LIST_MAX:
+        return ", ".join(items[:_FULL_LIST_MAX]) + "（共 %d 条，此处只列前 %d 条）" % (
+            total, _FULL_LIST_MAX)
+    tail = "（共 %d 条）" % total if total > 8 else ""
     return ", ".join(items) + tail
 
 
@@ -363,6 +377,23 @@ def check_zip(zip_path, version=None):
                     repo_raw = f.read()
                 if hashlib.sha256(raw).hexdigest() != hashlib.sha256(repo_raw).hexdigest():
                     fails.append("发布包里的 桌宠.py 与仓库内容不一致（包是旧的/未重新打包）")
+            # v2.4.1（质量审查 L2）：数字版本判据此前只覆盖**仓库根**那份 version_info.txt
+            # （version_problems 读的是 ROOT），而真正发出去的是包内那份——包里那份停在
+            # (2, 2, 0, 0) 也照样能装出去（exe 属性显示旧版本号）。这里直接读包内那份比。
+            try:
+                _vi_raw = z.read("version_info.txt").decode("utf-8", "replace")
+            except KeyError:
+                _vi_raw = ""
+            _nums = numeric_versions(_vi_raw)
+            _want = _ver_key(version)
+            for _field in ("filevers", "prodvers"):
+                _got = _nums.get(_field)
+                if _got is not None and _got != _want:
+                    fails.append(
+                        "发布包里 version_info.txt 的数字版本 %s=(%s) 与 VERSION %s（%s）不一致"
+                        "（exe 属性会显示旧版本；根目录那份对了不代表包内那份对）"
+                        % (_field, ", ".join(str(x) for x in _got), version,
+                           ", ".join(str(x) for x in _want)))
         except KeyError:
             fails.append("发布包里没有 桌宠.py")
     return fails

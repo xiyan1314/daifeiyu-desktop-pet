@@ -11,6 +11,10 @@
   · main_thread_ms —— 场景函数**同步返回**所花的墙钟时间。
   · loop_gap_ms   —— 5ms 心跳定时器在整个场景窗口（含其后泵事件循环的时间）里的最大间隔。
   · ready_ms      —— 场景开始到"帧集真正装好"的耗时（异步分片路径下 > main_thread_ms）。
+    就绪判据 = **win._anim_pending is None 且指纹已收敛**（_anim_pending 是"这一批分片跑完了"
+    的唯一权威信号）。**不要退回 bool(win.anim._sets.get("idle"))**：分片在途时那上面还挂着
+    上一次注册的帧集（旧角色/上一个形态），判据恒真 → ready_ms 恒等于 main_thread_ms
+    （实测 ui_freeze_raw.json 里 40 行每行都相等，与本文件"异步路径下应 >"的说法自相矛盾）。
   · gap_after_ready —— 起播那一刻的最大循环缺口（异步路径下所有分片的最大值）。
 
 用法：
@@ -176,8 +180,14 @@ print("  真实素材源：%d 个 PNG；512px 单帧 %.1f KB"
 
 
 def idle_ready():
-    """帧集是否已经真正装进 FrameAnim（异步分片路径下要泵到这一刻才算就绪）。"""
-    return lambda: bool(win.anim._sets.get("idle"))
+    """帧集是否**真正装好**（异步分片路径下要泵到这一刻才算就绪）。
+
+    判据是 _anim_pending is None（本批分片收尾的唯一权威信号）+ 指纹收敛到当前角色/形态。
+    别用 anim._sets.get("idle") 非空：分片在途时它仍是上一次注册的帧集 → 恒真 → ready_ms
+    等于 main_thread_ms，"异步路径下 ready_ms > main_thread_ms"永远不会成立（实测如此）。
+    """
+    return lambda: (getattr(win, "_anim_pending", None) is None
+                    and win._wire_key == win._wire_anim_key())
 
 
 print("\n== C1 角色切换（apply_role） ==")
@@ -185,7 +195,7 @@ scene("apply_role(默认角色)", lambda: win.apply_role(""))
 scene("apply_role(小角色 8 帧 64px)", lambda: win.apply_role(R_SMALL))
 scene("apply_role(60 帧 512px 真实美术)", lambda: win.apply_role(R_BIG),
       ready=idle_ready())
-print("  -> 该角色实际注册的 idle 帧数：%d"
+print("  -> 就绪后该角色实际注册的 idle 帧数：%d（就绪判据 = _anim_pending is None）"
       % len(win.anim._sets.get("idle") or []))
 scene("apply_role(默认) 回切", lambda: win.apply_role(""))
 scene("apply_role(60 帧 512px) 第二次（预热）", lambda: win.apply_role(R_BIG),

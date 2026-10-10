@@ -340,11 +340,15 @@ class W(QObject):
     finally:
         C._slot_arity = orig
     # v2.4.1：阈值从 50 提到 116——实测本仓 .connect(...) 共 145 处、其中 116 处能解析成
-    # 具体槽（其余是 lambda / 局部函数 / Qt 自带信号，按设计跳过）。阈值远低于真实值，
-    # "解析器失明"（比如正则被改坏、sources() 少扫文件）就发现不了；贴着真实值才拦得住。
+    # 具体槽（其余是 lambda / 局部函数 / Qt 自带信号，按设计跳过）。
+    # v2.4.1（找茬 M6）：**改成比例**。写死 116 == 当时实测值、余量 0，任何良性重构
+    # （拆一个槽函数、少一处 .connect）都会假红；比例留 5 个百分点余量，同时"解析器失明"
+    # （正则被改坏 / sources() 少扫文件 → 比例骤降到 0）照样拦得住。
     # 重测：python -c "import _check_static as C; s=[]; o=C._slot_arity; C._slot_arity=lambda *a:(s.append(o(*a)) or s[-1]); C.check_signal_arity(C.sources()); print(sum(1 for r in s if r is not None), len(s))"
     _n_slots = sum(1 for r in seen if r is not None)
-    assert _n_slots >= 116,         "可解析槽数骤降（%d/%d）：检查可能已经失明（重测方法见上面注释）" % (_n_slots, len(seen))
+    # 分母本身也要有下限：sources() 万一扫成 0 个文件，"0 >= 0" 会让整条断言空转
+    assert len(seen) >= 100, "扫描面太窄（%d 处 .connect）：sources() 可能没扫到文件" % len(seen)
+    assert _n_slots >= 0.75 * len(seen),         "可解析槽比例骤降（%d/%d = %.3f）：检查可能已经失明（重测方法见上面注释）"         % (_n_slots, len(seen), _n_slots / float(len(seen)))
 
 
 def test_b8_static_thread_write_check():

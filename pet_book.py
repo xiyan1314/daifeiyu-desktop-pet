@@ -667,18 +667,23 @@ class Book:
                 return '"' + v.replace('"', '""') + '"'
             return v
 
-        lines = ["日期,时间,类型,金额,备注"]
-        for r in self.all_records():
-            kind = "API消费" if r["kind"] == "api" else "手动"
-            lines.append(",".join([
-                r["date"],
-                r["time"],
-                kind,
-                "%.2f" % r["amount"],
-                esc(r["note"] or ""),
-            ]))
-        body = "\ufeff" + "\r\n".join(lines) + "\r\n"  # BOM + CRLF，Excel 兼容
         try:
+            # v2.4.1（找茬 M1）：**CSV 正文也在 try 内**。此前 try 只包住 atomic_write_bytes，
+            # 正文（all_records / r["date"] / "%.2f" % r["amount"]）跑到 try 外——账本里一条
+            # 脏记录（缺 date 或 amount 不是数字）就会让异常穿透到调用方；pet_dialogs._export
+            # 没有自己的 try，异常走 Qt 槽 → 全局 excepthook 弹"出错了"模态框，而不是
+            # 3696 行那句友好提示。本方法的契约是"失败返回 (False, err)、绝不抛异常"。
+            lines = ["日期,时间,类型,金额,备注"]
+            for r in self.all_records():
+                kind = "API消费" if r["kind"] == "api" else "手动"
+                lines.append(",".join([
+                    r["date"],
+                    r["time"],
+                    kind,
+                    "%.2f" % r["amount"],
+                    esc(r["note"] or ""),
+                ]))
+            body = "\ufeff" + "\r\n".join(lines) + "\r\n"  # BOM + CRLF，Excel 兼容
             err = pet_io.atomic_write_bytes(str(path), body.encode("utf-8"),
                                             log=pet_log.log_error)
         except Exception as e:

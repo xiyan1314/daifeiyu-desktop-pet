@@ -49,13 +49,11 @@ def pet(tmp_path_factory):
     from helpers_roles import install_three_form_role
     install_three_form_role(win, tmp)
     yield win
-    try:
-        win._closing = True
-        win.voice.stop()
-        win.hide()
-        win.deleteLater()
-    except Exception:
-        pass  # 有意忽略：测试收尾
+    # L4（v2.4.1）：统一收尾——先停掉全部 QTimer 再 hide/close/deleteLater，
+    # 并自检"拆完 0 个活跃定时器"（只 hide 时实测还剩 6 个，后续用例一 pump 就被回调）。
+    from helpers_roles import active_timer_count, shutdown_pet
+    shutdown_pet(win)
+    assert active_timer_count(win) == 0, "拆完还有 %d 个活跃定时器" % active_timer_count(win)
     (main.DATA_DIR, main.CONFIG_PATH, main.USAGE_PATH,
      main.MEMORY_PATH) = _snap[0], _snap[1], _snap[2], _snap[3]
     pet_log.set_data_dir(_snap[4])
@@ -294,3 +292,76 @@ def test_role_edit_dialog_move_form_keeps_all_forms(pet):
         assert dlg._form_list.count() == len(dlg._forms)
     finally:
         dlg.hide()
+
+
+# ---------------- v2.4.1 找茬：对话框状态行 ----------------
+
+def test_role_edit_clear_front_shows_cleared_state(pet):
+    """N2（v2.4.1）：点「清除正面图」后状态行必须显示"清除"。
+
+    HEAD：判据是 pending_front is not None，而 None 正是"已清除"的取值 → 这一态永远显示
+    不出来，回落成"已有正面图"/"未选择新素材"：用户点完清除，界面反而说他有正面图。
+    能真失败：把判据改回 is-not-None，第一条断言红。
+    """
+    rid = "inv1"
+    dlg = pet_dialogs.RoleEditDialog(pet, lib=pet.role_lib, role_id=rid)
+    dlg.show()
+    try:
+        dlg._form_list.setCurrentRow(0)
+        # 反例对照：没动过时不该出现"清除"（不然这条断言就是恒真的）
+        dlg._pending_front.pop(0, None)
+        dlg._forms[0].pop("front", None)
+        dlg._update_statuses()
+        assert "清除" not in dlg._img_status.text(), dlg._img_status.text()
+        dlg._clear_front()
+        assert dlg._pending_front.get(0) is None, "清除没有登记（前提不成立）"
+        txt = dlg._img_status.text()
+        assert "清除" in txt and "待处理正面图" in txt, \
+            "「已清除」这一态显示不出来（回落成了别的状态）：%r" % txt
+        # 选新正面图 → 显示待处理文件名；把待处理项拿掉才轮到"已有正面图"
+        dlg._pending_front[0] = "roles/inv_a.png"
+        dlg._update_statuses()
+        assert "待处理正面图" in dlg._img_status.text() and "inv_a.png" in dlg._img_status.text()
+        dlg._pending_front.pop(0, None)
+        dlg._forms[0]["front"] = "roles/inv_a.png"
+        dlg._update_statuses()
+        assert "已有正面图" in dlg._img_status.text(), dlg._img_status.text()
+    finally:
+        dlg.hide()
+
+
+def test_voice_dialog_backend_result_message_is_not_overwritten(pet, monkeypatch):
+    """N3（v2.4.1）：启动/结束后端的结果消息（尤其**失败原因**）不能被状态刷新覆盖。
+
+    HEAD：先写结果消息、再调 _refresh_launch_status()，后者无条件 setText("运行中/未运行")
+    → 用户在界面上永远看不到"命令不对"这类原因，只看到一句无关状态。
+    能真失败：把两个 setText 的顺序换回去（先写消息后刷新），第一/三条断言红。
+    """
+    dlg = pet_dialogs.VoiceDialog(pet)
+    dlg.show()
+    try:
+        monkeypatch.setattr(dlg, "_save", lambda *a, **k: True)   # 本用例只管状态行，不落配置
+        monkeypatch.setattr(pet.voice, "launch_status", lambda: {"running": False})
+        monkeypatch.setattr(pet, "start_voice_backend",
+                            lambda: (False, "启动失败：命令不对"), raising=False)
+        dlg._start_backend_now()
+        txt = dlg._lstatus.text()
+        assert txt.startswith("❌") and "命令不对" in txt, \
+            "启动失败原因被状态刷新覆盖了：%r" % txt
+        # 反例对照：成功结论同样要看得见（不是只有失败才特殊）
+        monkeypatch.setattr(pet, "start_voice_backend",
+                            lambda: (True, "已启动（PID 1）"), raising=False)
+        dlg._start_backend_now()
+        assert "已启动" in dlg._lstatus.text(), dlg._lstatus.text()
+        # 结束后端的失败原因同理
+        monkeypatch.setattr(dlg, "_svc", pet.voice)
+        monkeypatch.setattr(pet.voice, "stop_backend", lambda: (False, "结束后端失败：x"))
+        dlg._stop_backend_now()
+        txt2 = dlg._lstatus.text()
+        assert txt2.startswith("❌") and "结束后端失败" in txt2, txt2
+    finally:
+        dlg.hide()
+        try:
+            dlg.deleteLater()
+        except Exception:
+            pass  # 有意忽略：测试收尾

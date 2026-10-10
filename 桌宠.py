@@ -71,7 +71,7 @@ import pet_io  # v2.3.1：原子写/清扫临时文件（P2-B 导入恢复、L4 
 
 
 APP_NAME = "大肥鱼桌宠"
-VERSION = "2.4.0"
+VERSION = "2.4.1"
 PAD = 1.25  # 窗口相对角色的透明边距（为压扁/回弹预留空间）
 IDLE_FRAME_MS = 140      # 待机帧间隔
 IDLE_FORM_HOLD_SECS = 8  # v2.1.3：只有形态、没有动作可播时的展示期上限（到期回用户形态）
@@ -91,6 +91,10 @@ EAT_FRAME_MS = 110       # 进食帧间隔
 #      QTimer(0) 下一轮继续——主线程任何一次连续阻塞都不超过约一个切片。
 _FRAME_SLICE_MS = 12.0   # 一个事件循环切片里最多花多久解码（首片同步跑）
 _FRAME_CACHE_MAX = 512   # 解码缓存条目上限（满了按插入顺序淘汰最旧的一条）
+# v2.4.1（找茬 M5）：**字节预算**才是真正的上界。单帧最大 512×512×4 = 1 MB，只按条目数
+# 封顶的话最坏常驻 512 MB；实测 24 帧 512px 角色跑完缓存 ≈25 MB。现在按解码后
+# w*h*4 计费（_frame_pix），超预算按插入顺序淘汰最旧的一条，条目上限退化成兜底。
+_FRAME_CACHE_MAX_BYTES = 64 * 1024 * 1024
 SLEEP_AFTER_SECONDS = 60 # 无交互多久入睡
 STATE_DURATION_MS = 2500 # 状态图默认展示时长
 # 跟随/散步行走参数（v1.4.2 降速档）实现迁至 pet_wander：此处保留模块级名字（tests/v13 依赖）
@@ -906,7 +910,10 @@ class PetWindow(QWidget):
         self._wire_key = None
         # v2.4.1（UI 卡顿 C1/C2）：单帧解码缓存 + 在途的分片解码（见 _frame_pix /
         # _wire_anim_sets）。缓存键含 mtime/size，素材被替换会自动失配重解。
+        # v2.4.1（找茬 M5）：缓存同时按**字节**封顶（_frame_cache_bytes = 各帧 w*h*4 之和），
+        # 换角色时整表清掉（旧角色的键不可能再命中，留着只占内存）。
         self._frame_cache = {}
+        self._frame_cache_bytes = 0
         self._anim_pending = None      # 在途分片解码状态；None = 没有
         self._anim_pending_restart = False  # 分片装好后是否欠一次 _play_idle 起播
         self._fx_petpet = pet_anim.load_frame_set(os.path.join(assets_dir, "fx"), "petpet", 10)
@@ -2355,18 +2362,44 @@ class PetWindow(QWidget):
             _log_error("_role_pix: %r" % (e,))
             return None
 
+    def _path_sig(self, path):
+        """帧素材的**内容签名** (路径, mtime_ns, 大小)（读不到时后两项为 None）。
+
+        v2.4.1（找茬 M2）：解码缓存与帧集指纹共用同一个 stat 口径——只有把 mtime+大小算进
+        指纹，"同路径原地换素材"（用户直接把数据目录里的 PNG 换成新图）才会失配重解；
+        只含路径的指纹会永远吃到旧贴图。os.stat 失败（删了/读不到）返回 (路径, None, None)，
+        仍可参与相等比较，绝不抛。
+        """
+        try:
+            st = os.stat(path)
+        except (OSError, TypeError, ValueError):
+            return (str(path), None, None)
+        return (str(path), st.st_mtime_ns, st.st_size)
+
+    def _clear_frame_cache(self):
+        """清空解码缓存 + **作废帧集指纹**（换角色/重建贴图时调用）。
+
+        两件事必须一起做：只清缓存的话，下一次 _wire_anim_sets 会被指纹短路（"路径没变，
+        不用重新注册"）→ 缓存再也填不回来，帧要等下一次换形态/换角色才重解（实测：
+        连 apply_role 之后基准注册都会真解 PNG）。**外部要清就调它**，别只 clear() 字典
+        ——字节计数器也得一起归零，否则会一直按旧占用淘汰（缓存白小一圈）。
+        """
+        self._frame_cache.clear()
+        self._frame_cache_bytes = 0
+        self._wire_key = None
+
     def _frame_pix(self, path):
         """单帧 PNG → QPixmap（经 _cap_role_pix 统一尺寸口径）；坏帧/读不到返回 None。
 
         v2.4.1（UI 卡顿 C1）：带**解码缓存**。缓存键是 (路径, mtime_ns, 文件大小)——
         同一份素材只解码一次，素材被替换（重新导入/用户改图）时键自动失配重解，
         绝不会拿到陈旧贴图。QPixmap 隐式共享，命中缓存不复制像素。
-        缓存有界（_FRAME_CACHE_MAX）：超限按插入顺序淘汰最旧一条。
+        v2.4.1（找茬 M5）：缓存有界，口径是**字节预算**（_FRAME_CACHE_MAX_BYTES）——
+        单帧按解码后 w*h*4 计费，超预算按插入顺序淘汰最旧一条；条目上限
+        _FRAME_CACHE_MAX 退化成兜底。单帧本身就超预算时不进缓存（仍返回本次结果）。
         """
-        try:
-            st = os.stat(path)
-            key = (str(path), st.st_mtime_ns, st.st_size)
-        except OSError:
+        key = self._path_sig(path)
+        if key[1] is None:
             return None
         hit = self._frame_cache.get(key)
         if hit is not None:
@@ -2379,9 +2412,19 @@ class PetWindow(QWidget):
         except Exception:
             return None
         cache = self._frame_cache
-        if len(cache) >= _FRAME_CACHE_MAX:
-            cache.pop(next(iter(cache)), None)  # 淘汰最旧一条（dict 保插入序）
+        if not cache:
+            self._frame_cache_bytes = 0   # 外部清过表：把计数器拉回真实值
+        cost = int(pix.width()) * int(pix.height()) * 4    # 解码后常驻内存的近似值
+        if cost > _FRAME_CACHE_MAX_BYTES:
+            return pix                    # 单帧就超预算：不入缓存，免得把别人挤光还超界
+        while cache and (len(cache) >= _FRAME_CACHE_MAX
+                         or self._frame_cache_bytes + cost > _FRAME_CACHE_MAX_BYTES):
+            old = cache.pop(next(iter(cache)))   # 淘汰最旧一条（dict 保插入序）
+            self._frame_cache_bytes -= int(old.width()) * int(old.height()) * 4
+            if self._frame_cache_bytes < 0:
+                self._frame_cache_bytes = 0
         cache[key] = pix
+        self._frame_cache_bytes += cost
         return pix
 
     # v2.4（L4）：原 _role_frames() 已删除——v2.4 把 "idle" 槽改成**按形态**注册
@@ -2422,20 +2465,26 @@ class PetWindow(QWidget):
             k for k in cur if k not in ("interval_ms",) and k not in pet_resources.ANIM_ACTIONS)))
 
     def _wire_anim_key(self):
-        """当前"该注册哪些帧集"的指纹（只走路径，**一次 PNG 都不解码**）。
+        """当前"该注册哪些帧集"的指纹（只做 stat / 取引用，**一次 PNG 都不解码**）。
 
         v2.4.1（UI 卡顿）：_play_idle 每次待机都重查帧集（_wire_anim_sets），而它会把当前
         形态的整批帧重新解码一遍。实测（_dev/probe_ui_freeze.py，60 帧真实美术 512px）：
         _play_idle 12 次共 690 ms、单次最大 199.5 ms，全是同一批 PNG 的重复解码。
-        帧集内容由**路径列表**唯一决定（add_set 只是覆盖同一个 list，帧像素由文件决定），
-        所以指纹一致 = 注册结果逐位相同 → 跳过。角色换素材时路径会变（RoleLibrary 导入
-        一律用新文件名/新 id），指纹随之改变，不会拿到陈旧贴图。
+        所以指纹一致 = 注册结果逐位相同 → 跳过。
+
+        v2.4.1（找茬 M2）：自定义角色的每条路径换成 **(路径, mtime_ns, 大小)**——只含路径的
+        指纹盖不住"同一个路径换了素材"（把 roles/xxx.png 原地替换成新图是既有用法），
+        那样帧集永远不重解、画面永远停在旧贴图。导入路径本来就换名换 id（这条对它是冗余的），
+        但对"手改素材"是唯一生效的判据；每条路径一次 os.stat（_path_sig），不解码。
+        默认角色的帧集是启动时一次性解好的 QPixmap（assets/ 随包发布、不在数据目录里，
+        换它本来就要重启），指纹直接由 QPixmap 身份构成，语义等价。
         """
         if self._custom_role:
             cur = self._cur_form_anim()
             return ("role", str(self.cfg.get("role", "")), self.form,
                     str(cur.get("interval_ms") or ""),
-                    tuple((act, tuple(cur.get(act) or [])) for act in self._anim_actions(cur)))
+                    tuple((act, tuple(self._path_sig(p) for p in (cur.get(act) or [])))
+                          for act in self._anim_actions(cur)))
         return ("default", self.form, tuple(self._default_idle_frames()),
                 tuple(self._eat_frames if self._idle_frames else []))
 
@@ -2487,6 +2536,12 @@ class PetWindow(QWidget):
                     self.anim.add_set(act, sets.get(act) or [])
                 self.has_frames = bool(self.anim._sets.get("idle"))
                 self._wire_key = key
+                # v2.4.1（找茬 M3）：本批**同步**装好了 → 在途分片连同它排下的 QTimer 一起
+                # 作废。否则那颗定时器到点后因同 key 不算 superseded，会把整批 jobs 再走一遍、
+                # 对每个动作再 add_set、再 _anim_ready 强制 _play_idle（帧动画从第 0 帧重跳）。
+                # 它欠下的那次"起播"义务在本批内结清（_anim_ready 由标志自己归位，幂等）。
+                self._anim_pending = None
+                self._anim_ready()
                 return
             # 本片没解完：已解出来的帧都在 _frame_pix 的缓存里，分片接力不会重复付解码成本
             self._anim_start_async(plan, key)
@@ -2498,14 +2553,34 @@ class PetWindow(QWidget):
         self.anim.add_set("idle", self._default_idle_frames())
         self.anim.add_set("eat", self._eat_frames if self.has_frames else [])
         self._wire_key = key
+        # v2.4.1（找茬 M3）：自定义角色切回默认角色时，在途分片同样是陈旧批 —— 一起作废
+        # （它排下的 QTimer 到点会因 _anim_pending 为空直接返回）。
+        self._anim_pending = None
+        self._anim_ready()
 
     def _anim_start_async(self, plan, key):
         """一批帧在一个切片里解不完：拆成若干时间片在主线程上"接力"解（UI 卡顿 C2）。
 
         与同步路径的**结果**逐位相同（同一批路径 → 同一批帧），差别只在时序：解码期间
-        事件循环照常转（窗口不假死），anim 里暂时还是上一次的帧集；全部解完后一次性
-        add_set，再按 _play_idle 的同一判据起播（_anim_ready）。
+        事件循环照常转（窗口不假死）；全部解完后一次性 add_set，再按 _play_idle 的同一
+        判据起播（_anim_ready）。
+
+        v2.4.1（质量审查 M2）：**进异步分支就先自损**。帧集换成新角色要 0.25~0.55 s，
+        这期间 anim 上还挂着**上一个角色**的 idle 帧集、anim_mode 还是 "idle"，界面会继续
+        播旧角色（审查实测 5/6 次采样是旧角色帧在动）；旧路径是"整屏卡 456 ms 后直接是
+        新角色"，不会播错角色——所以这里宁可牺牲窗口期的动感：停表 + idle 槽置空 + 先贴
+        新角色静态图，_play_idle 于是走"无帧集 → 静态形态图"那条路，_anim_ready() 装好后
+        照旧起播。只动 idle 槽：eat/poke/sleep 另有主（吃帧进行中 stop 会吞掉 on_finish）。
         """
+        try:
+            self.anim.add_set("idle", [])
+            # getattr：__init__ 的第 917 行也会走到这里，那时 anim_mode 还没赋值
+            if getattr(self, "anim_mode", "") in ("idle", "form_idle", ""):
+                self.anim.stop()
+            self.item.setPixmap(self.sprites[self.form]["front"])
+            self._using_front = True
+        except Exception as e:  # noqa: BLE001
+            _log_error("_anim_start_async 静态兜底失败: %r" % (e,))
         self._anim_pending = {
             "key": key,
             "acts": [act for act, _paths in plan],
@@ -2518,39 +2593,53 @@ class PetWindow(QWidget):
         QTimer.singleShot(0, self, self._gslot("anim_chunk", self._anim_chunk_step))
 
     def _anim_chunk_step(self):
-        """分片解码的一步：最多占主线程 _FRAME_SLICE_MS，没完就排到下一轮事件循环。"""
+        """分片解码的一步：最多占主线程 _FRAME_SLICE_MS，没完就排到下一轮事件循环。
+
+        v2.4.1（质量审查 L7）：本函数抛错（坏素材/坏 QPixmap）时异常由 _gslot 吞掉，
+        而 _anim_pending 不会被清 → 本批帧集永远装不上（idle 槽还是自损后的空集），
+        要等下一次指纹变化才自愈。于是 finally 兜底：本批没正常走完就作废 + 补一次起播。
+        """
         st = self._anim_pending
         if not st:
             return
+        _rescheduled = False
         try:
-            superseded = st["key"] != self._wire_anim_key()
-        except Exception:  # noqa: BLE001
-            superseded = True  # 指纹都算不出来（角色数据坏了）：本批作废，别把它装上
-        if superseded:
-            self._anim_pending = None  # 角色/形态已经变了：本批作废（新的那批会自己起）
-            return
-        t0 = time.perf_counter()
-        jobs, sets, bad = st["jobs"], st["sets"], st["bad"]
-        while st["k"] < len(jobs):
-            act, path = jobs[st["k"]]
-            st["k"] += 1
-            if act in bad:
-                continue
-            pix = self._frame_pix(path)
-            if pix is None:
-                bad.add(act)         # 坏帧：整动作回退静态，不播残缺动画
-                sets.pop(act, None)
-            else:
-                sets.setdefault(act, []).append(pix)
-            if (time.perf_counter() - t0) * 1000.0 >= _FRAME_SLICE_MS:
-                QTimer.singleShot(0, self, self._gslot("anim_chunk", self._anim_chunk_step))
+            try:
+                superseded = st["key"] != self._wire_anim_key()
+            except Exception:  # noqa: BLE001
+                superseded = True  # 指纹都算不出来（角色数据坏了）：本批作废，别把它装上
+            if superseded:
+                self._anim_pending = None  # 角色/形态已经变了：本批作废（新的那批会自己起）
                 return
-        for act in st["acts"]:
-            self.anim.add_set(act, sets.get(act) or [])
-        self.has_frames = bool(self.anim._sets.get("idle"))
-        self._wire_key = st["key"]
-        self._anim_pending = None
-        self._anim_ready()
+            t0 = time.perf_counter()
+            jobs, sets, bad = st["jobs"], st["sets"], st["bad"]
+            while st["k"] < len(jobs):
+                act, path = jobs[st["k"]]
+                st["k"] += 1
+                if act in bad:
+                    continue
+                pix = self._frame_pix(path)
+                if pix is None:
+                    bad.add(act)         # 坏帧：整动作回退静态，不播残缺动画
+                    sets.pop(act, None)
+                else:
+                    sets.setdefault(act, []).append(pix)
+                if (time.perf_counter() - t0) * 1000.0 >= _FRAME_SLICE_MS:
+                    _rescheduled = True
+                    QTimer.singleShot(0, self, self._gslot("anim_chunk", self._anim_chunk_step))
+                    return
+            for act in st["acts"]:
+                self.anim.add_set(act, sets.get(act) or [])
+            self.has_frames = bool(self.anim._sets.get("idle"))
+            self._wire_key = st["key"]
+            self._anim_pending = None
+            self._anim_ready()
+        finally:
+            if not _rescheduled and self._anim_pending is st:
+                # 走到这儿说明本批**没有**正常收尾（抛错/提前返回）：作废 pending，
+                # 免得它永久挂着让帧集装不上；再补一次起播兜底（_anim_ready 幂等）。
+                self._anim_pending = None
+                self._anim_ready()
 
     def _anim_ready(self):
         """分片解码装好帧集后补一次起播。
@@ -2606,6 +2695,9 @@ class PetWindow(QWidget):
         self._idle_form_active = False
         self._idle_after_full_at = None
         self._idle_last_action = ""
+        # v2.4.1（找茬 M5）：换角色时把解码缓存整表清掉——旧角色的键不可能再被命中，
+        # 留着只是把 64MB 预算占满、让新角色的帧更早被淘汰。
+        self._clear_frame_cache()
         self._build_sprites()
         self._build_state_pix()  # 自定义角色：程序化表情图随底图重建
         # P1-7：各形态尺寸可能不同：窗口按较大者定（v2 角色计入形态 scale），避免溢出/不居中
@@ -2688,7 +2780,11 @@ class PetWindow(QWidget):
             self.item.setPixmap(self.sprites[self.form]["side"])
             self._using_front = False
         elif idle_frames:
-            if self.anim_mode != "idle":
+            # v2.4.1（找茬 M2）：anim_mode == "idle" **不等于**"正在播的就是当前帧集"。
+            # 帧集对象换了（换素材后重新注册 / 分片装好后）而模式没变时，anim._frames 还指向
+            # 旧列表 → 画面一直停在旧贴图（用户原地换 PNG"看不出任何变化"就是这么来的）。
+            if (self.anim_mode != "idle" or self.anim._name != "idle"
+                    or self.anim._frames is not idle_frames):
                 self.anim_mode = "idle"
                 self.anim.play("idle", interval, loops=-1)
         else:
@@ -4382,10 +4478,14 @@ class PetWindow(QWidget):
         # 把坏/满日志改名成它（可能 512KB+），此前清日志只删前两个 → 用户以为擦干净了，
         # 隔离出的那份却永久留在数据目录里。
         _failed = []  # v2.4.1：删不掉的（被占用）单独列出来，别对用户说"本来就干净"
+        # v2.4.1（质量审查 L4）：memory.log 的轮转产物 memory.log.old 此前不在名单里——
+        # pet_main._rotate_log 在 memory.log 超 512KB 时把它改名成 .old，用户点"清理日志"
+        # 以为记忆日志清空了，那份 512KB+ 的旧日志却永久留在数据目录（还会被索引/备份带走）。
         removed = _remove_files((os.path.join(DATA_DIR, "error.log"),
                                  os.path.join(DATA_DIR, "error.log.old"),
                                  os.path.join(DATA_DIR, "error.log.bad"),
-                                 os.path.join(DATA_DIR, "memory.log")), failed=_failed)
+                                 os.path.join(DATA_DIR, "memory.log"),
+                                 os.path.join(DATA_DIR, "memory.log.old")), failed=_failed)
         kept = False
         try:
             lt = pet_chat.read_long_term(MEMORY_PATH, _log_error)

@@ -194,6 +194,54 @@ def test_due_alarms_compares_structurally_not_as_strings():
     assert pet_alarm.due_alarms([night], "00:00", "2026-09-30") == []
 
 
+def test_due_alarms_invalid_now_logs_once(monkeypatch):
+    """L5（找茬）：非法 now 从"全响"改成"一个都不响"是对的，但新失败模式不许**静默**。
+
+    调用方格式传错时用户只会觉得"闹钟莫名其妙不响了"，error.log 里一个字都没有。
+    这里钉两件事：①非法 now 记**一次**日志（轮询每 15s 调一次，逐次记会刷爆日志）；
+    ②合法 now 一条都不记（别把正常路径也记脏）。
+    """
+    logs = []
+    monkeypatch.setattr(pet_alarm.pet_log, "log_error", logs.append)
+    monkeypatch.setattr(pet_alarm, "_NOW_INVALID_WARNED", False)
+    a = {"id": "a1", "time": "08:00", "enabled": True, "last_fired_date": ""}
+    for bad in ("abc", "", None, "25:00"):
+        assert pet_alarm.due_alarms([a], bad, "2026-09-30") == [], bad
+    assert len(logs) == 1, "非法 now 记了 %d 条日志（该只记一次）：%r" % (len(logs), logs)
+    assert "非法" in logs[0], logs[0]
+    # 反例对照：合法 now 不记任何日志（本判据不是"恒记"）
+    logs[:] = []
+    monkeypatch.setattr(pet_alarm, "_NOW_INVALID_WARNED", False)
+    assert pet_alarm.due_alarms([a], "08:00", "2026-09-30")
+    assert logs == [], "合法 now 也记了日志：%r" % (logs,)
+
+
+def test_update_bad_ringtone_does_not_poison_memory_or_disk(tmp_path):
+    """N1（v2.4.1）：update 拒绝非法铃声时必须**先校验后赋值**。
+
+    HEAD：先 a["ringtone"] = str(ringtone) 再 return False（只跳过 _save）——内存里的闹钟
+    已经是坏铃声，之后任何一次成功保存（改别的字段 / mark_fired / 新增闹钟）都会把它写进
+    alarms.json：失败路径反而污染了持久化。能真失败：把校验挪回赋值之后，后两条断言红。
+    """
+    svc = pet_alarm.AlarmService(str(tmp_path), log=lambda m: None)
+    a, err = svc.add("08:00", "早起")
+    assert err == "" and a.get("id")
+    aid = a["id"]
+    assert svc.update(aid, ringtone="bad.mp4") == (False, "铃声仅支持 wav/mp3")
+    # ① 内存里不许留下坏值
+    assert svc.list()[0].get("ringtone") == "", \
+        "坏铃声留在内存里了：%r" % svc.list()[0].get("ringtone")
+    # ② 之后一次**成功**的保存必须落干净值（拒绝时没落盘不算数，落盘的才算）
+    ok, err2 = svc.update(aid, label="改个名")
+    assert ok is True and err2 == "", (ok, err2)
+    on_disk = json.loads((tmp_path / "alarms.json").read_text(encoding="utf-8"))
+    assert on_disk["alarms"][0].get("ringtone") == "", \
+        "坏铃声被后续保存写进盘了：%r" % on_disk["alarms"][0]
+    # 反例对照：合法铃声照旧能更新（证明上面不是"整个 update 都不干活"）
+    assert svc.update(aid, ringtone="ok.wav") == (True, "")
+    assert svc.list()[0].get("ringtone") == "ok.wav"
+
+
 def test_alarm_load_heals_through_heal_json(tmp_path, monkeypatch):
     """v2.4.1（A 区）：闹钟的愈合环走 pet_io.heal_json（锁内复查 + 统一 .bak/日志口径）。
 

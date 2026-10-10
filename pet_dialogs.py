@@ -1684,7 +1684,10 @@ class RoleEditDialog(QDialog):
         lines = []
         if pending_img:
             lines.append("待处理换图：%s" % os.path.basename(pending_img))
-        if pending_front is not None:
+        # N2（v2.4.1）：判据必须是**键在不在**，不能是"值是不是 None"——None 是有效值
+        # （用户点了「清除正面图」），用 is-not-None 会让"已清除"这一态永远显示不出来，
+        # 回落成 elif 的"已有正面图"：用户点完清除，界面反而说"已有正面图"。
+        if idx in self._pending_front:
             lines.append("待处理正面图：%s" % (os.path.basename(pending_front) if pending_front else "清除"))
         elif fm.get("front"):
             lines.append("已有正面图")
@@ -4826,20 +4829,23 @@ class VoiceDialog(QDialog):
                 self._lstatus.setText("❌ 语音服务不可用")
                 return
             ok, msg = self._svc.start_backend()
-            self._lstatus.setText(("✅ " if ok else "❌ ") + msg)
+            # N3（v2.4.1）：**先刷新状态、再写结果消息**。此前顺序相反，_refresh_launch_status()
+            # 会把刚写好的✅/❌结果整行覆盖成"运行中/未运行"——用户（尤其启动失败时）
+            # 永远看不到失败原因，只能看到一句无关的状态。
             self._refresh_launch_status()
+            self._lstatus.setText(("✅ " if ok else "❌ ") + msg)
             return
         ok, msg = res if isinstance(res, tuple) else (False, "启动失败")
+        self._refresh_launch_status()
         self._lstatus.setText(("✅ " if ok else "❌ ") + msg
                               + ("（后台等就绪，稍后气泡告知）" if ok else ""))
-        self._refresh_launch_status()
 
     def _stop_backend_now(self):
         if self._svc is None:
             return
         ok, msg = self._svc.stop_backend()
+        self._refresh_launch_status()   # N3：先刷新状态，结果消息最后写（不被覆盖）
         self._lstatus.setText(("✅ " if ok else "❌ ") + msg)
-        self._refresh_launch_status()
 
     def _stash_backend_ui(self, bid=None):
         """把控件的参数/密钥暂存回**指定后端**的槽位。

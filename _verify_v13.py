@@ -1707,12 +1707,27 @@ def main_flow():
 
         _ctx_off = pet._build_ai_context({"ai_rag_enabled": False})
         _ctx_on = pet._build_ai_context({"ai_rag_enabled": True, "city": "验证市"})
-        # 负例对照（M2）：①构建器**整体退化**（开关都返空）②隐私开关**失效**（关也在注入）
-        # 都必须判为"不通过"——否则"off 是空串"这一句可能只是撞上了恒空的构建器
-        _deg_ok = (not _rag_ok("", "")              # 整体退化：不许算通过
-                   and not _rag_ok(_ctx_on, _ctx_on))   # 开关失效：不许算通过
+        # 负例对照（找茬 L1）：对判据本身做**真变异**。旧写法是
+        #   not _rag_ok("", "") and not _rag_ok(_ctx_on, _ctx_on)
+        # ——_rag_ok 要求 off=="" **且** on 含非空子串，这两个输入对任何实现都为 False，
+        # 于是"退化对照=True"恒真、一点信息量都没有（不是判据在把关，是表达式在自转）。
+        # 现在真的把构建器换掉再判一次：
+        #   ① 整体退化（开关都返空串）→ 判据必须判"不通过"；
+        #   ② 隐私开关失效（关也注入同一份摘要）→ 同样必须判"不通过"。
+        _real_build = pet._build_ai_context
+        try:
+            pet._build_ai_context = lambda *a, **k: ""
+            _deg_a = not _rag_ok(pet._build_ai_context({"ai_rag_enabled": False}),
+                                 pet._build_ai_context({"ai_rag_enabled": True, "city": "验证市"}))
+            pet._build_ai_context = lambda *a, **k: _ctx_on
+            _deg_b = not _rag_ok(pet._build_ai_context({"ai_rag_enabled": False}),
+                                 pet._build_ai_context({"ai_rag_enabled": True, "city": "验证市"}))
+        finally:
+            pet._build_ai_context = _real_build
+        _deg_ok = bool(_deg_a and _deg_b)
+        _t3_why = "off=%r on=%r 变异对照=退化%s/开关失效%s" % (
+            _ctx_off[:16], _ctx_on[:110], _deg_a, _deg_b)
         _t3_ok = _rag_ok(_ctx_off, _ctx_on) and _deg_ok
-        _t3_why = "off=%r on=%r 退化对照=%s" % (_ctx_off[:16], _ctx_on[:110], _deg_ok)
     except Exception as _e:
         _t3_why = repr(_e)
     check("ai rag switch off/on", _t3_ok, _t3_why)
