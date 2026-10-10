@@ -168,3 +168,114 @@ def test_ringtone_size_cap(tmp_path):
     svc.RINGTONE_MAX_BYTES = 10  # 收紧阈值验证上限先于读取
     fn, err = svc.import_ringtone(str(src))
     assert fn is None and "太大" in err
+
+
+def test_due_alarms_compares_structurally_not_as_strings():
+    """P3-5（v2.4.1）：到点判定用**分钟数**比较，不再比字符串。
+
+    旧实现 `now >= t` 是字符串比较："7:59" >= "08:00" 为真（'7' > '0'）→ 07:59 就把
+    08:00 的闹钟响了；now="abc" 更是全表齐响。生产侧 now_hhmm() 总是补零，所以线上没炸过，
+    但 API 一被误用就是"闹钟提前响/乱响"。
+    """
+    a = {"id": "a1", "time": "08:00", "enabled": True, "last_fired_date": ""}
+    # 反例（旧实现必红）：未补零的 now 不得把未来的闹钟提前响
+    assert pet_alarm.due_alarms([a], "7:59", "2026-09-30") == []
+    # 正例：同一时刻的两种写法都要响，且返回的仍是归一化时间串
+    assert pet_alarm.due_alarms([a], "08:00", "2026-09-30")[0][1] == "08:00"
+    assert len(pet_alarm.due_alarms([a], "8:00", "2026-09-30")) == 1
+    assert pet_alarm.due_alarms([a], "8:00:00", "2026-09-30")[0][1] == "08:00"
+    # now 非法 → 一个都不响（旧字符串比较会全表齐响）
+    for bad in ("abc", "", None, "25:00", "7"):
+        assert pet_alarm.due_alarms([a], bad, "2026-09-30") == [], bad
+    # 边界：23:59 的闹钟在当天 23:59 响、次日 00:00 不响（结构化比较的跨午夜口径）
+    night = dict(a, time="23:59")
+    assert pet_alarm.due_alarms([night], "23:58", "2026-09-30") == []
+    assert pet_alarm.due_alarms([night], "23:59", "2026-09-30")
+    assert pet_alarm.due_alarms([night], "00:00", "2026-09-30") == []
+
+
+def test_alarm_load_heals_through_heal_json(tmp_path, monkeypatch):
+    """v2.4.1（A 区）：闹钟的愈合环走 pet_io.heal_json（锁内复查 + 统一 .bak/日志口径）。
+
+    变异验证：把 heal_json 换成探针——自建环会绕过它（seen 为空），本条即红。
+    """
+    import pet_io
+    idx = tmp_path / "alarms.json"
+    idx.write_text("{{{ not json", encoding="utf-8")
+    seen = []
+    real = pet_io.heal_json
+
+    def spy(path, factory=dict, **kw):
+        seen.append((str(path), kw.get("normalize") is not None))
+        return real(path, factory, **kw)
+
+    monkeypatch.setattr(pet_io, "heal_json", spy)
+    svc = pet_alarm.AlarmService(str(tmp_path), log=lambda m: None)
+    assert svc.list() == []
+    assert seen == [(str(idx), True)], "闹钟没走 pet_io.heal_json：%r" % (seen,)
+    assert json.loads(idx.read_text(encoding="utf-8")) == {"alarms": []}
+    assert (tmp_path / "alarms.json.bak").read_text(encoding="utf-8") == "{{{ not json"
+
+
+def test_alarm_clean_file_is_not_rewritten(tmp_path, monkeypatch):
+    """反面：合法 alarms.json 读一遍**一个字节都不写**（normalize 判据返回空 reason）。"""
+    import pet_io
+    idx = tmp_path / "alarms.json"
+    original = json.dumps({"alarms": [{"id": "a1", "time": "08:00", "label": "起床",
+                                       "ringtone": "", "enabled": True,
+                                       "last_fired_date": "", "repeat": "", "snooze_min": 0}]},
+                          ensure_ascii=False)
+    idx.write_text(original, encoding="utf-8")
+    writes = []
+    real = pet_io.atomic_write_json
+    monkeypatch.setattr(pet_io, "atomic_write_json",
+                        lambda *a, **kw: (writes.append(a), real(*a, **kw))[1])
+    svc = pet_alarm.AlarmService(str(tmp_path), log=lambda m: None)
+    assert [x["id"] for x in svc.list()] == ["a1"]
+    assert writes == [], "合法文件被重写了（读侧不该有副作用）"
+    assert idx.read_text(encoding="utf-8") == original
+    assert not (tmp_path / "alarms.json.bak").exists()
+
+
+def test_alarm_read_failure_writes_nothing(tmp_path, monkeypatch):
+    """反面（P0-B 同款保护）：文件在磁盘上但这次读不到 → 不愈合、不写、不留 .bak。
+
+    这条对"改成 heal_json"尤其关键：自建环的写入门槛是 dirty，heal_json 的门槛是
+    corrupted/normalize reason——接线错了就会把"读不到"当成"损坏"清空用户的闹钟。
+    """
+    import builtins
+    idx = tmp_path / "alarms.json"
+    raw = json.dumps({"alarms": [{"id": "a1", "time": "08:00", "label": "起床"}]},
+                     ensure_ascii=False).encode("utf-8")
+    idx.write_bytes(raw)
+    real_open = builtins.open
+
+    def deny(file, *a, **kw):
+        if str(file).endswith("alarms.json"):
+            raise PermissionError(13, "Permission denied")
+        return real_open(file, *a, **kw)
+
+    monkeypatch.setattr(builtins, "open", deny)
+    logs = []
+    svc = pet_alarm.AlarmService(str(tmp_path), log=logs.append)
+    assert svc.list() == [], "读不到就是读不到：内存按空库继续"
+    with real_open(str(idx), "rb") as f:
+        assert f.read() == raw, "读不到被当成损坏，回写覆盖了完好闹钟库"
+    assert not (tmp_path / "alarms.json.bak").exists(), "没有回写就不该有 .bak"
+    assert any("读取失败" in m for m in logs), logs
+
+
+def test_alarm_heals_only_once_through_normalize(tmp_path):
+    """正向：清洗（丢坏条目 / 补零）确实回写；第二次启动零日志（旧日志里刷了 15 次）。"""
+    idx = tmp_path / "alarms.json"
+    idx.write_text(json.dumps({"alarms": [{"id": "a1", "time": "7:5", "label": "起床"},
+                                          {"id": "a2", "time": "bad"}]}, ensure_ascii=False),
+                   encoding="utf-8")
+    logs = []
+    svc = pet_alarm.AlarmService(str(tmp_path), log=logs.append)
+    assert [a["id"] for a in svc.list()] == ["a1"] and svc.get("a1")["time"] == "07:05"
+    assert any("bad entry" in m for m in logs)
+    assert [a["time"] for a in json.loads(idx.read_text(encoding="utf-8"))["alarms"]] == ["07:05"]
+    logs2 = []
+    pet_alarm.AlarmService(str(tmp_path), log=logs2.append)
+    assert logs2 == []

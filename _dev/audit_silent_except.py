@@ -267,6 +267,122 @@ def _handler_body_trivial(handler):
     return True
 
 
+# ---------------- v2.4.1（B1）A 档收紧：三类已知误报 ----------------
+# 收紧前 A=19，其中三类不是"被吞"：
+#   ① 重试 / 轮询循环：handler 只把异常存进变量，循环结束统一 return/raise/记日志；
+#   ② 防御性读取：try 体只做取字段 / 类型转换，坏了用常量兜底，不改变用户可见结果；
+#   ③ 同一 try 的多个 handler：同一次写盘被数成 2-3 条 A。
+# 判据都写成"证据式"的：认不出证据就保持原判（宁可留着让人看，也不悄悄放宽）。
+
+def _handler_lines_text(src, handler):
+    """handler 覆盖的源码行（**含注释**）。
+
+    ast 的源码片段在最后一条语句结束处就截断了，于是 `pass  # 有意忽略：…` 这种**同行尾注释**
+    被漏掉，"已注释"一列会误报成否。按行号取整段就没有这个问题（v2.4.1 B1 顺带修）。
+    """
+    lo = getattr(handler, "lineno", 1)
+    hi = getattr(handler, "end_lineno", lo)
+    return "\n".join(src.splitlines()[lo - 1:hi])
+
+
+def _ends_with_report(stmts):
+    """一组语句"最后一步"是不是把失败上报出去（return 非常量值 / raise）。
+
+    v2.4.1（B1）：`_returns_report` 太严——handler 里先清理残留、再 `return None, "复制失败"`
+    的写法它认不出（见到第一条非 return 语句就放弃），于是 pet_resources 的 6 处复制失败、
+    pet_export 的打包失败都被算成"A 档数据丢失"。清理语句不该抹掉上报结论。
+    """
+    stmts = [s for s in stmts if not isinstance(s, (ast.Pass,))]
+    if not stmts:
+        return False
+    last = stmts[-1]
+    if isinstance(last, ast.Raise):
+        return True
+    if isinstance(last, ast.Return):
+        return last.value is not None and not isinstance(last.value, ast.Constant)
+    if isinstance(last, ast.If) and last.orelse:
+        return _ends_with_report(last.body) and _ends_with_report(last.orelse)
+    return False
+
+
+def _handler_ends_with_report(handler):
+    """handler 的最后一步把失败上报给调用方（清理由此之前的语句负责）。"""
+    return _ends_with_report(handler.body)
+
+
+def _innermost_func(tree, target):
+    """target 所属的最内层函数节点（模块级语句返回 None）。"""
+    best = None
+    ln = getattr(target, "lineno", 0)
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            if node.lineno <= ln <= getattr(node, "end_lineno", node.lineno):
+                if best is None or node.lineno >= best.lineno:
+                    best = node
+    return best
+
+
+def _assigned_names(node):
+    """节点里被赋值的局部变量名（handler 把异常存进 last/err 这类变量的写法）。"""
+    out = set()
+    for n in ast.walk(node):
+        if isinstance(n, ast.Assign):
+            out.update(t.id for t in n.targets if isinstance(t, ast.Name))
+        elif isinstance(n, ast.AnnAssign) and isinstance(n.target, ast.Name):
+            out.add(n.target.id)
+    return out
+
+
+def _reported_later(func_node, try_node, names):
+    """try 之后（同一函数内）有没有把这个变量 return / raise / 记日志出去。
+
+    重试循环的常见写法是"handler 里只存错误，循环结束再统一上报"——handler 静态上看是
+    静默的，但失败并没有被吞。判据要求真的看到"同一个变量名出现在其后的上报语句里"，
+    认不出就不降级。
+    """
+    if not names or func_node is None:
+        return False
+    ln = getattr(try_node, "lineno", 0)
+    for n in ast.walk(func_node):
+        if not isinstance(n, (ast.Return, ast.Raise, ast.Call)):
+            continue
+        if getattr(n, "lineno", 0) <= ln:
+            continue
+        if isinstance(n, ast.Call):
+            dotted = _dotted(n.func)
+            last = (dotted.split(".")[-1] if dotted else "").lower()
+            if not (dotted.split(".")[-1:] and (last in NOISE_NAMES
+                                                or any(tok in last for tok in NOISE_TOKENS))):
+                continue
+        if any(isinstance(x, ast.Name) and x.id in names for x in ast.walk(n)):
+            return True
+    return False
+
+
+def _pure_defensive_read(try_node):
+    """try 体只做"取字段 / 类型转换"这类无副作用动作（坏了就用常量兜底）→ True。
+
+    这种静默 except 不改变用户看得见的结果（值本来就是可选的），不该按"A4 用户动作失败
+    无提示"计。带读 open()、写盘、网络、子进程的一律返回 False（读配置回填这类失败会丢
+    真实数据，保留 A 让人看）。
+    """
+    read_only = READONLY_ATTRS | {"get", "dict", "list", "set", "tuple", "int", "float",
+                                  "str", "bool", "len", "isinstance", "strip", "lower",
+                                  "upper", "split", "format", "loads", "keys", "values",
+                                  "items", "copy", "deepcopy"}
+    for call in [n for n in ast.walk(try_node) if isinstance(n, ast.Call)]:
+        dotted = _dotted(call.func)
+        base = dotted.split(".")[0] if dotted else ""
+        last = dotted.split(".")[-1] if dotted else ""
+        if base == "open":
+            return False
+        if not last or last not in read_only:
+            return False
+        if base in NET_MODULES or base in PERSIST_MODULES or base in FILE_MODULES:
+            return False
+    return True
+
+
 def _snippet(text, node, limit=150):
     """打平一段源码做单行摘要。"""
     try:
@@ -297,6 +413,7 @@ def _iter_targets(root):
 
 def scan(root):
     findings = []
+    a_seen = set()   # 同一 try 只计一次 A（v2.4.1 B1：多 handler 不重复计数）
     for path in sorted(_iter_targets(root)):
         rel = os.path.relpath(path, root).replace("\\", "/")
         try:
@@ -320,7 +437,7 @@ def scan(root):
             for handler in node.handlers:
                 silent = _handler_is_silent(handler)
                 func = owner.get(id(handler), owner.get(id(node), "<module>"))
-                annotated = bool(ANNOTATION_RE.search(_snippet(src, handler, 400)))
+                annotated = bool(ANNOTATION_RE.search(_handler_lines_text(src, handler)))
                 persist, net, proc, why = _classify_try_body(node)
                 trivial = _handler_body_trivial(handler)
                 exempt = ""
@@ -336,15 +453,20 @@ def scan(root):
                     tier, reason = "C", "良性（显式豁免）：" + exempt
                 elif cleanup_only:
                     tier, reason = "C", "良性：仅删除孤儿/残留文件，失败只留文件，无数据丢失"
-                elif _returns_report(handler):
+                elif _returns_report(handler) or _handler_ends_with_report(handler):
                     tier, reason = "B", "失败以返回值/哨兵上报调用方（静态看不到调用方怎么处理）"
+                elif _reported_later(_innermost_func(tree, node), node,
+                                     _assigned_names(handler)):
+                    tier, reason = "B", ("重试/轮询循环：handler 只存错误，其后"
+                                         " return/raise/日志统一上报（不是吞掉）")
                 elif persist:
                     tier, reason = "A", "A1 写盘被吞: " + ",".join(why)
                 elif net:
                     tier, reason = "A", "A2 网络被吞: " + ",".join(why)
                 elif proc and PROC_FN_RE.search(func):
                     tier, reason = "A", "A3 后端启停被吞: " + ",".join(why)
-                elif STRONG_VERB_RE.search(func or "") and n_calls:
+                elif (STRONG_VERB_RE.search(func or "") and n_calls
+                      and not _pure_defensive_read(node)):
                     tier, reason = "A", "A4 用户动作(%s)失败无提示" % func
                 elif (DISPATCH_FN_RE.match(func or "") and n_calls
                       and _has_dynamic_call(node)):
@@ -353,6 +475,11 @@ def scan(root):
                     tier, reason = "C", "良性: handler 为空/常量返回，无写盘网络"
                 else:
                     tier, reason = "B", "功能性吞咽（可恢复，无写盘/网络）"
+                if tier == "A":
+                    if id(node) in a_seen:
+                        tier, reason = "B", "同一 try 的另一个 handler（A 档只计一次，同一次写盘不重复计数）"
+                    else:
+                        a_seen.add(id(node))
                 if nonprod and tier == "A":
                     tier, reason = "N", "非生产路径(tests/_dev)不计 A 档: " + reason
                 findings.append(dict(

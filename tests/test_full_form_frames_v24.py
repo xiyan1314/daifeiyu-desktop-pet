@@ -64,6 +64,20 @@ def _sha256(path):
         return hashlib.sha256(f.read()).hexdigest()
 
 
+def _pix_hash(path):
+    """像素哈希（不是文件字节哈希）。
+
+    v2.4.1：帧素材门禁该管的是"图变了"，不是"Pillow 换了编码器"。同一张图在不同
+    Pillow/libpng 版本下重编码，文件字节完全不同（压缩级别/filter/块顺序都可能变），
+    按字节比会把"升级依赖"误判成"素材被改"。这里比 (尺寸, 模式, 原始像素) —— 与
+    _dev/gen_full_idle_frames.py --check 的口径一致（那里也是 ImageChops 比像素）。
+    """
+    from PIL import Image
+    with Image.open(path) as im:
+        im.load()
+        return (im.size, im.mode, hashlib.sha256(im.tobytes()).hexdigest())
+
+
 def _mad(a, b, size=None):
     """平均绝对像素差（RGBA 四通道平均）。"""
     w, h = size or a.size
@@ -179,13 +193,15 @@ def test_generator_idempotent_and_assets_are_its_output(tmp_path):
 
     for i in range(FRAME_COUNT):
         name = "idle_full_f%02d.png" % i
-        h1 = _sha256(os.path.join(out1, name))
-        h2 = _sha256(os.path.join(out2, name))
-        h3 = _sha256(os.path.join(ASSETS, name))
-        assert h1 == h2, "生成脚本不幂等：%s 两遍哈希不同" % name
+        p1, p2, p3 = (os.path.join(out1, name), os.path.join(out2, name),
+                      os.path.join(ASSETS, name))
+        # 比**像素**（v2.4.1）：文件字节会随 Pillow/libpng 版本变，像素才是素材本身
+        h1, h2, h3 = _pix_hash(p1), _pix_hash(p2), _pix_hash(p3)
+        assert h1 == h2, "生成脚本不幂等：%s 两遍像素不同" % name
         assert h1 == h3, (
-            "%s 与脚本输出不一致——素材被手改过，或用另一版 Pillow 生成（重跑 "
-            "_dev/gen_full_idle_frames.py 后提交）" % name)
+            "%s 与脚本输出像素不一致——素材被手改过（重跑 _dev/gen_full_idle_frames.py "
+            "后提交）。仓库副本与脚本输出的字节哈希：%s vs %s"
+            % (name, _sha256(p3)[:12], _sha256(p1)[:12]))
 
     # CLI 自检分支（--check）也必须通过
     assert gen._main(["--check", "--out", ASSETS]) == 0

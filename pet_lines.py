@@ -37,6 +37,7 @@ import copy
 import hashlib
 import os
 import uuid
+from typing import Any, Callable, Iterable
 
 import pet_io   # v2.3.1：全仓共用原子写（分锁 + 线程唯一临时名 + replace 重试）
 import pet_log
@@ -198,7 +199,7 @@ DIRTY_READ_NOTICE = ("lines.json 不是 UTF-8（记事本另存成 ANSI 了？�
                      "改台词前会先把它备份成 lines.json.bak")
 
 
-def _seed_source():
+def _seed_source() -> list[tuple[str, str, str, str]]:
     """内置种子表：[(id, text, category, food)]（id 稳定，供删除名单与去重）。"""
     src = []
     for cat, lst in (("sajiao", LINES_SAJIAO), ("greedy", LINES_GREEDY),
@@ -217,7 +218,7 @@ def _seed_source():
     return src
 
 
-def _food_key(food):
+def _food_key(food: str) -> str:
     """食物名 → ASCII 稳定键（小鱼干/蛋糕/钻石 三个内建；未知食物用 md5 后缀，
     跨进程稳定——不能用内置 hash()，Python 字符串哈希每次启动都不同）。"""
     known = {"小鱼干": "fish", "蛋糕": "cake", "钻石": "gem"}
@@ -231,7 +232,7 @@ class LineService:
 
     VERSION = 1
 
-    def __init__(self, data_dir, log=None):
+    def __init__(self, data_dir: str, log: Callable[[str], Any] | None = None) -> None:
         self._path = os.path.join(data_dir, "lines.json")
         self._log = log or pet_log.log_error
         self._lines = []          # [{id,text,category,role_slot,voice_slot,order,builtin,food}]
@@ -248,12 +249,12 @@ class LineService:
         self._load()
 
     @property
-    def dirty_read(self):
+    def dirty_read(self) -> bool:
         """启动时 lines.json 在磁盘上却没读到 → True（调用方据此弹一次提示气泡）。"""
         return self._dirty_read
 
     # ---------------- 持久化 ----------------
-    def _load(self):
+    def _load(self) -> None:
         """读 lines.json 并归一化；**只有真损坏**才回写（v2.3.1 兼容审查 S1 修复）。
 
         读路径统一走 pet_io（utf-8-sig）。旧实现自己 open(..., encoding="utf-8") 并把
@@ -304,7 +305,7 @@ class LineService:
             if err:
                 self._log("lines heal save failed: %s" % err)
 
-    def _merge_builtins(self, force=False):
+    def _merge_builtins(self, force: bool = False) -> None:
         """补入缺失的内置台词：跳过用户删过的 id（防复活）；force=首次种子化。"""
         have = {ln["id"] for ln in self._lines}
         for lid, text, cat, food in _seed_source():
@@ -314,12 +315,12 @@ class LineService:
                                 "role_slot": None, "voice_slot": None,
                                 "order": 0, "builtin": True, "food": food})
 
-    def _reindex(self):
+    def _reindex(self) -> None:
         """按类别+现有顺序重排 order（1..n，无空洞）。"""
         for i, ln in enumerate(self._lines, 1):
             ln["order"] = i
 
-    def _save(self):
+    def _save(self) -> str:
         data = {
             "version": self.VERSION,
             "lines": self._lines,
@@ -346,7 +347,7 @@ class LineService:
         return "台词保存失败：%s" % err
 
     # ---------------- 归一化 ----------------
-    def _norm_line_checked(self, ln):
+    def _norm_line_checked(self, ln: Any) -> dict | None:
         """_norm_line + 超长截断留痕（手改 lines.json 的超长行会被截断，但必须可追溯）。"""
         out = self._norm_line(ln)
         if out is not None:
@@ -357,7 +358,7 @@ class LineService:
         return out
 
     @staticmethod
-    def _norm_line(ln):
+    def _norm_line(ln: Any) -> dict | None:
         if not isinstance(ln, dict):
             return None
         lid = str(ln.get("id") or "").strip()
@@ -393,7 +394,7 @@ class LineService:
         return out
 
     @staticmethod
-    def _norm_dialogue(d):
+    def _norm_dialogue(d: Any) -> dict | None:
         if not isinstance(d, dict):
             return None
         did = str(d.get("id") or "").strip()
@@ -406,30 +407,30 @@ class LineService:
                 "line_ids": [str(x) for x in ids if isinstance(x, (str, int))]}
 
     # ---------------- 变更通知（轻量回调，零 Qt） ----------------
-    def on_changed(self, cb):
+    def on_changed(self, cb: Callable[[], None]) -> None:
         if cb not in self._changed_cbs:
             self._changed_cbs.append(cb)
 
-    def off_changed(self, cb):
+    def off_changed(self, cb: Callable[[], None]) -> None:
         if cb in self._changed_cbs:
             self._changed_cbs.remove(cb)
 
-    def _emit_changed(self):
+    def _emit_changed(self) -> None:
         for cb in list(self._changed_cbs):
             try:
                 cb()
             except Exception as e:
                 self._log("line changed cb failed: %r" % (e,))  # 有意忽略：单个监听者失败不影响其余
 
-    def on_invalid_reference(self, cb):
+    def on_invalid_reference(self, cb: Callable[[list[dict]], None]) -> None:
         if cb not in self._invalid_cbs:
             self._invalid_cbs.append(cb)
 
-    def off_invalid_reference(self, cb):
+    def off_invalid_reference(self, cb: Callable[[list[dict]], None]) -> None:
         if cb in self._invalid_cbs:
             self._invalid_cbs.remove(cb)
 
-    def emit_invalid_reference(self, items):
+    def emit_invalid_reference(self, items: Iterable[dict] | None) -> None:
         """把引用校验结果广播给监听者（UI 刷新失效列表/提示条）。"""
         for cb in list(self._invalid_cbs):
             try:
@@ -438,35 +439,35 @@ class LineService:
                 self._log("invalid ref cb failed: %r" % (e,))  # 有意忽略：同上
 
     # ---------------- 查询 ----------------
-    def lines(self, category=None):
+    def lines(self, category: str | None = None) -> list[dict]:
         """全部台词（副本，按 order）；category 非空则只取该类别。"""
         out = [copy.deepcopy(ln) for ln in self._lines]
         if category:
             out = [ln for ln in out if ln["category"] == category]
         return sorted(out, key=lambda x: x["order"])
 
-    def get(self, line_id):
+    def get(self, line_id: str) -> dict | None:
         for ln in self._lines:
             if ln["id"] == str(line_id or ""):
                 return copy.deepcopy(ln)
         return None
 
-    def text_of(self, line_id):
+    def text_of(self, line_id: str) -> str:
         ln = self.get(line_id)
         return ln["text"] if ln else ""
 
-    def by_category(self, category):
+    def by_category(self, category: str) -> list[str]:
         """类别文本列表（随机抽取用；无条目返回空列表，调用方自行兜底）。"""
         return [ln["text"] for ln in self.lines(category)]
 
-    def texts_by_category(self, category):
+    def texts_by_category(self, category: str) -> list[str]:
         """类别文本列表（**免深拷贝**版，供刷新台词池等高频路径用）。
 
         与 by_category 的差别：不 deepcopy 每条台词（几千条时明显更快）。
         返回的是新列表（可安全持有），但元素是内部字符串（不可变，无副作用）。"""
         return [ln["text"] for ln in self._lines if ln["category"] == category]
 
-    def food_texts(self, food):
+    def food_texts(self, food: str) -> list[str]:
         """某食物的喂食台词。
 
         M12 修复：库可用时**不回落到内置常量**（否则用户删光的喂食台词会"复活"）；
@@ -478,16 +479,16 @@ class LineService:
             return list(FOOD_LINES.get(food, ["啊呜~好吃！"]))
         return ["啊呜~好吃！"]
 
-    def dialogues(self):
+    def dialogues(self) -> list[dict]:
         return copy.deepcopy(self._dialogues)
 
-    def get_dialogue(self, dialogue_id):
+    def get_dialogue(self, dialogue_id: str) -> dict | None:
         for d in self._dialogues:
             if d["id"] == str(dialogue_id or ""):
                 return copy.deepcopy(d)
         return None
 
-    def dialogue_lines(self, dialogue_id):
+    def dialogue_lines(self, dialogue_id: str) -> list[dict]:
         """对白解析成有序台词列表；缺失 id 跳过（调用方用 validate 提示失效）。"""
         d = self.get_dialogue(dialogue_id)
         if d is None:
@@ -499,24 +500,24 @@ class LineService:
                 out.append(ln)
         return out
 
-    def categories(self):
+    def categories(self) -> list[str]:
         return list(LINE_CATEGORIES)
 
-    def count(self):
+    def count(self) -> int:
         return len(self._lines)
 
     # ---------------- 修改 ----------------
-    def _snapshot(self, kind):
+    def _snapshot(self, kind: str) -> None:
         self._undo = {"kind": kind, "lines": copy.deepcopy(self._lines),
                       "dialogues": copy.deepcopy(self._dialogues),
                       "deleted": list(self._deleted)}
 
-    def _invalidate_undo(self):
+    def _invalidate_undo(self) -> None:
         """M10 修复：非破坏性修改（新增/编辑/排序）之后旧快照不再有效——
         否则"删 A → 新增 B → 撤销"会把 B 一起抹掉（静默丢数据）。"""
         self._undo = None
 
-    def undo(self):
+    def undo(self) -> tuple[bool, str]:
         """撤销最近一次删除/清空。返回 (ok, err)。"""
         if not self._undo:
             return False, "没有可撤销的操作"
@@ -528,10 +529,11 @@ class LineService:
         self._emit_changed()
         return (False, err) if err else (True, "")
 
-    def can_undo(self):
+    def can_undo(self) -> bool:
         return self._undo is not None
 
-    def add(self, text, category=DEFAULT_CATEGORY, role_slot=None, voice_slot=None, food=""):
+    def add(self, text: str, category: str = DEFAULT_CATEGORY, role_slot: str | None = None,
+            voice_slot: str | None = None, food: str = "") -> tuple[dict | None, str]:
         """新增台词。返回 (line|None, err)。"""
         text = str(text or "").strip()
         if not text:
@@ -550,8 +552,9 @@ class LineService:
         self._emit_changed()
         return (None, err) if err else (dict(ln), "")
 
-    def save(self, line_id, text=None, category=None, role_slot=None, voice_slot=None,
-             food=None, clear_role=False, clear_voice=False):
+    def save(self, line_id: str, text: str | None = None, category: str | None = None,
+             role_slot: str | None = None, voice_slot: str | None = None, food: str | None = None,
+             clear_role: bool = False, clear_voice: bool = False) -> tuple[bool, str]:
         """就地修改（None=不动；clear_role/clear_voice 显式清空引用）。"""
         ln = None
         for x in self._lines:
@@ -586,7 +589,7 @@ class LineService:
         self._emit_changed()
         return (False, err) if err else (True, "")
 
-    def delete(self, line_id):
+    def delete(self, line_id: str) -> tuple[bool, str]:
         """真删单条（内置也删；内置 id 记入删除名单防复活）。返回 (ok, err)。"""
         ln = None
         for x in self._lines:
@@ -606,7 +609,7 @@ class LineService:
         self._emit_changed()
         return (False, err) if err else (True, "")
 
-    def delete_many(self, line_ids):
+    def delete_many(self, line_ids: Iterable[str] | None) -> tuple[int, str]:
         """批量删除。返回 (删除条数, err)。"""
         ids = {str(x) for x in (line_ids or [])}
         if not ids:
@@ -626,7 +629,7 @@ class LineService:
         self._emit_changed()
         return (0, err) if err else (len(hit), "")
 
-    def clear_all(self):
+    def clear_all(self) -> tuple[bool, str]:
         """清空全部台词与对白（调用方须二次确认）。返回 (ok, err)。"""
         self._snapshot("clear_all")
         for ln in self._lines:
@@ -638,7 +641,7 @@ class LineService:
         self._emit_changed()
         return (False, err) if err else (True, "")
 
-    def restore_builtins(self):
+    def restore_builtins(self) -> int:
         """把内置台词补回来（清掉删除名单）。返回补回条数。"""
         self._snapshot("restore")
         self._deleted = []
@@ -649,7 +652,7 @@ class LineService:
         self._emit_changed()
         return len(self._lines) - before
 
-    def reorder(self, ids_in_order):
+    def reorder(self, ids_in_order: Iterable[str] | None) -> tuple[bool, str]:
         """按给定 id 顺序重排（只影响列出的 id，剩余保持相对位置在后）。返回 (ok, err)。"""
         order = [str(x) for x in (ids_in_order or [])]
         if not order:
@@ -665,7 +668,7 @@ class LineService:
         return (False, err) if err else (True, "")
 
     # ---------------- 对白 ----------------
-    def add_dialogue(self, name, line_ids=None):
+    def add_dialogue(self, name: str, line_ids: Iterable[str] | None = None) -> tuple[dict | None, str]:
         """新建对白（有序台词 id 列表）。返回 (dialogue|None, err)。"""
         ids = [str(x) for x in (line_ids or [])]
         if not ids:
@@ -682,7 +685,8 @@ class LineService:
         self._emit_changed()
         return (None, err) if err else (dict(d), "")
 
-    def save_dialogue(self, dialogue_id, name=None, line_ids=None):
+    def save_dialogue(self, dialogue_id: str, name: str | None = None,
+                      line_ids: Iterable[str] | None = None) -> tuple[bool, str]:
         """改对白名/顺序/成员（None=不动）。返回 (ok, err)。"""
         d = None
         for x in self._dialogues:
@@ -705,7 +709,7 @@ class LineService:
         self._emit_changed()
         return (False, err) if err else (True, "")
 
-    def delete_dialogue(self, dialogue_id):
+    def delete_dialogue(self, dialogue_id: str) -> tuple[bool, str]:
         """删除整段对白。返回 (ok, err)。"""
         d = None
         for x in self._dialogues:
@@ -721,7 +725,8 @@ class LineService:
         return (False, err) if err else (True, "")
 
     # ---------------- 引用校验 ----------------
-    def validate_references(self, role_exists, voice_exists):
+    def validate_references(self, role_exists: Callable[[str], bool],
+                            voice_exists: Callable[[str], bool]) -> list[dict]:
         """扫描失效引用（不自动删、不自动替换）。
 
         role_exists(slot)->bool / voice_exists(slot)->bool 由调用方注入（单向依赖，不 import）。

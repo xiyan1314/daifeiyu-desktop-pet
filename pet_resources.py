@@ -243,44 +243,26 @@ def form_render(role, form_idx=0):
     return {"anchor": (anchor["x"], anchor["y"]), "scale": scale, "offset": (off["x"], off["y"])}
 
 
-def state_resource(role, form_idx, state):
-    """P1-7 纯函数：forms[form_idx].states[state] 文件名（资源图优先查询）；无返回 None。
-
-    显示侧优先级（P2-5）：资源图 → 程序化叠图；本函数只负责资源图查表，
-    兜底叠图在 桌宠._build_state_pix 合并处实现。
-    """
-    forms = role.get("forms") or []
-    if not (isinstance(form_idx, int) and 0 <= form_idx < len(forms)):
-        return None
-    return (forms[form_idx].get("states") or {}).get(state)
-
 # ---------------- 通用 IO 助手（v2.3.1：统一走 pet_io；原子替换，降级不抛） ----------------
-# 哨兵：pet_io.read_json_or 只在"走到 factory()"时返回它（真数据永远是 json.load 造的新对象）
-# → 用它把"文件不存在（首次运行）"与"文件在磁盘上、这次没读到"分开。
-_PROBE = object()
-
-
 def _read_json_ex(path, factory=dict, heal=True):
-    """读 JSON → (data, corrupted, unreadable)；绝不抛出。
+    """读 JSON → (data, corrupted, unreadable)；绝不抛出（= pet_io.read_json_ex 的薄壳）。
 
     P0-2：损坏（存在但解析不了 / 顶层不是对象）时**回写 factory() 结构**做愈合，
     坏文件不再每次启动重报（error.log 实测 pet_resources 读取失败 ×2）。
     heal=False 给"自己有更强恢复路径"的调用方：RoleLibrary._load 要先把原文件
     备份成 roles.json.bak 再重建，不能让愈合先把它覆盖掉（备份要留原始坏内容）。
 
-    unreadable=True（仅 heal=False 时可能为真）：文件在磁盘上但这次读不到
-    （权限/共享占用/非 UTF-8 编码）——**不能证明损坏**，调用方必须"不重建、不覆盖"。
+    unreadable=True：文件在磁盘上但这次读不到（权限/共享占用/非 UTF-8 编码）——
+    **不能证明损坏**，调用方必须"不重建、不覆盖"。
+
+    v2.4.1（A 区一致性收口）：本函数退化成 pet_io.read_json_ex 的**薄壳**。此前它是
+    "read_json_or 读一遍探测（_PROBE 哨兵区分 factory() 与真数据）→ 再 heal_json 读
+    第二遍复查 → 回写"的自建两遍读实现，与 pet_book._read_json 是两份复制品；现在
+    读、判、回写在同一把路径锁内一次完成，三元口径（含 unreadable）由 read_json_ex
+    原生给出——heal=True 时它同样**不会**因为一次瞬时读失败就回写（unreadable 只影响
+    调用方分支，不触发愈合）。
     """
-    if heal:
-        data, corrupted = pet_io.heal_json(path, factory, log=pet_log.log_error)
-        return data, corrupted, False
-    data, corrupted = pet_io.read_json_or(path, lambda: _PROBE, log=pet_log.log_error)
-    if data is _PROBE:
-        # 走到 factory() 的三种情况：文件不存在 / 读失败 / 解码失败（corrupted=False），
-        # 以及**真损坏**（corrupted=True，此时 factory() 返回的正是哨兵本身）。
-        # 只有"没坏 + 文件确实在盘上"才是"这次读不到"，真损坏要留给下面的重建分支。
-        return factory(), corrupted, (not corrupted) and os.path.exists(str(path))
-    return data, corrupted, False
+    return pet_io.read_json_ex(path, factory, heal=heal, log=pet_log.log_error)
 
 
 def _read_json(path, factory=dict, heal=True):
@@ -884,6 +866,10 @@ class RoleLibrary:
             try:
                 shutil.copyfile(src, dst)
             except Exception:
+                # v2.4.1（B 区 · A 档静默 except 判定）：这里的静默是**安全**的——
+                # 复制失败**不是被吞掉**，下一行就把 "复制文件失败" 返回给调用方
+                # （导入向导/界面会当场告诉用户）；except 里只做"删掉半截文件"的
+                # 尽力清理，清理再失败也只是留一个孤儿文件，不影响判定结果。
                 try:
                     if os.path.exists(dst):
                         os.remove(dst)  # 半截文件清理，不留孤儿
@@ -1012,6 +998,8 @@ class RoleLibrary:
                             shutil.copyfile(fm_src, d)
                             dst_forms.append(d)
             except Exception:
+                # v2.4.1（B 区 · A 档静默 except 判定）：不是吞掉——_cleanup_files 清掉
+                # 本次已复制的半成品（回滚），紧接着把 "复制文件失败" 返回调用方。
                 self._cleanup_files(dst_base, dst_full, *dst_frames, *dst_forms)
                 return None, "复制文件失败"
             # ---- P1-7 新参数校验（缺省 = 现行为）----
@@ -1058,6 +1046,8 @@ class RoleLibrary:
                     for st, sp in states.items():
                         shutil.copyfile(sp, os.path.join(self._dir, dst_states[st]))
                 except Exception:
+                    # v2.4.1（B 区 · A 档静默 except 判定）：不是吞掉——先清掉本次复制的
+                    # 半成品（回滚整个导入），紧接着把 "复制状态图失败" 返回调用方。
                     self._cleanup_files(dst_base, dst_full, *dst_frames, *dst_forms,
                                         *[os.path.join(self._dir, x) for x in dst_states.values()])
                     return None, "复制状态图失败"
@@ -1396,6 +1386,8 @@ class AudioLibrary:
             try:
                 shutil.copyfile(src, dst)
             except Exception:
+                # v2.4.1（B 区 · A 档静默 except 判定）：失败**已上报**（返回 "复制文件
+                # 失败" 给导入向导），这里只做半截文件清理；清理失败也只剩一个孤儿文件。
                 try:
                     if os.path.exists(dst):
                         os.remove(dst)  # 半截文件清理，不留孤儿
@@ -1635,6 +1627,8 @@ class VoiceAssetLibrary:
             try:
                 shutil.copyfile(src, dst)
             except Exception:
+                # v2.4.1（B 区 · A 档静默 except 判定）：失败**已上报**（返回 "复制文件
+                # 失败" 给导入向导），这里只做半截文件清理；清理失败也只剩一个孤儿文件。
                 try:
                     if os.path.exists(dst):
                         os.remove(dst)  # 半截文件清理，不留孤儿

@@ -20,8 +20,10 @@ v2.3.0 只给 pet_book/pet_config 修了"固定 .tmp + 无锁"这一处同款 bu
 - path_lock(path)          按路径分锁：同一文件的所有写者共用同一把可重入锁（键已 normcase）
 - atomic_write_json(...)   原子写 JSON：进程+线程唯一临时名 + os.replace 冲突短重试
 - atomic_write_bytes(...)  原子写二进制（语音缓存等同款需求）
-- read_json_or(...)        读 JSON 并**如实告知是否损坏**（文件缺失 ≠ 损坏）
-- heal_json(...)           回写合法结构（顶层坏 / 内层类型非法，不覆盖新数据）
+- _read_json_status(...)   读 JSON → (data, corrupted, unreadable)，绝不抛（读侧单一实现）
+- read_json_or(...)        二元口径薄壳：读 JSON 并**如实告知是否损坏**（文件缺失 ≠ 损坏）
+- read_json_ex(...)        三元口径 + 可选**当场愈合**（读只一次、锁内完成；全仓读侧真源）
+- heal_json(...)           read_json_ex 的薄壳：回写合法结构（顶层坏 / 内层类型非法）
 - backup_before_heal(...)  愈合/重建前留 "<path>.bak"（自建恢复路径的模块共用）
 - clean_tmp_files(...)     清扫 "<p>.tmp" / "<p>.<线程号>.tmp" / "<p>.<进程号>.<线程号>.tmp"
 
@@ -42,8 +44,9 @@ v2.3.1（读侧愈合口径一致性收口，本轮）：
    完成读与写——既不会自己死锁，也不会被别的线程插进来用旧快照覆盖。
 3. atomic_write_* 总是拿"路径锁"；调用方另有自己的锁时（pet_book/pet_config 保留
    历史锁语义），按固定顺序"调用方锁 → 路径锁"获取，不存在反向路径，故无死锁。
-4. heal_json 在同一把路径锁内**重新读一次**：从"发现损坏"到"准备回写"之间若已有
-   写者把文件修好了，这里读到的就是新数据 → 不写。这就是"愈合不覆盖更新的数据"。
+4. read_json_ex / heal_json 的"读 + 判 + 愈合回写"全在**同一把路径锁内**完成：锁内本进程
+   没有别的写者，所以既不会覆盖在途写者刚写好的新数据，也不必"先在锁外读一遍探测、再进锁
+   复查一遍"（v2.4.1 前那样写的话，每次真损坏要读两遍磁盘）。
 5. 锁只覆盖本进程；跨进程并发不在本模块范围内（桌宠用命名互斥体保证单实例）。
 
 日志口径：异常一律在 except 里交给调用方注入的 log 回调（默认 None=不记），
@@ -55,6 +58,7 @@ import re
 import shutil
 import threading
 import time
+from typing import Any, Callable, Iterable
 
 # 全局锁 → 保护 _LOCKS 这张表本身；_LOCKS[绝对路径] → 该路径的专用可重入锁
 _LOCKS_GUARD = threading.Lock()
@@ -73,7 +77,7 @@ _TMP_MID_RE = re.compile(r"[0-9]+(?:\.[0-9]+)?\Z")
 _RETRY_SLEEP = 0.05
 
 
-def path_lock(path):
+def path_lock(path: str | os.PathLike) -> threading.RLock:
     """取某路径的专用锁（可重入）。同一路径的所有写者拿到的必须是同一把锁。
 
     v2.3.1（L1 修复）：键先 normcase(abspath)——Windows 文件系统大小写不敏感，
@@ -89,7 +93,7 @@ def path_lock(path):
         return lock
 
 
-def _log(log, msg):
+def _log(log: Callable[[str], Any] | None, msg: str) -> None:
     """日志回调（注入式）：日志通道自身出错不影响持久化主流程。"""
     if log is None:
         return
@@ -99,7 +103,7 @@ def _log(log, msg):
         pass  # 有意忽略：日志失败绝不影响写盘
 
 
-def _cleanup_tmp(tmp, log):
+def _cleanup_tmp(tmp: str, log: Callable[[str], Any] | None) -> None:
     """删除本次写入自己的临时文件（进程+线程唯一名，别人不会用这个路径）。"""
     try:
         if os.path.exists(tmp):
@@ -108,7 +112,8 @@ def _cleanup_tmp(tmp, log):
         _log(log, "pet_io 临时文件清理失败 %s: %r" % (tmp, e))
 
 
-def _default_from(factory, expect, log, path):
+def _default_from(factory: Callable[[], Any], expect: type | None,
+                  log: Callable[[str], Any] | None, path: object) -> Any:
     """取调用方注入的默认值；连默认值都造不出来时退回与 expect 同型的空容器。
 
     v2.3.1（M3）：本模块对外的承诺是"绝不抛异常"，而 factory 是**调用方注入**的
@@ -125,7 +130,8 @@ def _default_from(factory, expect, log, path):
         return None
 
 
-def backup_before_heal(path, log=None):
+def backup_before_heal(path: str | os.PathLike,
+                       log: Callable[[str], Any] | None = None) -> bool:
     """愈合/重建**之前**把原文件另存 "<path>.bak"（留证，判错时可手工恢复）。
 
     返回 True=已备份、False=文件不存在或备份失败（失败只记日志，绝不抛：
@@ -155,7 +161,8 @@ def backup_before_heal(path, log=None):
         return False
 
 
-def clean_tmp_files(targets, log=None):
+def clean_tmp_files(targets: Iterable[str | os.PathLike],
+                    log: Callable[[str], Any] | None = None) -> int:
     """清扫这些目标文件的原子写残留（三种临时名形状，见 _TMP_MID_RE）。
 
     v2.3.1（L4）：临时名带线程号之后，退出/清 Key 时只删固定名 ".tmp" 已经扫不到
@@ -196,7 +203,7 @@ def clean_tmp_files(targets, log=None):
     return removed
 
 
-def _guard(path, lock):
+def _guard(path: str | os.PathLike, lock: object) -> object:
     """按固定顺序取锁：调用方锁（可选）→ 路径锁。返回 contextmanager。"""
     path_lk = path_lock(path)
     if lock is None or lock is path_lk:
@@ -243,7 +250,9 @@ class _MergeGuard(object):
         return False
 
 
-def atomic_write_bytes(path, data, *, lock=None, retries=3, log=None):
+def atomic_write_bytes(path: str | os.PathLike, data: bytes, *,
+                       lock: Any = None, retries: int = 3,
+                       log: Callable[[str], Any] | None = None) -> str | None:
     """原子写二进制：临时文件 + os.replace；成功返回 None，失败返回错误字符串（绝不抛）。
 
     临时名带**进程号 + 线程号**（"%s.%d.%d.tmp" % (path, pid, tid)）——两个线程同时写
@@ -279,7 +288,10 @@ def atomic_write_bytes(path, data, *, lock=None, retries=3, log=None):
         return str(e)
 
 
-def atomic_write_json(path, data, *, lock=None, retries=3, log=None, indent=2):
+def atomic_write_json(path: str | os.PathLike, data: Any, *,
+                      lock: Any = None, retries: int = 3,
+                      log: Callable[[str], Any] | None = None,
+                      indent: int | None = 2) -> str | None:
     """原子写 JSON（UTF-8 / ensure_ascii=False）；成功 None，失败错误字符串。
 
     indent 默认 2（与 pet_book/pet_resources/… 原口径一致）；记忆文件传 indent=None
@@ -294,13 +306,20 @@ def atomic_write_json(path, data, *, lock=None, retries=3, log=None, indent=2):
                               lock=lock, retries=retries, log=log)
 
 
-def read_json_or(path, factory=dict, *, expect=dict, log=None):
-    """读 JSON；返回 (data, corrupted: bool)。
+def _read_json_status(path: str | os.PathLike, factory: Callable[[], Any] = dict, *,
+                      expect: type | None = dict,
+                      log: Callable[[str], Any] | None = None) -> tuple[Any, bool, bool]:
+    """读 JSON → (data, corrupted, unreadable)，绝不抛出。
 
-    - 文件不存在 → (factory(), False)：首次运行不是错误，也**不需要愈合**
-    - 解析失败 / 顶层类型不是 expect → (factory(), True)：真损坏，调用方可据此愈合
-    - 读取本身失败但文件在（权限/共享占用等）→ (factory(), False)：**不能证明损坏**，
+    **v2.4.1（A 区一致性收口）：这是全仓读侧的单一实现**——read_json_or / load_json /
+    read_json_ex / heal_json 都走它（此前 pet_book._read_json 与 pet_resources._read_json_ex
+    是两份逐字相同的复制品，"修一处漏一处"）。
+
+    - 文件不存在 → (factory(), False, False)：首次运行不是错误，也**不需要愈合**
+    - 解析失败 / 顶层类型不是 expect → (factory(), True, False)：真损坏，调用方可据此愈合
+    - 读取本身失败但文件在（权限/共享占用等）→ (factory(), False, True)：**不能证明损坏**，
       绝不据此回写（否则可能用空结构覆盖掉别人的好文件）
+    - 非 UTF-8 编码（GBK/ANSI 另存）同 OSError 口径 → unreadable=True、corrupted=False
 
     与 heal_json 同口径：factory 自己抛异常也不外泄（M3），退回与 expect 同型的空容器。
     """
@@ -310,34 +329,98 @@ def read_json_or(path, factory=dict, *, expect=dict, log=None):
         with open(str(path), "r", encoding="utf-8-sig") as f:
             data = json.load(f)
     except FileNotFoundError:
-        return _default_from(factory, expect, log, path), False
+        return _default_from(factory, expect, log, path), False, False
     except OSError as e:
         _log(log, "pet_io 读取失败（按默认值继续）%s: %r" % (path, e))
-        return _default_from(factory, expect, log, path), False
+        return _default_from(factory, expect, log, path), False, True
     except UnicodeDecodeError as e:
         # v2.3.1（兼容审查 S1）：解码失败 ≠ 内容损坏。GBK/ANSI 另存的文件内容完全可读，
         # 旧版对它一个字节都不动；把它判成"坏"再回写 = 原地销毁用户数据。
         # 与 OSError 同口径：不能证明损坏 → 不回写，只记一行日志。
         _log(log, "pet_io 编码不是 UTF-8（按默认值继续，不覆盖原文件）%s: %r" % (path, e))
-        return _default_from(factory, expect, log, path), False
+        return _default_from(factory, expect, log, path), False, True
     except Exception as e:
         # 其余（JSONDecodeError / RecursionError…）= 文件内容确实坏了
         _log(log, "pet_io 解析失败（按默认值重建）%s: %r" % (path, e))
-        return _default_from(factory, expect, log, path), True
+        return _default_from(factory, expect, log, path), True, False
     if expect is not None and not isinstance(data, expect):
         _log(log, "pet_io 顶层结构非法（按默认值重建）%s: %s"
              % (path, type(data).__name__))
-        return _default_from(factory, expect, log, path), True
-    return data, False
+        return _default_from(factory, expect, log, path), True, False
+    return data, False, False
 
 
-def load_json(path, factory=dict, *, expect=dict, log=None):
-    """read_json_or 的 ok 口径快捷版：返回 (data, ok)（ok=False=文件损坏）。"""
+def read_json_or(path: str | os.PathLike, factory: Callable[[], Any] = dict, *,
+                 expect: type | None = dict, log: Callable[[str], Any] | None = None
+                 ) -> tuple[Any, bool]:
+    """读 JSON；返回 (data, corrupted: bool)（= _read_json_status 的二元口径）。
+
+    调用方要区分"文件不存在"与"文件在但读不到"时改用 read_json_ex（三元口径）。
+    """
+    data, corrupted, _unreadable = _read_json_status(path, factory, expect=expect, log=log)
+    return data, corrupted
+
+
+def read_json_ex(path: str | os.PathLike, factory: Callable[[], Any] = dict, *,
+                 expect: type | None = dict, log: Callable[[str], Any] | None = None,
+                 heal: bool = True, retries: int = 3, indent: int | None = 2,
+                 normalize: Callable[[Any], tuple[Any, Any]] | None = None
+                 ) -> tuple[Any, bool, bool]:
+    """读 JSON → (data, corrupted, unreadable)，可选**当场愈合**（读侧唯一真源）。
+
+    v2.4.1（A 区一致性收口）：pet_book._read_json / pet_resources._read_json_ex 此前是
+    两份逐字相同的自建实现（各自 read_json_or + heal_json 读两遍磁盘），现在收敛到本函数，
+    那两个函数退化成薄壳。口径：
+
+    · **读只发生一次**：读、判、愈合回写全在同一把路径锁内完成。锁内本进程没有别的写者，
+      因此既不需要"先读一遍探测、再进锁复查一遍"（旧写法每次真损坏都要读两遍磁盘），
+      也不存在"回写覆盖在途写者刚写好的新数据"的窗口。
+    · corrupted=False 时**一个字节都不写**（文件不存在 / 读不到 / BOM / GBK 都算）。
+      heal=False 给"马上要改名 / 另有更强恢复路径"的调用方（如 pet_book 的 usage.json 迁移）。
+    · unreadable=True 专指"文件在磁盘上但这次读不到（权限/共享占用/非 UTF-8）"——
+      调用方据此**跳过整体回写**：一次瞬时 PermissionError 不许把完好数据清空。
+    · normalize(data) -> (fixed, reason)：顶层合法但内层类型非法时的判据（见 _safe_normalize，
+      判据自己坏了就一个字节都不写）；真损坏时走 factory() 重建、不看 normalize。
+    """
+    lock = path_lock(path)
+    with lock:
+        data, corrupted, unreadable = _read_json_status(path, factory, expect=expect, log=log)
+        if corrupted:
+            if heal:
+                # v2.3.1（兼容审查 S1）：愈合前先把原文件另存 .bak——万一判错了（未来又出现
+                # 某种"内容可读但被判坏"的假阳性），用户的数据还在，可手工恢复。
+                backup_before_heal(path, log)
+                atomic_write_json(path, data, lock=lock, retries=retries, log=log, indent=indent)
+        elif normalize is not None:
+            fixed, reason = _safe_normalize(normalize, data, log, path)
+            if reason:
+                backup_before_heal(path, log)
+                _log(log, "pet_io 内层结构非法（已留 .bak 并按归一化结构重建）%s: %s"
+                     % (path, reason))
+                atomic_write_json(path, fixed, lock=lock, retries=retries, log=log, indent=indent)
+                data = fixed
+    return data, corrupted, unreadable
+
+
+def load_json(path: str | os.PathLike, factory: Callable[[], Any] = dict, *,
+              expect: type | None = dict, log: Callable[[str], Any] | None = None
+              ) -> tuple[Any, bool]:
+    """read_json_or 的 ok 口径快捷版：返回 (data, ok)（ok=False=文件损坏）。
+
+    v2.4.1 去留判定：**有意保留的 API**（不是残留）。它把"损坏"翻成布尔口径
+    （ok = not corrupted），是 pet_io 读侧唯一的 bool 门面；生产路径当前不直接调用
+    （各模块更关心 corrupted / unreadable 的分支），但它是公开薄壳，删掉等于破坏读侧
+    API 的完整性。要用就用它，别在调用方自己写 "not corrupted"。
+    契约测试：tests/test_io_v231.py::test_read_json_reports_corruption（第 206 行那条
+    "ok 口径的等价入口"）；结构性回归在 tests/test_deadcode_types_v241.py（判定为保留、
+    不得被当死代码删掉）。
+    """
     data, corrupted = read_json_or(path, factory, expect=expect, log=log)
     return data, not corrupted
 
 
-def _safe_normalize(normalize, data, log, path):
+def _safe_normalize(normalize: Callable[[Any], Any] | None, data: Any,
+                    log: Callable[[str], Any] | None, path: object) -> tuple[Any, Any]:
     """跑调用方注入的"内层结构"判据，返回 (fixed, reason)，绝不抛。
 
     normalize(data) 应当返回 (fixed, reason)：
@@ -357,42 +440,28 @@ def _safe_normalize(normalize, data, log, path):
     return fixed, str(reason)
 
 
-def heal_json(path, factory=dict, *, expect=dict, log=None, retries=3, indent=2,
-              normalize=None):
+def heal_json(path: str | os.PathLike, factory: Callable[[], Any] = dict, *,
+              expect: type | None = dict, log: Callable[[str], Any] | None = None,
+              retries: int = 3, indent: int | None = 2,
+              normalize: Callable[[Any], tuple[Any, Any]] | None = None
+              ) -> tuple[Any, bool]:
     """读 JSON；**只在文件仍然是坏的**时才回写 factory() 结构（一次性愈合）。
 
-    返回 (data, corrupted)。"仍然是坏的"= 在同一把路径锁内重新读一次的结果；
-    若期间已有写者修好了文件，读到的是新数据 → 不再回写，因此**绝不覆盖更新数据**。
-
-    indent：愈合回写的缩进口径，默认 2（各索引文件的既有口径）；memory.json 这类
-    原本是**紧凑单行**的文件由调用方传 indent=None（L2：愈合不能顺手改变文件格式）。
-
-    normalize（v2.3.1 一致性收口，可选）：内层类型判据 callable(data) -> (fixed, reason)。
-    顶层结构合法、但内层字段类型非法（P2：{"history": {...}}、"clips": [...] 这类）以前
-    **静默返回空、无日志、不愈合**；给判据后统一成：reason 非空 → 记一行日志 + 留 .bak
-    + 回写 fixed（与顶层损坏同一把锁、同一份备份口径），并把 fixed 作为返回的 data
-    （让调用方内存态与盘上内容一致）。reason 为空 → 原样返回，不写。
-    只有"能被归一化安全重建"的字段才该由调用方给出 fixed；不安全的（重建会丢用户
-    能用的数据）请让判据自己记日志并返回 reason=None。
+    返回 (data, corrupted)。v2.4.1（A 区一致性收口）：本函数是 pet_io.read_json_ex 的
+    **薄壳**（此前"读侧愈合"有三套命名：pet_book._read_json / pet_resources._read_json_ex /
+    各模块内联环，现在全部收敛到 read_json_ex 这一份实现）。因此：
+      · 读只发生一次，且与"判坏 + 回写"在同一把路径锁内完成——锁内本进程没有别的写者，
+        既不需要"先读一遍探测、再进锁复查一遍"，也不会覆盖在途写者刚写好的新数据；
+      · indent：愈合回写的缩进口径（默认 2）；memory.json 这类原本是**紧凑单行**的文件
+        由调用方传 indent=None（L2：愈合不能顺手改变文件格式）；
+      · normalize：内层类型判据 callable(data) -> (fixed, reason)（v2.3.1 加）。顶层结构合法、
+        但内层字段类型非法（P2：{"history": {...}}、"clips": [...] 这类）以前**静默返回空、
+        无日志、不愈合**；给判据后统一成：reason 非空 → 记一行日志 + 留 .bak + 回写 fixed
+        （与顶层损坏同一把锁、同一份备份口径），并把 fixed 作为返回的 data（让调用方内存态
+        与盘上内容一致）。reason 为空 → 原样返回，不写。只有"能被归一化安全重建"的字段才该
+        由调用方给出 fixed；不安全的（重建会丢用户能用的数据）请让判据自己记日志并返回 None。
     """
-    lock = path_lock(path)
-    with lock:
-        data, corrupted = read_json_or(path, factory, expect=expect, log=log)
-        if corrupted:
-            # v2.3.1（兼容审查 S1）：愈合前先把原文件另存 .bak——万一判错了（未来又出现
-            # 某种"内容可读但被判坏"的假阳性），用户的数据还在，可手工恢复。
-            backup_before_heal(path, log)
-            # 锁还在手上：此刻没有本进程写者能在"读到坏"与"回写"之间插入新数据
-            atomic_write_json(path, _default_from(factory, expect, log, path),
-                              lock=lock, retries=retries, log=log, indent=indent)
-        elif normalize is not None:
-            # 锁在手上 → "读到内层非法"与"回写"之间同样插不进本进程写者（口径与上面一致）
-            fixed, reason = _safe_normalize(normalize, data, log, path)
-            if reason:
-                backup_before_heal(path, log)
-                _log(log, "pet_io 内层结构非法（已留 .bak 并按归一化结构重建）%s: %s"
-                     % (path, reason))
-                atomic_write_json(path, fixed, lock=lock, retries=retries, log=log,
-                                  indent=indent)
-                data = fixed
+    data, corrupted, _unreadable = read_json_ex(path, factory, expect=expect, log=log, heal=True,
+                                                retries=retries, indent=indent,
+                                                normalize=normalize)
     return data, corrupted

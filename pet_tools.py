@@ -25,6 +25,7 @@
 import json
 import threading
 import uuid
+from typing import Any, Callable, Iterable
 
 # 一次对话最多几轮工具调用（防"模型自己跟自己聊"死循环）
 MAX_TOOL_ROUNDS = 2
@@ -46,7 +47,9 @@ class ToolSpec:
 
     __slots__ = ("name", "label", "description", "parameters", "handler", "readonly")
 
-    def __init__(self, name, description, parameters, handler, readonly, label=""):
+    def __init__(self, name: str, description: str, parameters: dict,
+                 handler: Callable[[dict, Any], Any], readonly: bool,
+                 label: str = "") -> None:
         self.name = str(name)
         self.label = str(label or name)
         self.description = str(description)
@@ -55,14 +58,14 @@ class ToolSpec:
         self.handler = handler
         self.readonly = bool(readonly)
 
-    def to_openai(self):
+    def to_openai(self) -> dict:
         """OpenAI 兼容的 tools 条目（DeepSeek / Kimi / Qwen / OpenAI 同一格式）。"""
         return {"type": "function",
                 "function": {"name": self.name, "description": self.description,
                              "parameters": self.parameters}}
 
 
-def build_registry(specs):
+def build_registry(specs: Iterable[ToolSpec]) -> dict[str, ToolSpec]:
     """工具列表 → {name: ToolSpec}。重名直接报错：工具名必须唯一，否则模型指哪个都说不清。"""
     out = {}
     for spec in specs:
@@ -74,13 +77,13 @@ def build_registry(specs):
     return out
 
 
-def _schema(props=None, required=()):
+def _schema(props: dict | None = None, required: Iterable[str] = ()) -> dict:
     """JSON Schema 片段（object 类型 + 属性 + required），省得每条手写。"""
     return {"type": "object", "properties": dict(props or {}), "required": list(required)}
 
 
 # ---------------- 处理器：全部只做"转发 + 兜底"，业务逻辑留在各服务里 ----------------
-def _provider(fn, missing):
+def _provider(fn: Callable[[], tuple[Any, Any]] | None, missing: str) -> dict:
     """调用注入的数据提供者：约定返回 (ok, dict) 或 (ok, 错误文案)。"""
     if not callable(fn):
         return {"ok": False, "error": missing}
@@ -94,7 +97,7 @@ def _provider(fn, missing):
     return {"ok": False, "error": str(payload or missing)}
 
 
-def _ui(ctx, name, args, blocking=True):
+def _ui(ctx: Any, name: str, args: Any, blocking: bool = True) -> dict:
     """主线程类工具：blocking=True 等结果；False 只投递（对话框自己给用户反馈）。"""
     fn = getattr(ctx, "ui" if blocking else "ui_async", None)
     if not callable(fn):
@@ -105,43 +108,43 @@ def _ui(ctx, name, args, blocking=True):
     return {"ok": True}
 
 
-def _h_check_balance(args, ctx):
+def _h_check_balance(args: dict, ctx: Any) -> dict:
     return _provider(getattr(ctx, "balance", None), "余额服务不可用")
 
 
-def _h_check_weather(args, ctx):
+def _h_check_weather(args: dict, ctx: Any) -> dict:
     return _provider(getattr(ctx, "weather", None), "天气服务不可用")
 
 
-def _h_ledger_summary(args, ctx):
+def _h_ledger_summary(args: dict, ctx: Any) -> dict:
     return _provider(getattr(ctx, "ledger", None), "账本不可用")
 
 
-def _h_open_ledger(args, ctx):
+def _h_open_ledger(args: dict, ctx: Any) -> dict:
     return _ui(ctx, "open_ledger", args, blocking=False)
 
 
-def _h_add_manual_record(args, ctx):
+def _h_add_manual_record(args: dict, ctx: Any) -> dict:
     return _ui(ctx, "add_manual_record", args, blocking=False)
 
 
-def _h_set_budget(args, ctx):
+def _h_set_budget(args: dict, ctx: Any) -> dict:
     return _ui(ctx, "set_budget", args, blocking=False)
 
 
-def _h_set_alarm(args, ctx):
+def _h_set_alarm(args: dict, ctx: Any) -> dict:
     return _ui(ctx, "set_alarm", args, blocking=True)
 
 
-def _h_set_timer(args, ctx):
+def _h_set_timer(args: dict, ctx: Any) -> dict:
     return _ui(ctx, "set_timer", args, blocking=True)
 
 
-def _h_show_emote(args, ctx):
+def _h_show_emote(args: dict, ctx: Any) -> dict:
     return _ui(ctx, "show_emote", args, blocking=True)
 
 
-def _h_play_action(args, ctx):
+def _h_play_action(args: dict, ctx: Any) -> dict:
     return _ui(ctx, "play_action", args, blocking=True)
 
 
@@ -211,24 +214,29 @@ TOOLS = build_registry(TOOL_SPECS)
 
 
 # ---------------- 注册表读取 ----------------
-def get_tool(name):
+def get_tool(name: str) -> ToolSpec | None:
     """按名取工具（未知返回 None）。"""
     return TOOLS.get(str(name or ""))
 
 
-def openai_tools():
+def openai_tools() -> list[dict]:
     """请求体里的 tools 参数（顺序稳定）。"""
     return [spec.to_openai() for spec in TOOL_SPECS]
 
 
-def tool_names(readonly=None):
-    """工具名元组；readonly=None 全部，True 只读，False 写入。"""
+def tool_names(readonly: bool | None = None) -> tuple[str, ...]:
+    """工具名元组；readonly=None 全部，True 只读，False 写入。
+
+    v2.4.1 去留判定：**有意保留的 API**（不是残留）。生产的执行/请求路径只用
+    get_tool() 与 openai_tools()；本函数是注册表唯一的"按权限列名单"自省入口，也是
+    契约测试的断言消息来源（tests/test_tools_v230.py）。要用就统一走这里，别自己
+    遍历 TOOL_SPECS。"""
     return tuple(s.name for s in TOOL_SPECS
                  if readonly is None or bool(s.readonly) == bool(readonly))
 
 
 # ---------------- 参数与结果处理（纯函数，可测） ----------------
-def validate_args(spec, args):
+def validate_args(spec: ToolSpec, args: Any) -> str:
     """参数粗校验：必须是对象、required 必填。返回错误文案（"" = 通过）。"""
     if not isinstance(args, dict):
         return "参数必须是 JSON 对象"
@@ -243,7 +251,7 @@ def validate_args(spec, args):
     return ""
 
 
-def parse_call(call):
+def parse_call(call: Any) -> tuple[str, dict | None, str]:
     """OpenAI tool_call → (name, args, call_id)。arguments 坏 JSON 时 args 为 None。"""
     if not isinstance(call, dict):
         return "", {}, ""
@@ -268,7 +276,7 @@ def parse_call(call):
     return name, {}, call_id
 
 
-def args_json(args):
+def args_json(args: Any) -> str:
     """参数 → JSON 文本（跨线程投递用；坏值退空对象，绝不抛）。"""
     try:
         return json.dumps(args if isinstance(args, dict) else {}, ensure_ascii=False, default=str)
@@ -276,7 +284,7 @@ def args_json(args):
         return "{}"
 
 
-def parse_args(text):
+def parse_args(text: Any) -> dict:
     """JSON 文本 → dict（坏输入退空对象，绝不抛）。"""
     if isinstance(text, dict):
         return dict(text)
@@ -287,7 +295,7 @@ def parse_args(text):
     return val if isinstance(val, dict) else {}
 
 
-def result_text(result, limit=TOOL_RESULT_MAX):
+def result_text(result: Any, limit: int = TOOL_RESULT_MAX) -> str:
     """工具结果 → tool 消息正文（JSON 文本；超长截断防 token 爆炸）。"""
     try:
         txt = json.dumps(result, ensure_ascii=False, default=str)
@@ -296,37 +304,37 @@ def result_text(result, limit=TOOL_RESULT_MAX):
     return txt if len(txt) <= limit else txt[:limit] + "…(truncated)"
 
 
-def summarize(result):
+def summarize(result: Any) -> str:
     """工具结果 → 主线程气泡摘要：结果里带 summary 才有（其余由具体界面自己反馈）。"""
     if not isinstance(result, dict):
         return ""
     return str(result.get("summary") or "")[:60]
 
 
-def _fmt_money(v):
+def _fmt_money(v: Any) -> str:
     try:
         return "¥%.2f" % float(v)
     except (TypeError, ValueError):
         return "一笔账"
 
 
-def _describe_manual(args):
+def _describe_manual(args: dict | None) -> str:
     note = str((args or {}).get("note") or "").strip()
     return "在账本里记一笔 %s%s" % (_fmt_money((args or {}).get("amount")),
                                 ("（%s）" % note[:20]) if note else "")
 
 
-def _describe_budget(args):
+def _describe_budget(args: dict | None) -> str:
     return "把今日预算设成 %s" % _fmt_money((args or {}).get("amount"))
 
 
-def _describe_alarm(args):
+def _describe_alarm(args: dict | None) -> str:
     t = str((args or {}).get("time") or "").strip()
     label = str((args or {}).get("label") or "").strip()
     return "设一个 %s 的闹钟%s" % (t or "？", ("（%s）" % label[:20]) if label else "")
 
 
-def _describe_timer(args):
+def _describe_timer(args: dict | None) -> str:
     label = str((args or {}).get("label") or "").strip()
     minutes = (args or {}).get("minutes")
     try:
@@ -336,11 +344,12 @@ def _describe_timer(args):
     return "设一个 %s 后的提醒%s" % (span, ("（%s）" % label[:20]) if label else "")
 
 
-_DESCRIBE = {"add_manual_record": _describe_manual, "set_budget": _describe_budget,
-             "set_alarm": _describe_alarm, "set_timer": _describe_timer}
+_DESCRIBE: dict[str, Callable[[dict | None], str]] = {
+    "add_manual_record": _describe_manual, "set_budget": _describe_budget,
+    "set_alarm": _describe_alarm, "set_timer": _describe_timer}
 
 
-def describe_call(name, args):
+def describe_call(name: str, args: Any) -> str:
     """工具调用 → 给用户看的一句确认文案（纯函数，可测）。"""
     spec = get_tool(name)
     label = spec.label if spec is not None else str(name or "未知操作")
@@ -355,7 +364,7 @@ def describe_call(name, args):
 
 
 # ---------------- 执行器 ----------------
-def execute(name, args, ctx, confirmed=False):
+def execute(name: str, args: Any, ctx: Any, confirmed: bool = False) -> dict:
     """执行一次工具调用，返回结果 dict。**任何异常都吞成 {"ok": False, ...}**，绝不抛出。
 
     confirmed=False 时写入类工具一律拒绝（needs_confirm=True）：调用方必须要么先经主线程
@@ -390,19 +399,19 @@ class MainThreadCall:
 
     __slots__ = ("id", "name", "args", "result", "event")
 
-    def __init__(self, name, args):
+    def __init__(self, name: str, args: Any) -> None:
         self.id = uuid.uuid4().hex
         self.name = str(name)
         self.args = args if isinstance(args, dict) else {}
         self.result = {"ok": False, "error": "界面没有响应"}
         self.event = threading.Event()
 
-    def resolve(self, result):
+    def resolve(self, result: Any) -> None:
         """主线程交回结果（非 dict 一律当成功）。"""
         self.result = result if isinstance(result, dict) else {"ok": True}
         self.event.set()
 
-    def wait(self, timeout=None):
+    def wait(self, timeout: float | None = None) -> bool:
         """等主线程执行完；False = 超时（调用方按失败处理）。"""
         return self.event.wait(timeout)
 
@@ -412,18 +421,18 @@ class ToolConfirmRequest:
 
     __slots__ = ("id", "name", "args", "approved", "event")
 
-    def __init__(self, name, args):
+    def __init__(self, name: str, args: Any) -> None:
         self.id = uuid.uuid4().hex
         self.name = str(name)
         self.args = args if isinstance(args, dict) else {}
         self.approved = False
         self.event = threading.Event()
 
-    def resolve(self, approved):
+    def resolve(self, approved: Any) -> None:
         self.approved = bool(approved)
         self.event.set()
 
-    def wait(self, timeout=None):
+    def wait(self, timeout: float | None = None) -> bool | None:
         """True=用户同意，False=用户拒绝，None=超时没回应。"""
         if not self.event.wait(timeout):
             return None
@@ -442,8 +451,12 @@ class ToolContext:
 
     __slots__ = ("balance", "weather", "ledger", "ui", "ui_async", "log")
 
-    def __init__(self, balance=None, weather=None, ledger=None,
-                 ui=None, ui_async=None, log=None):
+    def __init__(self, balance: Callable[[], tuple[Any, Any]] | None = None,
+                 weather: Callable[[], tuple[Any, Any]] | None = None,
+                 ledger: Callable[[], tuple[Any, Any]] | None = None,
+                 ui: Callable[[str, dict], Any] | None = None,
+                 ui_async: Callable[[str, dict], Any] | None = None,
+                 log: Callable[[str], Any] | None = None) -> None:
         self.balance = balance
         self.weather = weather
         self.ledger = ledger

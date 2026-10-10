@@ -70,7 +70,14 @@ def test_check_zip_flags_same_version_but_stale_content(tmp_path):
 
 
 def test_check_version_of_this_repo():
-    """当前仓库三处版本号必须一致（护栏的一部分）。"""
+    """当前仓库的版本一致性：**严格**全绿（含数字版本 filevers/prodvers）。
+
+    v2.4.1 收紧（质量审查）：此前为了绕开 version_info.txt 里 (2, 2, 0, 0) 的历史漂移，这里
+    只校验"非数字项"，等于把新判据在开发期关掉了——而本轮真实踩到的正是这条漂移。现在
+    version_info.txt 已同步成 (2, 4, 0, 0)，这里恢复严格：任何一项（字符串 / 数字 / CHANGELOG
+    首条与次条）出问题都让本用例变红；数字判据的"能真报"由 test_release_chain_v24.py 的
+    合成文本用例（反例 1）单独钉住。
+    """
     assert chk.check_version() == []
     assert chk.repo_version() not in ("", "?")
 

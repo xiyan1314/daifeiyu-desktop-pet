@@ -333,17 +333,114 @@ def test_l9_untracked_runtime_prompts_are_ignored():
     assert rc2 == 1, "prompts/custom/*.txt 不该被一起忽略（用户自建人设要能进仓库）"
 
 
-def test_l9_tracked_prompts_still_dirty_the_tree():
-    """L9 边界（代码事实，与报告一致）：.gitignore **管不住已跟踪文件**。
+def test_l9_prompts_are_untracked_so_editing_them_no_longer_dirties_the_tree():
+    """L9 收口（v2.4.1 / A9）：三份人设**不再被跟踪**——它们是运行时生成物。
 
-    仓库里的 prompts/default.txt · sheshe.txt · tsundere.txt 是已跟踪的，编辑它们照样
-    会出现在 git status 里 → check_clean_tree 仍会判"未提交改动"。想让它们彻底不挡发布，
-    只有"不再跟踪"这一条路（那会把文件从仓库删掉，本轮明确不做）。
-    这条测试把边界钉死：若哪天有人改成了不跟踪，它会失败并提醒更新结论。
+    旧结论是"已跟踪 → 编辑就弄脏树，本轮明确不做"（下一条用例当时钉的就是这个边界）；
+    本轮按交接清单走"不再跟踪"那条路：git rm --cached（本地文件保留）+ .gitignore 的
+    prompts/*.txt 生效。此后用户改人设、删文件重生成，都不会再让发布门 check_clean_tree
+    判"未提交改动"。能真失败：把 prompts/*.txt 重新 git add 回去，第一条断言立刻红。
     """
     rc, out = _git("ls-files", "prompts")
-    tracked = [x for x in out.splitlines() if x.strip().endswith(".txt")]
-    assert "prompts/default.txt" in tracked, \
-        "已跟踪的 prompts 文件清单变了（%r），L9 的结论需要重新评估" % (tracked,)
-    rc2, _ = _git("check-ignore", "-q", "prompts/default.txt")
-    assert rc2 == 1, "git 竟然把已跟踪文件也判为忽略——L9 的边界结论要更新"
+    assert out.split() == [], "prompts 下还有被跟踪的文件（生成物不该进仓库）：%r" % (out,)
+    for name in ("default.txt", "sheshe.txt", "tsundere.txt"):
+        rc_i, _ = _git("check-ignore", "-q", "prompts/" + name)
+        assert rc_i == 0, "prompts/%s 没被忽略：它会作为未跟踪文件弄脏 git status" % name
+        assert os.path.isfile(os.path.join(chk.ROOT, "prompts", name)), \
+            "git rm --cached 只该停止跟踪，不该删本地文件：prompts/%s 不见了" % name
+    rc_s, out_s = _git("status", "--porcelain", "--", "prompts")
+    # 本次"停止跟踪"会留下一次性的已暂存删除（D）直到提交；除此之外**不许**再有任何条目：
+    # 出现 " M"（改了内容）或 "??"（未跟踪）就说明忽略规则没生效，用户编辑人设又会挡住发布。
+    lines = [x for x in out_s.splitlines() if x.strip()]
+    assert all(x.startswith("D ") for x in lines), \
+        "prompts 仍在弄脏 git status（除了一次性的已暂存删除）：%r" % (out_s,)
+    # 反例对照：prompts/custom/ 下的用户自建人设**要能**进仓库（忽略规则不许一刀切）
+    rc_c, _ = _git("check-ignore", "-q", "prompts/custom/zzz_runtime.txt")
+    assert rc_c == 1, "prompts/custom/*.txt 被一起忽略了：用户自建人设没法进仓库"
+
+
+def test_l9_persona_files_are_regenerated_from_builtin_constants(tmp_path, monkeypatch):
+    """不跟踪的前提：文件丢了能自动重建（否则等于把默认人设从产品里删掉）。
+
+    这三份文件按设计是 ensure_persona_files() 首启从内置常量写盘的**生成物**，
+    仓库里那三份就是这么来的；不跟踪以后，"新克隆的仓库/新解包目录里没有它们"
+    必须不影响任何人设功能。
+    """
+    import pet_log
+    import 桌宠 as main
+
+    monkeypatch.setattr(main, "DATA_DIR", str(tmp_path), raising=False)
+    monkeypatch.setattr(pet_log, "_data_dir", str(tmp_path), raising=False)
+    main.ensure_persona_files()
+    for pid, text in main.PERSONA_PRESETS.items():
+        p = tmp_path / "prompts" / (pid + ".txt")
+        assert p.is_file(), "内置人设 %s 没有落地成文件" % pid
+        assert p.read_text(encoding="utf-8").strip() == text.strip()
+    assert (tmp_path / "prompts" / "custom").is_dir()
+    # 只写不覆盖：用户改过的内容不许被重建冲掉（这是"生成物"能被安全不跟踪的另一半理由）
+    p = tmp_path / "prompts" / "default.txt"
+    p.write_text("我改过的", encoding="utf-8")
+    main.ensure_persona_files()
+    assert p.read_text(encoding="utf-8") == "我改过的"
+
+
+# ---------------- A6（v2.4.1）：版本核对与"脏条目全量报告" ----------------
+
+def _vi_text(version, filevers, prodvers):
+    """合成一份 version_info.txt（只为喂纯函数，不碰真实文件）。"""
+    return ("VSVersionInfo(ffi=FixedFileInfo(filevers=%s, prodvers=%s), kids=[StringFileInfo(["
+            "StringTable('040904B0', [StringStruct('FileVersion', '%s'), "
+            "StringStruct('ProductVersion', '%s')])])])"
+            % (filevers, prodvers, version, version))
+
+
+_L9_GOOD_CL = "## v2.4.0\n- 新\n\n## v2.3.1\n- 旧\n"
+
+
+def test_version_problems_reports_each_way_of_forgetting_to_bump():
+    """A6：每条判据都要能真报（合成文本即可，全部是纯函数）。"""
+    vg = 'check("green version", main.VERSION == "2.4.0")\n'
+    # 反例 1：数字版本停在旧版（本轮实测 version_info.txt 正是 2.2.0.0）
+    bad = chk.version_problems("2.4.0", _vi_text("2.4.0", "(2, 2, 0, 0)", "(2, 2, 0, 0)"),
+                               vg, _L9_GOOD_CL)
+    assert any(("数字版本" in x and "filevers" in x) for x in bad), bad
+    # 反例 2：filevers 与 prodvers 互相不一致
+    bad = chk.version_problems("2.4.0", _vi_text("2.4.0", "(2, 4, 0, 0)", "(2, 5, 0, 0)"),
+                               vg, _L9_GOOD_CL)
+    assert any("filevers 与 prodvers 不一致" in x for x in bad), bad
+    # 反例 3：CHANGELOG 次条 >= VERSION（没升版本，或首条被复制成了上一条）
+    bad = chk.version_problems("2.4.0", _vi_text("2.4.0", "(2, 4, 0, 0)", "(2, 4, 0, 0)"), vg,
+                               "## v2.4.0\n- 新\n\n## v2.4.0\n- 旧\n")
+    assert any("次条" in x for x in bad), bad
+    # 反例 4：字符串版本没跟上（老判据，别在重构里丢了）
+    bad = chk.version_problems("2.4.0", _vi_text("2.3.1", "(2, 4, 0, 0)", "(2, 4, 0, 0)"),
+                               vg, _L9_GOOD_CL)
+    assert any("FileVersion" in x for x in bad) and any("ProductVersion" in x for x in bad), bad
+    # 正例：全对 → 一条都不报；数字版本少写一段（"2.4"）补零后等价，不许误报
+    ok = chk.version_problems("2.4.0", _vi_text("2.4.0", "(2, 4, 0, 0)", "(2, 4, 0, 0)"),
+                              vg, _L9_GOOD_CL)
+    assert ok == [], ok
+    ok2 = chk.version_problems("2.4.0", _vi_text("2.4.0", "(2, 4)", "(2, 4)"), vg, _L9_GOOD_CL)
+    assert ok2 == [], ok2
+
+
+def test_全量脏条目报告(tmp_path):
+    """A6 + A12：脏条目报告**全量**（此前 [:8] 截断，第 9 条起永远看不见）。
+
+    memory.log.old（pet_main 的 512KB 轮转产物）必须在残留判据里——它是本轮 A12 的点名项。
+    """
+    names = ["config.json.%d.tmp" % i for i in range(12)]
+    assert len(chk._full_list(names).split(",")) == 12
+    assert "config.json.11.tmp" in chk._full_list(names), "第 12 条被截断了"
+    assert "共 12 条" in chk._full_list(names)
+    assert chk._full_list(["a", "b"]) == "a, b"        # 少条目时不加尾巴（别噪音化）
+    # 绿色版目录真跑：11 个残留必须全部点名，常规用户数据一个都不点名
+    for n in ["memory.log.old", "error.log.bad", "config.json.12345.678.tmp", "roles.json.bak",
+              "usage.json.migrated"] + ["lines.json.%d.tmp" % i for i in range(6)]:
+        (tmp_path / n).write_text("x", encoding="utf-8")
+    (tmp_path / "config.json").write_text("{}", encoding="utf-8")
+    got = chk.green_residue(str(tmp_path))
+    assert "memory.log.old" in got, "memory.log 轮转产物不在残留判据里（A12）"
+    assert "config.json" not in got and "memory.log" not in got, "常规用户数据被点名了：%r" % (got,)
+    assert len(got) == 11, got
+    assert len(chk._full_list(got).split(",")) == 11, "残留报告仍在截断：%r" % (chk._full_list(got),)

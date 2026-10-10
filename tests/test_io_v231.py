@@ -207,6 +207,104 @@ def test_read_json_reports_corruption(tmp_path):
     assert data == {} and ok is False
 
 
+def _count_text_reads(monkeypatch, path):
+    """统计对 path 的**文本读** open() 次数（"rb" 不算：愈合备份 shutil.copyfile 用它）。"""
+    import builtins
+    real_open = builtins.open
+    hits = []
+
+    def spy(file, mode="r", *a, **kw):
+        if str(file) == str(path) and str(mode) in ("r", "rt"):
+            hits.append(str(mode))
+        return real_open(file, mode, *a, **kw)
+
+    monkeypatch.setattr(builtins, "open", spy)
+    return hits
+
+
+def test_read_json_ex_separates_missing_corrupt_and_unreadable(tmp_path, monkeypatch):
+    """v2.4.1（A 区）：读侧单一实现 read_json_ex 的三种状态必须分得开。
+
+    这个三元口径此前在 pet_book._read_json 与 pet_resources._read_json_ex 里各写了一份
+    （read_json_or + 哨兵 + os.path.exists 拼出来，"修一处漏一处"）；现在收敛成一份实现，
+    这条用例钉死语义：不存在 / 真损坏 / 在盘上但读不到，三者的 (corrupted, unreadable) 不同。
+    """
+    p = str(tmp_path / "x.json")
+    # ① 文件不存在：首次运行，不报损坏、不算读不到、不建文件
+    assert pet_io.read_json_ex(p, dict) == ({}, False, False)
+    assert not os.path.exists(p), "只读路径凭空空造了文件"
+    # ② 真损坏：corrupted=True → 愈合回写（先留 .bak）；unreadable 必须是 False
+    with open(p, "w", encoding="utf-8") as f:
+        f.write("{broken")
+    assert pet_io.read_json_ex(p, dict) == ({}, True, False)
+    assert _read(p) == {}
+    assert (tmp_path / "x.json.bak").read_text(encoding="utf-8") == "{broken"
+    # ③ 文件在、这次读不到（持续共享冲突）：不能证明损坏 → 一个字节都不写
+    q = tmp_path / "y.json"
+    q.write_bytes(b'{"keep": 1}')
+    with monkeypatch.context() as m:
+        _deny_open(m, "y.json", times=None)
+        assert pet_io.read_json_ex(str(q), dict) == ({}, False, True)
+        assert pet_io.read_json_or(str(q), dict) == ({}, False)   # 二元口径：不报损坏
+        assert q.read_bytes() == b'{"keep": 1}', "读不到被当成损坏，回写覆盖了原文件"
+        assert not (tmp_path / "y.json.bak").exists(), "没有回写就不该有 .bak"
+    # ④ heal=False：真损坏也不写（pet_book 迁移 usage.json 用的就是它）
+    z = tmp_path / "z.json"
+    z.write_text("{broken", encoding="utf-8")
+    assert pet_io.read_json_ex(str(z), dict, heal=False) == ({}, True, False)
+    assert z.read_text(encoding="utf-8") == "{broken"
+    assert not (tmp_path / "z.json.bak").exists()
+    # ⑤ 非 UTF-8（GBK）同"读不到"口径：内容完好，不许回写
+    g = tmp_path / "g.json"
+    g.write_bytes(json.dumps({"名": "中文"}, ensure_ascii=False).encode("gbk"))
+    gb = g.read_bytes()
+    assert pet_io.read_json_ex(str(g), dict, log=lambda m: None) == ({}, False, True)
+    assert g.read_bytes() == gb, "GBK 文件被当成损坏清空了"
+
+
+def test_read_json_ex_reads_corrupt_file_once(tmp_path, monkeypatch):
+    """v2.4.1（A 区）：真损坏只读**一遍**磁盘（旧写法 read_json_or + heal_json 读两遍）。
+
+    变异验证：下面把旧写法（先 read_json_or 探测、再 heal_json 进锁复查）原地跑一遍，
+    计数器必须报 2 —— 证明前面那句"只读一遍"不是恒真的空转。
+    """
+    p = str(tmp_path / "once.json")
+    with open(p, "w", encoding="utf-8") as f:
+        f.write("{broken")
+    reads = _count_text_reads(monkeypatch, p)
+    assert pet_io.read_json_ex(p, dict) == ({}, True, False)
+    assert len(reads) == 1, "真损坏读了 %d 遍磁盘：%r" % (len(reads), reads)
+    # 正例对照：健康文件同样只读一遍（计数器不是恒 0/恒 1）
+    pet_io.atomic_write_json(p, {"ok": 1})
+    reads2 = _count_text_reads(monkeypatch, p)
+    assert pet_io.read_json_ex(p, dict) == ({"ok": 1}, False, False)
+    assert len(reads2) == 1, reads2
+    # 变异：旧的"两遍读"路径必须被数成 2
+    with open(p, "w", encoding="utf-8") as f:
+        f.write("{broken again")
+    reads3 = _count_text_reads(monkeypatch, p)
+    pet_io.read_json_or(p, dict)      # 旧 pet_book._read_json 第一步：读一遍探测
+    pet_io.heal_json(p, dict)         # 旧第二步：进锁再读一遍复查 + 愈合
+    assert len(reads3) == 2, "旧写法没被复现成 2 遍，控制组失效：%r" % (reads3,)
+
+
+def test_book_corrupt_ledger_read_once_v241(tmp_path, monkeypatch):
+    """v2.4.1（A 区）：pet_book 真损坏时读**一遍**就愈合——"真损坏双读"已消除。
+
+    旧行为：_read_json 先 read_json_or 读一遍探测 → 再 heal_json 读第二遍复查 → 才回写。
+    新行为：直接走 pet_io.read_json_ex——读、判、回写在同一把路径锁内一次完成，"绝不覆盖
+    在途写者新数据"的保证没丢（锁内本进程没有别的写者）。
+    """
+    p = str(tmp_path / "ledger.json")
+    with open(p, "w", encoding="utf-8") as f:
+        f.write("{{{ not json")
+    reads = _count_text_reads(monkeypatch, p)
+    b = pet_book.Book(str(tmp_path))
+    assert b.all_records() == []
+    assert len(reads) == 1, "坏账本被读了 %d 遍（旧写法 2 遍）：%r" % (len(reads), reads)
+    assert _read(p)["records"] == [] and (tmp_path / "ledger.json.bak").exists()
+
+
 def test_heal_only_writes_when_still_broken(tmp_path):
     """愈合的写入门槛：文件没坏就不动它（不重写、不更新时间戳）。"""
     p = str(tmp_path / "h.json")
@@ -884,12 +982,10 @@ def test_clear_logs_legacy_saver_still_has_the_window(tmp_path, monkeypatch):
     assert len(hist) == 4, "窗口没被复现（那 test_clear_logs_worker_does_not_write_back 就不能证明什么）"
 
 
-def test_book_corrupt_ledger_still_rebuilds(tmp_path):
-    """P0-B 的反面：**真损坏**仍然按空账本重建（别把愈合一起改没了）。"""
-    (tmp_path / "ledger.json").write_text("{ not json", encoding="utf-8")
-    b = pet_book.Book(str(tmp_path))
-    assert b.today_usage() == 0.0
-    assert _read(tmp_path / "ledger.json")["records"] == [], "启动时没有把坏账本回写成合法结构"
+# A10 去重（v2.4.1）：这里原本还有一条 test_book_corrupt_ledger_still_rebuilds——与
+# tests/test_persistence_consistency.py::test_book_corrupt_ledger_heals_with_bak 是同一件事的
+# 两份拷贝（同一 fixture、同一断言，那份还多验了 .bak）。同一行为只留一处维护；
+# 本文件保留下面那对"读失败不清空"的用例。
 
 
 # ---- P0-B 补：读失败之后的"第一次真实写"必须先重试读并合并 ----
@@ -1032,22 +1128,9 @@ def test_factory_exception_never_escapes(tmp_path):
     assert logs, "默认值构造失败必须留痕"
 
 
-def test_clean_tmp_files_only_removes_whitelisted_names(tmp_path):
-    """L4：线程唯一 tmp（<p>.<tid>.tmp）与旧固定名都要能清；非白名单文件一律不碰。"""
-    target = tmp_path / "lines.json"
-    target.write_text("{}", encoding="utf-8")
-    (tmp_path / "lines.json.tmp").write_text("x", encoding="utf-8")          # 旧固定名
-    (tmp_path / "lines.json.12345.tmp").write_text("x", encoding="utf-8")    # 线程唯一名
-    keep = [tmp_path / "lines.json.abc.tmp", tmp_path / "lines.json.bak",
-            tmp_path / "other.json.123.tmp"]
-    for k in keep:
-        k.write_text("x", encoding="utf-8")
-    removed = pet_io.clean_tmp_files((str(target),), log=lambda m: None)
-    assert removed == 2, removed
-    assert not (tmp_path / "lines.json.tmp").exists()
-    assert not (tmp_path / "lines.json.12345.tmp").exists()
-    for k in keep:
-        assert k.exists(), "清扫动了白名单外的文件：%s" % k
+# A10 去重（v2.4.1）：这里原本还有一条 test_clean_tmp_files_only_removes_whitelisted_names——
+# 被 tests/test_persistence_consistency.py::test_clean_tmp_files_covers_new_and_old_tmp_shapes
+# 严格覆盖（三种临时名形状 + 更严的保留清单），同一行为不再两处维护。
 
 
 # ---- M5：closeEvent 在真退出/关机时必须放行 ----
@@ -1138,6 +1221,151 @@ def test_no_fixed_tmp_literals_in_source():
             bad.append("%s:%d %r" % (name, node.lineno, node.value))
     assert ok, "扫描没找到任何线程唯一临时名（判据失效，这条绿不可信）"
     assert not bad, "仍有固定名 .tmp 字面量：%s" % "; ".join(bad)
+
+
+
+# ---------------- v2.4.1（A 区）：注解收口 / 开发脚本口径 / 人设生成物不弄脏发布门 ----------------
+
+
+def _ann_missing(src, fname):
+    """源码里 fname 缺哪些注解 → ["参数 a", "返回值"]；同名函数不存在返回 None。"""
+    for node in ast.walk(ast.parse(src)):
+        if isinstance(node, ast.FunctionDef) and node.name == fname:
+            miss = []
+            a = node.args
+            for arg in list(a.posonlyargs) + list(a.args) + list(a.kwonlyargs):
+                if arg.arg not in ("self", "cls") and arg.annotation is None:
+                    miss.append("参数 %s" % arg.arg)
+            if a.vararg is not None and a.vararg.annotation is None:
+                miss.append("参数 *%s" % a.vararg.arg)
+            if a.kwarg is not None and a.kwarg.annotation is None:
+                miss.append("参数 **%s" % a.kwarg.arg)
+            if node.returns is None:
+                miss.append("返回值")
+            return miss
+    return None
+
+
+# pet_book.Book 的公开方法（点名的必须是**存在**的方法：改名/删方法会让本用例红）
+_BOOK_PUBLIC = ("__init__", "observe_balance", "add_manual", "today_usage", "week_usage",
+                "daily_totals", "all_records", "search_records", "total_amount", "total_count",
+                "check_alerts", "export_csv", "reset_balance_baseline", "last_balance", "has_data")
+
+
+def test_pet_io_and_pet_book_annotations_are_complete_and_resolvable():
+    """v2.4.1（A 区注解收口）：pet_io.py 的**每个模块级函数**与 pet_book.Book 的公开方法
+    都要"每个参数 + 返回值"有注解，且注解能在运行时解析（写错类型名 / 漏 import 会抛）。
+
+    分工：pet_tools.py 与 pet_lines.py 的注解归另一路（原代理 D 的 _PINNED），本文件只钉
+    这两个模块（本轮从 D 手里接过来的那部分）。纯函数与会话内方法的注解**不是摆设**：
+    下面既扫源码（缺注解即红），又跑 typing.get_type_hints（注解解析不了即红）。
+    能真失败：把 `def path_lock(path):` 或 `def export_csv(self, path):` 这类旧签名放回去，
+    立刻报缺；下面先证明检查器对合成坏样本会报（避免"检查器恒通过"的空转）。
+    """
+    import typing
+    # 反例对照：检查器必须能认出缺注解
+    assert _ann_missing("def f(a, b: int) -> int:\n    return a + b\n", "f") == ["参数 a"]
+    assert _ann_missing("def f(a):\n    return a\n", "f") == ["参数 a", "返回值"]
+    assert _ann_missing("def f(a: int) -> int:\n    return a\n", "f") == []
+    assert _ann_missing("def f(*a, **kw) -> int:\n    return 0\n", "f") == ["参数 *a", "参数 **kw"]
+    assert _ann_missing("def g(a):\n    return a\n", "f") is None
+
+    here = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    missing = {}
+    mod_funcs = {}
+    for fname in ("pet_io.py", "pet_book.py"):
+        src = open(os.path.join(here, fname), encoding="utf-8").read()
+        names = []
+        for node in ast.parse(src).body:        # 只扫模块级函数（类方法下面单独点名）
+            if isinstance(node, ast.FunctionDef):
+                names.append(node.name)
+                miss = _ann_missing(src, node.name)
+                if miss:
+                    missing["%s:%s" % (fname, node.name)] = miss
+        assert names, "%s 里一个模块级函数都没扫到（判据失效）" % fname
+        mod_funcs[fname] = names
+    book_src = open(os.path.join(here, "pet_book.py"), encoding="utf-8").read()
+    for name in _BOOK_PUBLIC:
+        miss = _ann_missing(book_src, name)
+        assert miss is not None, "pet_book.Book.%s 不见了（改名/删方法）" % name
+        if miss:
+            missing["pet_book.Book.%s" % name] = miss
+    # 运行时解析：注解里引用的名字必须真的存在（写错名字/漏 import 会抛）
+    objs = [getattr(pet_io, n) for n in mod_funcs["pet_io.py"]]
+    objs += [getattr(pet_book, n) for n in mod_funcs["pet_book.py"]]
+    objs += [getattr(pet_book.Book, n) for n in _BOOK_PUBLIC]
+    for obj in objs:
+        typing.get_type_hints(obj.fget if isinstance(obj, property) else obj)
+    assert missing == {}, missing
+
+
+def test_dev_repro_comment_and_e2e_exit_are_kept_in_sync():
+    """v2.4.1（A7/A8）：两个开发脚本的"能真失败"细节，防止再漂回去。
+
+    A7：`_dev/repro_io_conflict.py` 的负载注释必须与常量一致——此前注释写"每线程 25 次 /
+        每轮 200 次"而代码早已是 50/400，发布说明引用的那组数字就没人能核对；
+    A8：`_dev/e2e_full_form.py` / `_dev/e2e_idle_and.py` 的定时退出统一走 `app.exit(0)`
+        （A 区清单要求：这两个脚本原先用单次 `app.quit()`）。
+    两条都带反例对照：把旧写法原地拼出来，同一判据必须认出来。
+    """
+    here = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    dev = os.path.join(here, "_dev")
+
+    repro = open(os.path.join(dev, "repro_io_conflict.py"), encoding="utf-8").read()
+    nums = dict(re.findall(r"^(THREADS|WRITES_PER_THREAD|ROUNDS) = ([0-9]+)$", repro, re.M))
+    assert set(nums) == {"THREADS", "WRITES_PER_THREAD", "ROUNDS"}, nums
+    total = int(nums["THREADS"]) * int(nums["WRITES_PER_THREAD"])
+    want = "每线程 %d 次 = 每轮 %d 次写入" % (int(nums["WRITES_PER_THREAD"]), total)
+    assert want in repro, ("负载注释与常量对不上：注释里应出现 %r（常量是 %s 线程 × %s 次）"
+                           % (want, nums["THREADS"], nums["WRITES_PER_THREAD"]))
+    stale = repro.replace(want, "每线程 25 次 = 每轮 200 次写入")
+    assert want not in stale, "反例对照失效：旧注释也被判成一致"
+
+    for fname in ("e2e_full_form.py", "e2e_idle_and.py"):
+        src = open(os.path.join(dev, fname), encoding="utf-8").read()
+        assert "app.quit()" not in src, "%s 又用回了单次 app.quit()" % fname
+        assert re.search(r"QTimer\.singleShot\([^\n]*app\.exit\(0\)\)", src), \
+            "%s 的定时退出不是 app.exit(0)" % fname
+    old_line = "QTimer.singleShot(int(watch * 1000), lambda: (t.stop(), app.quit()))"
+    assert "app.quit()" in old_line, "反例对照失效（旧写法没被拼出来）"
+    assert not re.search(r"QTimer\.singleShot\([^\n]*app\.exit\(0\)\)", old_line), \
+        "反例对照失效：旧写法也被判成合规"
+
+
+def test_persona_samples_are_ignored_and_do_not_dirty_the_release_gate():
+    """v2.4.1（A9）：prompts/*.txt 停止跟踪（git rm --cached，**本地文件保留**）之后，
+    编辑样本人设既不出现在 git status 里，也不会让发布门 check_clean_tree() 报"未提交改动"。
+
+    发布门自身用的就是 git status --porcelain，所以"status 看不见"是根因判据；下面把
+    check_clean_tree() 的输出也直接断言一遍（两处口径都钉住）。
+    能真失败：把 prompts/*.txt 重新 git add 回去 → 编辑后 git status 会列出它，本用例红。
+    """
+    import subprocess
+    import _check_release as chk
+    here = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+    def _git(*args):
+        r = subprocess.run(["git"] + list(args), cwd=here, capture_output=True, text=True,
+                           encoding="utf-8", errors="replace", timeout=30)
+        return r.stdout or ""
+
+    assert _git("ls-files", "prompts").split() == [], "prompts 下还有被跟踪的文件（生成物不该进仓库）"
+    sample = os.path.join(here, "prompts", "default.txt")
+    assert os.path.isfile(sample), "git rm --cached 只该停止跟踪，不该删本地文件"
+    raw = open(sample, "rb").read()
+    try:
+        with open(sample, "ab") as f:
+            f.write("\n# 编辑样本（本用例临时写入，结束前还原）\n".encode("utf-8"))
+        lines = [x for x in _git("status", "--porcelain", "--", "prompts").splitlines() if x.strip()]
+        # 允许一次性的已暂存删除（"停止跟踪"这个动作本身留下的 D）；不许出现 " M" / "??"
+        assert all(x.startswith("D ") for x in lines), \
+            "编辑样本人设仍然会弄脏 git status：%r" % (lines,)
+        joined = " ".join(chk.check_clean_tree())
+        assert "prompts" not in joined, "编辑样本人设让发布门报红了：%r" % (joined,)
+    finally:
+        with open(sample, "wb") as f:
+            f.write(raw)
+    assert open(sample, "rb").read() == raw, "样本文件没有还原"
 
 
 

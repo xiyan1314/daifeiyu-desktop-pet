@@ -50,7 +50,7 @@ ROOT = os.path.dirname(HERE)
 sys.path.insert(0, ROOT)
 import pet_io  # noqa: E402
 
-# 负载参数：8 线程（与发布说明"8 线程同写"一致）× 每线程 25 次 = 每轮 200 次写入
+# 负载参数：8 线程（与发布说明"8 线程同写"一致）× 每线程 50 次 = 每轮 400 次写入
 THREADS = 8
 WRITES_PER_THREAD = 50
 ROUNDS = 5

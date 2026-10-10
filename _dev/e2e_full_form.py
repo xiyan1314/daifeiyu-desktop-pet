@@ -33,7 +33,7 @@ def run_case(name, idle_form, feed_at, watch=40, idle_delay=8, after_full=2):
         win.maybe_idle_behavior()   # 模拟每拍检查（真实 idle_timer 15s 一拍）
     t1 = QTimer(); t1.timeout.connect(tick); t1.start(1000)
     QTimer.singleShot(int(feed_at * 1000), lambda: win.feed("小鱼干"))
-    QTimer.singleShot(int(watch * 1000), lambda: (t1.stop(), app.quit()))
+    QTimer.singleShot(int(watch * 1000), lambda: (t1.stop(), app.exit(0)))
     app.exec()
     print("  形态变化时间线：")
     for l in log:

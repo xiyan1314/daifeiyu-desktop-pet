@@ -360,6 +360,7 @@ def test_book_corrupt_ledger_heals_with_bak(tmp_path):
     assert b.all_records() == []
     assert _text(tmp_path / "ledger.json.bak") == "{{{ not json"
     assert _json(p)["records"] == [], "坏账本没有愈合回写"
+    assert b.today_usage() == 0.0      # A10：去重时从 test_io_v231 那条搬过来的断言
 
 
 def test_book_corrupt_archive_heals_with_bak(tmp_path):
@@ -371,18 +372,9 @@ def test_book_corrupt_archive_heals_with_bak(tmp_path):
     assert _json(p)["days"] == {}, "顶层类型非法的归档没有愈合回写"
 
 
-def test_book_read_failure_writes_nothing_and_no_bak(tmp_path, monkeypatch):
-    """P1-2 反面（P0-B 保护必须原样有效）：账本读不到 → 不写、不备份、下一次写再落盘。"""
-    p = tmp_path / "ledger.json"
-    pet_book.Book(str(tmp_path)).add_manual(12.5, "午饭")
-    raw = _bytes(p)
-    with monkeypatch.context() as m:
-        _deny_open(m, "ledger.json")
-        b = pet_book.Book(str(tmp_path))
-        assert _bytes(p) == raw, "读失败被当成损坏，回写覆盖了完好账本"
-        assert not (tmp_path / "ledger.json.bak").exists(), "没有回写就不该有 .bak"
-        assert b.today_usage() == 0.0
-    assert len(pet_book.Book(str(tmp_path)).all_records()) == 1
+# A10 去重（v2.4.1）：这里原本还有一条 test_book_read_failure_writes_nothing_and_no_bak——
+# 被 tests/test_io_v231.py::test_book_transient_read_failure_keeps_ledger 严格覆盖
+# （那条还多验"下一次真实写照常落盘"），同一行为不再两处维护。
 
 
 def test_book_nested_records_type_logged(tmp_path, monkeypatch):

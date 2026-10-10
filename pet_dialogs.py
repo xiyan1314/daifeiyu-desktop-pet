@@ -97,7 +97,6 @@ from PySide6.QtWidgets import (
     QMessageBox,
     QPlainTextEdit,
     QPushButton,
-    QRadioButton,
     QSpinBox,
     QTableWidget,
     QTableWidgetItem,
@@ -232,7 +231,7 @@ def _call(pet, name, *args):
     的回调（apply_ai_settings / apply_bubble_style / apply_voice / apply_role /
     apply_idle_settings / apply_physics / apply_sound_group / clear_long_term_memory…）。
     回调抛异常时对话框照常 accept()，界面显示"保存成功"，实际没生效，error.log 里也
-    没有任何线索（22 处调用点共用同一条静默路径）。现在失败先记一条日志，再按原契约
+    没有任何线索（23 处调用点共用同一条静默路径）。现在失败先记一条日志，再按原契约
     返回 None。**只记方法名与异常，不记 args**——apply_voice / set_api_key 的参数里
     可能带后端密钥，日志宁少勿多。
     """

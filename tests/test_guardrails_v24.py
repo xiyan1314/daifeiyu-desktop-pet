@@ -339,7 +339,12 @@ class W(QObject):
         C.check_signal_arity(real)
     finally:
         C._slot_arity = orig
-    assert sum(1 for r in seen if r is not None) >= 50,         "可解析槽数骤降（%d）：检查可能已经失明" % sum(1 for r in seen if r is not None)
+    # v2.4.1：阈值从 50 提到 116——实测本仓 .connect(...) 共 145 处、其中 116 处能解析成
+    # 具体槽（其余是 lambda / 局部函数 / Qt 自带信号，按设计跳过）。阈值远低于真实值，
+    # "解析器失明"（比如正则被改坏、sources() 少扫文件）就发现不了；贴着真实值才拦得住。
+    # 重测：python -c "import _check_static as C; s=[]; o=C._slot_arity; C._slot_arity=lambda *a:(s.append(o(*a)) or s[-1]); C.check_signal_arity(C.sources()); print(sum(1 for r in s if r is not None), len(s))"
+    _n_slots = sum(1 for r in seen if r is not None)
+    assert _n_slots >= 116,         "可解析槽数骤降（%d/%d）：检查可能已经失明（重测方法见上面注释）" % (_n_slots, len(seen))
 
 
 def test_b8_static_thread_write_check():

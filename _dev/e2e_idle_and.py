@@ -34,7 +34,7 @@ def run_case(name, feed_at=None, click_at=None, watch=16):
     if click_at is not None:
         QTimer.singleShot(int(click_at * 1000), lambda: (events.append((time.monotonic() - T0, "CLICK", win.form)), win._touch_activity()))
     t = QTimer(); t.timeout.connect(win.maybe_idle_behavior); t.start(500)   # 模拟 tick（真实 15s 粒度太粗）
-    QTimer.singleShot(int(watch * 1000), lambda: (t.stop(), app.quit()))
+    QTimer.singleShot(int(watch * 1000), lambda: (t.stop(), app.exit(0)))
     app.exec()
     for e in events:
         print("   %5.2fs  %-9s form=%s" % (e[0], e[1], e[2]))

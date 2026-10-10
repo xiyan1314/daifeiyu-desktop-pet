@@ -9,6 +9,11 @@ memory.json.tmp
 error.log
 error.log.old
 error.log.bad
+# v2.4.1（A12）：memory.log 的 512KB 轮转产物（pet_main.check_memory 里 os.replace →
+# memory.log.old）。此前只写了 error.log.old，memory.log 一轮转就冒出一个未跟踪文件，
+# 发布前 check_clean_tree 判"未提交改动"。（残留判据 residue_hit 本来就认它——
+# stem "memory.log" 在 USER_DATA_NAMES 里，缺的只是这条忽略规则。）
+memory.log.old
 .write_probe
 # v1.3 记账账本 / 角色 / 音频库（运行时数据）
 ledger.json
@@ -24,9 +29,10 @@ audio.json.tmp
 
 # v2.4（L9）：人设提示词是**运行时生成**的（首次启动写进 <数据目录>/prompts/，只写不覆盖），
 # 未跟踪的生成物不该让 check_clean_tree 判"未提交改动"。
-# 注意：仓库里已有的 default/sheshe/tsundere.txt 是**已跟踪**文件——git 的忽略规则
-# 对已跟踪文件无效，编辑它们照样会出现在 git status 里（见 tests/test_release_chain_v24.py
-# 的 test_l9_gitignore_scope_is_documented，那里钉死了这条边界）。
+# v2.4.1（A9 收口）：仓库里那三份（default/sheshe/tsundere.txt）同样是**生成物**——本轮已
+# 用 git rm --cached 停止跟踪（本地文件保留）。此后编辑人设不再弄脏 git status，发布门
+# 也不会再被生成物挡住；真丢了也没关系：桌宠.ensure_persona_files() 下次启动按内置常量重建
+# （边界由 tests/test_release_chain_v24.py 的 L9 两条用例钉住）。
 prompts/*.txt
 
 # Python

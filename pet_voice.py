@@ -311,10 +311,19 @@ class MiniMaxBackend(VoiceBackend):
         if resp.status_code != 200:
             return None, "MiniMax 上传参考音失败：%s" % explain_backend_error(resp.status_code)
         try:
-            file_id = ((resp.json() or {}).get("file") or {}).get("file_id")
+            _j = resp.json() or {}
+            file_id = ((_j.get("file") or {}).get("file_id")) if isinstance(_j, dict) else None
+            _br = (_j.get("base_resp") or {}) if isinstance(_j, dict) else {}
         except Exception:
-            file_id = None
+            file_id, _br = None, {}
         if not file_id:
+            # v2.4.1：上传接口 HTTP 200 但 body 里带 base_resp 报错时，真实原因（余额/鉴权/
+            # 素材格式）必须透出——此前一律报"没有返回 file_id（接口返回格式变了？）"，把
+            # 服务端说清楚的原因吞掉。base_resp 的 status_code=0 表示成功，不当失败用。
+            _code = _br.get("status_code")
+            if _br and _code not in (0, None):
+                return None, "MiniMax 上传参考音失败：%s（code=%s）" % (
+                    _br.get("status_msg") or "未知原因", _code)
             return None, "MiniMax 没有返回 file_id（接口返回格式变了？）"
         resp2, err2 = self._post(base + "/v1/voice_clone",
                                  json_body={"file_id": file_id}, headers=headers)
@@ -601,6 +610,12 @@ def _decode_json_audio(resp, who):
                         if _looks_like_audio(r.content):
                             return r.content, ""
                         return None, "%s 下载到的 %s 不是音频数据（已拒绝）" % (who, k)
+                    # v2.4.1：URL 不是 200 / 内容为空时，此前**掉到循环外**报"返回里没有
+                    # 音频数据"——把 404/403 这种服务端明确说清楚的原因吞掉了（audio 分支
+                    # 本来就会报 HTTP 码，两条分支口径不一致）。这里与 audio 分支对齐。
+                    if r.status_code != 200:
+                        return None, "%s 下载音频失败（HTTP %d）" % (who, r.status_code)
+                    return None, "%s 下载到的 %s 是空内容（已拒绝）" % (who, k)
                 except Exception as e:
                     return None, "%s 下载音频失败：%s" % (who, e)
             elif os.path.isfile(v):
@@ -853,6 +868,20 @@ def _normalize_index(data):
     return data, None
 
 
+def _flat_clips(data):
+    """从 v2.0 之前的**扁平格式**（顶层直接是 事件→文件名）里挑出可用的绑定。
+
+    v2.4.1：坏 clips 被 _normalize_index 重建成空对象之后，"clips 是 dict 就用它"的判据
+    会让读侧再也退不回扁平解析，同文件里的扁平键被静默丢掉（旧格式用户升级即丢绑定）。
+    这里只认**真能用**的值（事件名 + .wav/.mp3），避免把无关的顶层同名键当成绑定。
+    """
+    out = {}
+    for k, v in (data or {}).items():
+        if k in VOICE_EVENTS and isinstance(v, str) and v.lower().endswith((".wav", ".mp3")):
+            out[k] = v
+    return out
+
+
 # ---------------- v2.1：语言系统服务 ----------------
 class VoiceService:
     """语言系统：事件片段 + 角色声音绑定 + 克隆合成队列 + 播放控制。主线程调用。
@@ -896,13 +925,24 @@ class VoiceService:
             真解析失败 / 顶层不是对象 → 留 .bak 后回写合法空结构（_empty_index）；
             "clips" 字段类型非法 → 记一行日志 + .bak + 按归一化结构重建（_normalize_index）；
           · 条目级问题只记一行日志（重写会把用户手写的 .ogg/.m4a 绑定永久删掉）。
+          · v2.4.1：clips 表为空（含"坏 clips 刚被治愈成 {}"）时，若顶层还有可用的扁平
+            绑定（v2.0 前的旧格式），退回扁平解析——见 _flat_clips。
         """
         data, _corrupted = pet_io.heal_json(self._index, _empty_index, log=self._log,
                                             normalize=_normalize_index)
         clips = {}
         if isinstance(data, dict):
             raw = data.get("clips")
-            src = raw if isinstance(raw, dict) else data   # 兼容 v2.0 之前的扁平格式
+            flat = _flat_clips(data)
+            if isinstance(raw, dict) and raw:
+                src = raw            # 规范结构（clips 表非空）：以它为准
+            elif flat:
+                # v2.4.1：clips 缺失 / 类型非法被治愈成空表时，退回 v2.0 前的扁平格式——
+                # 治愈只把坏 clips 重建成 {}，同文件里的扁平键还在，不能当作"没有绑定"
+                # （此前判据只看 clips 是不是 dict，退回扁平的分支永远走不到）。
+                src = data
+            else:
+                src = raw if isinstance(raw, dict) else data
             dropped = []
             for k, v in src.items():
                 if k in VOICE_EVENTS and isinstance(v, str) and v.lower().endswith((".wav", ".mp3")):

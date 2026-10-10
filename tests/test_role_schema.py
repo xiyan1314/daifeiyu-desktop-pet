@@ -182,19 +182,28 @@ def test_states_priority_resource_first(tmp_path, qapp):
     assert fallback.cacheKey() != base_pix.cacheKey()
 
 
-def test_state_resource_pure(tmp_path):
-    """state_resource 纯查表：配置返回文件名，未配置返回 None。"""
+def test_form_state_paths_is_the_production_state_lookup(tmp_path, qapp):
+    """生产查表入口 RoleLibrary.form_state_paths：配了且文件在 → 绝对路径；未配置/缺文件不出现。
+
+    v2.4.1：原 test_state_resource_pure 测的 pet_resources.state_resource(role, form_idx, state)
+    已删除——全仓零生产引用（显示侧走 form_state_paths → 桌宠._build_state_pix），只有那一个
+    用例引用它。这里把同一套「查表口径」钉在**真正的生产入口**上，并补两个负例。
+    """
+    (tmp_path / "roles").mkdir(exist_ok=True)
+    _mk_png(str(tmp_path / "roles" / "r1_angry.png"))
     _write_index(tmp_path, [{
         "id": "r1", "name": "x", "file": "r1.png", "form": "single",
         "forms": [{"name": "常态", "file": "r1.png",
-                   "states": {"angry": "r1_angry.png"}}],
+                   "states": {"angry": "r1_angry.png",
+                              "cry": "r1_cry_missing.png"}}],
         "added": "",
     }])
     lib = pet_resources.RoleLibrary(str(tmp_path))
-    role = lib.get("r1")
-    assert pet_resources.state_resource(role, 0, "angry") == "r1_angry.png"
-    assert pet_resources.state_resource(role, 0, "blush") is None
-    assert pet_resources.state_resource(role, 1, "angry") is None
+    paths = lib.form_state_paths("r1")
+    assert paths[0]["angry"] == str(tmp_path / "roles" / "r1_angry.png")  # 配置 + 文件在
+    assert "cry" not in paths[0]        # 负例：配了但文件缺失 → 不出现（显示侧走叠图兜底）
+    assert "blush" not in paths[0]      # 负例：压根没配置
+    assert lib.form_state_paths("不存在") == []   # 负例：角色不存在
 
 
 # ---------------- update() patch ----------------

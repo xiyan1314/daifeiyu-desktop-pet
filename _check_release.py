@@ -106,37 +106,83 @@ def repo_version():
     return m.group(1) if m else ""
 
 
-def check_version():
-    """版本三处一致检查。返回失败说明列表（空=通过）。"""
-    version = repo_version()
+_NUM_VER_RE = re.compile(r"\b(filevers|prodvers)\s*=\s*\(([^)]*)\)")
+
+
+def _ver_key(v):
+    """版本串/数字串 → 可比较的四段整数元组（"2.4.0" 与 "(2, 4, 0, 0)" 等价）。
+
+    非数字成分直接跳过（"2.4.1b1" → (2,4,1,1)）；不足四段补 0，避免 "2.4" 与 "2.4.0"
+    比出"前者更小"这种假报警。
+    """
+    parts = [int(x) for x in re.findall(r"\d+", str(v or ""))][:4]
+    return tuple(parts + [0] * (4 - len(parts)))
+
+
+def numeric_versions(vi_text):
+    """version_info.txt 文本 → {"filevers": (2,2,0,0), "prodvers": (...)}；读不到就不在表里。"""
+    return {m.group(1): _ver_key(m.group(2)) for m in _NUM_VER_RE.finditer(vi_text or "")}
+
+
+def version_problems(version, vi_text, vg_text, changelog_text):
+    """版本一致性核对的**纯函数**（喂合成文本才能做"能失败"的对照）。
+
+    判据（每条都对应一种真实"漏升版本 / 漏改字段"的方式）：
+      ① version_info.txt 的 FileVersion / ProductVersion 字符串 == VERSION；
+      ② **数字版本** filevers / prodvers == VERSION 的数字形态（v2.4.1 补：此前只比字符串，
+         于是 exe 属性里的数字版本停在 2.2.0.0 也没人喊）；且 filevers 与 prodvers 必须一致；
+      ③ _verify_green.py 的 green version 断言里是 VERSION（用断言语句匹配，注释不算）；
+      ④ CHANGELOG **首条** == VERSION（改完没写变更/没升版本）；
+      ⑤ VERSION 必须**大于 CHANGELOG 次条**（"首条被复制成上一条版本"这种漏升也能抓到）。
+    运行时代码是否已提交由 check_clean_tree() 单独负责（开发期不能长期假红）。
+    """
     fails = []
-    if not version:
-        return ["桌宠.py 里读不到 VERSION"]
-    vi = io.open(os.path.join(ROOT, "version_info.txt"), encoding="utf-8").read()
-    vg = io.open(os.path.join(ROOT, "_verify_green.py"), encoding="utf-8").read()
     for field in ("FileVersion", "ProductVersion"):
-        if not re.search(r"'%s'\s*,\s*'%s'" % (field, re.escape(version)), vi):
+        if not re.search(r"'%s'\s*,\s*'%s'" % (field, re.escape(version)), vi_text or ""):
             fails.append("version_info.txt %s 与桌宠.py VERSION(%s) 不一致" % (field, version))
+    nums = numeric_versions(vi_text)
+    want = _ver_key(version)
+    for field in ("filevers", "prodvers"):
+        got = nums.get(field)
+        if got is None:
+            fails.append("version_info.txt 里读不到 %s（数字版本）" % field)
+        elif got != want:
+            fails.append("version_info.txt 的数字版本 %s=(%s) 与 VERSION %s（%s）不一致"
+                         "（exe 属性里的文件版本会显示旧版：要么同步这两个数字，"
+                         "要么在 version_info.txt 里写清它不受本判据管）"
+                         % (field, ", ".join(str(x) for x in got), version,
+                            ", ".join(str(x) for x in want)))
+    if nums.get("filevers") is not None and nums.get("prodvers") is not None \
+            and nums["filevers"] != nums["prodvers"]:
+        fails.append("version_info.txt 的 filevers 与 prodvers 不一致：%r vs %r"
+                     % (nums["filevers"], nums["prodvers"]))
     # L-4 修复：用**断言语句**匹配（此前是全文子串匹配，注释里出现版本号也能蒙混过关）
     if not re.search(r'check\(\s*"green version"\s*,\s*main\.VERSION\s*==\s*"%s"'
-                     % re.escape(version), vg):
+                     % re.escape(version), vg_text or ""):
         fails.append("_verify_green.py 的 green version 断言不是 %s" % version)
-    # 版本号必须**升过**：如果该版本号已经有 git tag，说明改完代码没升版本号
-    # （三处一致检查查不出这种漏升），发布前必须发现。
-    # 版本号必须**升过**：三处一致检查查不出"改完代码没升版本"，改用两个不依赖 tag 的判据
-    # （本仓库 v2.x 线从未打 tag，用 tag 判据会静默失效；给已发布版本打 tag 后又会误红）：
-    #   ① CHANGELOG 的**首条**版本必须等于 VERSION（改完没写变更/没升版本 → 报）
-    #   ② 运行时代码必须已提交（有未提交改动说明还没定版 → 报）
-    try:
-        cl = io.open(os.path.join(ROOT, "CHANGELOG.md"), encoding="utf-8").read()
-        m_top = re.search(r"^##\s*v([0-9][\w.]*)", cl, re.M)
-        top = m_top.group(1) if m_top else ""
-        if top != version:
-            fails.append("CHANGELOG.md 首条版本是 %r，与 VERSION %r 不一致（忘了升版本/写变更？）"
-                         % (top or "无", version))
-    except Exception as e:
-        fails.append("CHANGELOG.md 读不到：%r" % (e,))
+    m_all = re.findall(r"^##\s*v([0-9][\w.]*)", changelog_text or "", re.M)
+    top = m_all[0] if m_all else ""
+    if top != version:
+        fails.append("CHANGELOG.md 首条版本是 %r，与 VERSION %r 不一致（忘了升版本/写变更？）"
+                     % (top or "无", version))
+    elif len(m_all) > 1 and _ver_key(version) <= _ver_key(m_all[1]):
+        fails.append("VERSION %s 没有比 CHANGELOG 次条 v%s 大（版本号没升，或首条被复制成了上一条）"
+                     % (version, m_all[1]))
     return fails
+
+
+def check_version():
+    """版本一致检查（读仓库真实文件 → version_problems 纯函数）。返回失败说明列表（空=通过）"""
+    version = repo_version()
+    if not version:
+        return ["桌宠.py 里读不到 VERSION"]
+    for name in ("version_info.txt", "_verify_green.py", "CHANGELOG.md"):
+        if not os.path.isfile(os.path.join(ROOT, name)):
+            return ["%s 读不到（发布门需要它）" % name]
+    vi = io.open(os.path.join(ROOT, "version_info.txt"), encoding="utf-8").read()
+    vg = io.open(os.path.join(ROOT, "_verify_green.py"), encoding="utf-8").read()
+    cl = io.open(os.path.join(ROOT, "CHANGELOG.md"), encoding="utf-8").read()
+    return version_problems(version, vi, vg, cl)
 
 
 def check_clean_tree():
@@ -159,6 +205,16 @@ def check_clean_tree():
     except Exception:
         pass  # 无 git（绿色版/离线环境）：跳过
     return []
+
+
+def _full_list(items):
+    """报告用：**全量**列出条目（v2.4.1：此前 [:8] 截断，第 9 条起永远看不见）。
+
+    条目多时在末尾附总数，便于一眼判断规模；一条都不省略——发布门的意义就是"看得见"。
+    """
+    items = [str(x) for x in items]
+    tail = "（共 %d 条）" % len(items) if len(items) > 8 else ""
+    return ", ".join(items) + tail
 
 
 def green_residue(root=None):
@@ -219,13 +275,13 @@ def check_green_dir():
     residue = green_residue()
     if residue:
         fails.append("绿色版目录里有用户数据残留（临时文件/愈合备份/轮转日志，打包前请移出）：%s"
-                     % ", ".join(residue[:8]))
+                     % _full_list(residue))
     # v2.4（M3）：根目录的开发/排障脚本同样是"会随包发出去"的东西（实测 repro_quiet.py
     # 进过真包）。_dev/ 里的同名脚本按设计保留，不算。
     dev = green_root_dev_leftovers()
     if dev:
         fails.append("绿色版根目录有开发/排障脚本残留（_dev/ 内的不算，打包前请移出）：%s"
-                     % ", ".join(dev[:8]))
+                     % _full_list(dev))
     return fails
 
 
@@ -281,7 +337,7 @@ def check_zip(zip_path, version=None):
                or any(n.startswith(p) for p in ZIP_EXTRA_PREFIX)
                or any(n.startswith(d + "/") for d in USER_DATA_DIRS)]
         if bad:
-            fails.append("发布包含运行时数据/残留/开发文件：%s" % ", ".join(sorted(bad)[:8]))
+            fails.append("发布包含运行时数据/残留/开发文件：%s" % _full_list(sorted(bad)))
         # v2.3.0（兼容审查 S1）：need 必须覆盖**所有运行时 .py**——此前漏了 pet_tools.py，
         # 出包时白名单漏拷该文件会静默放行一个"双击即 ModuleNotFoundError"的包。
         # v2.4（M2/M3）：need 改成**全量正向校验**——直接用 _sync_pairs()（SYNC_FILES +

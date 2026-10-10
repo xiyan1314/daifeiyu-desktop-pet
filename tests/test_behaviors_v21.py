@@ -78,9 +78,6 @@ def test_idle_action_crud(tmp_path):
     assert pb.update_idle_action(cfg, "nope", enabled=False)[0] is False
     assert pb.remove_idle_action(cfg, b["id"]) == (True, "")
     assert len(cfg["idle_actions"]) == 1
-    assert pb.set_idle_play_mode(cfg, "weighted") == (True, "")
-    assert cfg["idle_play_mode"] == "weighted"
-    assert pb.set_idle_play_mode(cfg, "ghost")[0] is False
 
 
 def test_service_idle_pick_and_config(tmp_path):

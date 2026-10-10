@@ -1,0 +1,386 @@
+{
+ "before": {
+  "rows": [
+   {
+    "scene": "PetWindow() 构造（启动）",
+    "main_thread_ms": 411.3,
+    "ready_ms": 411.3,
+    "loop_gap_ms": 411.3,
+    "err": ""
+   },
+   {
+    "scene": "apply_role(默认角色)",
+    "main_thread_ms": 47.0,
+    "ready_ms": 47.0,
+    "loop_gap_ms": 47.2,
+    "err": ""
+   },
+   {
+    "scene": "apply_role(小角色 8 帧 64px)",
+    "main_thread_ms": 25.8,
+    "ready_ms": 25.8,
+    "loop_gap_ms": 25.8,
+    "err": ""
+   },
+   {
+    "scene": "apply_role(60 帧 512px 真实美术)",
+    "main_thread_ms": 456.8,
+    "ready_ms": 456.8,
+    "loop_gap_ms": 456.8,
+    "err": ""
+   },
+   {
+    "scene": "apply_role(默认) 回切",
+    "main_thread_ms": 61.3,
+    "ready_ms": 61.3,
+    "loop_gap_ms": 61.3,
+    "err": ""
+   },
+   {
+    "scene": "apply_role(60 帧 512px) 第二次（预热）",
+    "main_thread_ms": 240.8,
+    "ready_ms": 240.8,
+    "loop_gap_ms": 240.9,
+    "err": ""
+   },
+   {
+    "scene": "apply_role(60 帧×4 形态 512px)",
+    "main_thread_ms": 481.7,
+    "ready_ms": 481.7,
+    "loop_gap_ms": 481.7,
+    "err": ""
+   },
+   {
+    "scene": "_play_idle() ×5（自定义 60 帧×4 形态）",
+    "main_thread_ms": 0.2,
+    "ready_ms": 0.2,
+    "loop_gap_ms": 0.2,
+    "err": ""
+   },
+   {
+    "scene": "apply_role(默认) 后 _play_idle() ×5",
+    "main_thread_ms": 64.3,
+    "ready_ms": 64.3,
+    "loop_gap_ms": 64.4,
+    "err": ""
+   },
+   {
+    "scene": "pet_export.export_bundle(60 帧 512px 真实美术)",
+    "main_thread_ms": 199.3,
+    "ready_ms": 199.3,
+    "loop_gap_ms": 199.3,
+    "err": ""
+   },
+   {
+    "scene": "role_lib.delete(腾位)",
+    "main_thread_ms": 67.9,
+    "ready_ms": 67.9,
+    "loop_gap_ms": 68.0,
+    "err": ""
+   },
+   {
+    "scene": "_import_role_bundle(60 帧 512px 真实美术包)",
+    "main_thread_ms": 548.7,
+    "ready_ms": 548.7,
+    "loop_gap_ms": 548.7,
+    "err": ""
+   }
+  ],
+  "worst_gap_ms": 548.7
+ },
+ "after": {
+  "rows": [
+   {
+    "scene": "PetWindow() 构造（启动）",
+    "main_thread_ms": 364.1,
+    "ready_ms": 364.1,
+    "loop_gap_ms": 364.3,
+    "err": ""
+   },
+   {
+    "scene": "apply_role(默认角色)",
+    "main_thread_ms": 59.4,
+    "ready_ms": 59.4,
+    "loop_gap_ms": 59.5,
+    "err": ""
+   },
+   {
+    "scene": "apply_role(小角色 8 帧 64px)",
+    "main_thread_ms": 31.9,
+    "ready_ms": 31.9,
+    "loop_gap_ms": 31.9,
+    "err": ""
+   },
+   {
+    "scene": "apply_role(60 帧 512px 真实美术)",
+    "main_thread_ms": 71.4,
+    "ready_ms": 71.4,
+    "loop_gap_ms": 71.4,
+    "err": ""
+   },
+   {
+    "scene": "apply_role(默认) 回切",
+    "main_thread_ms": 60.9,
+    "ready_ms": 60.9,
+    "loop_gap_ms": 60.9,
+    "err": ""
+   },
+   {
+    "scene": "apply_role(60 帧 512px) 第二次（预热）",
+    "main_thread_ms": 67.1,
+    "ready_ms": 67.1,
+    "loop_gap_ms": 67.1,
+    "err": ""
+   },
+   {
+    "scene": "apply_role(60 帧×4 形态 512px)",
+    "main_thread_ms": 156.5,
+    "ready_ms": 156.5,
+    "loop_gap_ms": 156.5,
+    "err": ""
+   },
+   {
+    "scene": "_play_idle() ×5（自定义 60 帧×4 形态）",
+    "main_thread_ms": 45.0,
+    "ready_ms": 45.0,
+    "loop_gap_ms": 45.0,
+    "err": ""
+   },
+   {
+    "scene": "apply_role(默认) 后 _play_idle() ×5",
+    "main_thread_ms": 57.5,
+    "ready_ms": 57.5,
+    "loop_gap_ms": 57.5,
+    "err": ""
+   },
+   {
+    "scene": "pet_export.export_bundle(60 帧 512px 真实美术)",
+    "main_thread_ms": 205.9,
+    "ready_ms": 205.9,
+    "loop_gap_ms": 205.9,
+    "err": ""
+   },
+   {
+    "scene": "role_lib.delete(腾位)",
+    "main_thread_ms": 43.0,
+    "ready_ms": 43.0,
+    "loop_gap_ms": 43.1,
+    "err": ""
+   },
+   {
+    "scene": "_import_role_bundle(60 帧 512px 真实美术包)",
+    "main_thread_ms": 203.1,
+    "ready_ms": 203.1,
+    "loop_gap_ms": 203.1,
+    "err": ""
+   }
+  ],
+  "worst_gap_ms": 364.3
+ },
+ "after2": {
+  "rows": [
+   {
+    "scene": "PetWindow() 构造（启动）",
+    "main_thread_ms": 173.3,
+    "ready_ms": 173.3,
+    "loop_gap_ms": 173.4,
+    "err": ""
+   },
+   {
+    "scene": "apply_role(默认角色)",
+    "main_thread_ms": 71.3,
+    "ready_ms": 71.3,
+    "loop_gap_ms": 71.4,
+    "err": ""
+   },
+   {
+    "scene": "apply_role(小角色 8 帧 64px)",
+    "main_thread_ms": 75.1,
+    "ready_ms": 75.1,
+    "loop_gap_ms": 75.1,
+    "err": ""
+   },
+   {
+    "scene": "apply_role(60 帧 512px 真实美术)",
+    "main_thread_ms": 72.5,
+    "ready_ms": 72.5,
+    "loop_gap_ms": 72.6,
+    "err": ""
+   },
+   {
+    "scene": "apply_role(默认) 回切",
+    "main_thread_ms": 52.8,
+    "ready_ms": 52.8,
+    "loop_gap_ms": 52.8,
+    "err": ""
+   },
+   {
+    "scene": "apply_role(60 帧 512px) 第二次（预热）",
+    "main_thread_ms": 72.2,
+    "ready_ms": 72.2,
+    "loop_gap_ms": 72.2,
+    "err": ""
+   },
+   {
+    "scene": "apply_role(60 帧×4 形态 512px)",
+    "main_thread_ms": 138.8,
+    "ready_ms": 138.8,
+    "loop_gap_ms": 138.8,
+    "err": ""
+   },
+   {
+    "scene": "_play_idle() ×5（自定义 60 帧×4 形态）",
+    "main_thread_ms": 45.3,
+    "ready_ms": 45.3,
+    "loop_gap_ms": 45.3,
+    "err": ""
+   },
+   {
+    "scene": "_wire_anim_key() ×20（热路径指纹计算）",
+    "main_thread_ms": 0.2,
+    "ready_ms": 0.2,
+    "loop_gap_ms": 0.0,
+    "err": ""
+   },
+   {
+    "scene": "_play_idle() ×5（稳定态再来一遍）",
+    "main_thread_ms": 0.3,
+    "ready_ms": 0.3,
+    "loop_gap_ms": 0.4,
+    "err": ""
+   },
+   {
+    "scene": "apply_role(默认) 后 _play_idle() ×5",
+    "main_thread_ms": 57.2,
+    "ready_ms": 57.2,
+    "loop_gap_ms": 57.2,
+    "err": ""
+   },
+   {
+    "scene": "pet_export.export_bundle(60 帧 512px 真实美术)",
+    "main_thread_ms": 204.8,
+    "ready_ms": 204.8,
+    "loop_gap_ms": 204.8,
+    "err": ""
+   },
+   {
+    "scene": "role_lib.delete(腾位)",
+    "main_thread_ms": 37.8,
+    "ready_ms": 37.8,
+    "loop_gap_ms": 37.8,
+    "err": ""
+   },
+   {
+    "scene": "_import_role_bundle(60 帧 512px 真实美术包)",
+    "main_thread_ms": 178.2,
+    "ready_ms": 178.2,
+    "loop_gap_ms": 178.2,
+    "err": ""
+   }
+  ],
+  "worst_gap_ms": 204.8
+ },
+ "final": {
+  "rows": [
+   {
+    "scene": "PetWindow() 构造（启动）",
+    "main_thread_ms": 177.7,
+    "ready_ms": 177.7,
+    "loop_gap_ms": 177.7,
+    "err": ""
+   },
+   {
+    "scene": "apply_role(默认角色)",
+    "main_thread_ms": 31.1,
+    "ready_ms": 31.1,
+    "loop_gap_ms": 31.1,
+    "err": ""
+   },
+   {
+    "scene": "apply_role(小角色 8 帧 64px)",
+    "main_thread_ms": 16.1,
+    "ready_ms": 16.1,
+    "loop_gap_ms": 16.1,
+    "err": ""
+   },
+   {
+    "scene": "apply_role(60 帧 512px 真实美术)",
+    "main_thread_ms": 60.9,
+    "ready_ms": 60.9,
+    "loop_gap_ms": 60.9,
+    "err": ""
+   },
+   {
+    "scene": "apply_role(默认) 回切",
+    "main_thread_ms": 30.6,
+    "ready_ms": 30.6,
+    "loop_gap_ms": 30.6,
+    "err": ""
+   },
+   {
+    "scene": "apply_role(60 帧 512px) 第二次（预热）",
+    "main_thread_ms": 17.7,
+    "ready_ms": 17.7,
+    "loop_gap_ms": 17.7,
+    "err": ""
+   },
+   {
+    "scene": "apply_role(60 帧×4 形态 512px)",
+    "main_thread_ms": 95.7,
+    "ready_ms": 95.7,
+    "loop_gap_ms": 95.7,
+    "err": ""
+   },
+   {
+    "scene": "_play_idle() ×5（自定义 60 帧×4 形态）",
+    "main_thread_ms": 0.1,
+    "ready_ms": 0.1,
+    "loop_gap_ms": 2.0,
+    "err": ""
+   },
+   {
+    "scene": "_wire_anim_key() ×20（热路径指纹计算）",
+    "main_thread_ms": 0.2,
+    "ready_ms": 0.2,
+    "loop_gap_ms": 0.2,
+    "err": ""
+   },
+   {
+    "scene": "_play_idle() ×5（稳定态再来一遍）",
+    "main_thread_ms": 0.1,
+    "ready_ms": 0.1,
+    "loop_gap_ms": 0.1,
+    "err": ""
+   },
+   {
+    "scene": "apply_role(默认) 后 _play_idle() ×5",
+    "main_thread_ms": 32.6,
+    "ready_ms": 32.6,
+    "loop_gap_ms": 32.6,
+    "err": ""
+   },
+   {
+    "scene": "pet_export.export_bundle(60 帧 512px 真实美术)",
+    "main_thread_ms": 124.6,
+    "ready_ms": 124.6,
+    "loop_gap_ms": 124.7,
+    "err": ""
+   },
+   {
+    "scene": "role_lib.delete(腾位)",
+    "main_thread_ms": 22.0,
+    "ready_ms": 22.0,
+    "loop_gap_ms": 22.1,
+    "err": ""
+   },
+   {
+    "scene": "_import_role_bundle(60 帧 512px 真实美术包)",
+    "main_thread_ms": 130.3,
+    "ready_ms": 130.3,
+    "loop_gap_ms": 130.3,
+    "err": ""
+   }
+  ],
+  "worst_gap_ms": 177.7
+ }
+}

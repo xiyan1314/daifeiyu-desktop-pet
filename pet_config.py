@@ -288,7 +288,11 @@ def write_config(path, cfg, defaults, schema_version, log, encrypt_fn):
                     old = json.load(f)
                 old_key = str(old.get("api_key", "") or "")
                 out["api_key"] = old_key if old_key.startswith("dpapi:") else ""
-            except Exception:
+            except Exception as e:
+                # v2.4.1（B1 静默 except 审计 A 档）：这里读不到旧配置 → 写盘时 api_key 会
+                # 变成空串（内存里的新 key 与磁盘旧值不一致，重启后以磁盘为准）。不记一行
+                # 的话，用户只会看到"Key 自己没了"，连排查线索都没有。
+                log("read old config for api_key failed, api_key cleared: %r" % (e,))
                 out["api_key"] = ""
         # v2.2.5：整段写盘加锁 + 临时文件带线程标识，避免两个线程抢同一个 tmp。
         # v2.3.1：实现挪进 pet_io（多一层按路径分锁 + os.replace 共享冲突短重试），

@@ -29,6 +29,11 @@ ALARM_LABEL_MAX = 40
 ALARMS_MAX = 50  # 闹钟数量上限（防配置爆炸）
 
 
+def _empty_index():
+    """合法的空闹钟库结构（愈合/默认值共用；**每次新建对象**，不做共享可变默认值）。"""
+    return {"alarms": []}
+
+
 def valid_time(t):
     """"HH:MM" 合法（00:00~23:59）。"""
     return isinstance(t, str) and bool(TIME_RE.match(t))
@@ -68,12 +73,31 @@ def today_str():
     return time.strftime("%Y-%m-%d")
 
 
+def _hhmm_minutes(t):
+    """"HH:MM"（已合法）→ 当天分钟数 0..1439（结构化比较用，见 due_alarms）。"""
+    return int(t[:2]) * 60 + int(t[3:])
+
+
+def _now_minutes(now):
+    """now → 当天分钟数；非法返回 None（宽松补零：测试传 "7:59" 也认）。"""
+    t = normalize_time(now)
+    return _hhmm_minutes(t) if t else None
+
+
 def due_alarms(alarms, now, today):
     """到点判定（纯函数）：返回 [(alarm, normalized_time), ...]。
 
-    now="HH:MM"（须两位补零，生产侧 now_hhmm() 保证）、today="YYYY-MM-DD"；
+    now="HH:MM"（生产侧 now_hhmm() 保证两位补零，测试可注入）、today="YYYY-MM-DD"；
     enabled 且 now >= time 且当日未触发 → 到点。
+
+    v2.4.1（P3-5）：比较改成**结构化分钟数**，不再比字符串。"HH:MM" 的字典序在生产路径上
+    恰好等于时间序（两侧都补零），但 API 很脆：调用方传未补零的 now（"7:59"）时
+    "7:59" >= "08:00" 为真 → 07:59 就把 08:00 的闹钟响了；传 "abc" 更是全表齐响。
+    现在两侧都先归一化成分钟数：now 非法 → 一个都不响（宁可少响一次，也不误响一整天）。
     """
+    now_min = _now_minutes(now)
+    if now_min is None:
+        return []
     out = []
     for a in alarms:
         if not isinstance(a, dict) or not a.get("enabled"):
@@ -83,7 +107,7 @@ def due_alarms(alarms, now, today):
             continue
         if a.get("last_fired_date") == today:
             continue
-        if now >= t:
+        if now_min >= _hhmm_minutes(t):
             out.append((a, t))
     return out
 
@@ -104,14 +128,26 @@ class AlarmService:
 
         此前把坏条目从内存丢掉却不落盘：坏数据留在 alarms.json 里，
         每次启动都重报「时间格式应为 HH:MM」（error.log 实测 ×15）。
-        现在只要"损坏 / 丢条目 / 归一化确实改了内容"就 _save() 一次，
+        现在只要"损坏 / 丢条目 / 归一化确实改了内容"就愈合回写一次，
         下次启动读到的是干净文件，报错不再复发。
+
+        v2.4.1（A 区一致性收口）：自建"读 + 清洗 + 手工 backup + _save"环改成
+        pet_io.heal_json（清洗判据走它的 normalize 入参）——读、判、回写都在**同一把
+        路径锁内**完成，与 alarms 之外的模块共用同一套 .bak / 日志口径；不再自己维护
+        一份（自建环的两个弱点：从"读到坏"到"回写"之间本进程写者能插进来；备份与回写
+        是两次独立操作，口径容易与 pet_io 漂移）。
         """
-        data, corrupted = pet_io.read_json_or(self._index, dict, log=self._log)
         self._alarms = {}
-        dirty = corrupted   # 文件本身坏了：读完立刻用合法空库覆盖
-        if isinstance(data, dict):
+
+        def _normalize(data):
+            """内层结构判据（交给 heal_json）：清洗 alarms 数组 → (fixed, reason)。
+
+            reason 非空 = 内存态与盘上内容不一致（损坏 / 丢条目 / 补零清洗）→ 需要回写愈合；
+            为空 = **一个字节都不写**。data 一定是 dict（read_json_or 的 expect=dict 兜着）。
+            """
             raw = data.get("alarms")
+            clean = {}
+            dirty = False
             if not isinstance(raw, list):
                 if raw is not None:
                     self._log("alarm index alarms field not a list, reset to empty")
@@ -123,18 +159,20 @@ class AlarmService:
                     # 坏条目=用户数据损坏：记日志留痕（不弹窗，静默恢复）
                     self._log("alarm index dropped bad entry: %s" % (err or "格式非法"))
                     dirty = True
-                elif na["id"] not in self._alarms:
-                    self._alarms[na["id"]] = na
+                elif na["id"] not in clean:
+                    clean[na["id"]] = na
                     if na != a:
                         dirty = True   # 补零/清洗（如 "7:5"→"07:05"）也要落盘，避免每次启动重做
                 else:
                     self._log("alarm index dropped duplicate id: %s" % na["id"])
                     dirty = True
-        if dirty:
-            # P0-C：愈合/清洗回写**之前**先留 .bak——原先只有 pet_io.heal_json 有备份，
-            # 这里自建"读 + 回写"路径没有，判错（或清洗逻辑本身有 bug）就无从恢复。
-            pet_io.backup_before_heal(self._index, self._log)
-            self._save()   # 愈合回写（走 pet_io 的同一把路径锁，与在途写者串行）
+            # 内存态与**本次真读到的**内容一致（含愈合后的）；一个字节都不写时也走这里
+            self._alarms = clean
+            if not dirty:
+                return data, None
+            return {"alarms": [a for a in clean.values()]}, "alarms 索引含坏条目/非法结构"
+
+        pet_io.heal_json(self._index, _empty_index, log=self._log, normalize=_normalize)
 
     def _save(self):
         err = pet_io.atomic_write_json(self._index, {"alarms": list(self._alarms.values())},

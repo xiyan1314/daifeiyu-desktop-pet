@@ -1700,11 +1700,19 @@ def main_flow():
     # -- 7c-3. ai_rag_enabled=False 完全不注入；True 时摘要里有记账字段 --
     _t3_ok, _t3_why = False, ""
     try:
+        def _rag_ok(_off, _on):
+            """判据本身（抽成函数才能喂退化输入做对照）：关=空串、开=摘要含记账字段。"""
+            return (_off == "" and "【用户数据摘要】" in _on
+                    and "今日消费" in _on and "验证市" in _on)
+
         _ctx_off = pet._build_ai_context({"ai_rag_enabled": False})
         _ctx_on = pet._build_ai_context({"ai_rag_enabled": True, "city": "验证市"})
-        _t3_ok = (_ctx_off == "" and "【用户数据摘要】" in _ctx_on
-                  and "今日消费" in _ctx_on and "验证市" in _ctx_on)
-        _t3_why = "off=%r on=%r" % (_ctx_off[:16], _ctx_on[:110])
+        # 负例对照（M2）：①构建器**整体退化**（开关都返空）②隐私开关**失效**（关也在注入）
+        # 都必须判为"不通过"——否则"off 是空串"这一句可能只是撞上了恒空的构建器
+        _deg_ok = (not _rag_ok("", "")              # 整体退化：不许算通过
+                   and not _rag_ok(_ctx_on, _ctx_on))   # 开关失效：不许算通过
+        _t3_ok = _rag_ok(_ctx_off, _ctx_on) and _deg_ok
+        _t3_why = "off=%r on=%r 退化对照=%s" % (_ctx_off[:16], _ctx_on[:110], _deg_ok)
     except Exception as _e:
         _t3_why = repr(_e)
     check("ai rag switch off/on", _t3_ok, _t3_why)
@@ -1720,11 +1728,19 @@ def main_flow():
         _pc.write_memory(_mem_guard, [("user", "在吗")], 10)
         _hist_b = _pc.read_memory(_mem_guard, 10)
         _lt = _pc.read_long_term(_mem_guard)
+        # 负例对照（M2）：旧的"拿着旧 dict 整文件覆盖"口径**确实**会丢 long_term
+        # ——否则上面那句"写 history 没冲掉 long_term"可能只是碰巧；对照自己失效同样算红
+        import pet_io as _pio
+        _pio.atomic_write_json(_mem_guard, {"history": []}, indent=None)
+        _clobber_loses = (_pc.read_long_term(_mem_guard) == _pc.sanitize_long_term(None)
+                          and _pc.read_memory(_mem_guard, 10) == [])
         _t4_ok = (_hist_a == [("user", "你好"), ("assistant", "嗨")]
                   and _hist_b == [("user", "在吗")]
                   and _lt.get("user_name") == "小明"
-                  and list(_lt.get("preferences") or []) == ["喜欢吃蛋糕"])
-        _t4_why = "hist_a=%r hist_b=%r lt=%r" % (_hist_a, _hist_b, _lt)
+                  and list(_lt.get("preferences") or []) == ["喜欢吃蛋糕"]
+                  and _clobber_loses)
+        _t4_why = "hist_a=%r hist_b=%r lt=%r 覆盖对照=%s" % (_hist_a, _hist_b, _lt,
+                                                              _clobber_loses)
     except Exception as _e:
         _t4_why = repr(_e)
     check("memory history/long_term roundtrip", _t4_ok, _t4_why)
@@ -1755,6 +1771,8 @@ def main_flow():
         _real_post = main.pet_chat.requests.post
         _real_ctx = pet.chat._tool_ctx
         _real_tools = pet.cfg.get("ai_tools_enabled")
+        _real_per = pet_tools.MAX_CALLS_PER_ROUND
+        _posts2 = []
         try:
             def _fake_post(url, headers=None, json=None, timeout=None):
                 _posts.append(json or {})
@@ -1766,35 +1784,53 @@ def main_flow():
             pet.chat._tool_ctx = pet_tools.ToolContext(
                 ledger=lambda: (True, {"today": 1.0, "total": 2.0, "summary": "今日 ¥1.00"}))
             pet.chat._worker("查一下账本摘要", pet.cfg.get("api_key") or "")
+
+            # 负例对照（M2）：同一份输入把**单轮上限放大**到不再超量 → 不该再出现"跳过"
+            # （证明"有跳过"是跟着常量走的，不是写死的；常量没被真正读到就会红）
+            def _fake_post2(url, headers=None, json=None, timeout=None):
+                _posts2.append(json or {})
+                return _FakeResp(_payload)
+
+            main.pet_chat.requests.post = _fake_post2
+            pet_tools.MAX_CALLS_PER_ROUND = _over
+            pet.chat._worker("查一下账本摘要", pet.cfg.get("api_key") or "")
         finally:
             main.pet_chat.requests.post = _real_post
             pet.chat._tool_ctx = _real_ctx
             pet.cfg["ai_tools_enabled"] = _real_tools
+            pet_tools.MAX_CALLS_PER_ROUND = _real_per
         _msgs = (_posts[-1].get("messages") or []) if _posts else []
         _tool_msgs = [m for m in _msgs if m.get("role") == "tool"]
         _asked = [c.get("id") for m in _msgs if m.get("role") == "assistant"
                   for c in (m.get("tool_calls") or [])]
         _answered = [m.get("tool_call_id") for m in _tool_msgs]
         _skipped = [m for m in _tool_msgs if "先跳过" in str(m.get("content") or "")]
+        _msgs2 = (_posts2[-1].get("messages") or []) if _posts2 else []
+        _tool_msgs2 = [m for m in _msgs2 if m.get("role") == "tool"]
+        _skipped2 = [m for m in _tool_msgs2 if "先跳过" in str(m.get("content") or "")]
+        _ctrl_ok = (bool(_posts2) and not _skipped2
+                    and len(_tool_msgs2) == _rounds * _over)
         _t5_ok = (_rounds >= 1 and _per >= 1
                   and len(_posts) == _rounds + 1          # 第 rounds+1 次请求发现超限 → 收敛
                   and len(_tool_msgs) == _rounds * _over  # 每个 tool_call 都有 tool 消息
                   and _asked == _answered
-                  and len(_skipped) == _rounds * (_over - _per))
-        _t5_why = ("rounds=%d per=%d posts=%d tool=%d skipped=%d id配对=%s"
+                  and len(_skipped) == _rounds * (_over - _per)
+                  and _ctrl_ok)
+        _t5_why = ("rounds=%d per=%d posts=%d tool=%d skipped=%d id配对=%s 放大对照=%s"
                    % (_rounds, _per, len(_posts), len(_tool_msgs), len(_skipped),
-                      _asked == _answered))
+                      _asked == _answered, _ctrl_ok))
     except Exception as _e:
         _t5_why = repr(_e)
     check("tool round/call caps", _t5_ok, _t5_why)
 
-    # -- 7c-6. 人设文件优先：prompts/default.txt 覆盖内置常量；文件删掉后回退 --
+    # -- 7c-6. 人设文件优先：prompts/default.txt 覆盖内置常量；删掉/空白/读不到都回退 --
     _t6_ok, _t6_why = False, ""
+    _pdir = os.path.join(_tmp, "prompts")
+    _pfile = os.path.join(_pdir, "default.txt")
+    _pold = None
+    _builtin = main.PERSONA_PRESETS["default"][:12]
     try:
-        _pdir = os.path.join(_tmp, "prompts")
         os.makedirs(_pdir, exist_ok=True)
-        _pfile = os.path.join(_pdir, "default.txt")
-        _pold = ""
         if os.path.isfile(_pfile):
             with open(_pfile, "r", encoding="utf-8") as _f:
                 _pold = _f.read()
@@ -1803,14 +1839,34 @@ def main_flow():
         _sys_file = main._build_ai_sys_prompt({"ai_persona": "default"})
         os.remove(_pfile)
         _sys_fallback = main._build_ai_sys_prompt({"ai_persona": "default"})
-        # 还原：把原文件写回去（重跑/后续检查不受影响）
+        # 负例对照（M2）：**空白文件**与**读不到文件**（同名目录让 open 抛错 → 走 except 分支）
+        # 都必须回退内置——否则"文件优先"可能只是"读到啥都当人设"
         with open(_pfile, "w", encoding="utf-8") as _f:
-            _f.write(_pold or (main.PERSONA_PRESETS["default"].strip() + "\n"))
+            _f.write("   \n")
+        _sys_blank = main._build_ai_sys_prompt({"ai_persona": "default"})
+        os.remove(_pfile)
+        os.makedirs(_pfile, exist_ok=True)
+        _sys_unreadable = main._build_ai_sys_prompt({"ai_persona": "default"})
         _t6_ok = (_sys_file.startswith("验证用人设：只说好话")
-                  and _sys_fallback.startswith(main.PERSONA_PRESETS["default"][:12]))
-        _t6_why = "file=%r fallback=%r" % (_sys_file[:20], _sys_fallback[:20])
+                  and _sys_fallback.startswith(_builtin)
+                  and _sys_blank.startswith(_builtin)
+                  and _sys_unreadable.startswith(_builtin)
+                  and not _sys_blank.startswith("验证用人设"))
+        _t6_why = ("file=%r fallback=%r blank=%r 读不到=%r"
+                   % (_sys_file[:16], _sys_fallback[:16], _sys_blank[:16], _sys_unreadable[:16]))
     except Exception as _e:
         _t6_why = repr(_e)
+    finally:
+        # 还原放 finally（M2）：上面任何一步抛异常都不会把改过的人设文件留在盘上
+        try:
+            if os.path.isdir(_pfile):
+                os.rmdir(_pfile)
+            with open(_pfile, "w", encoding="utf-8") as _f:
+                _f.write(_pold if _pold is not None
+                         else (main.PERSONA_PRESETS["default"].strip() + "\n"))
+        except Exception as _e2:
+            _t6_ok = False
+            _t6_why = "人设文件还原失败：%r（%s）" % (_e2, _t6_why)
     check("persona file overrides builtin", _t6_ok, _t6_why)
 
     # ---- 8. 清理与退出 ----

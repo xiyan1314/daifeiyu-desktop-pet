@@ -53,6 +53,7 @@ import math
 import os
 import threading
 import time
+from typing import Any, Callable, Iterable
 
 import pet_io   # v2.3.1：全仓共用原子写/安全读（分锁 + 线程唯一临时名 + replace 重试）
 import pet_log
@@ -63,21 +64,17 @@ _DAY_MAX_RECORDS = 20000
 
 
 # ---------------- 通用 IO 助手（v2.3.1：统一走 pet_io；原子替换，降级不抛） ----------------
-# 哨兵：pet_io.read_json_or 只在"走到 factory()"时返回它（真数据永远是 json.load 造的新对象，
-# 不可能与这个进程内对象相同）→ 用它把"文件不存在"与"文件在、这次没读到"分开。
-_PROBE = object()
-
-
-def _read_json(path, factory=dict, heal=True):
-    """读 JSON → (data, corrupted, unreadable)，绝不抛出。
+def _read_json(path: str | os.PathLike, factory: Callable[[], Any] = dict,
+               heal: bool = True) -> tuple[Any, bool, bool]:
+    """读 JSON → (data, corrupted, unreadable)，绝不抛出（= pet_io.read_json_ex 的薄壳）。
 
     unreadable=True：文件**在磁盘上**但这次读不到（权限/共享占用/非 UTF-8 编码）——
     与"文件不存在（首次运行）"严格区分：前者不能证明文件坏了，**绝不能回写覆盖**
     （pet_io 的契约：读取失败 ≠ 损坏；P0-B 实测：一次瞬时 PermissionError 就让
     Book.__init__ 末尾的 _save_all 把完好账本清成 records=0，连 .bak 都没有）。
 
-    v2.3.1（读侧愈合口径一致性收口）：**真损坏即愈合回写**（pet_io.heal_json：同一把路径锁
-    内复查 → 先留 "<path>.bak" → 回写 → 记日志），与 alarms/behaviors/lines/索引/voice 同口径。
+    v2.3.1（读侧愈合口径一致性收口）：**真损坏即愈合回写**（同一把路径锁内 → 先留
+    "<path>.bak" → 回写 → 记日志），与 alarms/behaviors/lines/索引/voice 同口径。
     此前只靠 Book.__init__ 末尾的 _save_all / 写前恢复**间接**自愈，两个口子：
       · 全程没有 .bak——判错（或以后归一化逻辑出 bug）时无从恢复；
       · 读失败保护（P0-B）生效时会整体跳过 _save_all，坏文件就留在盘上、每次启动重报
@@ -85,19 +82,14 @@ def _read_json(path, factory=dict, heal=True):
     heal=False 给"马上要把文件改名 / 另有更强恢复路径"的调用方：_migrate_usage 读完
     usage.json 就会 os.replace 把它改名，先愈合再改名只会凭空多一份 .bak 与困惑。
     **读不到（OSError / 非 UTF-8）一律不写**——这条保护不能被愈合改掉。
+
+    v2.4.1（A 区一致性收口）：本函数退化成 pet_io.read_json_ex 的**薄壳**。此前它是
+    "read_json_or 读一遍探测（哨兵 _PROBE 区分 factory() 与真数据）→ 再 heal_json 读
+    第二遍复查 → 回写"的两遍读实现，与 pet_resources._read_json_ex 是两份复制品；
+    现在读、判、回写在 read_json_ex 里**同一把路径锁内一次完成**（少一遍磁盘读，
+    "绝不覆盖在途写者新数据"的保证不变——锁内本进程没有别的写者）。
     """
-    data, corrupted = pet_io.read_json_or(path, lambda: _PROBE, log=pet_log.log_error)
-    if data is _PROBE:
-        # 走到 factory() 的三种情况：文件不存在 / 读失败 / 解码失败（corrupted=False），
-        # 以及**真损坏**（corrupted=True，此时 factory() 返回的正是哨兵本身）。
-        if corrupted:
-            # 真损坏（文件确实在盘上、内容解析不了或顶层类型非法）→ 愈合回写（含 .bak）
-            if heal:
-                pet_io.heal_json(path, factory, log=pet_log.log_error)
-            return factory(), True, False
-        # 文件不存在（首次运行）或这次读不到：**都不写盘**，只用 exists 把两者分开
-        return factory(), False, os.path.exists(str(path))
-    return data, corrupted, False
+    return pet_io.read_json_ex(path, factory, heal=heal, log=pet_log.log_error)
 
 
 # v2.3.0（兼容审查 M5）：账本此前假定"只有主线程写"。1.2/1.3 之后 worker 线程每条消息都会
@@ -106,7 +98,7 @@ def _read_json(path, factory=dict, heal=True):
 _BOOK_WRITE_LOCK = threading.RLock()
 
 
-def _write_json(path, data):
+def _write_json(path: str | os.PathLike, data: Any) -> str | None:
     """原子写 JSON（v2.3.1：统一走 pet_io）；成功返回 None，失败返回错误字符串。
 
     v2.3.0：临时文件名带线程号 + 写盘段互斥（避免两个线程抢同一 .tmp 后各自 replace）。
@@ -116,11 +108,11 @@ def _write_json(path, data):
     return pet_io.atomic_write_json(path, data, lock=_BOOK_WRITE_LOCK, log=None)
 
 
-def _today():
+def _today() -> str:
     return time.strftime("%Y-%m-%d")
 
 
-def _date_shift(date_str, days):
+def _date_shift(date_str: str, days: int) -> str:
     """ISO 日期字符串 +/- days 天；解析失败回退今天。"""
     try:
         dt = datetime.datetime.strptime(date_str, "%Y-%m-%d") + datetime.timedelta(days=days)
@@ -129,7 +121,7 @@ def _date_shift(date_str, days):
         return _today()
 
 
-def _normalize_record(r):
+def _normalize_record(r: Any) -> dict | None:
     """记录归一化：字段补全、金额取正并四舍五入到分；非法记录返回 None。"""
     if not isinstance(r, dict):
         return None
@@ -162,13 +154,13 @@ def _normalize_record(r):
     }
 
 
-def _clean_records(raw):
+def _clean_records(raw: Any) -> list[dict]:
     """记录列表归一化（非 list / 坏条目一律丢弃）——读侧与"恢复合并"共用同一口径。"""
     recs = raw if isinstance(raw, list) else []
     return [r for r in (_normalize_record(x) for x in recs) if r is not None]
 
 
-def _merge_records(disk_records, mem_records):
+def _merge_records(disk_records: Iterable[dict], mem_records: Iterable[dict]) -> list[dict]:
     """磁盘记录 + 本次内存新增记录，按 (ts, amount, note) 去重（P0-B 恢复合并）。
 
     去重键与 _archive_day 一致（同一秒内的多笔记账不会被误判成重复）。
@@ -185,7 +177,7 @@ def _merge_records(disk_records, mem_records):
     return out
 
 
-def _clean_days(raw_days):
+def _clean_days(raw_days: Any) -> dict[str, dict]:
     """归档 days 归一化（{date: {total,count,records}}）；非 dict 一律按空处理。"""
     days = raw_days if isinstance(raw_days, dict) else {}
     clean_days = {}
@@ -207,7 +199,7 @@ def _clean_days(raw_days):
     return clean_days
 
 
-def _new_record(amount, kind, note):
+def _new_record(amount: Any, kind: str, note: Any) -> dict:
     """按当前时刻生成一条新记录。"""
     ts = time.time()
     return {
@@ -220,7 +212,7 @@ def _new_record(amount, kind, note):
     }
 
 
-def _public(r):
+def _public(r: dict) -> dict:
     """对外视图：仅暴露 date/time/amount/kind/note 五列。"""
     return {
         "date": r["date"],
@@ -235,7 +227,7 @@ def _public(r):
 class Book:
     """记账账本：余额差 + 手动记账，按日归档，统计 / 搜索 / 提醒 / 导出。"""
 
-    def __init__(self, data_dir):
+    def __init__(self, data_dir: str | os.PathLike) -> None:
         self._ledger_path = os.path.join(data_dir, "ledger.json")
         self._archive_path = os.path.join(data_dir, "ledger_archive.json")
         self._ledger = {
@@ -517,7 +509,7 @@ class Book:
         self._archive["days"] = {d: days[d] for d in keep}
 
     # ---------- 记账 ----------
-    def observe_balance(self, total):
+    def observe_balance(self, total: Any) -> str | None:
         """余额差记账：total < last 时记一条 kind="api"；更新 last_balance=total。
 
         单次降幅异常大（>20% 且 >5 元）多半是平台调整（赠送过期/退款/活动），
@@ -544,7 +536,7 @@ class Book:
             self._save_all()
         return note
 
-    def add_manual(self, amount, note=""):
+    def add_manual(self, amount: Any, note: Any = "") -> None:
         """手动记账（kind="manual"）；amount 必须 > 0，否则静默忽略。"""
         try:
             amount = round(float(amount), 2)
@@ -560,12 +552,12 @@ class Book:
             self._save_all()
 
     # ---------- 统计 ----------
-    def today_usage(self):
+    def today_usage(self) -> float:
         """今日合计（ledger 当前日）。"""
         self._ensure_today()
         return round(sum(float(r["amount"]) for r in self._ledger["records"]), 2)
 
-    def week_usage(self):
+    def week_usage(self) -> float:
         """最近 7 天（含今天）合计：今天用 ledger，过去用 archive。"""
         self._ensure_today()
         total = sum(float(r["amount"]) for r in self._ledger["records"])
@@ -575,7 +567,7 @@ class Book:
                 total += float(day.get("total") or 0.0)
         return round(total, 2)
 
-    def daily_totals(self, n=7):
+    def daily_totals(self, n: Any = 7) -> list[tuple[str, float]]:
         """最近 n 天逐日合计 [("2026-09-22", 1.23), ...]，由旧到新（无数据为 0.0）。"""
         try:
             n = max(1, min(int(n), _ARCHIVE_MAX_DAYS))
@@ -594,7 +586,7 @@ class Book:
             out.append((d, total))
         return out
 
-    def all_records(self):
+    def all_records(self) -> list[dict]:
         """合并 archive + 当前记录，按 ts 倒序；每条 {"date","time","amount","kind","note"}。"""
         self._ensure_today()
         rows = []
@@ -604,7 +596,7 @@ class Book:
         rows.sort(key=lambda r: r.get("ts") or 0.0, reverse=True)
         return [_public(r) for r in rows]
 
-    def search_records(self, term):
+    def search_records(self, term: Any) -> list[dict]:
         """按日期子串或备注子串搜索（不区分大小写）；空 term 返回全部。"""
         term = str(term or "").strip().lower()
         if not term:
@@ -615,16 +607,16 @@ class Book:
                 out.append(r)
         return out
 
-    def total_amount(self):
+    def total_amount(self) -> float:
         """全部历史合计（四舍五入到分）。"""
         return round(sum(float(r["amount"]) for r in self.all_records()), 2)
 
-    def total_count(self):
+    def total_count(self) -> int:
         """全部历史记录条数。"""
         return len(self.all_records())
 
     # ---------- 提醒 ----------
-    def check_alerts(self, total, budget, balance_alert):
+    def check_alerts(self, total: Any, budget: Any, balance_alert: Any) -> list[str]:
         """预算 / 余额提醒：每类每天只提醒一次。
 
         budget / balance_alert 为浮点（<=0 = 关闭）。
@@ -658,57 +650,55 @@ class Book:
         return alerts
 
     # ---------- 导出 / 重置 ----------
-    def export_csv(self, path):
+    def export_csv(self, path: str | os.PathLike) -> tuple[bool, str]:
         """导出 CSV（UTF-8 with BOM，Excel 兼容）。列：日期,时间,类型,金额,备注。
 
-        原子写（临时文件 + os.replace）。成功返回 (True, "")，失败 (False, err)。
+        成功返回 (True, "")，失败 (False, err)。
+
+        v2.4.1（A 区一致性收口）：改走 pet_io.atomic_write_bytes——这是全仓最后一个自建
+        "临时文件 + os.replace"的写盘点（v2.3.1 把临时名加了线程号，但仍是自建的一份：
+        没有按路径分锁、没有 replace 共享冲突重试、失败清理也是自己的）。走 pet_io 之后
+        与 memory/索引/闹钟/行为/语音/台词/账本/配置同口径：按路径分锁 + 进程/线程唯一
+        临时名 + 冲突重试 + 失败清理自己的 tmp（导出失败仍只报错给调用方，不抛异常）。
         """
-        # v2.3.1（评审报告根因 A 的同类遗留）：固定 .tmp 在多写者/共享冲突下会丢写盘
-        tmp = "%s.%d.tmp" % (str(path), threading.get_ident())
+        def esc(v):
+            v = str(v)
+            if any(ch in v for ch in ',"\r\n'):
+                return '"' + v.replace('"', '""') + '"'
+            return v
+
+        lines = ["日期,时间,类型,金额,备注"]
+        for r in self.all_records():
+            kind = "API消费" if r["kind"] == "api" else "手动"
+            lines.append(",".join([
+                r["date"],
+                r["time"],
+                kind,
+                "%.2f" % r["amount"],
+                esc(r["note"] or ""),
+            ]))
+        body = "\ufeff" + "\r\n".join(lines) + "\r\n"  # BOM + CRLF，Excel 兼容
         try:
-            def esc(v):
-                v = str(v)
-                if any(ch in v for ch in ',"\r\n'):
-                    return '"' + v.replace('"', '""') + '"'
-                return v
-
-            lines = ["日期,时间,类型,金额,备注"]
-            for r in self.all_records():
-                kind = "API消费" if r["kind"] == "api" else "手动"
-                lines.append(",".join([
-                    r["date"],
-                    r["time"],
-                    kind,
-                    "%.2f" % r["amount"],
-                    esc(r["note"] or ""),
-                ]))
-            body = "\ufeff" + "\r\n".join(lines) + "\r\n"  # BOM + CRLF，Excel 兼容
-            d = os.path.dirname(os.path.abspath(str(path)))
-            if d:
-                os.makedirs(d, exist_ok=True)
-            with open(tmp, "wb") as f:
-                f.write(body.encode("utf-8"))
-            os.replace(tmp, path)
-            return True, ""
+            err = pet_io.atomic_write_bytes(str(path), body.encode("utf-8"),
+                                            log=pet_log.log_error)
         except Exception as e:
-            try:
-                if os.path.exists(tmp):
-                    os.remove(tmp)
-            except Exception:
-                pass  # 有意忽略：导出失败后的临时文件清理尽力而为
+            # pet_io 的契约是"绝不抛"，这里再兜一层：导出失败绝不能掀掉调用方的界面
             return False, str(e)
+        if err is None:
+            return True, ""
+        return False, err
 
-    def reset_balance_baseline(self):
+    def reset_balance_baseline(self) -> None:
         """清 API Key 时调用：重置 last_balance=None，保留手动记录。"""
         self._ledger["last_balance"] = None
         self._save_all()
 
     @property
-    def last_balance(self):
+    def last_balance(self) -> float | None:
         """最近一次观察到的余额基准（float|None）。"""
         return self._ledger.get("last_balance")
 
-    def has_data(self):
+    def has_data(self) -> bool:
         """是否有任何账本数据（记录 / 归档 / 余额基准）。"""
         return (bool(self._ledger["records"])
                 or bool(self._archive["days"])

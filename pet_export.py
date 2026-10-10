@@ -452,6 +452,9 @@ def import_bundle(role_lib, behaviors_svc, cfg, zip_path, alarms_apply=None,
             try:
                 _ver = int(manifest.get("version") or BUNDLE_VERSION)
             except (TypeError, ValueError):
+                # v2.4.1（B 区 · A 档静默 except 判定）：**误报**——这里只做"能不能比较
+                # 版本号"的防御性读取，包里的 version 写坏了就按当前版本处理，最坏是
+                # 少弹一句"包版本高于当前支持"的提示；不丢数据、不产生用户可见错误。
                 _ver = BUNDLE_VERSION
             if _ver > BUNDLE_VERSION:
                 warnings.append("包版本高于当前支持，部分内容可能未生效")

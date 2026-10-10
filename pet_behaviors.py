@@ -307,14 +307,6 @@ def move_idle_action(cfg, action_id, delta):
     return True, ""
 
 
-def set_idle_play_mode(cfg, mode):
-    """设置播放模式（就地改 cfg）。返回 (ok, err)。"""
-    if mode not in IDLE_PLAY_MODES:
-        return False, "播放模式不合法"
-    cfg["idle_play_mode"] = mode
-    return True, ""
-
-
 def validate_name(name):
     """行为名：ASCII 安全名（英文字母开头，字母/数字/下划线 ≤24 字符）。"""
     return isinstance(name, str) and bool(NAME_RE.match(name))
@@ -408,28 +400,43 @@ class BehaviorService:
 
         此前坏条目只从内存丢掉、不落盘：磁盘上的坏数据每次启动重报
         （error.log 实测「动作序列不能为空」「动作类型不合法：jump」）。
-        现在只要"损坏 / 丢条目 / 迁移或归一化确实改了内容"就 _save() 一次，
+        现在只要"损坏 / 丢条目 / 迁移或归一化确实改了内容"就愈合回写一次，
         下次启动直接读干净文件（旧动作别名迁移的结果也借此写回磁盘）。
+
+        v2.4.1（A 区一致性收口）：自建"读 + 清洗 + 手工 backup + _save"环改成
+        pet_io.heal_json（清洗判据走它的 normalize 入参）——读、判、回写都在**同一把
+        路径锁内**完成，与闹钟/台词/角色索引共用同一套 .bak 与日志口径；不再自己维护
+        一份（自建环的两个弱点：从"读到坏"到"回写"之间本进程写者能插进来；备份与回写
+        是两次独立操作，口径容易与 pet_io 漂移）。
         """
-        data, corrupted = pet_io.read_json_or(self._index, dict, log=self._log)
         self._behaviors = {}
-        dirty = corrupted   # 文件本身坏了：读完立刻用合法空库覆盖
-        if isinstance(data, dict):
+
+        def _normalize(data):
+            """内层结构判据（交给 heal_json）→ (fixed, reason)。
+
+            reason 非空 = 内存态与盘上内容不一致（损坏 / 丢条目 / 别名迁移）→ 需要回写愈合；
+            为空 = **一个字节都不写**。data 一定是 dict（read_json_ex 的 expect=dict 兜着）。
+            """
+            clean = {}
+            dirty = False
             for b in (data.get("behaviors") or []):
                 nb, err = self._norm_behavior(b)
                 if nb is None:
                     # 坏条目=用户资产损坏：记日志留痕（不弹窗，静默恢复空库）
                     self._log("behavior index dropped bad entry: %s" % (err or "格式非法"))
                     dirty = True
-                elif nb["id"] not in self._behaviors:
-                    self._behaviors[nb["id"]] = nb
+                elif nb["id"] not in clean:
+                    clean[nb["id"]] = nb
                     if nb != b:
                         dirty = True   # 别名迁移/字段清洗：磁盘与内存口径必须一致
-        if dirty:
-            # P0-C：愈合/迁移回写**之前**先留 .bak（与 pet_io.heal_json 同口径）——
-            # 原先这条自建"读 + 回写"路径没有备份，判错/迁移有 bug 就无从恢复。
-            pet_io.backup_before_heal(self._index, self._log)
-            self._save()   # 愈合回写（走 pet_io 的同一把路径锁，与在途写者串行）
+            # 内存态与**本次真读到的**内容一致（含愈合后的）；一个字节都不写时也走这里
+            self._behaviors = clean
+            if not dirty:
+                return data, None
+            return {"behaviors": list(clean.values())}, "behaviors 索引含坏条目/非法结构"
+
+        pet_io.heal_json(self._index, lambda: {"behaviors": []}, log=self._log,
+                         normalize=_normalize)
 
     def _save(self):
         pet_io.atomic_write_json(self._index, {"behaviors": list(self._behaviors.values())},
