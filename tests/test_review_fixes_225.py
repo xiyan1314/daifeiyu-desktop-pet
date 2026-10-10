@@ -47,7 +47,9 @@ def test_dialog_p0_backfills_are_present():
         "气泡样式：字号未按当前设置回填（点保存会把用户字号重置为 8）"
     assert 'self._radius_spin.setValue(max(0, min(30, int(_r0 if _r0 is not None else 16))))' in src, \
         "气泡样式：圆角未按当前设置回填（点保存会把圆角重置为 0）"
-    assert 'self._food.findData(ln.get("food")' in src, \
+    # v2.2.7：回填逻辑改为"取原值 → findData → 找不到补占位项"（未知 food 不再被改写）
+    assert '_food_val = str(ln.get("food") or "")' in src \
+        and "_fi = self._food.findData(_food_val)" in src, \
         "台词编辑：喂食对象未回填（保存会把 food 改成下拉默认值）"
 
 

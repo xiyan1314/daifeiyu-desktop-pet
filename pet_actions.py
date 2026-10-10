@@ -134,7 +134,8 @@ class ActionService:
         if getattr(pet, "_behavior_seq", None) is not None:
             return
         # v2.2.5：刚打过饭点小盹的那一拍不再叠加随机动作（两颗定时器可能同刻到点）
-        if time.monotonic() - getattr(pet, "_meal_zzz_at", 0.0) < 3.0:
+        _mz = getattr(pet, "_meal_zzz_at", 0.0)
+        if _mz and time.monotonic() - _mz < 3.0:   # v2.2.7：0.0 是"从未"哨兵，不再误压开机首拍
             return
         # P3-2：加权动作目录替代 0.35/0.65 魔法数（可扩展、可点播，共用 play_action）
         name, arg = self._pick()

@@ -62,7 +62,7 @@ import pet_alarm
 
 
 APP_NAME = "大肥鱼桌宠"
-VERSION = "2.2.6"
+VERSION = "2.2.7"
 PAD = 1.25  # 窗口相对角色的透明边距（为压扁/回弹预留空间）
 IDLE_FRAME_MS = 140      # 待机帧间隔
 IDLE_FORM_HOLD_SECS = 8  # v2.1.3：只有形态、没有动作可播时的展示期上限（到期回用户形态）
@@ -746,6 +746,7 @@ class PetWindow(QWidget):
         self._nap_zzz_timer.setSingleShot(True)
         self._nap_zzz_timer.timeout.connect(self._gslot('meal_zzz_nap', self._on_meal_zzz))
         self._meal_zzz_at = 0.0              # 最近一次饭点 zzz 的时刻（用于抑制同刻随机动作）
+        self._meal_zzz_retry = 0             # v2.2.7：小盹被守卫拦下时的短重试计数（最多 5 次）
         self._idle_display_form = ""         # v2.1.7：本次待机展示期实际画上去的形态
         self._idle_check_timer = None        # v2.1.8：待机触发的高速检查（1s），由 __init__ 创建
         self._idle_last_action = ""          # 顺序模式记上次播到哪
@@ -1384,14 +1385,25 @@ class PetWindow(QWidget):
         self._set_form(form)
 
     def _on_meal_zzz(self):
-        """饭点小盹：头顶 zzz 小表情（纯叠加，不换形态、不设 busy），走喂食事件时钟。"""
+        """饭点小盹：头顶 zzz 小表情（纯叠加，不换形态、不设 busy），走喂食事件时钟。
+
+        v2.2.7（审查 中-1）：守卫命中时**短重试**（2s × 至多 5 次）而不是直接丢——否则配了
+        「待机形态」（触发 A 在消化结束 +2s 就置位展示期）或那一刻正在播/吃帧的用户，
+        第二颗小盹会**永久**消失，与文档宣称的"确定性"矛盾。睡眠不重试（醒来会重新计时）。
+        """
         # 守卫与 pet_actions.idle_tick 同口径：吃帧/摸头/睡眠/变身/待机展示/行为序列在途 →
-        # 这次小盹跳过（不打断更高优先级展示，也不覆盖行为气泡）
+        # 本次跳过（不打断更高优先级展示，也不覆盖行为气泡），稍后重试
         if (self._closing or self.busy or self._petting or self._sleeping
                 or getattr(self, "_transform_home", None) is not None
                 or bool(getattr(self, "_idle_form_active", False))
-                or getattr(self, "_behavior_seq", None) is not None):
+                or getattr(self, "_behavior_seq", None) is not None
+                or getattr(self, "_drag_offset", None) is not None   # v2.2.7：拖拽中不插小盹
+                or bool(getattr(self, "_flying", False))):            # v2.2.7：甩抛飞行中不插小盹
+            if not self._sleeping and self._meal_zzz_retry < 5:
+                self._meal_zzz_retry += 1
+                self._nap_zzz_timer.start(2000)
             return
+        self._meal_zzz_retry = 0
         self._meal_zzz_at = time.monotonic()
         try:
             self.actions._idle_zzz()
@@ -2030,6 +2042,12 @@ class PetWindow(QWidget):
         _prev_display_temp = bool(self.form != (getattr(self, "_user_form", "") or self.form))
         if self._digest_timer is not None:
             self._digest_timer.stop()  # 切换角色：作废旧角色的消化定时器（L1）
+        # v2.2.7（审查 轻-2）：饭点小盹的两颗事件定时器也要停——此前只停消化表，
+        # 切角色后 10s 会冒出一个"没有消化过程"的陈旧 zzz（真实循环里已复现）。
+        if getattr(self, "_digest_zzz_timer", None) is not None:
+            self._digest_zzz_timer.stop()
+        if getattr(self, "_nap_zzz_timer", None) is not None:
+            self._nap_zzz_timer.stop()
         self._stop_tween()  # v2.0.1：切角色立即停合成动作，防旧角色振荡残留到新角色
         self._behavior_seq = None      # v2.0.2：切角色取消在途行为序列
         self._behavior_is_idle = False
@@ -2921,6 +2939,7 @@ class PetWindow(QWidget):
         # 同时**复位上一轮的饭后小盹**（质量审查 B1）：此前只有 _touch_activity 顺手停过它，
         # 而"轻交互不取消小盹"的改动把那处停了 → 连喂时上一轮的 nap 会落进本轮消化窗口。
         self._nap_zzz_timer.stop()
+        self._meal_zzz_retry = 0  # 新一轮喂食：重试计数清零
         self._digest_zzz_timer.start(MEAL_ZZZ_MS)
         # v2.1.4（S2 修复）：判据 = **目标形态有没有 eat 帧集**（吃帧素材挂在形态上，
         # 有就播；没有才用大笑表达）。此前先按"源形态==用户形态"判定，no_feed 跳步时会错位；

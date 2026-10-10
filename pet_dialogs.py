@@ -3930,7 +3930,13 @@ class LinesDialog(QDialog):
                          dead_label="（已失效：%s）")
         # v2.2.5（P0）：喂食对象也要回填——此前漏了 → 保存时用下拉当前值（默认第 1 项）
         # 覆盖掉原值，food_texts("蛋糕") 再也选不中这条台词（只闻其声不见其食）。
-        _fi = self._food.findData(ln.get("food") or "")
+        _food_val = str(ln.get("food") or "")
+        _fi = self._food.findData(_food_val)
+        if _fi < 0 and _food_val:
+            # v2.2.7（审查 轻-5）：下拉是硬编码 3 项，角色包导入可能带任意 food——
+            # 找不到就补一个占位项并选中，否则保存会把原值静默改写成第 1 项（"小鱼干"）。
+            self._food.addItem("（已失效：%s）" % _food_val, _food_val)
+            _fi = self._food.count() - 1
         self._food.setCurrentIndex(_fi if _fi >= 0 else 0)
 
     def _move_line(self, delta):

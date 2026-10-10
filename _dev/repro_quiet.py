@@ -12,6 +12,13 @@
 """
 import os, sys, time, tempfile
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+# v2.2.7（审查 中-2）：默认 GBK 控制台下打印 ✓ 会 UnicodeEncodeError → 全过也 exit 1。
+# 与 _verify_v13.py / _verify_green.py 同款处理：强制 stdout 为 utf-8 且不抛。
+try:
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+except Exception:
+    pass  # 有意忽略：老解释器/非标准流上无 reconfigure，退化为原编码
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(HERE)
 sys.path.insert(0, ROOT)
