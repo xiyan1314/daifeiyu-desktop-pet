@@ -2749,6 +2749,18 @@ class AISettingsDialog(QDialog):
         row.addWidget(self._tokens)
         row.addStretch(1)
         root.addLayout(row)
+        # v2.3.0（1.2 Function Calling）：工具调用开关 + 写入确认开关
+        self._tools = QCheckBox("允许 AI 主动调用工具（查余额/天气/记账/闹钟/表情）")
+        self._tools.setChecked(bool(cfg.get("ai_tools_enabled", True)))
+        root.addWidget(self._tools)
+        self._tools_confirm = QCheckBox("写入类操作先问我（记账/预算/闹钟/定时提醒）")
+        self._tools_confirm.setChecked(bool(cfg.get("ai_tools_confirm", True)))
+        self._tools_confirm.setEnabled(self._tools.isChecked())
+        self._tools.toggled.connect(self._tools_confirm.setEnabled)
+        root.addWidget(self._tools_confirm)
+        _tool_hint = QLabel("本地模型（Ollama 等）不支持工具调用，会自动退化为纯聊天。")
+        _tool_hint.setWordWrap(True)
+        root.addWidget(_tool_hint)
         btns = QHBoxLayout()
         ok = QPushButton("保存")
         cancel = QPushButton("取消")
@@ -2828,6 +2840,8 @@ class AISettingsDialog(QDialog):
             "ai_system_prompt": self._prompt.toPlainText().strip(),
             "ai_reply_len": self._reply.value(),
             "ai_max_tokens": self._tokens.value(),
+            "ai_tools_enabled": self._tools.isChecked(),
+            "ai_tools_confirm": self._tools_confirm.isChecked(),
         }
         _call(self._pet, "apply_ai_settings", data)
         self.accept()
@@ -3456,7 +3470,9 @@ class ResourceManagerDialog(QDialog):
 class AmountNoteDialog(QDialog):
     """记一笔：金额 QDoubleSpinBox(0.01~99999) + 备注 QLineEdit + 确定/取消。"""
 
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, amount=None, note=""):
+        """amount/note 是**预填值**（v2.3.0 1.2：AI 工具 add_manual_record 带上来的金额/备注），
+        用户仍要在对话框里确认/修改；非数字金额忽略预填，不给坏值任何表现机会。"""
         super().__init__(_qt_parent(parent))
         self.setWindowTitle("记一笔")
         self.setStyleSheet(DIALOG_QSS)
@@ -3467,11 +3483,17 @@ class AmountNoteDialog(QDialog):
         self._amount.setRange(0.01, 99999.0)
         self._amount.setDecimals(2)
         self._amount.setValue(1.0)
+        try:
+            if float(amount or 0) > 0:
+                self._amount.setValue(max(0.01, min(99999.0, float(amount))))
+        except (TypeError, ValueError):
+            pass  # 有意忽略：预填值非数字就保持默认 1.00
         self._amount.setSuffix(" ¥")
         grid.addWidget(self._amount, 0, 1)
         grid.addWidget(QLabel("备注："), 1, 0)
         self._note = QLineEdit()
         self._note.setPlaceholderText("例如：买了小鱼干（可留空）")
+        self._note.setText(str(note or "")[:60])
         grid.addWidget(self._note, 1, 1)
         root.addLayout(grid)
         row = QHBoxLayout()
@@ -5491,6 +5513,46 @@ class _VoicePickDialog(QDialog):
         return [self._list.item(i).data(Qt.ItemDataRole.UserRole)
                 for i in range(self._list.count())
                 if self._list.item(i).checkState() == Qt.CheckState.Checked]
+
+
+def pick_role_meta(parent, default_name=""):
+    """v2.3.0：导出前的「角色信息」对话框（角色名/作者/简介/标签/创建日期）。
+
+    返回 dict 或 None（用户取消）。纯展示元数据，留空=空串，不参与任何校验。
+    """
+    dlg = QDialog(_qt_parent(parent))
+    dlg.setWindowTitle("角色信息（会写进角色包，别人导入时能看到）")
+    dlg.setStyleSheet(DIALOG_QSS)
+    dlg.resize(460, 300)
+    root = QVBoxLayout(dlg)
+    form = QFormLayout()
+    name = QLineEdit(str(default_name or ""))
+    author = QLineEdit()
+    desc = QLineEdit()
+    tags = QLineEdit()
+    tags.setPlaceholderText("逗号分隔，例：猫,可爱,懒")
+    form.addRow("角色名", name)
+    form.addRow("作者", author)
+    form.addRow("一句话简介", desc)
+    form.addRow("标签", tags)
+    root.addLayout(form)
+    root.addWidget(QLabel("留空也可以，只是别人导入时看不到作者和简介~"))
+    row = QHBoxLayout()
+    row.addStretch(1)
+    btn_ok = QPushButton("继续导出")
+    btn_cancel = QPushButton("取消")
+    row.addWidget(btn_cancel)
+    row.addWidget(btn_ok)
+    root.addLayout(row)
+    if modal(dlg) != QDialog.DialogCode.Accepted:
+        return None
+    return {
+        "name": name.text().strip()[:40],
+        "author": author.text().strip()[:40],
+        "description": desc.text().strip()[:120],
+        "tags": [t.strip()[:16] for t in tags.text().replace("，", ",").split(",") if t.strip()][:8],
+        "created_at": time.strftime("%Y-%m-%d"),
+    }
 
 
 def pick_voice_assets(pet):

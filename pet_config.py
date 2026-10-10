@@ -150,6 +150,12 @@ def normalize_cfg(cfg, defaults, persona_ids):
     cfg["wander"] = _to_bool(cfg.get("wander", False))
     cfg["city"] = str(cfg.get("city", "北京") or "北京")
     cfg["sound"] = _to_bool(cfg.get("sound", True))
+    cfg["ai_rag_enabled"] = _to_bool(cfg.get("ai_rag_enabled", True))  # v2.3.0（1.3）：用户数据摘要注入开关
+    # v2.3.0（1.2 Function Calling）：工具调用总开关 + 写入确认开关。
+    # 坏值一律按 bool 兜底——tests/test_config_robustness.py 对 DEFAULT_CONFIG 逐键灌坏值，
+    # 归一化后类型必须仍然是 bool。
+    cfg["ai_tools_enabled"] = _to_bool(cfg.get("ai_tools_enabled", True))
+    cfg["ai_tools_confirm"] = _to_bool(cfg.get("ai_tools_confirm", True))
     cfg["badge"] = _to_bool(cfg.get("badge", False))
     # ---- v1.3 新增配置归一化 ----
     cfg["role"] = str(cfg.get("role", "") or "")

@@ -101,3 +101,57 @@ def test_manifest_meta_roundtrip_through_import(tmp_path):
     m, e = pet_export.validate_bundle(str(z))
     assert m is not None, e
     assert m["meta"]["author"] == "阿鱼"
+
+def test_long_term_roundtrip_keeps_history(tmp_path):
+    """1.1：长期记忆与对话历史**互不覆盖**（同一个 memory.json）。"""
+    import pet_chat
+    p = str(tmp_path / "memory.json")
+    pet_chat.write_memory(p, [("user", "你好"), ("assistant", "嗨")], 10)
+    pet_chat.write_long_term(p, {"user_name": "小明", "preferences": ["喜欢吃蛋糕"]})
+    assert pet_chat.read_memory(p, 10) == [("user", "你好"), ("assistant", "嗨")], "写长期记忆把历史冲掉了"
+    pet_chat.write_memory(p, [("user", "在吗")], 10)
+    lt = pet_chat.read_long_term(p)
+    assert lt["user_name"] == "小明" and lt["preferences"] == ["喜欢吃蛋糕"], "写历史把长期记忆冲掉了"
+
+
+def test_long_term_sanitize_limits(tmp_path):
+    """1.1：去重 + 截断 + FIFO 限量 + 体积兜底。"""
+    import pet_chat
+    lt = pet_chat.sanitize_long_term({
+        "preferences": ["a"] * 60 + ["a", "b"],
+        "nicknames": "不是列表",
+        "recent_topics": ["x" * 200]})
+    assert len(lt["preferences"]) <= pet_chat.LONG_TERM_MAX
+    assert lt["preferences"].count("a") == 1, "重复项没有去重"
+    assert lt["nicknames"] == [], "非列表字段应归一化为空列表"
+    assert len(lt["recent_topics"][0]) <= 60, "超长条目没有被截断"
+
+
+def test_extract_long_term_rules():
+    """1.1：规则抽取（零 API 成本）——喜好/称呼/近况。"""
+    import pet_chat
+    r = pet_chat.extract_long_term("我喜欢吃蛋糕，不喜欢早起")
+    assert "吃蛋糕" in r.get("preferences", []), r
+    assert pet_chat.extract_long_term("我叫小明")["user_name"] == "小明"
+    assert pet_chat.extract_long_term("嗨") == {}, "太短的输入不该抽出话题"
+    assert pet_chat.extract_long_term("x" * 300) == {}, "超长输入直接跳过（防噪声入库）"
+
+
+def test_ai_context_switch_and_content(tmp_path, monkeypatch):
+    """1.3：ai_rag_enabled=False 完全不注入；开启时注入记账摘要与长期记忆。"""
+    main = _reload_main(tmp_path, monkeypatch)
+    monkeypatch.setattr(main, "MEMORY_PATH", str(tmp_path / "memory.json"))
+
+    class _Stub:
+        book = None
+        _shown_balance = 12.5
+
+    s = _Stub()
+    assert main.PetWindow._build_ai_context(s, {"ai_rag_enabled": False}) == "", \
+        "隐私开关关闭时仍在注入用户数据"
+    txt = main.PetWindow._build_ai_context(s, {"ai_rag_enabled": True, "city": "北京"})
+    assert "【用户数据摘要】" in txt and "北京" in txt and "12.50" in txt, txt
+    main.pet_chat.write_long_term(str(tmp_path / "memory.json"),
+                                  {"preferences": ["喜欢吃蛋糕"]})
+    txt2 = main.PetWindow._build_ai_context(s, {"ai_rag_enabled": True})
+    assert "【关于绳匠的记忆】" in txt2 and "喜欢吃蛋糕" in txt2, txt2

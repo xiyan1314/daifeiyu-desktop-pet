@@ -71,7 +71,8 @@ class BalanceService:
         self.pet.show_bubble("查余额中……等我一下下~")
         self.refresh(manual=True)
 
-    def _worker(self, key):
+    def _request_balance(self, key):
+        """同步查一次余额（纯 HTTP，不碰 Qt）。返回 (True, (总额, 币种, 赠送)) 或 (False, 详情)。"""
         try:
             resp = requests.get(
                 "https://api.deepseek.com/user/balance",
@@ -86,10 +87,38 @@ class BalanceService:
                 total += float(info.get("total_balance", "0") or 0)
                 granted += float(info.get("granted_balance", "0") or 0)
             currency = (infos[0].get("currency") if infos else None) or "CNY"
-            self.signals.balance_updated.emit(float(total), currency, float(granted))
+            return True, (float(total), currency, float(granted))
         except Exception as e:
-            self._log("balance_worker: %r" % (e,))
+            return False, repr(e)
+
+    def _worker(self, key):
+        ok, payload = self._request_balance(key)
+        if ok:
+            total, currency, granted = payload
+            self.signals.balance_updated.emit(float(total), currency, float(granted))
+        else:
+            self._log("balance_worker: %s" % (payload,))
             self.signals.balance_err.emit()
+
+    def fetch_sync(self):
+        """v2.3.0（1.2 Function Calling）：工具 check_balance 的同步只读数据源。
+
+        由 ChatService 的**工作线程**直接调用：只发 HTTP，不碰 Qt，也**不改守卫标志**
+        （_fetching_balance/_manual_pending 属于轮询与手动查询的状态机，工具查询不参与，
+        免得把在途轮询的状态搅乱）。返回 (True, dict) 或 (False, 错误文案)。
+        """
+        key = self._cfg().get("api_key", "")
+        if not key:
+            return False, "还没设置 API Key，先让绳匠填一下"
+        ok, payload = self._request_balance(key)
+        if not ok:
+            self._log("balance fetch_sync failed: %s" % (payload,))
+            return False, "余额查不到（检查 API Key 或网络）"
+        total, currency, granted = payload
+        unit = "¥" if currency == "CNY" else (str(currency) + " ")
+        return True, {"balance": round(total, 2), "currency": currency,
+                      "granted": round(granted, 2),
+                      "summary": "余额 %s%.2f（赠送 %.2f）" % (unit, total, granted)}
 
     # ---- 信号落地（主线程槽） ----
     def on_updated(self, total, currency, granted):
@@ -178,9 +207,15 @@ class BalanceService:
             return 0.0
 
     # ---- 预算 / 预警 / 记一笔 / 账本（对话框入口，原 PetWindow 方法迁移） ----
-    def set_budget(self):
+    def set_budget(self, amount=None):
+        """今日预算。v2.3.0（1.2）：工具调用传来的金额只作输入框**预填值**，仍由用户确认。"""
         cfg = self._cfg()
         cur = cfg.get("budget", 0.0) or 0.0
+        if amount is not None:
+            try:
+                cur = max(0.0, float(amount))
+            except (TypeError, ValueError):
+                cur = cfg.get("budget", 0.0) or 0.0  # 非数字：忽略预填，用现值
         val = self.pet._ask_amount("今日预算", "今日已用超过多少元时提醒？\n（0 = 关闭提醒）", cur)
         if val is None:
             return
@@ -198,13 +233,14 @@ class BalanceService:
         self._save_cfg(cfg)
         self.pet.show_bubble("余额预警 %.2f 元%s" % (val, "" if val > 0 else "（提醒已关闭）"))
 
-    def add_manual_record(self):
+    def add_manual_record(self, amount=None, note=""):
+        """记一笔。v2.3.0（1.2）：工具带上的金额/备注只作对话框**预填**，最终由用户确认。"""
         pet = self.pet
         book = self._book()
         if book is None:
             return
         try:
-            dlg = pet_dialogs.AmountNoteDialog(pet)
+            dlg = pet_dialogs.AmountNoteDialog(pet, amount, note)
             pet_dialogs.modal(dlg)
             if dlg.result() == QDialog.DialogCode.Accepted:
                 amount, note = dlg.values()

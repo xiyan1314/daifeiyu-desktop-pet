@@ -45,7 +45,8 @@ class WeatherService:
     def on_done(self):
         self.pet._weather_inflight = False
 
-    def _worker(self, city):
+    def _request_weather(self, city):
+        """同步查一次天气（纯 HTTP，不碰 Qt）。返回 (True, 文案) 或 (False, 失败文案)。"""
         try:
             geo = requests.get(
                 "https://geocoding-api.open-meteo.com/v1/search",
@@ -53,8 +54,7 @@ class WeatherService:
                 timeout=8,
             ).json()
             if not geo.get("results"):
-                self.signals.weather.emit("找不到这座城市啦……")
-                return
+                return False, "找不到这座城市啦……"
             r = geo["results"][0]
             w = requests.get(
                 "https://api.open-meteo.com/v1/forecast",
@@ -68,11 +68,26 @@ class WeatherService:
             ).json()["current"]
             code = w.get("weather_code", 0)
             desc = WEATHER_CODES.get(code, "晴")
-            self.signals.weather.emit(
-                "%s今天%s，%.0f℃，风速%.0fkm/h" % (city, desc, w["temperature_2m"], w["wind_speed_10m"])
-            )
+            return True, ("%s今天%s，%.0f℃，风速%.0fkm/h"
+                          % (city, desc, w["temperature_2m"], w["wind_speed_10m"]))
         except Exception as e:
             self._log("weather_worker: %r" % (e,))
-            self.signals.weather.emit("天气服务开小差了……")
+            return False, "天气服务开小差了……"
+
+    def _worker(self, city):
+        try:
+            _ok, _text = self._request_weather(city)
+            self.signals.weather.emit(_text)
         finally:
             self.signals.weather_done.emit()
+
+    def fetch_sync(self, city=None):
+        """v2.3.0（1.2 Function Calling）：工具 check_weather 的同步只读数据源。
+
+        由 ChatService 的**工作线程**直接调用（不碰 Qt、不参与 _weather_inflight 状态机）。
+        """
+        _city = str(city or self._cfg().get("city", "北京") or "北京")
+        ok, text = self._request_weather(_city)
+        if not ok:
+            return False, text
+        return True, {"city": _city, "weather": text, "summary": text}

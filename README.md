@@ -111,6 +111,23 @@ python main.py        # 规范入口（桌宠.py 为兼容壳）；或双击 启
   待机永远是最低优先级——说话、读台词、拖拽、喂食、手动切形态随时打断，待机绝不覆盖你选定的形态
 - 所有自定义数据保存在程序目录（config.json、ledger.json / ledger_archive.json、roles/ + roles.json、audio/ + audio.json、lines.json、voice_assets.json + voice_ref/），换机器/升级时拷贝这些文件即可迁移
 
+## 🎨 角色画廊
+
+社区贡献的自定义角色：下载 `.dfypet.zip` 后，右键桌宠 → 角色 → **导入角色包** 即可使用。
+
+| 角色 | 作者 | 描述 | 下载 |
+|------|------|------|------|
+| *（还没有人投稿，等你来第一个 🐟）* | | | |
+
+> 想分享你的角色？看 [gallery/README.md](gallery/README.md) 的规范，或直接到
+> [「晒角色」讨论帖](https://github.com/xiyan1314/daifeiyu-desktop-pet/discussions/1) 回复。
+
+### 贡献角色（三步）
+
+1. 桌宠里导出角色包：右键 → 角色 → **导出角色包**（填角色名/作者/简介/标签，会写进包的 meta）
+2. 准备一张 ≤200×200 的预览图（PNG）
+3. Fork 仓库 → 两个文件放进 `gallery/` → 在 README 表格加一行 → 提 PR
+
 ## 💬 社区（晒角色 · 晒台词 · 提需求）
 
 到 **GitHub Discussions** 一起玩：[晒角色](https://github.com/xiyan1314/daifeiyu-desktop-pet/discussions/1) ·

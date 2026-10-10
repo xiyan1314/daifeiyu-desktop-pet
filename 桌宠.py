@@ -59,6 +59,7 @@ import pet_main
 import pet_behaviors
 import pet_export
 import pet_alarm
+import pet_tools  # v2.3.0（1.2）：工具注册表/执行器（Qt-free，无环）
 
 
 APP_NAME = "大肥鱼桌宠"
@@ -156,7 +157,10 @@ DEFAULT_CONFIG = {
     "ai_system_prompt": "",   # P1-10：人设（空=内置大肥鱼人设）
     "ai_max_tokens": 60,
     "ai_reply_len": 25,
-    "ai_persona": "default",  # P1-10+：人设预设 id（default/sheshe/tsundere/custom）
+    "ai_persona": "default",  # P1-10+：人设预设 id（default/sheshe/tsundere/custom/file:<名>）
+    "ai_rag_enabled": True,   # v2.3.0（1.3）：把长期记忆与记账/偏好摘要注入 AI（False=完全不注入）
+    "ai_tools_enabled": True,   # v2.3.0（1.2）：允许 AI 主动调用工具（不支持的后端自动退化）
+    "ai_tools_confirm": True,   # v2.3.0（1.2）：写入类工具（记账/预算/闹钟/提醒）先问用户
     "click_through": False,   # P3-1：透明区点击穿透（只命中身体，默认关闭）
     "role_frame_max": 24,     # P3-5+：帧动画帧数上限（2~60，用户可调）
     # P1-手感：甩抛物理（默认关闭=行为与旧版逐像素一致；参数与 pet_physics.DEFAULT_PHYSICS 同构）
@@ -188,6 +192,7 @@ _SOFT_FIX_KEYS = {"always_on_top", "ai_enabled", "follow_mouse", "wander", "soun
                   "ai_base_url", "ai_model", "ai_system_prompt", "lines_extra",
                   "sound_group", "role", "scale_compensated_role",
                   "ai_persona", "click_through", "role_frame_max", "physics", "voice",
+                  "ai_rag_enabled", "ai_tools_enabled", "ai_tools_confirm",  # v2.3.0
                   "idle_behavior", "idle_behavior_seconds", "transform_seconds",
                   "idle_trigger_delay", "idle_delay_after_full", "idle_form", "idle_actions",
                   "idle_play_mode", "idle_resume_on_interrupt"}
@@ -579,6 +584,11 @@ class Signals(QObject):
     ai_done = Signal()
     balance_updated = Signal(float, str, float)
     balance_err = Signal()
+    # v2.3.0（1.2 Function Calling）：工具调用（worker 线程 → 主线程，一律带请求 id）
+    tool_confirm_required = Signal(str, str, str)  # (请求id, 工具名, 参数JSON) 写入前问用户
+    tool_call = Signal(str, str, str)              # (请求id, 工具名, 参数JSON) 主线程执行并回结果
+    tool_ui = Signal(str, str)                     # (工具名, 参数JSON) 只投递（对话框类不等结果）
+    tool_result = Signal(str, str)                 # (工具名, 摘要) 结果气泡
 
 
 signals = Signals()
@@ -689,9 +699,21 @@ class PetWindow(QWidget):
         # 服务不 import 桌宠：配置/回调/信号全部构造注入；守卫状态仍归属 PetWindow（语义不变）
         self.wander = pet_wander.WanderController(self, lambda: self.cfg, self._screen_geo, save_config)
         self.weather = pet_weather.WeatherService(self, signals, lambda: self.cfg, _log_error)
+        # v2.3.0（1.2 Function Calling）：工具上下文——能力全部注入，pet_tools 不认识任何业务模块。
+        # 全用 lambda 晚绑定：balance/actions 在本行之后才构造，而工具只会在对话发生时被调用。
+        self.tool_ctx = pet_tools.ToolContext(
+            balance=lambda: self.balance.fetch_sync(),      # 只读：worker 线程内联（网络 I/O）
+            weather=lambda: self.weather.fetch_sync(),      # 只读：worker 线程内联
+            ledger=lambda: self._tool_ledger_summary(),     # 只读：账本摘要
+            ui=lambda name, args: self.chat.marshal(name, args),           # 主线程执行并等结果
+            ui_async=lambda name, args: self.chat.marshal_nowait(name, args),  # 只投递（对话框）
+            log=_log_error)
         self.chat = pet_chat.ChatService(self, signals, lambda: self.cfg, _build_ai_sys_prompt,
                                          parse_emote_tag, load_chat_memory, save_chat_memory,
-                                         play_sound, _log_error, MAX_REPLY_LEN)
+                                         play_sound, _log_error, MAX_REPLY_LEN,
+                                         context_builder=self._build_ai_context,  # v2.3.0：1.1+1.3
+                                         memory_path=MEMORY_PATH,
+                                         tool_ctx=self.tool_ctx)  # v2.3.0（1.2）：工具调用
         self.ai = pet_ai.AIService(self, self.chat, lambda: self.cfg, save_config, set_redact_key,
                                    _remove_files, (USAGE_PATH, DATA_DIR, CONFIG_PATH, MEMORY_PATH),
                                    lambda: self.book, _log_error, DEFAULT_CONFIG)
@@ -990,6 +1012,11 @@ class PetWindow(QWidget):
         signals.balance_err.connect(self.balance.on_err)
         signals.weather_done.connect(self.weather.on_done)
         signals.ai_done.connect(lambda: setattr(self, "_ai_inflight", False))
+        # v2.3.0（1.2 Function Calling）：工具调用的三条跨线程通路（worker → 主线程落地）
+        signals.tool_confirm_required.connect(self._on_tool_confirm_required)  # 写入前问用户
+        signals.tool_call.connect(self._on_tool_call)                          # 执行并回结果
+        signals.tool_ui.connect(self._on_tool_ui)                              # 只投递（对话框）
+        signals.tool_result.connect(self._on_tool_result)                      # 结果气泡
         self.bubble.clicked.connect(self._cycle_line)
 
         self.show()
@@ -1666,7 +1693,206 @@ class PetWindow(QWidget):
         except Exception as e:
             _log_error("alarm dialog: %r" % (e,))  # 有意忽略：对话框失败只记日志不崩主程序
 
+    # ---------------- v2.3.0（1.2 Function Calling）：工具在主线程落地 ----------------
+    # worker 线程只发信号，真正碰 Qt 的活全部在本节完成（对话框 / 表情 / 动作 / QTimer）。
+    def _tool_ledger_summary(self):
+        """get_ledger_summary 的数据源：账本今日/近7天/累计 + 今日预算（只读，可跨线程读）。
+
+        与 _build_ai_context 同口径：记账数据本来就是主线程写、worker 线程读的（1.3 摘要）。
+        """
+        book = self.book
+        if book is None:
+            return False, "账本还没准备好"
+        try:
+            today = float(book.today_usage() or 0.0)
+            week = float(book.week_usage() or 0.0)
+            total = float(book.total_amount() or 0.0)
+            budget = float(self.cfg.get("budget", 0.0) or 0.0)  # norm-ok（配置加载时已钳制）
+        except (TypeError, ValueError) as e:
+            return False, "记账数据读不出来：%r" % (e,)
+        return True, {"today": round(today, 2), "week": round(week, 2),
+                      "total": round(total, 2), "budget": round(budget, 2),
+                      "summary": "今日 ¥%.2f · 近7天 ¥%.2f · 累计 ¥%.2f" % (today, week, total)}
+
+    def _tool_main_dispatch(self, name, args):
+        """把 UI 类工具落到主线程执行（未知工具返回失败，绝不抛）。"""
+        handler = {
+            "open_ledger": self._tool_open_ledger,
+            "add_manual_record": self._tool_add_manual_record,
+            "set_budget": self._tool_set_budget,
+            "set_alarm": self._tool_set_alarm,
+            "set_timer": self._tool_set_timer,
+            "show_emote": self._tool_show_emote,
+            "play_action": self._tool_play_action,
+        }.get(str(name or ""))
+        if handler is None:
+            return {"ok": False, "error": "这个操作不能在界面上执行：%s" % (name,)}
+        return handler(args if isinstance(args, dict) else {})
+
+    def _on_tool_call(self, call_id, name, args_json):
+        """worker 线程要主线程执行一个 UI 工具并等结果（表情/动作/闹钟/定时器）。"""
+        try:
+            result = self._tool_main_dispatch(name, pet_tools.parse_args(args_json))
+        except Exception as e:
+            _log_error("tool call %s failed: %r" % (name, e))
+            result = {"ok": False, "error": "界面执行失败"}
+        if not self.chat.resolve_call(call_id, result):
+            _log_error("tool call %s: 请求已超时，结果丢弃" % name)  # 有意忽略：迟到结果丢弃
+
+    def _on_tool_ui(self, name, args_json):
+        """worker 线程只投递（对话框类工具：账本/记一笔/预算）——不等结果，对话框自己给反馈。"""
+        try:
+            self._tool_main_dispatch(name, pet_tools.parse_args(args_json))
+        except Exception as e:
+            _log_error("tool ui %s failed: %r" % (name, e))  # 有意忽略：对话框失败不拖累对话线程
+
+    def _on_tool_confirm_required(self, req_id, name, args_json):
+        """AI 想写数据（记账/预算/闹钟/提醒）：主线程弹确认框，答复交回 worker。"""
+        try:
+            ok = self._ask_tool_confirm(pet_tools.describe_call(name, pet_tools.parse_args(args_json)))
+        except Exception as e:
+            _log_error("tool confirm %s failed: %r" % (name, e))
+            ok = False  # 弹框都失败：按拒绝处理（数据只读不写）
+        if not self.chat.confirm(req_id, ok):
+            _log_error("tool confirm %s: 请求已超时，答复丢弃" % name)
+
+    def _ask_tool_confirm(self, text):
+        """确认框：置顶 + 显式焦点（规避前台锁），默认按钮=否（防误触写数据）。"""
+        box = QMessageBox(self)
+        box.setWindowTitle("大肥鱼想动你的数据")
+        box.setIcon(QMessageBox.Icon.Question)
+        box.setText(text)
+        box.setStandardButtons(QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+        box.setDefaultButton(QMessageBox.StandardButton.No)
+        box.setWindowFlags(box.windowFlags() | Qt.WindowType.WindowStaysOnTopHint)
+        box.show()
+        box.raise_()
+        box.activateWindow()
+        box.setFocus()
+        return box.exec() == QMessageBox.StandardButton.Yes
+
+    def _on_tool_result(self, name, summary):
+        """工具结果回主线程展示（余额/天气/账本摘要这类带 summary 的只读结果）。"""
+        if self._closing or not summary:
+            return
+        spec = pet_tools.get_tool(name)
+        self.show_bubble("🔧 %s：%s" % (spec.label if spec is not None else name, summary))
+
+    def _tool_open_ledger(self, args):
+        """打开账本（BalanceService 里已有实现，这里只转发）。"""
+        self.balance.open_ledger()
+        return {"ok": True, "opened": True}
+
+    def _tool_add_manual_record(self, args):
+        """记一笔：金额/备注作为对话框预填值，最终由用户在对话框里确认。"""
+        self.balance.add_manual_record(args.get("amount"), str(args.get("note") or ""))
+        return {"ok": True, "opened": True}
+
+    def _tool_set_budget(self, args):
+        """今日预算：金额作为输入框预填值，最终由用户确认。"""
+        self.balance.set_budget(args.get("amount"))
+        return {"ok": True, "opened": True}
+
+    def _tool_set_alarm(self, args):
+        """设闹钟：走 AlarmService.add（时间校验/上限/落盘都在那边）。"""
+        t = str(args.get("time") or "").strip()
+        label = str(args.get("label") or "").strip() or "闹钟"
+        alarm, err = self.alarms.add(t, label)
+        if alarm is None:
+            return {"ok": False, "error": str(err or "闹钟没设上")}
+        self.show_bubble("⏰ 闹钟设好啦：%s %s" % (alarm["time"], alarm["label"]))
+        return {"ok": True, "alarm": alarm}
+
+    def _tool_set_timer(self, args):
+        """一次性提醒：QTimer.singleShot（带 context=self，退出/销毁后不再回调）。"""
+        try:
+            minutes = float(args.get("minutes") or 0)
+        except (TypeError, ValueError):
+            return {"ok": False, "error": "minutes 得是数字"}
+        if minutes <= 0:
+            return {"ok": False, "error": "minutes 要大于 0"}
+        minutes = min(minutes, 1440.0)  # 上限 24 小时（防手滑设出个天文数字）
+        label = str(args.get("label") or "").strip() or ("%g 分钟到了" % minutes)
+        QTimer.singleShot(int(minutes * 60000), self, lambda: self._fire_tool_timer(label))
+        self.show_bubble("⏱ 好，%g 分钟后提醒你：%s" % (minutes, label))
+        return {"ok": True, "minutes": minutes, "label": label}
+
+    def _fire_tool_timer(self, label):
+        """v2.3.0（1.2）：定时提醒到点（主线程回调；与闹钟同款气泡+表情+语音）。"""
+        try:
+            if self._closing:
+                return  # P1-5：退出中不再弹提醒
+            self.show_bubble("⏰ %s" % label)
+            self._show_emote("exclaim")
+            if self.cfg.get("sound", True):
+                play_sound("coin")
+            self.voice.speak("⏰ %s，时间到了" % label, on_error=signals.voice_error.emit)
+        except Exception as e:
+            _log_error("tool timer fire: %r" % (e,))  # 有意忽略：提醒失败不拖累主线程
+
+    def _tool_show_emote(self, args):
+        """头顶表情（与 AI 回复带表情同款门控：忙/睡/摸摸头时不打断）。"""
+        kind = str(args.get("kind") or "").strip()
+        if kind not in pet_tools.EMOTE_KINDS:
+            return {"ok": False, "error": "没有这个表情：%s" % (kind or "空")}
+        if self.busy or self._sleeping or self._petting:
+            return {"ok": False, "error": "它正忙着（或睡着了），表情这次没显示"}
+        self._show_emote(kind)
+        return {"ok": True, "emote": kind}
+
+    def _tool_play_action(self, args):
+        """点播动作（force=True：用户/模型显式要求，开着跟随/散步也该表演）。"""
+        name = str(args.get("name") or "").strip()
+        if name not in ("jump", "emote") and name not in (self.anim._sets or {}) \
+                and name not in self._cur_procs():
+            return {"ok": False, "error": "没有这个动作：%s" % (name or "空")}
+        self.actions.play_action(name, force=True)
+        return {"ok": True, "action": name}
+
     # ---------- v2.0.3：角色导出/导入（分享包） ----------
+    def _build_ai_context(self, cfg):
+        """v2.3.0（1.1 长期记忆 + 1.3 用户数据摘要）：拼一段 system 尾巴给 AI。
+
+        隐私开关：ai_rag_enabled=False 时返回空串（完全不注入用户数据）。
+        token 控制：各列表最多 3 条、每条已在写入时截断，整体约 100~150 token。
+        """
+        if not bool(cfg.get("ai_rag_enabled", True)):
+            return ""
+        parts = []
+        try:
+            lt = pet_chat.read_long_term(MEMORY_PATH, _log_error)
+            _bits = []
+            if lt.get("user_name"):
+                _bits.append("称呼：%s" % lt["user_name"])
+            for _k, _label in (("nicknames", "别名"), ("preferences", "喜好"), ("recent_topics", "近况")):
+                _v = lt.get(_k) or []
+                if _v:
+                    _bits.append("%s：%s" % (_label, "、".join(_v[-3:])))
+            if _bits:
+                parts.append("【关于绳匠的记忆】" + "；".join(_bits))
+        except Exception as e:
+            _log_error("ai context long_term: %r" % (e,))
+        try:
+            b = self.book
+            _today = b.today_usage() if hasattr(b, "today_usage") else 0.0
+            _week = b.week_usage() if hasattr(b, "week_usage") else 0.0
+            _tot = b.total_amount() if hasattr(b, "total_amount") else 0.0
+            _budget = float(cfg.get("budget", 0) or 0)  # 键名以 DEFAULT_CONFIG 为准（budget=今日预算）
+            _bal = getattr(self, "_shown_balance", None)
+            _line = "【用户数据摘要】今日消费 ¥%.2f（累计 ¥%.2f）" % (float(_today or 0), float(_tot or 0))
+            if _week:
+                _line += "；近 7 天 ¥%.2f" % float(_week)
+            if _budget > 0:
+                _line += "；今日预算 ¥%.2f（已用 %.0f%%）" % (_budget, min(999.0, float(_today or 0) / _budget * 100))
+            if isinstance(_bal, (int, float)):
+                _line += "；当前余额 ¥%.2f" % float(_bal)
+            if cfg.get("city"):
+                _line += "；城市：%s" % cfg["city"]
+            parts.append(_line)
+        except Exception as e:
+            _log_error("ai context ledger: %r" % (e,))
+        return "\n".join(parts)
+
     def persona_choices(self):
         """v2.3.0：AI 设置的人设下拉项（内置 + data_dir/prompts/custom/*.txt）。"""
         return persona_choices()
