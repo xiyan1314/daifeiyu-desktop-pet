@@ -38,6 +38,43 @@ USER_DATA_NAMES = {"config.json", "roles.json", "audio.json", "voice.json", "voi
                    "lines.json", "ledger.json", "ledger_archive.json", "error.log",
                    "memory.log", "usage.json", "memory.json"}
 USER_DATA_DIRS = ("roles", "voice", "voice_ref", "audio", "alarms", "__pycache__")
+
+# v2.3.1（一致性收口）：精确名匹配挡不住**残留形态**——它们一样是用户数据（甚至是坏数据），
+# 绝不能随绿色版目录或发布包出货，此前却能悄悄混进去：
+#   <名字>.tmp / <名字>.<线程号>.tmp / <名字>.<进程号>.<线程号>.tmp
+#        原子写临时文件（pet_io.atomic_write_bytes；崩溃/被杀时留下的正是这三种形状）
+#   <名字>.bak      愈合前备份（pet_io.backup_before_heal）
+#   <名字>.migrated pet_book 迁移旧 usage.json 时改的名
+#   <名字>.old      pet_log 512KB 轮转出来的上一份日志（error.log.old）
+# 单独写成一个判据函数（单一来源），check_zip（发布包）与 check_green_dir（绿色版目录）共用。
+_RESIDUE_RE = re.compile(r"^(?P<stem>.+?)\.(?:(?:[0-9]+\.){0,2}tmp|bak|migrated|old)$")
+
+
+def residue_hit(base):
+    """文件名 → 命中的用户数据名（**只看残留形态**，精确名不算）；""=没命中。
+
+    绿色版目录检查用它：那只目录同时是用户的实时数据目录，常规数据文件（config.json…）
+    照旧允许存在（v2.2.2 事故），只有残留才点名。
+    """
+    m = _RESIDUE_RE.match(base)
+    if m and m.group("stem") in USER_DATA_NAMES:
+        return m.group("stem")
+    return ""
+
+
+def user_data_hit(base):
+    """文件名 → 命中的用户数据名（""=没命中）。精确名与残留形态都算命中。
+
+    发布包检查用它（包里出现用户数据或其残片都算不干净）。
+    base 必须传 basename（发布包条目先取 basename；绿色版目录传文件名）。
+    只认这几种形状，不会误伤正常文件：pet_io.py、assets/char.png、notes.tmp
+    （stem 不是用户数据名）一律不算命中。
+    """
+    if base in USER_DATA_NAMES:
+        return base
+    return residue_hit(base)
+
+
 # 发布包**额外**禁止的开发/验证文件（绿色版目录里做检测时允许存在）
 ZIP_EXTRA_NAMES = {"_verify_green.py", "_check_release.py", "_check_static.py", "_g_out.txt"}
 ZIP_EXTRA_PREFIX = ("_verify_assets/",)
@@ -115,17 +152,44 @@ def check_clean_tree():
     return []
 
 
+def green_residue(root=None):
+    """绿色版目录里的用户数据**残留**清单（相对路径，排序）；不含常规用户数据文件。
+
+    残留 = <用户数据名> + 后缀（见 _RESIDUE_RE）：临时文件 / 愈合备份 / 迁移改名 / 轮转日志。
+    它们是原子写与自愈流程的中间产物，没有任何保留价值，留在打包目录里就是"可能混进
+    发布物"的风险。本函数**只点名不删除**（要移走还是清掉由用户决定）。
+    """
+    base = os.path.abspath(root or GREEN)
+    out = []
+    if not os.path.isdir(base):
+        return out
+    for cur, dirs, files in os.walk(base):
+        dirs[:] = [d for d in dirs if d != "__pycache__"]   # 目录本身另有判据（USER_DATA_DIRS）
+        for f in files:
+            if residue_hit(f):      # 只看残留：常规用户数据文件不在这里点名（v2.2.2）
+                out.append(os.path.relpath(os.path.join(cur, f), base).replace("\\", "/"))
+    return sorted(out)
+
+
 def check_green_dir():
-    """绿色版**目录**是否可打包（只查目录存在性）。
+    """绿色版**目录**是否可打包（目录存在 + 没有用户数据残留）。
 
     v2.2.2 安全修复：绿色版目录**同时是用户正在使用的实时副本**——此前本检查把
     config.json/roles.json/ledger/roles 等**用户数据**当"打包前必须清"，
     导致每次发布都把用户的自定义角色（roles.json + roles 素材）删掉（真实事故）。
     打包安全其实不依赖这个检查：zip 从**白名单暂存目录**构建，用户数据根本进不了包。
-    因此本检查只保留"目录存在"，用户数据永不要求清除。
+    因此**常规用户数据文件名永不作为失败项**（config.json/roles.json/账本…照旧留着）。
+
+    v2.3.1（一致性收口）：只说"目录存在"还不够——残留形态（<名字>.tmp /
+    <名字>.<pid>.<tid>.tmp / <名字>.bak / <名字>.migrated / <名字>.old）是崩溃与自愈的
+    中间产物，混进绿色版目录就可能被一起打包 → 这里点名（只报不移）。
     """
     if not os.path.isdir(GREEN):
         return ["绿色版目录不存在：%s" % GREEN]
+    residue = green_residue()
+    if residue:
+        return ["绿色版目录里有用户数据残留（临时文件/愈合备份/轮转日志，打包前请移出）：%s"
+                % ", ".join(residue[:8])]
     return []
 
 
@@ -176,12 +240,12 @@ def check_zip(zip_path, version=None):
     with zipfile.ZipFile(zip_path) as z:
         names = _normalize_names(z.namelist())
         bad = [n for n in names
-               if os.path.basename(n) in USER_DATA_NAMES
+               if user_data_hit(os.path.basename(n))
                or os.path.basename(n) in ZIP_EXTRA_NAMES
                or any(n.startswith(p) for p in ZIP_EXTRA_PREFIX)
                or any(n.startswith(d + "/") for d in USER_DATA_DIRS)]
         if bad:
-            fails.append("发布包含运行时数据/开发文件：%s" % ", ".join(sorted(bad)[:8]))
+            fails.append("发布包含运行时数据/残留/开发文件：%s" % ", ".join(sorted(bad)[:8]))
         # v2.3.0（兼容审查 S1）：need 必须覆盖**所有运行时 .py**——此前漏了 pet_tools.py，
         # 出包时白名单漏拷该文件会静默放行一个"双击即 ModuleNotFoundError"的包。
         # 正向校验：凡仓库里被 SYNC_FILES 列为运行时 .py 的，包里必须存在同名条目。
@@ -221,8 +285,10 @@ def check_static():
         env = dict(os.environ)
         env["QT_QPA_PLATFORM"] = "offscreen"
         env["PYTHONIOENCODING"] = "utf-8"
+        # v2.3.1（M1）：静态体检单跑实测 120.4s（并发跑其它检查时更慢），180s 会随机超时
+        # → 发布门随机变红。放宽到 600s：宁可慢一点，也不要"体检没跑完就报失败"。
         r = subprocess.run([sys.executable, script], capture_output=True, text=True,
-                           encoding="utf-8", errors="replace", cwd=ROOT, timeout=180, env=env)
+                           encoding="utf-8", errors="replace", cwd=ROOT, timeout=600, env=env)
     except Exception as e:
         return ["静态体检跑不起来：%r" % (e,)]
     if r.returncode == 0:
@@ -245,7 +311,8 @@ def main():
     fails += check_version()
     fails += check_clean_tree()  # v2.1.4：发布时运行时代码必须已提交（定版）
     fails += check_static()  # v2.1.4：静态体检（入口解析/配置键/空池/类型转换/定时器/线程…）
-    fails += check_green_dir()  # v2.2.2：只查目录存在；用户数据是用户实时数据，永不要求清除
+    # v2.2.2：用户数据是用户实时数据，永不要求清除（只查目录存在 + 残留点名）
+    fails += check_green_dir()
     missing, diff = check_sync()
     print("[2] 绿色版同步：%d 个文件（缺失 %d，不一致 %d）"
           % (len(SYNC_FILES), len(missing), len(diff)))

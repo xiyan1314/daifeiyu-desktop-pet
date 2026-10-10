@@ -226,13 +226,27 @@ def _get(pet, name):
 
 
 def _call(pet, name, *args):
-    """防御性调用 pet 方法；缺失或抛异常返回 None。"""
+    """防御性调用 pet 方法；缺失或抛异常返回 None（返回值契约不变）。
+
+    v2.4（静默 except 审计 A5）：这里此前是裸 pass——而它的调用方全是**用户点了按钮**
+    的回调（apply_ai_settings / apply_bubble_style / apply_voice / apply_role /
+    apply_idle_settings / apply_physics / apply_sound_group / clear_long_term_memory…）。
+    回调抛异常时对话框照常 accept()，界面显示"保存成功"，实际没生效，error.log 里也
+    没有任何线索（22 处调用点共用同一条静默路径）。现在失败先记一条日志，再按原契约
+    返回 None。**只记方法名与异常，不记 args**——apply_voice / set_api_key 的参数里
+    可能带后端密钥，日志宁少勿多。
+    """
     try:
         fn = getattr(pet, name, None)
         if callable(fn):
             return fn(*args)
-    except Exception:
-        pass  # 有意忽略：防御性调用，缺失/异常按失败处理（缺省不崩）
+    except Exception as e:
+        try:
+            import traceback
+            pet_log.log_error("dialog callback %s failed: %r\n%s"
+                              % (name, e, traceback.format_exc()))
+        except Exception:
+            pass  # 有意忽略：日志自身失败无处可记
     return None
 
 
@@ -2763,6 +2777,16 @@ class AISettingsDialog(QDialog):
         _tool_hint = QLabel("本地模型（Ollama 等）不支持工具调用，会自动退化为纯聊天。")
         _tool_hint.setWordWrap(True)
         root.addWidget(_tool_hint)
+        # v2.4：隐私开关 ai_rag_enabled 此前**有配置键、没有界面入口**——README 与
+        # v2.3.0 发布说明都写着"AI 设置里可关"，但本对话框既不展示也不提交该键，
+        # 用户实际关不掉它（保存一次还会把旧值原样留在配置里）。这里补齐控件并纳入 _save。
+        self._rag = QCheckBox("把记账摘要与长期记忆随对话发给 AI（取消勾选 = 完全不注入）")
+        self._rag.setChecked(bool(cfg.get("ai_rag_enabled", True)))
+        root.addWidget(self._rag)
+        _rag_hint = QLabel("关掉后只发对话本身：今日消费、近 7 天、预算占比、余额、城市，"
+                           "以及称呼/喜好/近况都不会进请求。")
+        _rag_hint.setWordWrap(True)
+        root.addWidget(_rag_hint)
         # v2.3.0（1.1/兼容 M2）：长期记忆的查看/清除入口——此前"清理日志"的提示让用户来这里，
         # 但这里根本没有这个控件（长期记忆无法在应用内删除）
         _lt_row = QHBoxLayout()
@@ -2870,6 +2894,7 @@ class AISettingsDialog(QDialog):
             "ai_max_tokens": self._tokens.value(),
             "ai_tools_enabled": self._tools.isChecked(),
             "ai_tools_confirm": self._tools_confirm.isChecked(),
+            "ai_rag_enabled": self._rag.isChecked(),  # v2.4：隐私开关（此前只有键没有入口）
         }
         _call(self._pet, "apply_ai_settings", data)
         self.accept()
@@ -5591,23 +5616,10 @@ def pick_voice_assets(pet):
     return dlg.picked()
 
 
-def ask_amount(pet, title, label, cur):
-    """数值输入对话框（预算 / 余额预警共用）：置顶 + 显式焦点，规避前台锁。"""
-    dlg = QInputDialog(pet)
-    dlg.setWindowTitle(title)
-    dlg.setLabelText(label)
-    dlg.setInputMode(QInputDialog.InputMode.DoubleInput)
-    dlg.setDoubleRange(0.0, 99999.0)
-    dlg.setDoubleDecimals(2)
-    dlg.setDoubleValue(cur)
-    dlg.setWindowFlags(dlg.windowFlags() | Qt.WindowType.WindowStaysOnTopHint)
-    dlg.show()
-    dlg.raise_()
-    dlg.activateWindow()
-    dlg.setFocus()
-    if dlg.exec() == QDialog.DialogCode.Accepted:
-        return round(max(0.0, dlg.doubleValue()), 2)
-    return None
+# v2.4（技术债 B）：这里原本还有一份模块级 ask_amount()（"数值输入对话框，预算/余额预警
+# 共用"）——P1-7 重构后真正的实现是 PetWindow._ask_amount（由 BalanceService 注入调用，
+# pet_balance.py 里两处 self.pet._ask_amount(...)）。全仓零引用（含 tests/、_verify_v13.py、
+# _check_static.py 与所有文档），属于重构残留的重复实现，已删除。
 
 
 def set_frame_max(pet, save_cfg):

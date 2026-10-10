@@ -8,6 +8,8 @@
   D 数值转换       int(...)/float(...) 直接吃用户配置且不在 try 内 → ValueError 风险
   F 定时器清单     构造的 QTimer 是否都在退出时停止
   G 线程安全       threading.Thread 的目标函数里是否直接碰 Qt 控件
+  M 信号参数        Signal(...) 声明与 connect 槽的必需参数个数必须匹配（错了 emit 时 TypeError）
+  P 线程裸写盘      线程目标（含它直接调用的模块级函数）里的裸写盘/模块级容器写 → 提醒走 pet_io
   H 未使用导入
   I 死常量        模块级大写常量零引用
   L 散落 print     非 __main__ 块里的 print
@@ -58,6 +60,234 @@ def strip_comments(src):
         except (_tk.TokenError, IndentationError, SyntaxError):
             out.append(raw_ln.split("#", 1)[0])  # 容错回退
     return "\n".join(out)
+
+
+# ---------------- v2.4 新增：M 信号参数一致性 / P 线程裸写盘（纯函数，可单测） ----------------
+def _split_top_args(text):
+    """按**顶层**逗号切参数列表：Signal() → []，Signal(str, QPoint) → 2 个。"""
+    parts, depth, cur = [], 0, ""
+    for ch in text:
+        if ch in "([{":
+            depth += 1
+        elif ch in ")]}":
+            depth -= 1
+        if ch == "," and depth == 0:
+            parts.append(cur)
+            cur = ""
+        else:
+            cur += ch
+    if cur.strip():
+        parts.append(cur)
+    return [p for p in (x.strip() for x in parts) if p]
+
+
+def _callable_arity(node, kind):
+    """def/lambda 节点 → (必需位置参数个数, 最多可接受的位置参数个数 or None=不限)。"""
+    a = node.args
+    pos = list(getattr(a, "posonlyargs", [])) + list(a.args)
+    if kind == "def" and pos and pos[0].arg in ("self", "cls"):
+        pos = pos[1:]  # 绑定方法：self/cls 不算槽参数
+    required = len(pos) - len(a.defaults)
+    if a.vararg is not None:
+        return max(0, required), None
+    return max(0, required), len(pos)
+
+
+def _def_index(files):
+    """→ ({模块级函数名: [(文件, 节点)]}, {方法名: [(文件, 节点)]})。"""
+    funcs, methods = {}, {}
+    for name, raw in files:
+        try:
+            tree = ast.parse(raw)
+        except SyntaxError:
+            continue
+        for node in ast.walk(tree):
+            if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                continue
+            bucket = funcs if node.col_offset == 0 else methods
+            bucket.setdefault(node.name, []).append((name, node))
+    return funcs, methods
+
+
+def _slot_arity(slot, fname, funcs, methods):
+    """槽表达式 → (必需个数, 上限 or None, 描述)；判定不了返回 None（**一律跳过，不猜**）。
+
+    只认三种写法：内联 lambda、self.x / a.b.c 方法名、裸模块级函数名。
+    局部变量（_cb）、list.append 这类内建、guard_slot(...) 包装一律不解析——
+    宁可漏检也不误报（本检查的价值在"改了签名忘了改槽"，不在穷举）。
+    """
+    if isinstance(slot, ast.Lambda):
+        req, cap = _callable_arity(slot, "lambda")
+        return req, cap, "lambda"
+    target = None
+    if isinstance(slot, ast.Name):
+        target = slot.id
+        pool = [c for c in (funcs.get(target) or []) if c[0] == fname] or (funcs.get(target) or [])
+    elif isinstance(slot, ast.Attribute):
+        target = slot.attr
+        pool = [c for c in (methods.get(target) or []) if c[0] == fname] or (methods.get(target) or [])
+    else:
+        return None
+    pool = [c[1] for c in pool]
+    if not pool:
+        return None
+    # 同名多个定义（_save 之类）取**最宽松**的口径：任一个收得下就不算错 → 不误报
+    reqs, caps = [], []
+    for fn in pool:
+        r, c = _callable_arity(fn, "def")
+        reqs.append(r)
+        caps.append(c)
+    cap = None if any(c is None for c in caps) else max(caps)
+    return min(reqs), cap, target
+
+
+def check_signal_arity(files):
+    """Signal(...) 声明 ←→ connect 槽参数个数（M）。返回 (problems, notes)。
+
+    判据（PySide6 实测，见 tests/test_guardrails_v24.py）：
+      - emit 把信号实参**全部**传给槽；槽收得下多余的（Python 侧多余参数被丢弃）
+      - 槽要求的**必需**位置参数多于信号实参 → TypeError。PySide 在 emit 内部吞掉它、
+        只往 stderr 打一行 traceback，调用方完全看不到 → 静默坏（本仓 4 个工具信号就属这类）
+    同名信号优先用**同文件**声明（类各自定义的同名信号不互相串味），再退回全仓声明。
+    """
+    decl = {}          # 信号名 → {参数个数}
+    decl_local = {}    # (文件, 信号名) → {参数个数}
+    for name, raw in files:
+        src = strip_comments(raw)
+        for m in re.finditer(r"^\s*([A-Za-z_]\w*)\s*=\s*Signal\(([^)]*)\)", src, re.M):
+            _nargs = len(_split_top_args(m.group(2)))
+            decl.setdefault(m.group(1), set()).add(_nargs)
+            decl_local.setdefault((name, m.group(1)), set()).add(_nargs)
+    funcs, methods = _def_index(files)
+    problems, notes = [], []
+    for name, raw in files:
+        try:
+            tree = ast.parse(raw)
+        except SyntaxError:
+            continue
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Call) or not node.args:
+                continue
+            fn = node.func
+            # X.<信号名>.connect(槽)：只认**连到本仓 Signal 声明**的那些（Qt 自带信号无从判定）
+            if not (isinstance(fn, ast.Attribute) and fn.attr == "connect"
+                    and isinstance(fn.value, ast.Attribute)):
+                continue
+            sig = fn.value.attr
+            if sig not in decl:
+                continue
+            got = _slot_arity(node.args[0], name, funcs, methods)
+            if got is None:
+                continue
+            req, cap, desc = got
+            for n in sorted(decl_local.get((name, sig)) or decl[sig]):
+                if req > n:
+                    problems.append(
+                        "M 信号 %s(%d 个参数) 连到 %s（要 %d 个）→ emit 时 TypeError @ %s:%d"
+                        % (sig, n, desc, req, name, node.lineno))
+                elif cap is not None and cap < n:
+                    notes.append(
+                        "M? 信号 %s(%d 个参数) 连到 %s（只收 %d 个，多余参数被丢弃）@ %s:%d"
+                        % (sig, n, desc, cap, name, node.lineno))
+    return problems, notes
+
+
+# 会改磁盘的 os./shutil. 调用（线程里出现 = 与 UI 线程抢同一个文件）
+_DISK_WRITE_ATTRS = ("replace", "rename", "remove", "unlink", "rmtree", "move",
+                     "copyfile", "copy", "copytree", "makedirs")
+# 会改容器内容的 list/dict/set 方法
+_MUT_METHODS = ("append", "extend", "insert", "update", "pop", "clear", "setdefault",
+                "remove", "discard", "add", "sort", "reverse")
+
+
+def _module_containers(tree):
+    """模块级可变容器名（= {} / [] / set() 字面量赋值）——线程改它们就是共享状态。"""
+    out = set()
+    for node in tree.body:
+        if isinstance(node, ast.Assign) and isinstance(node.value, (ast.Dict, ast.List, ast.Set)):
+            for t in node.targets:
+                if isinstance(t, ast.Name):
+                    out.add(t.id)
+    return out
+
+
+def _write_hit(node, containers, globals_):
+    """节点是否是一次"裸写盘/改共享容器"；返回一句描述或 None。"""
+    if isinstance(node, ast.Call):
+        f = node.func
+        if isinstance(f, ast.Name) and f.id == "open":
+            mode = None
+            if len(node.args) >= 2 and isinstance(node.args[1], ast.Constant):
+                mode = node.args[1].value
+            for kw in node.keywords:
+                if kw.arg == "mode" and isinstance(kw.value, ast.Constant):
+                    mode = kw.value.value
+            if isinstance(mode, str) and any(ch in mode for ch in "wax+"):
+                return "open(mode=%r)" % mode
+        if isinstance(f, ast.Attribute) and isinstance(f.value, ast.Name) \
+                and f.value.id in ("os", "shutil") and f.attr in _DISK_WRITE_ATTRS:
+            return "%s.%s" % (f.value.id, f.attr)
+        if isinstance(f, ast.Attribute) and f.attr in _MUT_METHODS \
+                and isinstance(f.value, ast.Name) and f.value.id in containers:
+            return "%s.%s()" % (f.value.id, f.attr)
+    if isinstance(node, (ast.Assign, ast.AugAssign, ast.AnnAssign)):
+        for t in ast.walk(node):
+            if isinstance(t, ast.Subscript) and isinstance(t.value, ast.Name) \
+                    and t.value.id in containers:
+                return "%s[...] = ..." % t.value.id
+            if globals_ and isinstance(t, ast.Name) and t.id in globals_:
+                return "global %s = ..." % t.id
+    if isinstance(node, ast.Delete):
+        for t in ast.walk(node):
+            if isinstance(t, ast.Subscript) and isinstance(t.value, ast.Name) \
+                    and t.value.id in containers:
+                return "del %s[...]" % t.value.id
+    return None
+
+
+def check_thread_writes(files):
+    """线程目标（含它**直接调用**的模块级函数）里的裸写盘 / 模块级容器写（P）→ 待确认。
+
+    低误报口径（有意为之）：
+      - 只认 open(..., "w/a/x/+") 与 os./shutil. 的写、改模块级容器；open(p) 只读不报
+      - 只内联**同文件**的模块级函数（跨模块走 module.fn() 的调用不追，追不准）
+      - 输出是"待确认"而非"问题"：线程里写盘不必然错，但 v2.3.1 起应统一走 pet_io
+        （线程唯一临时名 + 路径锁 + os.replace 重试），这里只负责把人叫醒
+    """
+    notes = []
+    for name, raw in files:
+        try:
+            tree = ast.parse(raw)
+        except SyntaxError:
+            continue
+        containers = _module_containers(tree)
+        funcs, methods = {}, {}
+        for node in ast.walk(tree):
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                (funcs if node.col_offset == 0 else methods).setdefault(node.name, node)
+        for m in re.finditer(r"threading\.Thread\(\s*target\s*=\s*([A-Za-z_][\w.]*)", raw):
+            tgt = m.group(1)
+            head = tgt.split(".")[-1]
+            fn = methods.get(head) or funcs.get(head)
+            if fn is None:
+                continue  # 目标不在本文件（跨模块）/ 不是函数：不猜
+            bodies = [fn]
+            for call in ast.walk(fn):  # 直接调用的同文件模块级函数（一层，不递归）
+                if isinstance(call, ast.Call) and isinstance(call.func, ast.Name) \
+                        and call.func.id in funcs:
+                    bodies.append(funcs[call.func.id])
+            hits = []
+            for body in bodies:
+                globs = {g for node in ast.walk(body) if isinstance(node, ast.Global)
+                         for g in node.names}
+                for node in ast.walk(body):
+                    hit = _write_hit(node, containers, globs)
+                    if hit:
+                        hits.append("%s:%d %s" % (name, getattr(node, "lineno", 0), hit))
+            if hits:
+                notes.append("P? 线程目标 %s 里直接写盘/改共享状态（建议走 pet_io 原子写）@ %s"
+                             % (tgt, "; ".join(sorted(set(hits))[:4])))
+    return [], notes
 
 
 def main():
@@ -249,6 +479,14 @@ def main():
                 in_main_block = True
             if not in_main_block and re.match(r"\s+print\(", ln):
                 problems.append("L 非 __main__ 块的 print @ %s:%d" % (name, i + 1))
+
+    # ---------- M 信号参数一致性 / P 线程目标裸写盘（v2.4） ----------
+    _sig_p, _sig_n = check_signal_arity(files)
+    problems.extend(_sig_p)
+    notes.extend(_sig_n)
+    _thr_p, _thr_n = check_thread_writes(files)
+    problems.extend(_thr_p)
+    notes.extend(_thr_n)
 
     print("=== 问题（必须修/确认）===")
     for p in sorted(set(problems)):

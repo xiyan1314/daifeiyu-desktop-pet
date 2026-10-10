@@ -131,6 +131,9 @@ class AlarmService:
                     self._log("alarm index dropped duplicate id: %s" % na["id"])
                     dirty = True
         if dirty:
+            # P0-C：愈合/清洗回写**之前**先留 .bak——原先只有 pet_io.heal_json 有备份，
+            # 这里自建"读 + 回写"路径没有，判错（或清洗逻辑本身有 bug）就无从恢复。
+            pet_io.backup_before_heal(self._index, self._log)
             self._save()   # 愈合回写（走 pet_io 的同一把路径锁，与在途写者串行）
 
     def _save(self):

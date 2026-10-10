@@ -255,19 +255,37 @@ def state_resource(role, form_idx, state):
     return (forms[form_idx].get("states") or {}).get(state)
 
 # ---------------- 通用 IO 助手（v2.3.1：统一走 pet_io；原子替换，降级不抛） ----------------
-def _read_json(path, factory=dict, heal=True):
-    """读 JSON；文件缺失 / 损坏 / 结构非法时返回 factory() 默认值，绝不抛出。
+# 哨兵：pet_io.read_json_or 只在"走到 factory()"时返回它（真数据永远是 json.load 造的新对象）
+# → 用它把"文件不存在（首次运行）"与"文件在磁盘上、这次没读到"分开。
+_PROBE = object()
+
+
+def _read_json_ex(path, factory=dict, heal=True):
+    """读 JSON → (data, corrupted, unreadable)；绝不抛出。
 
     P0-2：损坏（存在但解析不了 / 顶层不是对象）时**回写 factory() 结构**做愈合，
     坏文件不再每次启动重报（error.log 实测 pet_resources 读取失败 ×2）。
     heal=False 给"自己有更强恢复路径"的调用方：RoleLibrary._load 要先把原文件
     备份成 roles.json.bak 再重建，不能让愈合先把它覆盖掉（备份要留原始坏内容）。
+
+    unreadable=True（仅 heal=False 时可能为真）：文件在磁盘上但这次读不到
+    （权限/共享占用/非 UTF-8 编码）——**不能证明损坏**，调用方必须"不重建、不覆盖"。
     """
-    if not heal:
-        data, _corrupted = pet_io.read_json_or(path, factory, log=pet_log.log_error)
-        return data
-    data, _corrupted = pet_io.heal_json(path, factory, log=pet_log.log_error)
-    return data
+    if heal:
+        data, corrupted = pet_io.heal_json(path, factory, log=pet_log.log_error)
+        return data, corrupted, False
+    data, corrupted = pet_io.read_json_or(path, lambda: _PROBE, log=pet_log.log_error)
+    if data is _PROBE:
+        # 走到 factory() 的三种情况：文件不存在 / 读失败 / 解码失败（corrupted=False），
+        # 以及**真损坏**（corrupted=True，此时 factory() 返回的正是哨兵本身）。
+        # 只有"没坏 + 文件确实在盘上"才是"这次读不到"，真损坏要留给下面的重建分支。
+        return factory(), corrupted, (not corrupted) and os.path.exists(str(path))
+    return data, corrupted, False
+
+
+def _read_json(path, factory=dict, heal=True):
+    """读 JSON；文件缺失 / 损坏 / 结构非法时返回 factory() 默认值，绝不抛出。"""
+    return _read_json_ex(path, factory, heal=heal)[0]
 
 
 def _write_json(path, data):
@@ -501,10 +519,15 @@ class RoleLibrary:
         兼容审查 L1 修复：**只有 roles 确实是 list 时**才做"修复 active"的写回；
         若 roles 是坏结构（dict/字符串等），先备份成 .bak 再重建空索引——
         避免把用户可恢复的元数据直接覆盖成空表（PNG 还在 roles/，索引没了就找不回）。
+
+        P1-B 修复：**只有真解析失败才算"结构坏"**。此前把"读不到"（权限/共享占用）
+        与"解析失败"混为一谈——一次瞬时 PermissionError 就把完好索引覆盖成
+        {"roles": [], "active": ""}，所有角色从界面上消失（.bak 虽在但不会自动回滚）。
+        现在读不到时：按原样继续用内存空库 + 记一行日志，**不重建、不覆盖任何文件**。
         """
-        # heal=False：下面这条分支自己会"先备份原文件再重建"（见 529-535），
+        # heal=False：下面这条分支自己会"先备份原文件再重建"（见下），
         # 交给它处理才不会让愈合把原始坏内容覆盖掉（备份要留证）
-        data = _read_json(self._index, heal=False)
+        data, _corrupted, unreadable = _read_json_ex(self._index, dict, heal=False)
         raw_roles = data.get("roles")
         roles_ok = isinstance(raw_roles, list)
         roles = raw_roles if roles_ok else []
@@ -517,7 +540,10 @@ class RoleLibrary:
         if active and not any(r["id"] == active for r in clean):
             active = ""
         self._data = {"roles": clean, "active": active}
-        if not roles_ok and os.path.isfile(self._index):
+        if unreadable:
+            # 读不到 ≠ 结构坏：内存空库继续用，磁盘一个字节都不动（下次启动再读）
+            pet_log.log_error("roles.json 读取失败（按空索引继续，不重建、不覆盖原文件）")
+        elif not roles_ok and os.path.isfile(self._index):
             try:
                 shutil.copyfile(self._index, self._index + ".bak")  # 坏结构：留一份原样备份
                 pet_log.log_error("roles.json 结构异常，已备份为 roles.json.bak 后重建索引")

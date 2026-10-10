@@ -91,8 +91,15 @@ class AIService:
         if book is not None:
             book.reset_balance_baseline()  # 只清余额基准，手动记账保留
         pet._usage = book.today_usage() if book is not None else 0.0
-        self._remove_files((usage_path, os.path.join(data_dir, "error.log"),
-                            config_path + ".tmp", usage_path + ".tmp"))  # P1-6：清 Key 连带清对话记忆
+        self._remove_files((usage_path, os.path.join(data_dir, "error.log")))  # P1-6：清 Key 连带清对话记忆
+        # L4：临时名现在带线程号（"<p>.<tid>.tmp"），只删固定名扫不到真正会残留的文件。
+        # clean_tmp_files 对每个目标取同一把路径锁 → 不会删掉在途写者正在用的 tmp。
+        try:
+            import pet_io as _io
+            _io.clean_tmp_files((config_path, usage_path, memory_path), self._log)
+        except Exception as _e:
+            if self._log is not None:
+                self._log("clear key tmp sweep: %r" % (_e,))
         # v2.3.0（找茬 S1）：这里以前把 memory.json 整个删掉。1.1 之后该文件还存着长期记忆
         # （称呼/别名/喜好/不喜欢/近况），整删 = 清一次 Key 就把"它记得你"一起抹掉。
         # 现在只清 history，long_term 保留。

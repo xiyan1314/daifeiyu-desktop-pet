@@ -10,20 +10,30 @@
 
 全部纯逻辑（Qt-free），可离线跑。
 """
+import ast
 import json
 import os
+import re
 import threading
 import time
 
 import pet_alarm
 import pet_behaviors
+import pet_book
 import pet_chat
 import pet_io
+import pet_lines
 import pet_resources
+import pet_voice
+
+
+# 模块导入时抓一份真 open：_deny_open 会替换 builtins.open 来模拟"应用读不到"，
+# 但**测试自己检查磁盘**不该被这个注入挡住（否则断言写不出来）。
+_REAL_OPEN = open
 
 
 def _read(path):
-    with open(str(path), "r", encoding="utf-8") as f:
+    with _REAL_OPEN(str(path), "r", encoding="utf-8") as f:
         return json.load(f)
 
 
@@ -34,7 +44,12 @@ def _tmp_leftovers(d):
 # ---------------- 1. pet_io：并发与原子性 ----------------
 
 def test_concurrent_writes_keep_file_valid(tmp_path):
-    """根因 A：多线程 × 多次写同一路径，读回恒为合法 JSON（固定 .tmp 无锁会半截上盘）。"""
+    """根因 A：多线程 × 多次写同一路径，读回恒为合法 JSON（固定 .tmp 无锁会半截上盘）。
+
+    旧实现能否检出：能——8 线程共用一个 "<path>.tmp" 时，一方 json.dump 到一半被另一方
+    截断，随后的 os.replace 就会把半截 JSON 提交上盘（本用例读回即 JSONDecodeError）。
+    写者**断言了 atomic_write_json 的返回值**，写失败不会被吞掉。
+    """
     p = str(tmp_path / "ledger.json")
     errors = []
 
@@ -58,46 +73,68 @@ def test_concurrent_writes_keep_file_valid(tmp_path):
     assert _tmp_leftovers(tmp_path) == []          # 没有残留半截 tmp
 
 
-def test_concurrent_readers_never_see_partial_json(tmp_path):
-    """写者不停替换文件时，读者永远只能读到合法 JSON（os.replace 原子提交）。
+def test_publish_holds_path_lock_until_replace_commits(tmp_path, monkeypatch):
+    """根因 A（确定性版；替换掉原来那条"结构上不可能失败"的读者用例，M2）。
 
-    注：Windows 上读者恰好撞上 rename 会拿到**瞬时** PermissionError（共享冲突）——
-    那是"这次读没读到"，不是"读到半截"；读侧重试即可（生产读侧 read_json_or 按
-    OSError 降级且不愈合，不会用空结构覆盖好文件）。真问题是 JSONDecodeError。
+    真正要钉住的不变量：**"写 tmp → os.replace"整段都在同一把路径锁内**。
+    它是另外两条语义的地基——heal_json 的"锁内复查"、pet_chat 的"锁内比代次"都靠它。
+    （原用例只能证明 os.replace 是原子的，而旧实现同样用 os.replace，所以永远绿。）
+
+    做法：让 os.replace 停在提交点（此时写者还持着锁），然后
+      ① 另一个线程去拿同一把路径锁读文件 → 必须阻塞；
+      ② 不持锁的直接读 → 只能看到旧版本（原子提交），绝不是半截。
+    旧实现（固定 "<path>.tmp"、提交不持路径锁）下 ① 会立刻返回 → 本用例失败。
     """
     p = str(tmp_path / "memory.json")
-    pet_io.atomic_write_json(p, {"history": []})
-    stop = threading.Event()
-    bad = []
+    pet_io.atomic_write_json(p, {"v": 0})
+    real_replace = pet_io.os.replace
+    inside = threading.Event()
+    release = threading.Event()
 
-    def reader():
-        while not stop.is_set():
-            try:
-                _read(p)
-            except OSError:
-                time.sleep(0.001)      # 瞬时共享冲突：重试
-            except Exception as e:     # JSONDecodeError / UnicodeDecodeError = 读到半截
-                bad.append(repr(e))
-                return
+    def slow_replace(src, dst):
+        inside.set()
+        assert release.wait(10), "测试没有放行提交"
+        return real_replace(src, dst)
+
+    monkeypatch.setattr(pet_io.os, "replace", slow_replace)
+    done = []
 
     def writer():
-        for i in range(60):
-            pet_io.atomic_write_json(p, {"history": [["user", "m%d" % i]], "pad": "y" * 500})
+        # 断言返回值（旧版此处丢弃返回值 → 写失败也是绿的）
+        done.append(pet_io.atomic_write_json(p, {"v": 1, "pad": "x" * 4000}))
 
-    readers = [threading.Thread(target=reader) for _ in range(3)]
-    w = threading.Thread(target=writer)
-    for t in readers:
-        t.start()
-    w.start()
-    w.join(30)
-    stop.set()
-    for t in readers:
-        t.join(5)
-    assert not bad, bad
+    t = threading.Thread(target=writer)
+    t.start()
+    assert inside.wait(10), "写者没有走到提交点"
+
+    got = []
+
+    def locked_reader():
+        with pet_io.path_lock(p):          # 与写者同一把路径锁
+            got.append(pet_io.read_json_or(p, dict, log=lambda m: None))
+
+    r = threading.Thread(target=locked_reader)
+    r.start()
+    r.join(0.3)
+    assert r.is_alive(), "提交不在路径锁内：读者没等锁就读到了中间态"
+    assert got == []
+    assert _read(p) == {"v": 0}            # 不持锁的直接读：只能看到旧版本
+
+    release.set()
+    t.join(10)
+    r.join(10)
+    assert done == [None], done
+    assert got == [({"v": 1, "pad": "x" * 4000}, False)]
+    assert _read(p)["v"] == 1
+    assert _tmp_leftovers(tmp_path) == []  # 提交成功，不留 tmp
 
 
 def test_tmp_name_uses_thread_id_and_is_cleaned_on_failure(tmp_path, monkeypatch):
-    """临时名必须是 "<path>.<线程号>.tmp"，写失败时自己的 tmp 必须被清掉。"""
+    """临时名必须是 "<path>.<进程号>.<线程号>.tmp"，写失败时自己的 tmp 必须被清掉。
+
+    v2.3.1（一致性收口）：加进程号——同机多实例/调试双开时两个进程的线程号可能相同，
+    只带线程号会抢同一个 tmp 互相截断（P3-5）。
+    """
     p = str(tmp_path / "x.json")
     seen = []
     real_replace = os.replace
@@ -108,7 +145,7 @@ def test_tmp_name_uses_thread_id_and_is_cleaned_on_failure(tmp_path, monkeypatch
 
     monkeypatch.setattr(pet_io.os, "replace", spy)
     assert pet_io.atomic_write_json(p, {"a": 1}) is None
-    assert seen == ["x.json.%d.tmp" % threading.get_ident()]
+    assert seen == ["x.json.%d.%d.tmp" % (os.getpid(), threading.get_ident())]
 
     def boom(src, dst):
         raise PermissionError(32, "The process cannot access the file")
@@ -228,10 +265,28 @@ def test_memory_corrupt_heals_file_once(tmp_path):
     assert logs2 == []                         # 不再每次启动重报（旧日志里刷了 140 次）
 
 
-def test_memory_history_and_long_term_survive_concurrent_writes(tmp_path):
-    """P1-1：读-改-写在同一把锁内完成——两个写者不再用旧快照互相覆盖。"""
+def test_memory_history_and_long_term_survive_concurrent_writes(tmp_path, monkeypatch):
+    """P1-1：读-改-写在同一把锁内完成——两个写者不再用旧快照互相覆盖。
+
+    旧实现能否检出：能——旧 _write_memory_file 是"锁外读 → 改 → 写"，两个写者各自
+    拿着自己读到的旧 dict 落盘，最后一次写会**整体丢掉**另一边的 history 或 long_term
+    （本用例末尾两条断言分别盯这两个字段，不是恒真）。
+
+    M2：两个写者的**落盘返回值**这里被逐个记账（write_memory 自己吞返回值，
+    旧口径下"写失败"照样是绿的）——任何一次原子写返回错误串，本用例直接失败。
+    """
     p = str(tmp_path / "memory.json")
     pet_chat.write_memory(p, [("user", "hi")], 10)
+
+    real_write = pet_io.atomic_write_json
+    errs = []
+
+    def spy(*a, **kw):
+        err = real_write(*a, **kw)
+        errs.append(err)
+        return err
+
+    monkeypatch.setattr(pet_io, "atomic_write_json", spy)
 
     def hist_writer():
         for i in range(40):
@@ -247,6 +302,8 @@ def test_memory_history_and_long_term_survive_concurrent_writes(tmp_path):
     t2.start()
     t1.join(30)
     t2.join(30)
+    assert len(errs) == 80, len(errs)          # 两个写者各 40 次全部真的走了落盘路径
+    assert all(e is None for e in errs), [e for e in errs if e]
     data = _read(p)                            # 恒为合法 JSON
     assert data["long_term"]["user_name"].startswith("绳匠")   # 长期记忆没被历史写覆盖
     assert data["history"] and data["history"][-1][0] == "user"  # 历史没被长期记忆写清空
@@ -383,3 +440,578 @@ def test_io_bom_and_gbk_are_not_treated_as_corrupt(tmp_path):
     pet_io.heal_json(str(bad), lambda: {"ok": True}, log=lambda m: None)
     assert _json.loads(bad.read_text(encoding="utf-8")) == {"ok": True}, "真损坏没有愈合"
     assert (tmp_path / "bad.json.bak").exists(), "愈合前没有留备份（判错就无法恢复）"
+
+# ---------------- 4. 二轮三路复核：愈合/回写不得销毁用户数据 ----------------
+
+def _read_bytes(p):
+    with _REAL_OPEN(str(p), "rb") as f:
+        return f.read()
+
+
+def _bom_json(obj):
+    """UTF-8 with BOM（记事本「另存为 UTF-8」的默认产物）。"""
+    return "\ufeff".encode("utf-8") + json.dumps(obj, ensure_ascii=False).encode("utf-8")
+
+
+def _deny_open(monkeypatch, suffix, times=1):
+    """让 builtins.open 对某个后缀的文件打不开 times 次（None=一直打不开），其余照常。
+
+    模拟杀软/索引器/残留句柄造成的**瞬时**（times=1）或**持续**（times=None）共享冲突。
+    """
+    import builtins
+    real_open = builtins.open
+    state = {"n": 0}
+
+    def fake_open(file, *a, **kw):
+        if str(file).endswith(suffix):
+            state["n"] += 1
+            if times is None or state["n"] <= times:
+                raise PermissionError(13, "Permission denied")
+        return real_open(file, *a, **kw)
+
+    monkeypatch.setattr(builtins, "open", fake_open)
+    return state
+
+
+# ---- P0-A：pet_lines 的读路径 ----------------
+
+def test_lines_bom_file_is_not_rewritten(tmp_path):
+    """P0-A：带 UTF-8 BOM 的**合法** lines.json 不得被"愈合"改写成内置种子库。
+
+    HEAD 实测：103 字节 / 1 条自定义台词 → 被改写成 20269 字节、自定义台词全丢、零日志。
+    """
+    p = tmp_path / "lines.json"
+    raw = _bom_json({"version": 1,
+                     "lines": [{"id": "u_keep", "text": "自定义台词不能被清掉",
+                                "category": "happy", "role_slot": None, "voice_slot": None,
+                                "order": 1, "builtin": False, "food": ""}],
+                     "dialogues": [], "deleted_builtins": []})
+    p.write_bytes(raw)
+    svc = pet_lines.LineService(str(tmp_path), log=lambda m: None)
+    assert p.read_bytes() == raw, "带 BOM 的完好文件被改写了（用户自定义台词被清空）"
+    assert svc.get("u_keep") is not None
+    assert svc.text_of("u_keep") == "自定义台词不能被清掉"
+    assert svc.count() > 1, "种子没有在内存里补齐"
+    assert not (tmp_path / "lines.json.bak").exists(), "没坏的文件不该产生 .bak"
+
+
+def test_lines_gbk_file_is_not_rewritten(tmp_path):
+    """P0-A：GBK 另存的 lines.json 内容完好，绝不能被"愈合"清空（旧版一个字节都不动）。"""
+    p = tmp_path / "lines.json"
+    raw = json.dumps({"lines": [{"id": "u_gbk", "text": "中文台词", "category": "idle"}]},
+                     ensure_ascii=False).encode("gbk")
+    p.write_bytes(raw)
+    svc = pet_lines.LineService(str(tmp_path), log=lambda m: None)
+    assert p.read_bytes() == raw, "GBK 文件被愈合写盘覆盖了"
+    assert svc.count() > 0, "读不出来也要能用（内存走种子），只是不许动磁盘"
+
+
+def test_lines_transient_read_failure_does_not_overwrite(tmp_path, monkeypatch):
+    """P0-A：读取失败（PermissionError）不能证明文件坏了——绝不回写种子覆盖它。"""
+    p = tmp_path / "lines.json"
+    raw = json.dumps({"lines": [{"id": "u_keep", "text": "我的台词", "category": "happy"}]},
+                     ensure_ascii=False).encode("utf-8")
+    p.write_bytes(raw)
+    _deny_open(monkeypatch, "lines.json")
+    svc = pet_lines.LineService(str(tmp_path), log=lambda m: None)
+    assert p.read_bytes() == raw, "一次瞬时读失败就把台词库覆盖成种子了"
+    assert not (tmp_path / "lines.json.bak").exists()
+    assert svc.count() > 0
+    svc2 = pet_lines.LineService(str(tmp_path), log=lambda m: None)   # 下次启动读得动
+    assert svc2.text_of("u_keep") == "我的台词"
+
+
+def test_lines_corrupt_file_heals_with_bak(tmp_path):
+    """P0-A/C：真损坏才愈合，且愈合**之前**留 .bak（判错可恢复）。"""
+    p = tmp_path / "lines.json"
+    p.write_text("{ 这不是合法 json", encoding="utf-8")
+    logs = []
+    svc = pet_lines.LineService(str(tmp_path), log=logs.append)
+    assert svc.count() > 0
+    assert (tmp_path / "lines.json.bak").read_text(encoding="utf-8") == "{ 这不是合法 json"
+    assert json.loads(p.read_text(encoding="utf-8"))["lines"], "坏文件没有被回写成合法结构"
+    assert logs, "愈合过程必须留痕（此前这里写的是本模块根本不存在的 _log_error）"
+
+
+def test_lines_norm_keeps_unknown_fields(tmp_path):
+    """P0-A（M1）：归一化"先复制再覆盖已知键"——未知字段不得在读取回写时被删掉。"""
+    p = tmp_path / "lines.json"
+    p.write_text(json.dumps({"version": 1, "lines": [
+        {"id": "u1", "text": "带自定义字段", "category": "happy", "order": 1,
+         "memo": "用户手加的备注 / 未来版本的新字段"}],
+        "dialogues": [], "deleted_builtins": []}, ensure_ascii=False), encoding="utf-8")
+    svc = pet_lines.LineService(str(tmp_path), log=lambda m: None)
+    assert svc.get("u1").get("memo") == "用户手加的备注 / 未来版本的新字段"
+    svc.add("新台词", "idle")          # 触发一次真实落盘
+    on_disk = {x["id"]: x for x in _read(p)["lines"]}
+    assert on_disk["u1"].get("memo") == "用户手加的备注 / 未来版本的新字段", \
+        "未知字段在归一化回写时被删掉了（重建已知键口径）"
+
+
+# ---- P0-B：账本读失败不得清空 ----
+
+def test_book_transient_read_failure_keeps_ledger(tmp_path, monkeypatch):
+    """P0-B：一次瞬时读失败不得清空完好账本（旧实现：Book.__init__ 末尾无条件 _save_all）。
+
+    实测（HEAD）：ledger.json 有 1 条记录 → 注入一次文本 open() PermissionError →
+    磁盘 records=0、无备份。修完：读失败只读启动 + 标脏，等下一次真正的写操作再落盘。
+    """
+    p = tmp_path / "ledger.json"
+    pet_book.Book(str(tmp_path)).add_manual(12.5, "午饭")
+    raw = _read_bytes(p)
+    assert len(_read(p)["records"]) == 1
+    with monkeypatch.context() as m:
+        _deny_open(m, "ledger.json")
+        b = pet_book.Book(str(tmp_path))
+        assert _read_bytes(p) == raw, "读失败时 Book.__init__ 把账本清空了（实测 records=0）"
+        assert b.today_usage() == 0.0, "读不到就是读不到：内存按空账本继续"
+        assert not (tmp_path / "ledger.json.bak").exists(), "没有回写就不该有 .bak"
+    # 磁盘内容没被动过：重新正常构造仍能看到那条记录
+    assert len(pet_book.Book(str(tmp_path)).all_records()) == 1
+    # 下一次**真实写操作**照常落盘（不是靠启动时无条件回写）
+    b.add_manual(1.0, "读失败之后的真实记账")
+    assert _read(p)["records"], "真实写操作没有落盘"
+
+
+# ---- P0-C：另外三处自建愈合路径也要留 .bak ----
+
+def test_alarm_heal_leaves_bak(tmp_path):
+    """P0-C：pet_alarm 自建「读 + 回写」愈合此前没有备份（只有 pet_io.heal_json 有）。"""
+    idx = tmp_path / "alarms.json"
+    idx.write_text("{{{ not json", encoding="utf-8")
+    svc = pet_alarm.AlarmService(str(tmp_path), log=lambda m: None)
+    assert svc.list() == []
+    assert (tmp_path / "alarms.json.bak").read_text(encoding="utf-8") == "{{{ not json"
+    assert _read(idx) == {"alarms": []}
+
+
+def test_behaviors_heal_leaves_bak(tmp_path):
+    """P0-C：pet_behaviors 同上（清洗/丢弃坏条目也算愈合，回写前必须留证）。"""
+    idx = tmp_path / "behaviors.json"
+    idx.write_text("{broken", encoding="utf-8")
+    svc = pet_behaviors.BehaviorService(str(tmp_path), log=lambda m: None)
+    assert svc.list() == []
+    assert (tmp_path / "behaviors.json.bak").read_text(encoding="utf-8") == "{broken"
+    assert _read(idx) == {"behaviors": []}
+
+
+# ---- P1-B：RoleLibrary 读失败不得重建 ----
+
+def test_role_library_read_failure_does_not_rebuild(tmp_path, monkeypatch):
+    """P1-B：读不到 ≠ 结构坏。一次瞬时 PermissionError 不得把角色索引重建为空表。"""
+    idx = tmp_path / "roles.json"
+    raw = json.dumps({"roles": [{"id": "r1", "name": "小鱼", "file": "r1.png"}], "active": "r1"},
+                     ensure_ascii=False).encode("utf-8")
+    idx.write_bytes(raw)
+    logs = []
+    with monkeypatch.context() as m:
+        _deny_open(m, "roles.json")
+        m.setattr(pet_resources.pet_log, "log_error", logs.append)
+        lib = pet_resources.RoleLibrary(str(tmp_path))
+        assert idx.read_bytes() == raw, "读失败就把索引重建成了空表（角色全部消失）"
+        assert not (tmp_path / "roles.json.bak").exists()
+        assert lib.list_roles() == []          # 内存空库照常可用（不崩）
+    assert any("读取失败" in x for x in logs), logs
+    # 下次启动读得动 → 角色还在（说明数据从没被覆盖）
+    lib2 = pet_resources.RoleLibrary(str(tmp_path))
+    assert [r["id"] for r in lib2.list_roles()] == ["r1"]
+
+
+def test_role_library_real_corruption_still_rebuilds_with_bak(tmp_path):
+    """P1-B 的反面：**真解析失败**仍然要「备份 + 重建」（别把修复一起改没了）。"""
+    idx = tmp_path / "roles.json"
+    idx.write_text("{broken", encoding="utf-8")
+    lib = pet_resources.RoleLibrary(str(tmp_path))
+    assert lib.list_roles() == []
+    assert (tmp_path / "roles.json.bak").read_text(encoding="utf-8") == "{broken"
+    assert _read(idx) == {"roles": [], "active": ""}
+
+
+# ---- P1-A：expect_epoch 守卫 ----
+
+def test_write_memory_expect_epoch_guard(tmp_path):
+    """P1-A：epoch 不匹配时必须在**写盘函数内部**放弃这次写（并记一行日志）。"""
+    p = str(tmp_path / "memory.json")
+    box = {"e": 0}
+    logs = []
+    pet_chat.write_memory(p, [("user", "旧")], 10)
+    pet_chat.write_memory(p, [("user", "旧"), ("assistant", "回")], 10,
+                          log=logs.append, expect_epoch=0, epoch_of=lambda: box["e"])
+    assert [c for _r, c in pet_chat.read_memory(p, 10)] == ["旧", "回"]
+    box["e"] = 1                       # 用户清了日志 / 清了 Key → 代次变了
+    pet_chat.write_memory(p, [("user", "不该写回来")], 10,
+                          log=logs.append, expect_epoch=0, epoch_of=lambda: box["e"])
+    assert [c for _r, c in pet_chat.read_memory(p, 10)] == ["旧", "回"], "代次已变还是写回去了"
+    assert any("代次" in x for x in logs), logs
+    # 代次一致时照常写；长期记忆走同一条守卫
+    pet_chat.write_memory(p, [("user", "新")], 10, expect_epoch=1, epoch_of=lambda: box["e"])
+    assert [c for _r, c in pet_chat.read_memory(p, 10)] == ["新"]
+    pet_chat.write_long_term(p, {"user_name": "不该写"}, log=logs.append,
+                             expect_epoch=0, epoch_of=lambda: box["e"])
+    assert pet_chat.read_long_term(p)["user_name"] == ""
+
+
+class _Resp:
+    def __init__(self, text):
+        self.status_code = 200
+        self._text = text
+        self.text = text
+
+    def json(self):
+        return {"choices": [{"message": {"role": "assistant", "content": self._text}}]}
+
+
+class _Sig:
+    def __init__(self):
+        self.slots = []
+
+    def connect(self, fn):
+        self.slots.append(fn)
+
+    def emit(self, *a):
+        for fn in list(self.slots):
+            fn(*a)
+
+
+class _FakeSignals:
+    def __init__(self):
+        for name in ("reply", "reply_ok", "ai_emote", "ai_done", "tool_confirm_required",
+                     "tool_call", "tool_ui", "tool_result"):
+            setattr(self, name, _Sig())
+
+
+class _FakePet:
+    """ChatService 只用到这几个守卫状态（语义与 PetWindow 一致）。"""
+
+    def __init__(self):
+        self._ai_inflight = False
+        self._chat_history = []
+        self._history_lock = threading.Lock()
+        self._mem_epoch = 0
+
+
+def _clear_logs_race(tmp_path, monkeypatch, legacy_saver=False):
+    """跑一次**真** ChatService._worker，在它落盘之前模拟「清理日志」。
+
+    返回 (落盘后的 history, 内存 history)。legacy_saver=True 注入只收 1 个参数的旧式
+    memory_saver（没有代次契约）——用于证明窗口真实存在、上面的用例不是恒真。
+    链路：ChatService._worker → 桌宠.save_chat_memory → pet_chat.write_memory（锁内查代次）。
+    """
+    import 桌宠 as main
+    mem = str(tmp_path / "memory.json")
+    monkeypatch.setattr(main, "MEMORY_PATH", mem)
+    monkeypatch.setattr(pet_chat.requests, "post", lambda *a, **kw: _Resp("我在的~"))
+    pet = _FakePet()
+    pet._chat_history = [("user", "早"), ("assistant", "早呀")]
+    pet_chat.write_memory(mem, pet._chat_history, 10)
+
+    started = threading.Event()
+    go = threading.Event()
+
+    if legacy_saver:
+        def saver(hist):
+            started.set()
+            assert go.wait(10), "测试没有放行落盘"
+            return main.save_chat_memory(hist)
+    else:
+        def saver(hist, expect_epoch=None, epoch_of=None):
+            started.set()
+            assert go.wait(10), "测试没有放行落盘"
+            return main.save_chat_memory(hist, expect_epoch=expect_epoch, epoch_of=epoch_of)
+
+    chat = pet_chat.ChatService(
+        pet, _FakeSignals(),
+        lambda: {"api_key": "k", "ai_reply_len": 60, "ai_max_tokens": 60,
+                 "chat_memory_rounds": 3, "sound": False},
+        lambda c: "人设", lambda t: ("", "", t), lambda: [], saver,
+        lambda k: None, lambda m: None, 60)
+    t = threading.Thread(target=chat._worker, args=("你好", "k"))
+    t.start()
+    assert started.wait(10), "worker 没有走到落盘"
+    # 用户此刻点「清理日志」：顺序与修复后的 桌宠._clear_logs 一致（先 +1，再写盘）
+    with pet._history_lock:
+        pet._chat_history.clear()
+        pet._mem_epoch += 1
+    pet_chat.write_memory(mem, [], 10)
+    go.set()
+    t.join(10)
+    return pet_chat.read_memory(mem, 10), list(pet._chat_history)
+
+
+def test_clear_logs_worker_does_not_write_back(tmp_path, monkeypatch):
+    """P1-A 端到端：清日志之后，在途 worker 的旧快照不得把 4 条 history 写回来。
+
+    窗口放大：注入的 memory_saver 先等事件再落盘（实测 200ms 延迟就足够复现）。
+    """
+    hist, mem = _clear_logs_race(tmp_path, monkeypatch)
+    assert hist == [], "清日志之后在途 worker 又把历史写回来了：%r" % (hist,)
+    assert mem == []
+
+
+def test_clear_logs_legacy_saver_still_has_the_window(tmp_path, monkeypatch):
+    """对照：只收 1 个参数的旧式注入没有代次契约 → 这条窗口依然存在（4 条被写回）。
+
+    这条绿恰恰说明上面那条不是恒真的：窗口是真的，挡住它的是代次守卫。
+    生产注入（桌宠.save_chat_memory）已带契约；第三方替换 memory_saver 时请照抄。
+    """
+    hist, _mem = _clear_logs_race(tmp_path, monkeypatch, legacy_saver=True)
+    assert len(hist) == 4, "窗口没被复现（那 test_clear_logs_worker_does_not_write_back 就不能证明什么）"
+
+
+def test_book_corrupt_ledger_still_rebuilds(tmp_path):
+    """P0-B 的反面：**真损坏**仍然按空账本重建（别把愈合一起改没了）。"""
+    (tmp_path / "ledger.json").write_text("{ not json", encoding="utf-8")
+    b = pet_book.Book(str(tmp_path))
+    assert b.today_usage() == 0.0
+    assert _read(tmp_path / "ledger.json")["records"] == [], "启动时没有把坏账本回写成合法结构"
+
+
+# ---- P0-B 补：读失败之后的"第一次真实写"必须先重试读并合并 ----
+
+def test_book_write_after_read_failure_keeps_disk_records(tmp_path, monkeypatch):
+    """P0-B 补（1）：瞬时读失败 → 内存加一笔 → 触发写：磁盘原有记录必须还在。
+
+    旧实现：这次写直接用内存里的空账本+新账覆盖 → 磁盘只剩新那笔（原有记录被挤掉）。
+    """
+    p = tmp_path / "ledger.json"
+    pet_book.Book(str(tmp_path)).add_manual(12.5, "午饭")
+    with monkeypatch.context() as m:
+        _deny_open(m, "ledger.json")            # 只挡构造时的那一次读
+        b = pet_book.Book(str(tmp_path))
+        assert b.today_usage() == 0.0
+        b.add_manual(1.0, "读失败期间的新账")     # 写前会重试读一次并合并
+        assert b._read_failed is False, "恢复之后标记没有清除（会每次写都重读磁盘）"
+    notes = {r["note"] for r in _read(p)["records"]}
+    assert notes == {"午饭", "读失败期间的新账"}, notes
+    assert abs(pet_book.Book(str(tmp_path)).total_amount() - 13.5) < 1e-9
+
+
+def test_book_write_abandoned_when_read_keeps_failing(tmp_path, monkeypatch):
+    """P0-B 补（2）：重试仍然读不到 → 放弃本次落盘（两个文件一字未动 + 返回错误串）。"""
+    p = tmp_path / "ledger.json"
+    arc = tmp_path / "ledger_archive.json"
+    pet_book.Book(str(tmp_path)).add_manual(12.5, "午饭")
+    raw_led, raw_arc = _read_bytes(p), _read_bytes(arc)
+    with monkeypatch.context() as m:
+        _deny_open(m, "ledger.json", times=None)     # 持续读不到
+        b = pet_book.Book(str(tmp_path))
+        b.add_manual(1.0, "不该覆盖")                # 走完整公开路径
+        assert _read_bytes(p) == raw_led, "读不到还是把内存账本写上去了"
+        assert _read_bytes(arc) == raw_arc, "读不到还是把归档写上去了"
+        err = b._save_all()                          # 直接问错误串
+        assert isinstance(err, str) and err, err
+        assert b._read_failed is True, "放弃落盘后必须保持脏标记"
+    # 读恢复之后：延后的那笔 + 新的一笔一起落盘，磁盘原有记录仍在（去重后不重复）
+    b.add_manual(2.0, "恢复后的新账")
+    notes = {r["note"] for r in _read(p)["records"]}
+    assert notes == {"午饭", "不该覆盖", "恢复后的新账"}, notes
+
+
+def test_book_recovery_merges_without_duplicates(tmp_path, monkeypatch):
+    """P0-B 补（3）：恢复合并要去重——磁盘与内存里的同一条（ts/amount/note 相同）不写两条。"""
+    p = tmp_path / "ledger.json"
+    pet_book.Book(str(tmp_path)).add_manual(12.5, "午饭")
+    dupe = dict(_read(p)["records"][0])
+    with monkeypatch.context() as m:
+        _deny_open(m, "ledger.json")
+        b = pet_book.Book(str(tmp_path))
+        b._ledger["records"].append(dict(dupe))      # 内存里已经有与磁盘同一条
+        b.add_manual(1.0, "新账")
+        assert b._read_failed is False
+    recs = _read(p)["records"]
+    assert len(recs) == 2, recs
+    assert {r["note"] for r in recs} == {"午饭", "新账"}, recs
+
+
+def test_book_merge_records_dedupe_key_is_triple():
+    """去重键 = (ts, amount, note)：同一条只留一份；同额同备注但 ts 不同 = 两笔真账。"""
+    r1 = {"ts": 1.0, "date": "2026-01-01", "time": "00:00:00", "amount": 1.0,
+          "kind": "manual", "note": "x"}
+    r2 = dict(r1, ts=2.0)
+    assert pet_book._merge_records([r1], [r1, r2]) == [r1, r2]
+    assert pet_book._merge_records([], [r1]) == [r1]
+    assert pet_book._merge_records([r1], []) == [r1]
+
+
+# ---- P2-A：音频魔数 ----
+
+def test_audio_magics_accept_common_containers():
+    """P2-A：m4a(ftyp 在偏移 4)/webm(EBML)/aac-adif 等合法格式不得被静默拒播。"""
+    assert all(len(m) == 4 for m in pet_voice.AUDIO_MAGICS), \
+        "AUDIO_MAGICS 里还有 2 字节死项（对 4 字节 head 永远匹配不上）"
+    good_samples = (
+        b"RIFF....", b"ID3\x04\x00\x00", b"OggS\x00\x02\x00\x00",
+        b"fLaC\x00\x00\x00\x00", b"FORM....AIFF", b"ADIF....", b"#!AMR\n\x00",
+        b"MThd\x00\x00\x00\x06", b"MAC \x00\x00\x00\x00", b"wvpk\x00\x00\x00\x00",
+        b"\x1a\x45\xdf\xa3\x01\x00\x00\x00",        # webm/mkv（EBML）
+        b"\xff\xfb\x90\x00", b"\xff\xf1\x50\x00",    # MPEG / AAC 帧同步
+        b"\x00\x00\x00\x20ftypM4A ", b"\x00\x00\x00\x18ftypmp42",   # m4a / mp4
+    )
+    for good in good_samples:
+        assert pet_voice._looks_like_audio(good), good
+    for bad in (b"<html><body>404 not found</body>", b'{"error": "invalid api key"}',
+                b"Not Found\n", b"", b"abc", b"   \r\n"):
+        assert not pet_voice._looks_like_audio(bad), bad
+
+
+def test_decode_json_audio_http_branch_checks_magic(monkeypatch):
+    """M4：audio 以 http 开头那条分支此前漏了魔数校验（HTML 错误页会被当音频缓存）。"""
+    class _HttpResp:
+        def __init__(self, body):
+            self.status_code = 200
+            self.content = body
+
+    def _resp(payload):
+        class _R:
+            def json(self):
+                return payload
+        return _R()
+
+    monkeypatch.setattr(pet_voice.requests, "get",
+                        lambda url, timeout=None: _HttpResp(b"<html>404</html>"))
+    data, err = pet_voice._decode_json_audio(_resp({"audio": "http://x/a.wav"}), "F5-TTS")
+    assert data is None and "不是音频数据" in err, (data, err)
+
+    monkeypatch.setattr(pet_voice.requests, "get",
+                        lambda url, timeout=None: _HttpResp(b"\x00\x00\x00\x20ftypM4A \x00\x00"))
+    data2, err2 = pet_voice._decode_json_audio(_resp({"audio": "http://x/a.m4a"}), "F5-TTS")
+    assert err2 == "" and data2.startswith(b"\x00\x00\x00\x20ftyp"), (data2, err2)
+
+
+# ---- pet_io 细节：分锁 / factory 兜底 / tmp 清扫 ----
+
+def test_path_lock_merges_case_variants(tmp_path):
+    """L1：Windows/macOS 大小写不敏感——x.json 与 X.JSON 必须是同一把锁。"""
+    p = str(tmp_path / "X.json")
+    if os.name == "nt":
+        assert pet_io.path_lock(p) is pet_io.path_lock(p.upper())
+        assert pet_io.path_lock(p) is pet_io.path_lock(p.lower())
+    else:
+        assert pet_io.path_lock(p) is pet_io.path_lock(p)     # 同路径恒同锁
+
+
+def test_factory_exception_never_escapes(tmp_path):
+    """M3：本模块承诺「绝不抛」，factory 自己抛异常也不能穿透（退回空结构 + 记日志）。"""
+    def boom():
+        raise RuntimeError("factory 坏了")
+
+    p = str(tmp_path / "missing.json")
+    logs = []
+    assert pet_io.read_json_or(p, boom, log=logs.append) == ({}, False)   # 文件不存在
+    with open(p, "w", encoding="utf-8") as f:
+        f.write("{ broken")
+    assert pet_io.read_json_or(p, boom, log=logs.append) == ({}, True)    # 真损坏
+    assert pet_io.heal_json(p, boom, log=logs.append) == ({}, True)       # 愈合也不抛
+    assert _read(p) == {}                                                 # 退回空结构
+    assert logs, "默认值构造失败必须留痕"
+
+
+def test_clean_tmp_files_only_removes_whitelisted_names(tmp_path):
+    """L4：线程唯一 tmp（<p>.<tid>.tmp）与旧固定名都要能清；非白名单文件一律不碰。"""
+    target = tmp_path / "lines.json"
+    target.write_text("{}", encoding="utf-8")
+    (tmp_path / "lines.json.tmp").write_text("x", encoding="utf-8")          # 旧固定名
+    (tmp_path / "lines.json.12345.tmp").write_text("x", encoding="utf-8")    # 线程唯一名
+    keep = [tmp_path / "lines.json.abc.tmp", tmp_path / "lines.json.bak",
+            tmp_path / "other.json.123.tmp"]
+    for k in keep:
+        k.write_text("x", encoding="utf-8")
+    removed = pet_io.clean_tmp_files((str(target),), log=lambda m: None)
+    assert removed == 2, removed
+    assert not (tmp_path / "lines.json.tmp").exists()
+    assert not (tmp_path / "lines.json.12345.tmp").exists()
+    for k in keep:
+        assert k.exists(), "清扫动了白名单外的文件：%s" % k
+
+
+# ---- M5：closeEvent 在真退出/关机时必须放行 ----
+
+def test_close_event_accepts_during_real_quit():
+    """M5：注销/关机（或已在退出流程中）不能 ignore 关窗事件，否则 Windows 会认为
+    程序阻止关机。普通 Alt+F4 仍然只收进托盘。"""
+    import 桌宠 as main
+
+    class _Ev:
+        def __init__(self):
+            self.actions = []
+
+        def accept(self):
+            self.actions.append("accept")
+
+        def ignore(self):
+            self.actions.append("ignore")
+
+    class _Stub:
+        closeEvent = main.PetWindow.closeEvent
+        _system_is_quitting = main.PetWindow._system_is_quitting
+
+        def __init__(self):
+            self._closing = False
+            self.hidden = 0
+            self.quit_calls = 0
+
+        def hide(self):
+            self.hidden += 1
+
+        def show_bubble(self, text):
+            pass
+
+        def _quit(self):
+            self.quit_calls += 1
+
+    s = _Stub()
+    ev = _Ev()
+    s.closeEvent(ev)                      # 普通关窗 → 收进托盘
+    assert ev.actions == ["ignore"] and s.hidden == 1 and s.quit_calls == 0
+
+    s2 = _Stub()
+    s2._closing = True                    # 托盘「退出」已进入退出流程
+    ev2 = _Ev()
+    s2.closeEvent(ev2)
+    assert ev2.actions == ["accept"], ev2.actions
+    assert s2.quit_calls == 1 and s2.hidden == 0
+
+
+# ---- L6：固定名 .tmp 落盘点的静态回归 ----
+
+# 允许名单：只有原子写实现本体可以出现裸 ".tmp" 后缀（clean_tmp_files 要按后缀枚举）；
+# 其余文件里出现不带 %s/%d 格式化的 ".tmp" 字符串常量 = 固定名临时文件（回归）。
+_TMP_SCAN_ALLOW = {"pet_io.py"}
+_TMP_SCAN_SKIP = {"_check_static.py", "_check_release.py", "_verify_v13.py", "_verify_green.py"}
+
+
+def test_no_fixed_tmp_literals_in_source():
+    """L6：全仓（除本测试与被跳过的开发脚本）不得再出现**固定名** .tmp 落盘点。
+
+    判据（AST，注释天然不参与）：非 docstring 的字符串常量含 ".tmp" 时，
+    必须带 %s/%d 格式化（即 <path>.<线程号>.tmp 这类线程唯一名）。
+    旧写法 [路径变量] + ".tmp" 与 "lines.json.tmp" 都会被抓出来。
+    """
+    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    bad = []
+    ok = []
+    for name in sorted(os.listdir(root)):
+        if not name.endswith(".py") or name in _TMP_SCAN_SKIP or name in _TMP_SCAN_ALLOW:
+            continue
+        with open(os.path.join(root, name), encoding="utf-8") as f:
+            src = f.read()
+        tree = ast.parse(src)
+        docstrings = set()
+        for node in ast.walk(tree):
+            if (isinstance(node, ast.Expr) and isinstance(node.value, ast.Constant)
+                    and isinstance(node.value.value, str)):
+                docstrings.add(id(node.value))       # 裸字符串说明（docstring）：不是代码
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Constant) or not isinstance(node.value, str):
+                continue
+            if ".tmp" not in node.value or id(node) in docstrings:
+                continue
+            if re.search(r"%[sd]", node.value):
+                ok.append("%s:%d" % (name, node.lineno))
+                continue
+            bad.append("%s:%d %r" % (name, node.lineno, node.value))
+    assert ok, "扫描没找到任何线程唯一临时名（判据失效，这条绿不可信）"
+    assert not bad, "仍有固定名 .tmp 字面量：%s" % "; ".join(bad)
+
+
+

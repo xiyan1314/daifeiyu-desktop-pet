@@ -63,13 +63,41 @@ _DAY_MAX_RECORDS = 20000
 
 
 # ---------------- 通用 IO 助手（v2.3.1：统一走 pet_io；原子替换，降级不抛） ----------------
-def _read_json(path, factory=dict):
-    """读 JSON；文件缺失 / 损坏 / 结构非法时返回 factory() 默认值，绝不抛出。
+# 哨兵：pet_io.read_json_or 只在"走到 factory()"时返回它（真数据永远是 json.load 造的新对象，
+# 不可能与这个进程内对象相同）→ 用它把"文件不存在"与"文件在、这次没读到"分开。
+_PROBE = object()
 
-    这里不愈合：Book.__init__ 末尾的 _save_all() 本来就会把内存态重写回磁盘。
+
+def _read_json(path, factory=dict, heal=True):
+    """读 JSON → (data, corrupted, unreadable)，绝不抛出。
+
+    unreadable=True：文件**在磁盘上**但这次读不到（权限/共享占用/非 UTF-8 编码）——
+    与"文件不存在（首次运行）"严格区分：前者不能证明文件坏了，**绝不能回写覆盖**
+    （pet_io 的契约：读取失败 ≠ 损坏；P0-B 实测：一次瞬时 PermissionError 就让
+    Book.__init__ 末尾的 _save_all 把完好账本清成 records=0，连 .bak 都没有）。
+
+    v2.3.1（读侧愈合口径一致性收口）：**真损坏即愈合回写**（pet_io.heal_json：同一把路径锁
+    内复查 → 先留 "<path>.bak" → 回写 → 记日志），与 alarms/behaviors/lines/索引/voice 同口径。
+    此前只靠 Book.__init__ 末尾的 _save_all / 写前恢复**间接**自愈，两个口子：
+      · 全程没有 .bak——判错（或以后归一化逻辑出 bug）时无从恢复；
+      · 读失败保护（P0-B）生效时会整体跳过 _save_all，坏文件就留在盘上、每次启动重报
+        （error.log 实测 pet_book._read_json ×170）。
+    heal=False 给"马上要把文件改名 / 另有更强恢复路径"的调用方：_migrate_usage 读完
+    usage.json 就会 os.replace 把它改名，先愈合再改名只会凭空多一份 .bak 与困惑。
+    **读不到（OSError / 非 UTF-8）一律不写**——这条保护不能被愈合改掉。
     """
-    data, _corrupted = pet_io.read_json_or(path, factory, log=pet_log.log_error)
-    return data
+    data, corrupted = pet_io.read_json_or(path, lambda: _PROBE, log=pet_log.log_error)
+    if data is _PROBE:
+        # 走到 factory() 的三种情况：文件不存在 / 读失败 / 解码失败（corrupted=False），
+        # 以及**真损坏**（corrupted=True，此时 factory() 返回的正是哨兵本身）。
+        if corrupted:
+            # 真损坏（文件确实在盘上、内容解析不了或顶层类型非法）→ 愈合回写（含 .bak）
+            if heal:
+                pet_io.heal_json(path, factory, log=pet_log.log_error)
+            return factory(), True, False
+        # 文件不存在（首次运行）或这次读不到：**都不写盘**，只用 exists 把两者分开
+        return factory(), False, os.path.exists(str(path))
+    return data, corrupted, False
 
 
 # v2.3.0（兼容审查 M5）：账本此前假定"只有主线程写"。1.2/1.3 之后 worker 线程每条消息都会
@@ -134,6 +162,51 @@ def _normalize_record(r):
     }
 
 
+def _clean_records(raw):
+    """记录列表归一化（非 list / 坏条目一律丢弃）——读侧与"恢复合并"共用同一口径。"""
+    recs = raw if isinstance(raw, list) else []
+    return [r for r in (_normalize_record(x) for x in recs) if r is not None]
+
+
+def _merge_records(disk_records, mem_records):
+    """磁盘记录 + 本次内存新增记录，按 (ts, amount, note) 去重（P0-B 恢复合并）。
+
+    去重键与 _archive_day 一致（同一秒内的多笔记账不会被误判成重复）。
+    顺序：磁盘在前、内存新增在后——"原有的不会被新写的挤掉"。
+    """
+    seen = set()
+    out = []
+    for r in list(disk_records) + list(mem_records):
+        key = (r.get("ts"), r.get("amount"), r.get("note"))
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(r)
+    return out
+
+
+def _clean_days(raw_days):
+    """归档 days 归一化（{date: {total,count,records}}）；非 dict 一律按空处理。"""
+    days = raw_days if isinstance(raw_days, dict) else {}
+    clean_days = {}
+    for d, v in days.items():
+        if not isinstance(v, dict):
+            continue
+        clean_recs = _clean_records(v.get("records"))
+        total = v.get("total")
+        if not isinstance(total, (int, float)):
+            total = round(sum(float(r["amount"]) for r in clean_recs), 2)
+        count = v.get("count")
+        if not isinstance(count, int) or count <= 0:
+            count = len(clean_recs)
+        clean_days[str(d)] = {
+            "total": round(float(total), 2),
+            "count": count,
+            "records": clean_recs,
+        }
+    return clean_days
+
+
 def _new_record(amount, kind, note):
     """按当前时刻生成一条新记录。"""
     ts = time.time()
@@ -173,17 +246,33 @@ class Book:
             "alerted_balance": "",
         }
         self._archive = {"days": {}}
+        self._read_failed = False   # P0-B：本次启动有没有"文件在但读不到"
         self._load()
         self._migrate_usage()
         self._ensure_today()
-        self._save_all()  # 归一化 / 迁移 / 跨天归档后统一落盘（失败静默）
+        if self._read_failed:
+            # P0-B：读失败时**只读启动 + 标脏**，绝不在这里回写。
+            # 此前无条件 _save_all()：一次瞬时读失败（权限/杀软占用）就把内存里的空账本
+            # 盖回磁盘 → 用户的账记录清零、无备份、无提示。等下一次真正的写操作
+            # （add_manual/observe_balance/check_alerts…）再落盘。
+            try:
+                pet_log.log_error("ledger 本次启动未能读到（已跳过回写，等下一次写操作再落盘）")
+            except Exception:
+                pass  # 有意忽略：日志通道自身异常不影响主流程
+        else:
+            self._save_all()  # 归一化 / 迁移 / 跨天归档后统一落盘（失败静默）
 
     # ---------- 内部：读写与归一化 ----------
     def _load(self):
-        """读两个数据文件并归一化；损坏的文件按空结构重建。"""
-        led = _read_json(self._ledger_path)
-        records = led.get("records") if isinstance(led.get("records"), list) else []
-        clean = [r for r in (_normalize_record(x) for x in records) if r is not None]
+        """读两个数据文件并归一化；**真损坏**按空结构重建，读不到则标记跳过回写。"""
+        led, _led_corrupt, _led_unreadable = _read_json(self._ledger_path)
+        # P2（v2.3.1 一致性收口）：顶层是对象、但**内层字段类型非法**时（records 不是列表）
+        # 归一化会静默丢成空表，用户看不到任何痕迹。这里补一行日志留痕（真正的落盘由
+        # 本函数末尾 / __init__ 的 _save_all 完成；真损坏那条路径已在 _read_json 里留 .bak）。
+        if isinstance(led, dict) and "records" in led and not isinstance(led["records"], list):
+            pet_log.log_error("ledger records 字段不是列表（已按空表重建）：%s"
+                              % self._ledger_path)
+        clean = _clean_records(led.get("records"))
         lb = led.get("last_balance")
         if not isinstance(lb, (int, float)):
             lb = None
@@ -194,30 +283,69 @@ class Book:
             "alerted_budget": str(led.get("alerted_budget") or ""),
             "alerted_balance": str(led.get("alerted_balance") or ""),
         }
-        arc = _read_json(self._archive_path)
-        days = arc.get("days") if isinstance(arc.get("days"), dict) else {}
-        clean_days = {}
-        for d, v in days.items():
-            if not isinstance(v, dict):
-                continue
-            recs = v.get("records") if isinstance(v.get("records"), list) else []
-            clean_recs = [r for r in (_normalize_record(x) for x in recs) if r is not None]
-            total = v.get("total")
-            if not isinstance(total, (int, float)):
-                total = round(sum(float(r["amount"]) for r in clean_recs), 2)
-            count = v.get("count")
-            if not isinstance(count, int) or count <= 0:
-                count = len(clean_recs)
-            clean_days[str(d)] = {
-                "total": round(float(total), 2),
-                "count": count,
-                "records": clean_recs,
-            }
-        self._archive = {"days": clean_days}
+        arc, _arc_corrupt, _arc_unreadable = _read_json(self._archive_path)
+        # 任一个文件"在磁盘上但没读到" → 本次启动不整体回写（_save_all 会同时写两个文件，
+        # 用一个的空内存态覆盖另一个的好文件也同样是丢数据）
+        self._read_failed = bool(_led_unreadable or _arc_unreadable)
+        # 同上：归档 days 字段类型非法 → 归一化静默丢成空表，补一行日志留痕
+        if isinstance(arc, dict) and "days" in arc and not isinstance(arc["days"], dict):
+            pet_log.log_error("ledger_archive days 字段不是对象（已按空表重建）：%s"
+                              % self._archive_path)
+        self._archive = {"days": _clean_days(arc.get("days"))}
         self._trim_archive()
+
+    def _recover_from_disk(self):
+        """读失败之后的**第一次真实写**之前，先重试读一次磁盘并合并（P0-B 补）。
+
+        返回 None = 可以继续写；返回错误串 = **本次落盘必须放弃**。
+
+        - 启动时读成功过的实例（_read_failed=False）→ 直接返回 None：不每次写都重读。
+        - 启动时"文件在但读不到" → 重试读两个文件：
+          · 读到合法数据 → 磁盘记录与本次内存新增按 (ts, amount, note) 去重合并
+            （_merge_records），归档按日期取并集（内存里的更新状态优先），
+            然后**清除标记**回到正常路径；
+          · 仍然读不到 → 保持标记并返回错误串（调用方放弃落盘 + 记日志），
+            内存继续脏着，等下一次写再试。
+        这样"读失败之后用户又记了一笔"不会把磁盘上的旧账挤掉。
+        """
+        if not self._read_failed:
+            return None
+        led, _led_corrupt, led_unreadable = _read_json(self._ledger_path)
+        arc, _arc_corrupt, arc_unreadable = _read_json(self._archive_path)
+        if led_unreadable or arc_unreadable:
+            return "账本读不到（已放弃本次落盘，避免用空账本覆盖磁盘）"
+        self._ledger["records"] = _merge_records(_clean_records(led.get("records")),
+                                                 self._ledger["records"])
+        # 标量字段：内存里"本次真的动过"的值优先，否则沿用磁盘上原有的
+        # （读失败时 last_balance 是 None，不能因此把用户已知的余额基准抹掉）
+        if self._ledger.get("last_balance") is None:
+            lb = led.get("last_balance")
+            if isinstance(lb, (int, float)):
+                self._ledger["last_balance"] = round(float(lb), 2)
+        for _k in ("alerted_budget", "alerted_balance"):
+            if not self._ledger.get(_k):
+                self._ledger[_k] = str(led.get(_k) or "")
+        days = _clean_days(arc.get("days"))
+        days.update(self._archive.get("days") or {})   # 内存（更新的状态）优先
+        self._archive["days"] = days
+        self._trim_archive()
+        self._read_failed = False
+        try:
+            pet_log.log_error("ledger 读取恢复：磁盘记录与本次新增已合并（共 %d 条）"
+                              % len(self._ledger["records"]))
+        except Exception:
+            pass  # 有意忽略：日志通道自身异常不影响主流程
+        return None
 
     def _save_all(self):
         """原子写两个数据文件；返回错误字符串或 None（调用方按需消费）。"""
+        err = self._recover_from_disk()
+        if err:
+            try:
+                pet_log.log_error("ledger 本次不落盘：%s" % err)
+            except Exception:
+                pass  # 有意忽略：日志通道自身异常不影响主流程
+            return err
         e1 = _write_json(self._ledger_path, self._ledger)
         e2 = _write_json(self._archive_path, self._archive)
         err = e1 or e2
@@ -243,7 +371,11 @@ class Book:
         usage_path = os.path.join(os.path.dirname(self._ledger_path), "usage.json")
         if not os.path.exists(usage_path):
             return
-        u = _read_json(usage_path)
+        # heal=False：这个文件马上要被 os.replace 改名成 usage.json.migrated，先愈合回写
+        # 只会凭空多一份 .bak（原始内容会原样保留在 .migrated 里），于诊断无益
+        u, _u_corrupt, _u_unreadable = _read_json(usage_path, heal=False)
+        if _u_unreadable:
+            return  # 读不到 usage.json：不动它、也不迁移（迁移会把文件改名，等于销毁）
         try:
             usage = round(float(u.get("usage") or 0.0), 2)
         except Exception:
@@ -277,6 +409,15 @@ class Book:
         """跨天处理：先落盘归档，成功后才清 ledger 昨日记录（防写序丢数据）。"""
         today = _today()
         if self._ledger["date"] == today:
+            return
+        # P0-B 补：这条路径也直接写盘（归档 + ledger），同样要先过"读失败恢复"闸门：
+        # 读不到就整个跳过本次跨天归档（内存保持原状，等下一次写再试），绝不用空归档覆盖磁盘。
+        err = self._recover_from_disk()
+        if err:
+            try:
+                pet_log.log_error("ledger 跨天归档跳过：%s" % err)
+            except Exception:
+                pass  # 有意忽略：日志通道自身异常不影响主流程
             return
         old_date, records = self._ledger["date"], self._ledger["records"]
         self._archive_day(old_date, records)

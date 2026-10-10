@@ -60,6 +60,7 @@ import pet_behaviors
 import pet_export
 import pet_alarm
 import pet_tools  # v2.3.0（1.2）：工具注册表/执行器（Qt-free，无环）
+import pet_io  # v2.3.1：原子写/清扫临时文件（P2-B 导入恢复、L4 退出清 tmp）
 
 
 APP_NAME = "大肥鱼桌宠"
@@ -618,9 +619,14 @@ def load_chat_memory():
     return pet_chat.read_memory(MEMORY_PATH, _MEMORY_MAX, _log_error)
 
 
-def save_chat_memory(hist):
-    """原子落盘对话记忆（P0-1：实现迁至 pet_chat）。"""
-    pet_chat.write_memory(MEMORY_PATH, hist, _MEMORY_MAX, _log_error)
+def save_chat_memory(hist, expect_epoch=None, epoch_of=None):
+    """原子落盘对话记忆（P0-1：实现迁至 pet_chat）。
+
+    P1-A：AI worker 落盘时会带上它出发时记下的记忆代次；pet_chat 在**路径锁内**复查，
+    不匹配（用户已清日志/清 Key）就放弃这次写，避免旧快照把清除结果覆盖回去。
+    """
+    pet_chat.write_memory(MEMORY_PATH, hist, _MEMORY_MAX, _log_error,
+                          expect_epoch=expect_epoch, epoch_of=epoch_of)
 
 
 def _build_ai_sys_prompt(cfg):
@@ -867,6 +873,11 @@ class PetWindow(QWidget):
         self.anim = pet_anim.FrameAnim(self)
         assets_dir = resource_dir("assets")
         self._idle_frames = pet_anim.load_frame_set(assets_dir, "idle", 10)
+        # v2.4：吃饱形态（默认角色**非首形态**）的专属 idle 帧集 assets/idle_full_f*。
+        # 由 _dev/gen_full_idle_frames.py 从 character_full.png 程序化生成（极小幅呼吸，
+        # 质心不变）。缺失（用户删图 / 旧版数据）时这里是空列表 → _play_idle 回退静态
+        # 形态图，即 v2.2.5 的旧行为，安全兜底。
+        self._idle_full_frames = pet_anim.load_frame_set(assets_dir, "idle_full", 10)
         self._eat_frames = pet_anim.load_frame_set(assets_dir, "eat", 7)
         self._fx_petpet = pet_anim.load_frame_set(os.path.join(assets_dir, "fx"), "petpet", 10)
         if len(self._fx_petpet) != 10:
@@ -2100,8 +2111,10 @@ class PetWindow(QWidget):
                     if os.path.exists(_p):
                         os.remove(_p)
                 else:
-                    with open(_p, "wb") as _f:
-                        _f.write(_blob)
+                    # P2-B：这里此前是裸 open(path, "wb")——写一半崩/被杀软打断就把受管
+                    # JSON 留成半截（6 个索引全部受影响），而同仓其它写点早已统一走 pet_io
+                    # 原子写。改走 atomic_write_bytes（线程唯一临时名 + os.replace + 冲突重试）。
+                    pet_io.atomic_write_bytes(_p, _blob, log=_log_error)
             except Exception as e:
                 _log_error("import restore %s: %r" % (_key, e))
         try:
@@ -2341,14 +2354,41 @@ class PetWindow(QWidget):
         except Exception:
             return []
 
+    def _form_idle_frames(self, form):
+        """默认角色某形态的**专属** idle 帧集；没有专属帧集返回 []。
+
+        v2.4：吃饱形态有 assets/idle_full_f*（_dev/gen_full_idle_frames.py 生成）。
+        返回 [] 是**有意义**的——调用方据此回退静态形态图（绝不拿常态帧盖住吃饱图）。
+        """
+        if form == "full":
+            return self._idle_full_frames or []
+        return []
+
+    def _default_idle_frames(self):
+        """默认角色当前形态该播的 idle 帧集。
+
+        首形态 = 常态帧集 assets/idle_f*（现行为）；非首形态 = 该形态专属帧集
+        （吃饱 = assets/idle_full_f*）。非首形态且没有专属帧集 → 空集 ⇒ _play_idle
+        走静态形态图分支（v2.2.5 语义：绝不拿常态帧盖住吃饱图）。
+        自定义角色不走这里（帧集按「形态×动作」查表）。
+        """
+        own = self._form_idle_frames(self.form)
+        if own:
+            return own
+        if self.form == self.form_keys[0]:
+            return self._idle_frames
+        return []
+
     def _wire_anim_sets(self):
-        """把当前角色对应的帧集注册进 FrameAnim（init 与角色切换共用）。
+        """把当前角色对应的帧集注册进 FrameAnim（init / 角色切换 / 形态切换 / 待机前共用）。
 
         P1-7：自定义角色按「形态×动作」查表（forms[i].animations 内建
         idle/eat/poke/sleep + v2.0.1 自定义命名帧动作，RoleLibrary.form_animations
         已解析为绝对路径）；旧角色级 frames 已由 RoleLibrary._load 迁移为
         forms[0].animations.idle（兼容路径，行为不变）。
-        默认角色用内置 idle 帧；eat 集仅默认角色注册（自定义角色吃帧按形态查表）。
+        v2.4：默认角色的 "idle" 槽也**按形态**注册（_default_idle_frames）——
+        首形态常态帧集、吃饱形态专属帧集、无专属帧集则空集（= 静态形态图）。
+        eat 集仅默认角色注册（自定义角色吃帧按形态查表）。
         """
         if self._custom_role:
             cur = self._cur_form_anim()
@@ -2360,13 +2400,12 @@ class PetWindow(QWidget):
                 self.anim.add_set(act, self._pix_frames(cur.get(act) or []))
             self.has_frames = bool(self.anim._sets.get("idle"))
             return
-        role_frames = self._role_frames() if self._custom_role else []
-        self.has_frames = bool(role_frames) or (bool(self._idle_frames) and not self._custom_role)
-        if self.has_frames:
-            self.anim.add_set("idle", role_frames if role_frames else self._idle_frames)
-        else:
-            self.anim.add_set("idle", [])
-        self.anim.add_set("eat", self._eat_frames if (self.has_frames and not self._custom_role) else [])
+        # v2.4：默认角色的 idle 槽按**当前形态**注册。吃到非首形态（吃饱）时若继续注册
+        # 常态帧集，就会重演 v2.2.5 修的"吃饱图被常态动画盖住"；所以这里注册
+        # _default_idle_frames()——非首形态没有专属帧集时是空集，_play_idle 据此走静态。
+        self.has_frames = bool(self._idle_frames) and not self._custom_role
+        self.anim.add_set("idle", self._default_idle_frames())
+        self.anim.add_set("eat", self._eat_frames if self.has_frames else [])
 
     def apply_role(self, role_id):
         """切换角色（""=默认角色）：持久化并立即重载贴图，无需重启。"""
@@ -2459,20 +2498,26 @@ class PetWindow(QWidget):
         # v2.1.4 修复（M1）：_sleeping 只由 _show_sleep/_wake 管理，这里不再悄悄清除——
         # 否则"睡眠中语音读完→_play_idle"会静默醒来且形态永久留在睡形态（无主人卡死）。
         self._cur_state = None  # 离开表情/睡眠展示
-        if self._custom_role:
-            self._wire_anim_sets()  # P1-7：待机前按当前形态重查「形态×动作」帧集
+        # P1-7：待机前按当前形态重查帧集。自定义角色 =「形态×动作」表；v2.4 起默认角色
+        # 也走这里（首形态常态帧集 / 吃饱形态专属帧集），否则形态切换后 "idle" 槽会留着
+        # 上一个形态的帧集。
+        self._wire_anim_sets()
         idle_frames = self.anim._sets.get("idle") or []
         # P1-7：帧间隔——自定义角色 forms[i].anim_interval_ms 优先，缺省沿用 IDLE_FRAME_MS
         interval = IDLE_FRAME_MS
         if self._custom_role:
             interval = self._cur_form_anim().get("interval_ms") or IDLE_FRAME_MS
-        # v2.2.5（画面级修复）：**默认角色**的 "idle" 帧集是"常态"形象素材（assets/idle_f*），
+        # v2.2.5（画面级修复）：默认角色的 "idle" 帧集曾是"常态"形象素材（assets/idle_f*），
         # 与当前形态无关——form=full 时若继续播它，吃饱静态图（character_full.png）永远被常态
-        # 动画盖住（用户看到"吃完还显示常态/待机、点一下才见吃饱"）。因此默认角色的**非首形态**
-        # 一律走静态形态图分支；首形态照旧播 idle 动画；自定义角色语义不变（帧集按「形态×动作」
-        # 查：有 idle 帧就播该形态的帧，没有才静态）。
-        _static_form = (self.form != self.form_keys[0]
-                        and (not self._custom_role or not idle_frames))
+        # 动画盖住（用户看到"吃完还显示常态/待机、点一下才见吃饱"）。当时的处置是"默认角色
+        # 非首形态一律静态"。
+        # v2.4：判据改为"**该形态有没有自己的 idle 帧集**"——_wire_anim_sets 已把 "idle" 槽
+        # 按形态指向对应帧集（吃饱 → assets/idle_full_f*），所以这里只看 idle_frames 是否为空：
+        #   · 默认角色吃饱形态有专属帧集 → 播帧（本来静止的吃饱形态动起来）；
+        #   · 帧集缺失（用户删图/旧版数据）→ "idle" 槽为空 → 静态形态图（v2.2.5 的安全回退）；
+        #   · 自定义角色语义完全不变：有 idle 帧就播该形态的帧，没有才静态（f0/f1 有帧照播、
+        #     f2/f3 无帧静态）。
+        _static_form = (self.form != self.form_keys[0] and not idle_frames)
         if _static_form:
             # 非首形态显示该形态静态图（默认角色=吃饱静态图；自定义角色=无帧形态静态图）
             if self.anim_mode != "form_idle":
@@ -2940,15 +2985,52 @@ class PetWindow(QWidget):
         self._position_badge()
         self._position_food_tray()
 
+    def _system_is_quitting(self):
+        """系统正在注销/关机（Windows 会让 Qt 走关窗路径）。
+
+        QCoreApplication.closingDown() 在 aboutToQuit 之后为真；Qt 6.3+ 的
+        isSavingSession() 在会话保存/关机时也为真。取不到（老版本 Qt）就返回 False，
+        按"普通关窗"处理（收进托盘，绝不误退）。
+        """
+        try:
+            app = QApplication.instance()
+            if app is None:
+                return False
+            if hasattr(app, "closingDown") and app.closingDown():
+                return True
+            if hasattr(app, "isSavingSession") and app.isSavingSession():
+                return True
+        except Exception:
+            pass  # 有意忽略：判定失败按普通关窗处理
+        return False
+
     def closeEvent(self, event):
-        """v2.3.1：关闭窗口 = **收进托盘**（不是退出程序）。
+        """v2.3.1：关闭窗口 = **收进托盘**（不是退出程序）；真退出/关机时放行。
 
         兼容审查（M2）指出：初版这里直接走 _quit，会把用户"Alt+F4 收起来、托盘再叫回"
         的习惯改成"直接杀进程"（而托盘里原本还有个"显示桌宠"，几乎成死入口）。
         因此恢复旧语义——close 只隐藏窗口；真正退出仍然只有托盘「⏹ 退出」这一条路
         （以及系统注销/关机时的 aboutToQuit 兜底）。首次关闭给一次气泡提示，避免用户
         以为程序没关掉。
+
+        M5 修复：注销/关机时 Qt 也会走关窗路径，无条件 ignore 可能让 Windows 认为
+        "程序阻止关机"。因此：真退出流程中（_closing 已置位）或系统正在注销/关机 →
+        accept 并走 _quit（幂等）；其余情况才 ignore + 收进托盘。
         """
+        try:
+            _quit_now = bool(getattr(self, "_closing", False)) or self._system_is_quitting()
+        except Exception:
+            _quit_now = False
+        if _quit_now:
+            try:
+                event.accept()
+            except Exception:
+                pass  # 有意忽略：事件对象异常也不能挡住退出
+            try:
+                self._quit()   # 幂等：已在退出流程里会直接返回
+            except Exception as e:
+                _log_error("closeEvent quit: %r" % (e,))
+            return
         try:
             event.ignore()   # 不真的销毁窗口：只隐藏，托盘菜单"显示桌宠"随时叫回来
         except Exception:
@@ -3175,14 +3257,14 @@ class PetWindow(QWidget):
         if not display_only:
             self._user_form = form  # 用户选定形态：待机/idle_form 不得覆盖
         self.form = form
-        if self._custom_role:
-            # P1-7：形态切换后帧集按「形态×动作」重查；若正在播待机帧，
-            # 先停掉旧帧引用（FrameAnim 正在播放的帧集是旧列表），
-            # 让 refresh 分支的 _play_idle 用新帧集重启
-            self._wire_anim_sets()
-            if self.anim_mode == "idle":
-                self.anim.stop()
-                self.anim_mode = "form_idle"
+        # P1-7：形态切换后帧集重查；若正在播待机帧，先停掉旧帧引用（FrameAnim 正在播放的
+        # 帧集是旧列表），让 refresh 分支的 _play_idle 用新帧集重启。
+        # v2.4：默认角色同样要重查——吃饱形态有专属 idle 帧集（assets/idle_full_f*），
+        # 形态一变就必须换帧集，否则会继续播常态帧、把吃饱图盖住（= v2.2.5 修的原始症状）。
+        self._wire_anim_sets()
+        if self.anim_mode == "idle":
+            self.anim.stop()
+            self.anim_mode = "form_idle"
         if refresh:
             if self.anim_mode in ("idle", "form_idle"):
                 self._play_idle()
@@ -4129,6 +4211,12 @@ class PetWindow(QWidget):
         长期记忆（称呼/别名/喜好/不喜欢/近况）——整文件删 = 用户点一次「清理日志」就**永久
         丢掉身份与偏好**、无提示无撤销。现在只清 history，long_term 原样保留。
         """
+        # P1-A：**先**把记忆代次 +1，再去写盘/删日志。此前是"先写盘、最后才 epoch++"：
+        # 这两步之间的窗口足够一个在途 worker 把它的旧快照（4 条 history）写回磁盘，
+        # 用户看到的"清干净了"下一轮就被撤销。现在 worker 落盘会在路径锁内复查代次并放弃。
+        with self._history_lock:
+            self._chat_history.clear()
+            self._mem_epoch += 1  # 代次 +1：在途 AI 回复不再把本次对话写回记忆
         removed = _remove_files((os.path.join(DATA_DIR, "error.log"),
                                  os.path.join(DATA_DIR, "error.log.old"),
                                  os.path.join(DATA_DIR, "memory.log")))
@@ -4143,9 +4231,6 @@ class PetWindow(QWidget):
             removed = removed or kept
         except Exception as e:
             _log_error("clear memory: %r" % (e,))
-        with self._history_lock:
-            self._chat_history.clear()
-            self._mem_epoch += 1  # 代次 +1：在途 AI 回复不再把本次对话写回记忆
         _tail = "（长期记忆保留着，想一起清就去 AI 设置里点「清除长期记忆」）" if kept else ""
         self.show_bubble(("日志和对话记忆都清干净啦~" if removed else "本来就干干净净的~") + _tail)
 
@@ -4302,19 +4387,22 @@ class PetWindow(QWidget):
                     self._preview_player.stop()
             except Exception:
                 pass  # 有意忽略：退出时停预览播放器尽力而为
-            _remove_files((CONFIG_PATH + ".tmp", USAGE_PATH + ".tmp",
-                           os.path.join(DATA_DIR, "ledger.json.tmp"),
-                           os.path.join(DATA_DIR, "ledger_archive.json.tmp"),
-                           os.path.join(DATA_DIR, "roles.json.tmp"),
-                           os.path.join(DATA_DIR, "audio.json.tmp"),
-                           # v2.1.2（L-3）：v2.0/v2.1 新增的索引也要清残留（崩溃后可能留半截 tmp）
-                           os.path.join(DATA_DIR, "lines.json.tmp"),
-                           os.path.join(DATA_DIR, "behaviors.json.tmp"),
-                           os.path.join(DATA_DIR, "alarms.json.tmp"),
-                           os.path.join(DATA_DIR, "voice.json.tmp"),
-                           os.path.join(DATA_DIR, "voice_assets.json.tmp"),
-                           os.path.join(DATA_DIR, "voice_backend.json.tmp"),
-                           MEMORY_PATH + ".tmp"))  # P1-6：退出清记忆原子写残留
+            # L4：临时名现在带线程号（"<p>.<tid>.tmp"），只删固定名扫描不到真正会残留的
+            # 文件（崩溃留下的是 "lines.json.12345.tmp"）→ 按目标名白名单清扫。
+            # pet_io.clean_tmp_files 对每个目标取同一把路径锁：在途写者持锁期间它的 tmp
+            # 不会被误删（锁内是"写 tmp → os.replace"整段）。
+            pet_io.clean_tmp_files((CONFIG_PATH, USAGE_PATH, MEMORY_PATH,
+                                    os.path.join(DATA_DIR, "ledger.json"),
+                                    os.path.join(DATA_DIR, "ledger_archive.json"),
+                                    os.path.join(DATA_DIR, "roles.json"),
+                                    os.path.join(DATA_DIR, "audio.json"),
+                                    # v2.1.2（L-3）：v2.0/v2.1 新增的索引也要清残留
+                                    os.path.join(DATA_DIR, "lines.json"),
+                                    os.path.join(DATA_DIR, "behaviors.json"),
+                                    os.path.join(DATA_DIR, "alarms.json"),
+                                    os.path.join(DATA_DIR, "voice.json"),
+                                    os.path.join(DATA_DIR, "voice_assets.json"),
+                                    os.path.join(DATA_DIR, "voice_backend.json")), _log_error)
         except Exception:
             pass  # 有意忽略：退出清理环节任何失败都不阻塞退出
         QApplication.quit()  # 事件循环退出后主线程结束，daemon 线程随进程回收

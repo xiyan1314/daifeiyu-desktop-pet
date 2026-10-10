@@ -8,11 +8,14 @@ Transparent frameless window, always-on-top, draggable, feedable, chatty — per
 
 中文介绍见 [README.md](README.md)。
 
-> **Note / 说明**：This English README is a short overview and **lags behind the Chinese README.md**
-> (which documents v2.1 features: AI voice-cloning dubbing, customizable lines & dialogues,
-> idle-behaviour system, local TTS-backend launcher, alarms…).
-> The Chinese [README.md](README.md) is the authoritative, up-to-date document.
-> 英文版只是概览，功能细节以中文 README.md 为准（v2.1 新增能力尚未全部翻译）。
+> **Note / 说明**：This English README is an overview; the Chinese [README.md](README.md) stays the
+> authoritative, up-to-date document.
+> Still Chinese-only here: the v2.1 features (AI voice-cloning dubbing, customizable lines &
+> dialogues, idle-behaviour system, local TTS-backend launcher, alarms).
+> Covered in English below: the v2.3.0 AI capabilities (long-term memory / tool calling / context
+> summary + privacy switch), the persona files under `prompts/`, and the character gallery.
+> 英文版是概览，功能细节以中文 README.md 为准：v2.1 的配音/台词/待机/闹钟仍未翻译；
+> v2.3.0 的 AI 新能力、`prompts/` 人设文件与角色画廊已在下方补齐。
 
 ## ✨ Features
 
@@ -76,6 +79,30 @@ python main.py   # canonical entry (桌宠.py kept as compat shim)
 
 > All network calls use HTTPS with timeouts; the key is DPAPI-encrypted and bound to your Windows account.
 
+## 🧠 It remembers you — and can act (new in v2.3.0)
+
+| Capability | What it does | How to control it |
+|---|---|---|
+| **Long-term memory** | Remembers your name, nicknames, likes, **dislikes** and recent topics across sessions (rule-based extraction, no extra API cost) | "AI 设置 → 清除长期记忆" (AI settings → clear long-term memory); "清理日志" (clear logs) never deletes it |
+| **Tool calling** | 10 tools: balance / weather / ledger summary / open ledger / emote / action run **directly**; recording a purchase, setting a budget, an alarm or a timer **ask you first** (default answer is "no"; unanswered after 60 s = not done) | Turn the whole thing off in AI settings; local models fall back to plain chat automatically |
+| **Context summary** | Packs today's spending, last 7 days, budget ratio, balance and city into the system prompt, so it chats about your ledger on its own | `ai_rag_enabled` (**on by default**) — turn it off and **none** of it is injected |
+| **Persona as a file** | The persona lives in `<data dir>/prompts/*.txt`; drop a file into `prompts/custom/*.txt` and it appears in AI settings by itself | Files are written once and **never overwritten**; delete one and it falls back to the built-in persona and tells you |
+
+> Your data stays local: `memory.json` (chat history + long-term memory) and `ledger*.json` (the ledger).
+> With the summary on, those fields travel with your chat request to the AI provider you configured;
+> turn `ai_rag_enabled` off and only the conversation itself is sent.
+
+### Persona files (`prompts/`)
+
+- **Where**: `<data dir>/prompts/` — next to the app (falls back to `%APPDATA%\大肥鱼桌宠` when read-only);
+  the folder and the built-in files are created on first launch.
+- **Built-ins**: `default.txt` / `sheshe.txt` / `tsundere.txt` — edit them in place to change the built-in
+  personas. They are **written once and never overwritten** afterwards.
+- **Your own**: put `prompts/custom/<name>.txt` there → it shows up in AI settings as a persona named
+  `<name>` (stored in `config.json` as `file:<name>`).
+- **If a file disappears**: the pet falls back to the built-in persona and tells you at startup —
+  it never silently changes character.
+
 ## 🎨 Customize your pet
 
 - **Character**: right-click → "🐟 角色" → "导入角色…" — material is auto-processed (background removed when opaque, transparent margins trimmed, oversized images scaled; png/jpg/bmp/webp supported):
@@ -87,6 +114,25 @@ python main.py   # canonical entry (桌宠.py kept as compat shim)
 - **Bubble**: right-click → "🎨 气泡样式…" to tweak background/text/border colors, font size and corner radius
 - **Lines**: right-click → "💬 自定义台词…" to append your own lines to four pools
 - Custom data lives next to the app (roles/, audio/, config.json) — copy these to migrate
+
+## 🎨 Character gallery
+
+Community-made characters: download a `.dfypet.zip`, then right-click the pet → 角色 (Characters)
+→ **导入角色包** (import character bundle) to use it.
+
+| Character | Author | Description | Download |
+|-----------|--------|-------------|----------|
+| *(nobody has contributed yet — be the first 🐟)* | | | |
+
+> Want to share yours? See [gallery/README.md](gallery/README.md) for the spec, or reply in the
+> ["show your character" discussion](https://github.com/xiyan1314/daifeiyu-desktop-pet/discussions/1).
+
+### Contributing a character (3 steps)
+
+1. Export it from the pet: right-click → 角色 (Characters) → **导出角色包** (export bundle). Fill in
+   name / author / description / tags — they are written into the bundle `meta`.
+2. Prepare a preview image (PNG, ≤200×200).
+3. Fork the repo → put both files under `gallery/` → add a row to the table in README.md → open a PR.
 
 ## 🛡️ Antivirus note
 
@@ -106,6 +152,7 @@ desktop-pet/
 ├── pet_resources.py     # resource library: character & audio import (v1.3)
 ├── pet_book.py          # ledger: balance-diff bookkeeping, daily archive, alerts (v1.3)
 ├── pet_dialogs.py       # resource/ledger/bubble-style/lines dialogs (v1.3)
+├── prompts/             # persona files (default/sheshe/tsundere .txt + custom/*.txt)
 ├── assets/              # frames / expressions / sounds
 ├── 去背景.py            # background removal tool
 ├── 生成占位角色.py      # placeholder generator

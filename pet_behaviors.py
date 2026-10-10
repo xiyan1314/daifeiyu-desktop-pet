@@ -426,6 +426,9 @@ class BehaviorService:
                     if nb != b:
                         dirty = True   # 别名迁移/字段清洗：磁盘与内存口径必须一致
         if dirty:
+            # P0-C：愈合/迁移回写**之前**先留 .bak（与 pet_io.heal_json 同口径）——
+            # 原先这条自建"读 + 回写"路径没有备份，判错/迁移有 bug 就无从恢复。
+            pet_io.backup_before_heal(self._index, self._log)
             self._save()   # 愈合回写（走 pet_io 的同一把路径锁，与在途写者串行）
 
     def _save(self):

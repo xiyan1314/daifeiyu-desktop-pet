@@ -28,6 +28,53 @@ _tls = threading.local()  # v2.2.5：重入标志改为**线程局部**——原
 # P0-2：DEBUG 开关——DFY_DEBUG=1 时 log_error 内部异常直抛，便于排障
 DEBUG = os.environ.get("DFY_DEBUG") == "1"
 
+# v2.4（技术债收口 C）：单文件体积上限（超过即轮转）与坏文件隔离后缀
+MAX_BYTES = 512 * 1024
+BAD_SUFFIX = ".bad"
+
+
+def _to_stderr(text):
+    """把一行文本写 stderr（日志自身出故障时的唯一出口）。"""
+    try:
+        sys.stderr.write(text if text.endswith("\n") else text + "\n")
+        sys.stderr.flush()
+    except Exception:
+        pass  # 有意忽略：stderr 不可写时无从记录
+
+
+def _quarantine(path):
+    """把坏/满/写不进去的日志文件改名成 error.log.bad（保留现场，不静默丢弃）。
+
+    返回隔离后的路径；改名失败（被独占锁等）返回空串。已有 .bad 会被覆盖——
+    同一次故障反复触发不堆文件；要看更早的历史还有 error.log.old。
+    """
+    bad = path + BAD_SUFFIX
+    try:
+        os.replace(path, bad)
+        return bad
+    except Exception:
+        return ""
+
+
+def _rotate_if_needed(path):
+    """512KB 轮转；轮转失败（被占用/无权限）退一步隔离成 .bad。
+
+    返回要报给维护者的说明（空串 = 正常）。日志自身的故障只能写 stderr，
+    这里只返回文案、不自己写，保持"出口唯一"。
+    """
+    try:
+        if os.path.getsize(path) <= MAX_BYTES:
+            return ""
+    except Exception:
+        return ""  # 文件不存在（首次写）或读不到体积：交给追加失败分支去报
+    try:
+        os.replace(path, path + ".old")
+        return ""
+    except Exception as e:
+        if _quarantine(path):
+            return "error.log 轮转失败（%r），已改名 error.log%s 重新开始" % (e, BAD_SUFFIX)
+        return "error.log 轮转失败且无法改名（%r）" % (e,)
+
 
 def set_data_dir(path):
     """设置日志目录（桌宠.py 在 DATA_DIR 计算后调用）。"""
@@ -114,44 +161,50 @@ def redact(msg):
 
 
 def log_error(msg, data_dir=None):
-    """写一条错误/信息日志：脱敏 → error.log 追加（512KB 轮转）。
+    """写一条错误/信息日志：脱敏 → error.log 追加（512KB 轮转；坏文件隔离成 .bad）。
 
     data_dir：桌宠._log_error 委托时传入其当前 DATA_DIR（保持 tests/verify
     对 main.DATA_DIR 的 monkeypatch 隔离仍然生效）；其余模块不传，按
     set_data_dir 同步值或 _default_dir() 规则取目录。
+
+    v2.4（技术债收口 C）：此前"轮转失败"和"追加失败"两个分支都是 pass——坏日志
+    文件既没被修好也没被隔离，之后每条日志都往同一个坏文件上撞（pythonw 下 stderr
+    不可见 = 全丢）。现在：①轮转失败 → 改名 error.log.bad 重新开始；②追加失败 →
+    隔离成 .bad 后**重试一次**（新建干净文件，这条消息不会丢）；③仍然失败才回退
+    stderr。轮转/隔离的结果会写一行 stderr——这是日志设施自身唯一可用的出口。
     """
     if getattr(_tls, "logging", False):
         # 重入：直写 stderr 立即返回，阻断套环；外层调用会正常走完整脱敏+落盘
-        try:
-            sys.stderr.write("[DFY] %s\n" % msg)
-        except Exception:
-            pass  # 有意忽略：stderr 不可写时无从记录
+        _to_stderr("[DFY] %s" % msg)
         return
     _tls.logging = True
     try:
         msg = redact(msg)
         path = os.path.join(data_dir or _data_dir or _default_dir(), "error.log")
-        try:
-            if os.path.getsize(path) > 512 * 1024:  # 512KB 轮转，防无限累积
-                os.replace(path, path + ".old")
-        except Exception:
-            pass  # 有意忽略：体积检查失败直接追加
+        note = _rotate_if_needed(path)
         try:
             with open(path, "a", encoding="utf-8") as f:
                 f.write(msg + "\n")
-        except Exception:
-            # 写盘失败（只读目录等）：回退 stderr，日志坏了也不能静默（P0-2）
-            try:
-                sys.stderr.write("[DFY] %s\n" % msg)
-                sys.stderr.flush()
-            except Exception:
-                pass  # 有意忽略：stderr 不可写时无从记录
+            if note:
+                _to_stderr("[DFY] " + note)
+        except Exception as e:
+            # 追加失败（只读目录 / 文件被占用 / 坏文件）：先把坏文件隔离掉，
+            # 再重试一次——别让一条坏文件把这条日志（以及后面所有日志）吃掉。
+            quarantined = _quarantine(path)
+            if quarantined:
+                try:
+                    with open(path, "a", encoding="utf-8") as f:
+                        f.write(msg + "\n")
+                    _to_stderr("[DFY] error.log 写入失败（%r）→ 已隔离为 %s 并重建"
+                               % (e, os.path.basename(quarantined)))
+                    return
+                except Exception as e2:
+                    e = e2
+            # 彻底写不进去：回退 stderr，日志坏了也不能静默（P0-2）
+            _to_stderr("[DFY] %s" % msg)
     except Exception:
         if DEBUG:
             raise  # 调试模式：异常直抛，方便定位
-        try:
-            sys.stderr.write("[DFY] log error: %s\n" % msg)
-        except Exception:
-            pass  # 有意忽略：stderr 不可写时无从记录
+        _to_stderr("[DFY] log error: %s" % msg)
     finally:
         _tls.logging = False  # 线程局部：只清本线程的重入标志

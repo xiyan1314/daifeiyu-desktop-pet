@@ -27,7 +27,9 @@ sys.path.insert(0, HERE)
 
 FAILS = []
 CHECKS = []
-EXPECT_CHECKS = 266  # v2.1.8：检查总数硬断言（每次增删检查同步更新；本检查自身不计入）
+EXPECT_CHECKS = 272  # v2.1.8：检查总数硬断言（每次增删检查同步更新；本检查自身不计入）
+# v2.4：+6（7c 段：工具权限 / 拒绝不改数据 / RAG 开关 / 记忆互不覆盖 / 工具封顶 / 人设文件优先）
+#        267 - 1（本检查自身）= 266 → 272；带本检查一起跑出来是 273 项
 
 
 def check(name, cond, extra=""):
@@ -1610,6 +1612,206 @@ def main_flow():
         check("import reject paths", False, repr(e))
     finally:
         pet_dialogs._warn = _real_warn
+
+    # ---- 7c. v2.3.0 功能护栏（v2.4 补齐）：工具权限 / 记忆互不覆盖 / RAG 开关 / 人设文件 ----
+    # v2.3.0 引入的这 7 项功能此前在这份端到端验证里 0 覆盖（267 项全在 v1.3 功能面）。
+    # 这 6 项用真 PetWindow + 假工具 backend，覆盖"权限门控 / 拒绝不得改数据 / 隐私开关 /
+    # 两段记忆互不覆盖 / 工具轮数封顶 / 人设文件优先"。
+    import pet_tools
+
+    # -- 7c-1. 工具权限分级：只读直执行；写入（4 条）未确认必须被拒且不碰界面 --
+    _t1_ok, _t1_why = False, ""
+    try:
+        _seen_ui = []
+
+        def _fake_ui(name, args):
+            _seen_ui.append(("ui", name))
+            return {"ok": True, "handled": name}
+
+        def _fake_ui_async(name, args):
+            _seen_ui.append(("ui_async", name))
+            return {"ok": True, "opened": True}
+
+        _ro_ctx = pet_tools.ToolContext(
+            balance=lambda: (True, {"balance": 45.6, "summary": "余额 ¥45.60"}),
+            ledger=lambda: (True, {"today": 3.2, "total": 99.9, "summary": "今日 ¥3.20"}),
+            ui=_fake_ui, ui_async=_fake_ui_async)
+        _r_bal = pet_tools.execute("check_balance", {}, _ro_ctx, confirmed=False)
+        _r_led = pet_tools.execute("get_ledger_summary", {}, _ro_ctx, confirmed=False)
+        _bad_write = []
+        for _wn, _wa in (("add_manual_record", {"amount": 38}),
+                         ("set_budget", {"amount": 5}),
+                         ("set_alarm", {"time": "07:30"}),
+                         ("set_timer", {"minutes": 10})):
+            _wr = pet_tools.execute(_wn, _wa, _ro_ctx, confirmed=False)
+            if not (_wr.get("ok") is False and _wr.get("needs_confirm") is True):
+                _bad_write.append("%s=%r" % (_wn, _wr))
+        _t1_ok = (bool(_r_bal.get("ok")) and abs(float(_r_bal.get("balance")) - 45.6) < 1e-6
+                  and bool(_r_led.get("ok")) and abs(float(_r_led.get("today")) - 3.2) < 1e-6
+                  and not _bad_write and not _seen_ui)
+        _t1_why = "bal=%r led=%r 未拒=%r 界面=%r" % (_r_bal, _r_led, _bad_write, _seen_ui)
+    except Exception as _e:
+        _t1_why = repr(_e)
+    check("tool readonly exec + write gated", _t1_ok, _t1_why)
+
+    # -- 7c-2. 拒绝路径跑完不得改数据：假界面**真的会写**（账本/预算/闹钟），漏过门控必然露馅 --
+    _t2_ok, _t2_why = False, ""
+    try:
+        def _data_sig():
+            return (len(pet.book._ledger.get("records") or []),
+                    round(float(pet.book.total_amount()), 2),
+                    pet.cfg.get("budget"),
+                    json.dumps(pet.alarms.list(), sort_keys=True, ensure_ascii=False))
+
+        _touched = []
+
+        def _mut_ui(name, args):
+            _touched.append(name)
+            if name == "set_alarm":
+                pet.alarms.add(str((args or {}).get("time") or "07:30"), "验证用闹钟")
+            return {"ok": True}
+
+        def _mut_ui_async(name, args):
+            _touched.append(name)
+            if name == "add_manual_record":
+                pet.book.add_manual(float((args or {}).get("amount") or 1.0), "验证用")
+            elif name == "set_budget":
+                pet.cfg["budget"] = float((args or {}).get("amount") or 0.0)
+            return {"ok": True}
+
+        _mut_ctx = pet_tools.ToolContext(ui=_mut_ui, ui_async=_mut_ui_async)
+        _sig_before = _data_sig()
+        for _wn, _wa in (("add_manual_record", {"amount": 38}), ("set_budget", {"amount": 5}),
+                         ("set_alarm", {"time": "07:30"}), ("set_timer", {"minutes": 10})):
+            pet_tools.execute(_wn, _wa, _mut_ctx, confirmed=False)
+        _sig_after = _data_sig()
+        # 正例对照：同一工具带 confirmed=True 必须真的进 handler（证明"没改"不是因为 handler 根本不生效）
+        _ran = []
+        _ctl_ctx = pet_tools.ToolContext(
+            ui=lambda n, a: (_ran.append(n), {"ok": True})[1],
+            ui_async=lambda n, a: (_ran.append(n), {"ok": True})[1])
+        pet_tools.execute("set_alarm", {"time": "07:30", "label": "对照"}, _ctl_ctx, confirmed=True)
+        _t2_ok = (_sig_before == _sig_after and not _touched and _ran == ["set_alarm"])
+        _t2_why = "before=%r after=%r 界面=%r 对照=%r" % (_sig_before, _sig_after, _touched, _ran)
+    except Exception as _e:
+        _t2_why = repr(_e)
+    check("tool refuse keeps data", _t2_ok, _t2_why)
+
+    # -- 7c-3. ai_rag_enabled=False 完全不注入；True 时摘要里有记账字段 --
+    _t3_ok, _t3_why = False, ""
+    try:
+        _ctx_off = pet._build_ai_context({"ai_rag_enabled": False})
+        _ctx_on = pet._build_ai_context({"ai_rag_enabled": True, "city": "验证市"})
+        _t3_ok = (_ctx_off == "" and "【用户数据摘要】" in _ctx_on
+                  and "今日消费" in _ctx_on and "验证市" in _ctx_on)
+        _t3_why = "off=%r on=%r" % (_ctx_off[:16], _ctx_on[:110])
+    except Exception as _e:
+        _t3_why = repr(_e)
+    check("ai rag switch off/on", _t3_ok, _t3_why)
+
+    # -- 7c-4. memory.json：history 与 long_term 互不覆盖（真实写入路径，落临时目录）--
+    _t4_ok, _t4_why = False, ""
+    try:
+        _mem_guard = os.path.join(_tmp, "memory_guard.json")
+        _pc = main.pet_chat
+        _pc.write_memory(_mem_guard, [("user", "你好"), ("assistant", "嗨")], 10)
+        _pc.write_long_term(_mem_guard, {"user_name": "小明", "preferences": ["喜欢吃蛋糕"]})
+        _hist_a = _pc.read_memory(_mem_guard, 10)
+        _pc.write_memory(_mem_guard, [("user", "在吗")], 10)
+        _hist_b = _pc.read_memory(_mem_guard, 10)
+        _lt = _pc.read_long_term(_mem_guard)
+        _t4_ok = (_hist_a == [("user", "你好"), ("assistant", "嗨")]
+                  and _hist_b == [("user", "在吗")]
+                  and _lt.get("user_name") == "小明"
+                  and list(_lt.get("preferences") or []) == ["喜欢吃蛋糕"])
+        _t4_why = "hist_a=%r hist_b=%r lt=%r" % (_hist_a, _hist_b, _lt)
+    except Exception as _e:
+        _t4_why = repr(_e)
+    check("memory history/long_term roundtrip", _t4_ok, _t4_why)
+
+    # -- 7c-5. 工具轮数 / 单轮数量封顶：超出的调用也必须拿到 tool 消息（否则下一轮 400）--
+    _t5_ok, _t5_why = False, ""
+    try:
+        _rounds = int(pet_tools.MAX_TOOL_ROUNDS)
+        _per = int(pet_tools.MAX_CALLS_PER_ROUND)
+        _over = _per + 2  # 单轮故意超量 2 个
+        _posts = []
+
+        class _FakeResp(object):
+            status_code = 200
+            text = "{}"
+
+            def __init__(self, payload):
+                self._payload = payload
+
+            def json(self):
+                return self._payload
+
+        _calls = [{"id": "v%d" % _i, "type": "function",
+                   "function": {"name": "get_ledger_summary", "arguments": "{}"}}
+                  for _i in range(_over)]
+        _payload = {"choices": [{"message": {"role": "assistant", "content": None,
+                                             "tool_calls": _calls}}]}
+        _real_post = main.pet_chat.requests.post
+        _real_ctx = pet.chat._tool_ctx
+        _real_tools = pet.cfg.get("ai_tools_enabled")
+        try:
+            def _fake_post(url, headers=None, json=None, timeout=None):
+                _posts.append(json or {})
+                return _FakeResp(_payload)
+
+            main.pet_chat.requests.post = _fake_post
+            pet.cfg["ai_tools_enabled"] = True
+            # 假 backend：账本摘要走假提供者（真提供者/网络不参与，验证只测工具循环）
+            pet.chat._tool_ctx = pet_tools.ToolContext(
+                ledger=lambda: (True, {"today": 1.0, "total": 2.0, "summary": "今日 ¥1.00"}))
+            pet.chat._worker("查一下账本摘要", pet.cfg.get("api_key") or "")
+        finally:
+            main.pet_chat.requests.post = _real_post
+            pet.chat._tool_ctx = _real_ctx
+            pet.cfg["ai_tools_enabled"] = _real_tools
+        _msgs = (_posts[-1].get("messages") or []) if _posts else []
+        _tool_msgs = [m for m in _msgs if m.get("role") == "tool"]
+        _asked = [c.get("id") for m in _msgs if m.get("role") == "assistant"
+                  for c in (m.get("tool_calls") or [])]
+        _answered = [m.get("tool_call_id") for m in _tool_msgs]
+        _skipped = [m for m in _tool_msgs if "先跳过" in str(m.get("content") or "")]
+        _t5_ok = (_rounds >= 1 and _per >= 1
+                  and len(_posts) == _rounds + 1          # 第 rounds+1 次请求发现超限 → 收敛
+                  and len(_tool_msgs) == _rounds * _over  # 每个 tool_call 都有 tool 消息
+                  and _asked == _answered
+                  and len(_skipped) == _rounds * (_over - _per))
+        _t5_why = ("rounds=%d per=%d posts=%d tool=%d skipped=%d id配对=%s"
+                   % (_rounds, _per, len(_posts), len(_tool_msgs), len(_skipped),
+                      _asked == _answered))
+    except Exception as _e:
+        _t5_why = repr(_e)
+    check("tool round/call caps", _t5_ok, _t5_why)
+
+    # -- 7c-6. 人设文件优先：prompts/default.txt 覆盖内置常量；文件删掉后回退 --
+    _t6_ok, _t6_why = False, ""
+    try:
+        _pdir = os.path.join(_tmp, "prompts")
+        os.makedirs(_pdir, exist_ok=True)
+        _pfile = os.path.join(_pdir, "default.txt")
+        _pold = ""
+        if os.path.isfile(_pfile):
+            with open(_pfile, "r", encoding="utf-8") as _f:
+                _pold = _f.read()
+        with open(_pfile, "w", encoding="utf-8") as _f:
+            _f.write("验证用人设：只说好话\n")
+        _sys_file = main._build_ai_sys_prompt({"ai_persona": "default"})
+        os.remove(_pfile)
+        _sys_fallback = main._build_ai_sys_prompt({"ai_persona": "default"})
+        # 还原：把原文件写回去（重跑/后续检查不受影响）
+        with open(_pfile, "w", encoding="utf-8") as _f:
+            _f.write(_pold or (main.PERSONA_PRESETS["default"].strip() + "\n"))
+        _t6_ok = (_sys_file.startswith("验证用人设：只说好话")
+                  and _sys_fallback.startswith(main.PERSONA_PRESETS["default"][:12]))
+        _t6_why = "file=%r fallback=%r" % (_sys_file[:20], _sys_fallback[:20])
+    except Exception as _e:
+        _t6_why = repr(_e)
+    check("persona file overrides builtin", _t6_ok, _t6_why)
 
     # ---- 8. 清理与退出 ----
     # 护栏自检：检查总数硬断言——任何守卫式跳过（少跑检查）都会让这里 FAIL，

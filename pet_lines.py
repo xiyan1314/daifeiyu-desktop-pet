@@ -35,7 +35,6 @@ class LineService(data_dir, log=None)
 """
 import copy
 import hashlib
-import json
 import os
 import uuid
 
@@ -240,20 +239,21 @@ class LineService:
 
     # ---------------- 持久化 ----------------
     def _load(self):
-        data = None
-        _read_failed_hard = False
-        try:
-            with open(self._path, "r", encoding="utf-8") as f:
-                data = json.load(f)
-        except FileNotFoundError:
-            data = None  # 首次运行：走种子（随后 _save 会写出来）
-        except (ValueError, UnicodeDecodeError):
-            data = None  # 内容坏了 → 允许下面的愈合回写
-        except OSError:
-            # 只是暂时打不开（Windows 共享冲突/句柄占用）→ 判为"不是坏文件"，绝不回写覆盖
-            _read_failed_hard = True
-        except Exception:
-            data = None  # 有意忽略：其余异常按首次运行处理
+        """读 lines.json 并归一化；**只有真损坏**才回写（v2.3.1 兼容审查 S1 修复）。
+
+        读路径统一走 pet_io（utf-8-sig）。旧实现自己 open(..., encoding="utf-8") 并把
+        ValueError / UnicodeDecodeError 一律当"内容坏了"→ data=None → 末尾 _save() 回写
+        **内置种子库**：带 UTF-8 BOM 的合法 lines.json（103 字节、1 条自定义台词）会被
+        改写成 20269 字节的种子库，用户台词全丢且零日志；GBK 另存的同理。现在：
+
+        - 文件不存在（首次运行）→ 种子，并落盘；
+        - 真解析失败 / 顶层不是对象 → **先留 .bak** 再回写种子（愈合留证，判错可恢复）；
+        - 读取失败（权限/共享占用）或非 UTF-8 编码 → **一个字节都不写**（不能证明损坏）。
+        """
+        data, corrupted = pet_io.read_json_or(self._path, lambda: None, expect=dict,
+                                              log=self._log)
+        # data is None 且不是"损坏" → 要么文件不存在（首次运行），要么这次没读到（不写）
+        _unreadable = data is None and os.path.exists(self._path)
         self._lines, self._dialogues, self._deleted = [], [], []
         if isinstance(data, dict):
             for ln in (data.get("lines") or []):
@@ -273,13 +273,17 @@ class LineService:
             self._merge_builtins(force=True)
         self._reindex()
         # v2.3.1（评审报告根因 B 的同类遗留）：之前这里是"坏 lines.json 只报错、被动等下次
-        # 写盘才愈合"。现在与 memory/alarms/behaviors/索引 同口径——**读到坏就回写一次愈合文件**，
-        # 让坏数据不再每次启动重报（read 失败=OSError 时不写，避免覆盖只是暂时打不开的好文件）。
-        if data is None and _read_failed_hard is False:
-            try:
-                self._save()
-            except Exception as _e:
-                _log_error("lines heal save failed: %r" % (_e,))
+        # 写盘才愈合"。现在与 memory/alarms/behaviors/索引 同口径——**读到真坏就回写一次**
+        # 愈合文件，让坏数据不再每次启动重报。
+        # v2.3.1（兼容审查 S1）：判据从"data is None"收紧成"真损坏 / 文件不存在"——
+        # 读失败（OSError）与编码不是 UTF-8 都不能证明文件坏了，绝不回写覆盖。
+        # 报错走注入的 self._log（此前这里写的是全局 _log_error，本模块并没有这个名字）。
+        if corrupted or (data is None and not _unreadable):
+            if corrupted:
+                pet_io.backup_before_heal(self._path, self._log)
+            err = self._save()
+            if err:
+                self._log("lines heal save failed: %s" % err)
 
     def _merge_builtins(self, force=False):
         """补入缺失的内置台词：跳过用户删过的 id（防复活）；force=首次种子化。"""
@@ -341,7 +345,11 @@ class LineService:
             order = int(ln.get("order") or 0)
         except (TypeError, ValueError):
             order = 0
-        return {
+        # v2.3.1（兼容审查 M1）：**先复制原条目**再覆盖已知键——此前这里"重建已知键"，
+        # 会把用户手加的备注/未来版本写入的新字段在"读取时归一化回写"这一步永久删掉。
+        # 与 pet_alarm._norm_alarm / pet_behaviors._norm_behavior 同口径。
+        out = dict(ln)
+        out.update({
             "id": lid,
             "text": text[:TEXT_MAX],
             "category": cat,
@@ -350,7 +358,8 @@ class LineService:
             "order": order,
             "builtin": bool(ln.get("builtin")),
             "food": str(ln.get("food") or ""),
-        }
+        })
+        return out
 
     @staticmethod
     def _norm_dialogue(d):

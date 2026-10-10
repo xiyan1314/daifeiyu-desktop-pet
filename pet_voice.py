@@ -497,17 +497,50 @@ class SapiBackend(VoiceBackend):
         return data, ""
 
 
-AUDIO_MAGICS = (b"RIFF", b"ID3", b"OggS", b"fLaC", b"\xff\xfb", b"\xff\xf3", b"\xff\xf2")
+# 容器魔数（**恒 4 字节**，按 head 逐字节比较）。v2.3.1（P2-A）：
+# 旧表里混了 3 个 2 字节项（b"\xff\xfb"/b"\xff\xf3"/b"\xff\xf2"）——head 永远取 4 字节，
+# 它们**永远匹配不上**（MPEG 帧同步由下面逐位判定覆盖，不需要进表）；
+# 复查时又发现第 4 个死项：b"ID3"（3 字节）同样永远匹配不上——ID3 前缀判定本来就在
+# 下面单独做（head[:3] == b"ID3"），这里一并删掉，表里只留真正的 4 字节魔数。
+# 同时补上被误拒的合法容器：FORM(aiff)、ADIF(aac-adif)、#!AM(amr)、MThd(midi)、
+# MAC (ape)、wvpk(wavpack)。m4a/mp4 的 ftyp 在偏移 4、webm 是 EBML，见下。
+AUDIO_MAGICS = (b"RIFF", b"OggS", b"fLaC", b"FORM", b"ADIF", b"#!AM",
+                b"MThd", b"MAC ", b"wvpk")
+_EBML_MAGIC = b"\x1a\x45\xdf\xa3"   # webm/mkv（opus/vorbis 音频）
+
+
+def _looks_like_text(head):
+    """明显是文本（HTML/JSON/纯 ASCII 说明文字）——把服务端的垃圾字节挡在缓存外。"""
+    if not head:
+        return False
+    head = bytes(head)
+    if head[:1] in (b"<", b"{", b"["):
+        return True                      # HTML/XML/JSON
+    # 全 ASCII 可打印（含空白）= 文本；出现非 ASCII 或控制字节 = 二进制
+    return all(32 <= b < 127 or b in (9, 10, 13) for b in head)
 
 
 def _looks_like_audio(data):
-    """音频字节粗校验（容器魔数）：防把非音频内容写进缓存后无声播放。"""
+    """音频字节粗校验（容器魔数）：防把非音频内容写进缓存后无声播放。
+
+    v2.3.1（P2-A）：口径从"必须命中白名单"改成"**只排除明显非音频**"。
+    旧口径把 m4a(ftyp 在偏移 4)/webm-opus(EBML)/aac-adif 这些合法格式静默拒播，
+    而 F5-TTS / CosyVoice 两个后端（pet_voice.py:226/266）返回的正是这类字节；
+    旧版没有这道校验、原样交给解码器。现在：命中已知魔数 → 放行；未知但不像文本
+    → 放行（宁可让解码器报错，也不静默拒播）；明显是文本/HTML/JSON → 拒绝。
+    """
     if not data or len(data) < 4:
         return False
     head = bytes(data[:4])
     if head[:3] == b"ID3" or head in AUDIO_MAGICS:  # 魔数单一来源：AUDIO_MAGICS
         return True
-    return head[0] == 0xFF and (head[1] & 0xE0) == 0xE0  # MPEG 帧同步（mp3/aac）
+    if head == _EBML_MAGIC:
+        return True                                  # webm/mkv（opus 音频）
+    if head[0] == 0xFF and (head[1] & 0xE0) == 0xE0:
+        return True                                  # MPEG 帧同步（mp3/aac-adts/latm）
+    if bytes(data[4:8]) == b"ftyp":
+        return True                                  # ISO-BMFF：mp4/m4a/3gp/mov
+    return not _looks_like_text(bytes(data[:64]))     # 未知：非文本就交给解码器
 
 
 def _audio_duration(path):
@@ -539,7 +572,11 @@ def _decode_json_audio(resp, who):
             try:
                 r = requests.get(audio, timeout=60)
                 if r.status_code == 200 and r.content:
-                    return r.content, ""
+                    # v2.3.1（M4）：这条分支此前**漏了魔数校验**（本轮只补了 url/path/file
+                    # 三条）——服务把 HTML 错误页/文本当 audio 递过来会写进缓存后无声播放。
+                    if _looks_like_audio(r.content):
+                        return r.content, ""
+                    return None, "%s 下载到的 audio 不是音频数据（已拒绝）" % who
                 return None, "%s 下载音频失败（HTTP %d）" % (who, r.status_code)
             except Exception as e:
                 return None, "%s 下载音频失败：%s" % (who, e)
@@ -619,12 +656,18 @@ class VoiceLauncher:
         self._log_fh = None
 
     def _load_state(self):
-        try:
-            with open(self._state_path, "r", encoding="utf-8") as f:
-                data = json.load(f)
-            return data if isinstance(data, dict) else {}
-        except Exception:
-            return {}  # 有意忽略：首次运行/损坏 → 视为没启动过
+        """读启动器状态；**真损坏才愈合回写**（v2.3.1 读侧愈合口径一致性收口）。
+
+        旧实现自己 open + "except Exception: return {}"：坏 JSON **既不愈合也不记日志**
+        （error.log 里连一行都没有），同一份坏文件每次启动重读重报。
+        现在统一走 pet_io.heal_json，与 alarms/behaviors/lines/索引同口径：
+          · 文件不存在（首次运行）→ {}，不写、不报；
+          · 真解析失败 / 顶层不是对象 → 先留 voice_backend.json.bak 再回写 {}（并记日志）；
+          · 读取失败（权限/共享占用）或非 UTF-8 编码 → **一个字节都不写**（不能证明损坏）。
+        状态里只有 pid/create_time 两个标量：读不出来的 pid 本来也用不了，重建不丢可用信息。
+        """
+        data, _corrupted = pet_io.heal_json(self._state_path, dict, log=self._log)
+        return data if isinstance(data, dict) else {}
 
     def _save_state(self):
         # v2.3.1：统一走 pet_io（分锁 + 线程唯一临时名 + replace 重试）；
@@ -784,6 +827,32 @@ class VoiceLauncher:
             last or "后端没起来", max(3, int(timeout or 30)), self._log_path)
 
 
+# ---------------- 片段库（voice.json）读侧口径：真损坏 / 内层类型非法才回写 ----------------
+def _empty_index():
+    """合法的空 voice.json（愈合回写用；与 VoiceService._save 写的结构完全一致）。"""
+    return {"version": 2, "clips": {}}
+
+
+def _normalize_index(data):
+    """voice.json 的"内层类型"判据（交给 pet_io.heal_json 的 normalize）。
+
+    返回 (fixed, reason)：reason 非空 = 顶层合法但内层类型非法，需要愈合回写。
+    只有**能被安全重建**的字段才动手：
+      · "clips" 存在但不是对象（如 {"clips": [...]}）→ 重建为空表：这种值不可能是合法的
+        "事件 → 文件名"映射，留着也一条都读不出来（旧代码正是**静默**读成空表、无日志、
+        不愈合），其余顶层键原样保留（未来版本新增的字段不能被读侧回写删掉）。
+      · 条目级问题（事件名不在 VOICE_EVENTS / 扩展名不是 .wav·.mp3）**只记日志不重建**：
+        那可能是用户手写的 .ogg/.m4a 绑定，重写会把它永久删掉——宁可留着。
+    """
+    if not isinstance(data, dict):
+        return data, None      # 顶层类型由 heal_json 的 expect 判（走 factory 重建）
+    if "clips" in data and not isinstance(data["clips"], dict):
+        fixed = dict(data)
+        fixed["clips"] = {}
+        return fixed, "clips 字段不是对象（可能是被手改/写坏的片段表）"
+    return data, None
+
+
 # ---------------- v2.1：语言系统服务 ----------------
 class VoiceService:
     """语言系统：事件片段 + 角色声音绑定 + 克隆合成队列 + 播放控制。主线程调用。
@@ -818,17 +887,34 @@ class VoiceService:
 
     # ---------------- 持久化（事件片段） ----------------
     def _load(self):
-        try:
-            with open(self._index, "r", encoding="utf-8") as f:
-                data = json.load(f)
-        except Exception:
-            data = None  # 有意忽略：首次使用/损坏 → 空表（首次运行常态）
+        """读事件片段库；**真损坏 / 内层类型非法才愈合回写**（v2.3.1 读侧口径收口）。
+
+        旧实现自己 open + "except Exception: data = None"：坏 voice.json **既不愈合也不
+        记日志**，同一份坏文件每次启动重报；条目级问题（事件名不认识、扩展名不是
+        .wav/.mp3）同样是**静默**丢，用户完全不知道自己的绑定没生效。现在：
+          · 读走 pet_io.heal_json（utf-8-sig）：缺失/读不到 → 空表且**一个字节都不写**；
+            真解析失败 / 顶层不是对象 → 留 .bak 后回写合法空结构（_empty_index）；
+            "clips" 字段类型非法 → 记一行日志 + .bak + 按归一化结构重建（_normalize_index）；
+          · 条目级问题只记一行日志（重写会把用户手写的 .ogg/.m4a 绑定永久删掉）。
+        """
+        data, _corrupted = pet_io.heal_json(self._index, _empty_index, log=self._log,
+                                            normalize=_normalize_index)
         clips = {}
         if isinstance(data, dict):
-            src = data.get("clips") if isinstance(data.get("clips"), dict) else data
+            raw = data.get("clips")
+            src = raw if isinstance(raw, dict) else data   # 兼容 v2.0 之前的扁平格式
+            dropped = []
             for k, v in src.items():
                 if k in VOICE_EVENTS and isinstance(v, str) and v.lower().endswith((".wav", ".mp3")):
                     clips[k] = v
+                elif src is not data:
+                    # 只统计规范结构（clips 表）里的坏条目：扁平格式下分不清"元数据键"与
+                    # "坏条目"，一律不报（与旧版行为一致）
+                    dropped.append(str(k))
+            if dropped:
+                self._log("voice index 忽略 %d 条无法识别的片段绑定（事件名不在 VOICE_EVENTS "
+                          "或不是 .wav/.mp3，原文件保留）：%s"
+                          % (len(dropped), ", ".join(dropped[:5])))
         self._clips = clips
 
     def _save(self):

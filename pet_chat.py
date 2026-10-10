@@ -5,6 +5,7 @@ AI 对话线程 + 对话记忆持久化（P1-6 / P1-10 / P3-3 / v2.0.4 多模型
 独立模块：不 import 桌宠.py。signals / cfg / 人设构造 / 表情解析 / 记忆读写全部注入；
 _py/_chat_history/_history_lock/_mem_epoch 等守卫状态仍归属 PetWindow（语义不变）。
 """
+import inspect
 import json
 import time
 import threading
@@ -162,6 +163,34 @@ def _empty_memory():
     return {"history": [], "long_term": sanitize_long_term(None)}
 
 
+def _normalize_memory_nested(data):
+    """memory.json 的"内层类型"判据（交给 pet_io.heal_json 的 normalize）。
+
+    P2（v2.3.1 读侧一致性收口）：顶层是对象、但内层字段类型非法（{"history": {...}}、
+    {"long_term": [...]}）时此前是**静默**返回空、无日志、不愈合——用户手改/半截写坏的
+    痕迹一点都看不到。现在只要**能被归一化安全重建**就愈合回写（并留 .bak）：
+      · history 不是列表 → 重建为 []（这种值里没有一条能用的 (role, content) 二元组）；
+      · long_term 不是对象 → 重建为 sanitize_long_term(None)（Single Source：与正常读同口径）；
+      · 其余顶层键**原样保留**（未来版本新增的字段不能被读侧回写删掉）。
+    返回 (fixed, reason)：reason 为空 = 内层结构合法，一个字节都不写。
+    """
+    if not isinstance(data, dict):
+        return data, None      # 顶层类型由 heal_json 的 expect 判（这条走不到）
+    bad = []
+    fixed = data
+    if "history" in data and not isinstance(data["history"], list):
+        fixed = dict(fixed)
+        fixed["history"] = []
+        bad.append("history 不是列表")
+    if "long_term" in data and not isinstance(data["long_term"], dict):
+        fixed = dict(fixed)
+        fixed["long_term"] = sanitize_long_term(None)
+        bad.append("long_term 不是对象")
+    if not bad:
+        return data, None
+    return fixed, "；".join(bad)
+
+
 def read_memory(path, max_entries, log=None):
     """读取 memory.json 对话历史 [(role, content), ...]；缺失/损坏返回 []。
 
@@ -169,8 +198,14 @@ def read_memory(path, max_entries, log=None):
     坏 JSON 不再每次启动重刷 error.log（历史实测：load_chat_memory 读取失败 ×140）。
     愈合只在"文件仍然是坏的"时才写（pet_io.heal_json 在路径锁内复查），
     与在途写者不打架。
+    P2（v2.3.1 一致性收口）：**内层**字段类型非法（{"history": {...}}）也走同一条愈合
+    路径（_normalize_memory_nested）：记一行日志 + 留 .bak + 按归一化结构重建；
+    读不到（OSError/非 UTF-8）仍然一个字节都不写。
     """
-    data, corrupted = pet_io.heal_json(path, _empty_memory, log=log)
+    # L2：memory.json 是**紧凑单行**格式，愈合时传 indent=None——
+    # 否则一次愈合就把用户的记忆文件改写成 indent=2 的多行格式（观感/体积双变）
+    data, corrupted = pet_io.heal_json(path, _empty_memory, log=log, indent=None,
+                                       normalize=_normalize_memory_nested)
     if corrupted:
         return []
     out = []
@@ -199,7 +234,18 @@ def _read_memory_raw(path, log=None):
     return data
 
 
-def _write_memory_file(path, hist=None, long_term=None, max_entries=3, log=None):
+def _log_msg(log, msg):
+    """日志回调（注入式）：日志通道自身出错不影响持久化主流程。"""
+    if log is None:
+        return
+    try:
+        log(msg)
+    except Exception:
+        pass  # 有意忽略：日志失败不影响写盘
+
+
+def _write_memory_file(path, hist=None, long_term=None, max_entries=3, log=None,
+                       expect_epoch=None, epoch_of=None):
     """原子写 memory.json：**history 与 long_term 合并写**，谁都不覆盖谁。
 
     P0-1（v2.3.1）：整个"读 → 改 → 写"都在 pet_io 的**同一把路径锁**内完成。
@@ -207,9 +253,26 @@ def _write_memory_file(path, hist=None, long_term=None, max_entries=3, log=None)
     同时写时，两边抢同一个 tmp 互相截断（半截 JSON 上盘），而且主线程用**更早读到的
     旧快照** os.replace，会把 worker 刚追加的一整轮对话覆盖回退。
     加锁后两者串行、且写前读到的永远是最新磁盘内容（锁内读-改-写）。
+
+    P1-A：expect_epoch（worker 出发时记下的"记忆代次"）+ epoch_of（读当前代次的可调用）
+    一起传入时，**在路径锁内**复查代次；不匹配就放弃这次落盘。
+    为什么必须在这里查：worker 侧那次判定（pet_chat.py 的 _history_lock 内）与真正
+    落盘之间还有窗口——实测（memory_saver 加 200ms 延迟放大）"清日志"之后在途 worker
+    仍能把 4 条 history 全写回去；撞上 os.replace 共享冲突重试时窗口可达 150ms。
     """
     lock = pet_io.path_lock(path)
     with lock:
+        if expect_epoch is not None and callable(epoch_of):
+            try:
+                _now_epoch = epoch_of()
+            except Exception as e:
+                _now_epoch = None
+                _log_msg(log, "pet_chat 记忆代次读取失败：%r" % (e,))
+            if _now_epoch != expect_epoch:
+                # 代次已变（用户清了日志/清了 Key）：旧快照不得撤销用户的清除操作
+                _log_msg(log, "pet_chat 记忆代次已变（%r→%r），放弃本次落盘"
+                         % (expect_epoch, _now_epoch))
+                return None
         data = _read_memory_raw(path, log)
         if hist is not None:
             data["history"] = list(hist)[-max_entries:]
@@ -220,9 +283,13 @@ def _write_memory_file(path, hist=None, long_term=None, max_entries=3, log=None)
     return data
 
 
-def write_memory(path, hist, max_entries, log=None):
-    """原子落盘对话记忆（保留 long_term 段，不再整文件覆盖）。"""
-    _write_memory_file(path, hist=hist, max_entries=max_entries, log=log)
+def write_memory(path, hist, max_entries, log=None, expect_epoch=None, epoch_of=None):
+    """原子落盘对话记忆（保留 long_term 段，不再整文件覆盖）。
+
+    expect_epoch/epoch_of 见 _write_memory_file：锁内复查"记忆代次"，不匹配就放弃本次写。
+    """
+    _write_memory_file(path, hist=hist, max_entries=max_entries, log=log,
+                       expect_epoch=expect_epoch, epoch_of=epoch_of)
 
 
 def sanitize_long_term(lt):
@@ -256,11 +323,15 @@ def read_long_term(path, log=None):
     return sanitize_long_term(_read_memory_raw(path, log).get("long_term"))
 
 
-def write_long_term(path, long_term, max_entries=3, log=None):
-    """写长期记忆（保留 history 段）。返回归一化后的结构。"""
+def write_long_term(path, long_term, max_entries=3, log=None, expect_epoch=None, epoch_of=None):
+    """写长期记忆（保留 history 段）。返回归一化后的结构。
+
+    expect_epoch/epoch_of 同上：清 Key/清记忆之后，在途请求抽取出的长期记忆不再写回。
+    """
     lt = sanitize_long_term(long_term)
     lt["last_updated"] = time.strftime("%Y-%m-%dT%H:%M:%S")
-    _write_memory_file(path, long_term=lt, max_entries=max_entries, log=log)
+    _write_memory_file(path, long_term=lt, max_entries=max_entries, log=log,
+                       expect_epoch=expect_epoch, epoch_of=epoch_of)
     return lt
 
 
@@ -314,6 +385,21 @@ def extract_long_term(user_msg):
     return out
 
 
+def _accepts_epoch_kwargs(fn):
+    """注入的记忆落盘函数是否接受 expect_epoch/epoch_of（P1-A）。
+
+    旧注入契约（含测试替身）只收 1 个参数；这里在构造时判定一次，避免运行时用
+    TypeError 猜（那会把落盘函数**内部**的 TypeError 也误判成"不支持"）。
+    """
+    try:
+        params = inspect.signature(fn).parameters
+    except (TypeError, ValueError):
+        return False
+    if any(p.kind is inspect.Parameter.VAR_KEYWORD for p in params.values()):
+        return True
+    return "expect_epoch" in params
+
+
 class ChatService:
     """AI 对话线程：请求 / 人设 / 记忆 / 表情标记解析（P3-3 先剥标记再截断）。
 
@@ -333,6 +419,8 @@ class ChatService:
         self._context = context_builder
         self._mem_path = memory_path  # v2.3.0（1.1）：长期记忆落盘目标（None=不启用抽取）
         self._save_memory = memory_saver
+        # P1-A：落盘函数是否支持"记忆代次"守卫（旧注入只收 1 个参数 → 按旧口径调）
+        self._saver_epoch = _accepts_epoch_kwargs(memory_saver)
         self._play = play_sound
         self._log = log
         self._default_reply_len = default_reply_len
@@ -342,6 +430,24 @@ class ChatService:
         self._ui_lock = threading.Lock()
         self._ui_calls = {}       # {call_id: pet_tools.MainThreadCall}
         self._tool_confirms = {}  # {req_id: pet_tools.ToolConfirmRequest}
+
+    def _epoch_now(self):
+        """当前记忆代次（清日志/清 Key 会 +1）。worker 落盘前在路径锁内复查它。"""
+        try:
+            return self.pet._mem_epoch
+        except Exception:
+            return None  # 有意忽略：pet 无该属性时按"代次不可知"处理（写盘侧会放弃）
+
+    def _save_snapshot(self, snapshot, epoch):
+        """把本轮对话快照落盘（P1-A：带上出发时记下的代次，锁内复查后才写）。
+
+        注入方支持新契约时传 expect_epoch/epoch_of；旧注入（只收 1 个参数）按旧口径调，
+        保持向后兼容（测试替身与第三方注入不受影响）。
+        """
+        if self._saver_epoch:
+            self._save_memory(snapshot, expect_epoch=epoch, epoch_of=self._epoch_now)
+        else:
+            self._save_memory(snapshot)
 
     def inflight(self):
         return self.pet._ai_inflight
@@ -572,7 +678,10 @@ class ChatService:
                 else:
                     snapshot = None
             if snapshot is not None:
-                self._save_memory(snapshot)  # P1-6：锁外落盘，原子写不阻塞其他线程
+                # P1-6：锁外落盘，原子写不阻塞其他线程；
+                # P1-A：把出发时记下的 mem_epoch 一起传下去，落盘路径在**路径锁内**复查
+                # 代次——清日志/清 Key 之后这次旧快照会被放弃，不再把历史写回去。
+                self._save_snapshot(snapshot, mem_epoch)
             # v2.3.0（1.1 长期记忆）：回复成功后**规则抽取**一条记忆并合并落盘。
             # 用规则而不是再调一次模型：零 API 成本、可单测，也不会因为额度和网络多一次失败面。
             if snapshot is not None and self._mem_path and not _exhausted:
@@ -589,7 +698,9 @@ class ChatService:
                                 _lt[_k].append(_v)
                                 _changed = True
                     if _changed:
-                        write_long_term(self._mem_path, _lt, log=self._log)
+                        # P1-A：长期记忆同样带代次守卫（清 Key 后不得把抽取结果写回）
+                        write_long_term(self._mem_path, _lt, log=self._log,
+                                        expect_epoch=mem_epoch, epoch_of=self._epoch_now)
                 except Exception as _e:
                     if self._log is not None:
                         self._log("long_term extract failed: %r" % (_e,))
