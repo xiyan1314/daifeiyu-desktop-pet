@@ -39,12 +39,23 @@ import re
 import tempfile
 import uuid
 
+import pet_io   # v2.3.1：全仓共用原子写/安全读（分锁 + 线程唯一临时名 + replace 重试）
 import pet_log
 
 # v2.0.2：行为动作类型白名单（单一来源：校验 / 编辑对话框共用）
 # v2.1：新增 speak_line / speak_dialogue（经 PetWindow 转交语言系统，模块间不互相 import）
 BEHAVIOR_ACTS = ("play_action", "say", "voice", "emote", "form", "sleep", "wait",
                  "speak_line", "speak_dialogue")
+# v2.3.1（P1-2）：历史 behaviors.json 里"把动作名直接写在 act 上"的旧条目——旧版本能跑、
+# 现在白名单里没有（error.log 实测「第 1 步动作类型不合法：jump」），属于**数据格式迁移缺口**
+# 而不是用户乱填。这类 act 一律映射成 play_action（动作名照旧透传），而不是丢弃。
+# 值 = (现用 act, 迁移后要补的默认参数值)。
+_LEGACY_ACT_ALIASES = {
+    "jump": ("play_action", "jump"),        # 内建跳跃动作：play_action 的 name 就叫 jump
+    "breathe": ("play_action", "breathe"),  # 程序化合成动作（角色定义了同名 procs 时生效）
+    "sway": ("play_action", "sway"),
+    "nod": ("play_action", "nod"),
+}
 # 语音事件白名单（与 pet_voice.VOICE_EVENTS 同值；pet_behaviors 不依赖 pet_voice 的私有实现）
 BEHAVIOR_VOICE_EVENTS = ("reply", "feed", "poke", "sleep", "wake")
 BEHAVIOR_EMOTES = ("note", "sparkle", "heart", "zzz")
@@ -323,9 +334,18 @@ def validate_steps(steps):
     for i, st in enumerate(steps):
         if not isinstance(st, dict):
             return None, "第 %d 步不是有效动作" % (i + 1)
-        act = st.get("act")
+        raw_act = st.get("act")
+        act = raw_act
+        # v2.3.1（P1-2）：旧动作名先迁移再判合法性（映射而非丢弃）。
+        # act 可能是任意 JSON 值（list/dict 不可哈希），先判类型再查表，防 TypeError。
+        alias = _LEGACY_ACT_ALIASES.get(raw_act) if isinstance(raw_act, str) else None
+        if alias is not None and act not in BEHAVIOR_ACTS:
+            act, default_name = alias
+            st = dict(st)   # 不改调用方的入参
+            if default_name and not str(st.get("name") or "").strip():
+                st["name"] = default_name   # 旧条目把动作名写在 act 上 → 补成 play_action 的 name
         if act not in BEHAVIOR_ACTS:
-            return None, "第 %d 步动作类型不合法：%s" % (i + 1, act)
+            return None, "第 %d 步动作类型不合法：%s" % (i + 1, raw_act)
         item = {"act": act}
         if act == "play_action":
             name = str(st.get("name") or "").strip()
@@ -385,30 +405,33 @@ class BehaviorService:
 
     # ---------- 持久化 ----------
     def _load(self):
-        try:
-            with open(self._index, "r", encoding="utf-8") as f:
-                data = json.load(f)
-        except Exception:
-            data = None  # 首次运行/损坏：空库（有意静默，首次运行常态）
+        """读行为库并归一化；**清洗过就回写愈合**（P0-2 / E）。
+
+        此前坏条目只从内存丢掉、不落盘：磁盘上的坏数据每次启动重报
+        （error.log 实测「动作序列不能为空」「动作类型不合法：jump」）。
+        现在只要"损坏 / 丢条目 / 迁移或归一化确实改了内容"就 _save() 一次，
+        下次启动直接读干净文件（旧动作别名迁移的结果也借此写回磁盘）。
+        """
+        data, corrupted = pet_io.read_json_or(self._index, dict, log=self._log)
         self._behaviors = {}
+        dirty = corrupted   # 文件本身坏了：读完立刻用合法空库覆盖
         if isinstance(data, dict):
             for b in (data.get("behaviors") or []):
                 nb, err = self._norm_behavior(b)
                 if nb is None:
                     # 坏条目=用户资产损坏：记日志留痕（不弹窗，静默恢复空库）
                     self._log("behavior index dropped bad entry: %s" % (err or "格式非法"))
+                    dirty = True
                 elif nb["id"] not in self._behaviors:
                     self._behaviors[nb["id"]] = nb
+                    if nb != b:
+                        dirty = True   # 别名迁移/字段清洗：磁盘与内存口径必须一致
+        if dirty:
+            self._save()   # 愈合回写（走 pet_io 的同一把路径锁，与在途写者串行）
 
     def _save(self):
-        try:
-            tmp = self._index + ".tmp"
-            with open(tmp, "w", encoding="utf-8") as f:
-                json.dump({"behaviors": list(self._behaviors.values())},
-                          f, ensure_ascii=False, indent=2)
-            os.replace(tmp, self._index)  # 原子写：半截文件不会被当作有效库
-        except Exception as e:
-            self._log("behavior index save failed: %r" % (e,))
+        pet_io.atomic_write_json(self._index, {"behaviors": list(self._behaviors.values())},
+                                 log=self._log)
 
     @staticmethod
     def _norm_behavior(b):
@@ -507,14 +530,10 @@ class BehaviorService:
         b = self.get(bid)
         if b is None:
             return False, "行为不存在"
-        try:
-            tmp = path + ".tmp"
-            with open(tmp, "w", encoding="utf-8") as f:
-                json.dump({"behavior": b}, f, ensure_ascii=False, indent=2)
-            os.replace(tmp, path)
+        err = pet_io.atomic_write_json(path, {"behavior": b}, log=self._log)
+        if err is None:
             return True, ""
-        except Exception as e:
-            return False, "导出失败：%s" % e
+        return False, "导出失败：%s" % err
 
     # ---------- 待机行为 ----------
     def idle(self, cfg_getter):

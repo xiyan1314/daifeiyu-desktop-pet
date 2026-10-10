@@ -39,6 +39,7 @@ import json
 import os
 import uuid
 
+import pet_io   # v2.3.1：全仓共用原子写（分锁 + 线程唯一临时名 + replace 重试）
 import pet_log
 
 # ---------------- 内置台词种子（用户可删可改；仅首次写入，之后以 lines.json 为准） ----------------
@@ -286,15 +287,12 @@ class LineService:
             "dialogues": self._dialogues,
             "deleted_builtins": self._deleted,
         }
-        try:
-            tmp = self._path + ".tmp"
-            with open(tmp, "w", encoding="utf-8") as f:
-                json.dump(data, f, ensure_ascii=False, indent=2)
-            os.replace(tmp, self._path)  # 原子写：半截文件不会被当作有效库
+        # v2.3.1：统一走 pet_io（分锁 + 线程唯一临时名 + replace 重试）——
+        # 此前固定 "<lines>.tmp" 且无锁，两个保存点交错会互相截断
+        err = pet_io.atomic_write_json(self._path, data, log=self._log)
+        if err is None:
             return ""
-        except Exception as e:
-            self._log("lines save failed: %r" % (e,))
-            return "台词保存失败：%s" % e
+        return "台词保存失败：%s" % err
 
     # ---------------- 归一化 ----------------
     def _norm_line_checked(self, ln):

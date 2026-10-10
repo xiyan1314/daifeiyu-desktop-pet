@@ -4,6 +4,7 @@
 纯逻辑，无需 Qt。
 """
 import json
+import os
 
 import pet_alarm
 
@@ -14,7 +15,12 @@ def test_valid_and_normalize_time():
     for bad in ("24:00", "12:60", "7:5", "abc", "", None, "12:3x"):
         assert not pet_alarm.valid_time(bad), bad
     assert pet_alarm.normalize_time("07:05") == "07:05"
-    assert pet_alarm.normalize_time("7:5") == ""  # 严格 HH:MM
+    # v2.3.1（P1-1）：normalize_time 改为**宽松补零**（valid_time 仍是严格最终判据）——
+    # 历史/手编数据里的 "7:5"/"8:0"/带秒格式此前被直接丢弃
+    assert pet_alarm.normalize_time("7:5") == "07:05"
+    assert pet_alarm.normalize_time("8:0") == "08:00"
+    assert pet_alarm.normalize_time("07:30:00") == "07:30"
+    assert pet_alarm.normalize_time("24:00") == "" and pet_alarm.normalize_time("abc") == ""
 
 
 def test_due_alarms_semantics():
@@ -150,7 +156,7 @@ def test_due_multiple_and_midnight():
 
 def test_norm_alarm_rejects_path_ringtone():
     a, err = pet_alarm.AlarmService._norm_alarm(
-        {"id": "x", "time": "08:00", "ringtone": "..\..\evil.wav"})
+        {"id": "x", "time": "08:00", "ringtone": os.path.join("..", "..", "evil.wav")})
     assert a is not None and not err
     assert a["ringtone"] == ""  # 路径注入清洗为默认提示音
 

@@ -128,7 +128,9 @@ class BalanceService:
         pet._fetching_balance = False
         if pet._pending_manual:
             pet._pending_manual = False
-            QTimer.singleShot(0, self, lambda: self.refresh(manual=True))  # 补发排队的手动查询
+            # v2.3.1（P2-1）：receiver 必须是 QObject——BalanceService 不是，传 self 会
+            # TypeError/连接异常；pet（QWidget）才是合法 receiver（同时保证窗口销毁后不再回调）
+            QTimer.singleShot(0, self.pet, lambda: self.refresh(manual=True))  # 补发排队的手动查询
         if not self._cfg().get("api_key"):
             return  # Key 已清空，忽略在途请求结果
         pet._currency = currency
@@ -178,7 +180,9 @@ class BalanceService:
         pet._fetching_balance = False
         if pet._pending_manual:
             pet._pending_manual = False
-            QTimer.singleShot(0, self, lambda: self.refresh(manual=True))  # 补发排队的手动查询
+            # v2.3.1（P2-1）：receiver 必须是 QObject——BalanceService 不是，传 self 会
+            # TypeError/连接异常；pet（QWidget）才是合法 receiver（同时保证窗口销毁后不再回调）
+            QTimer.singleShot(0, self.pet, lambda: self.refresh(manual=True))  # 补发排队的手动查询
         if pet._manual_pending:
             pet._manual_pending = False
             pet.show_bubble("余额查不到……API Key 对吗？")

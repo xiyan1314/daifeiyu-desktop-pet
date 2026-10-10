@@ -26,6 +26,7 @@ VBS_NAME = "启动桌宠.vbs"
 SYNC_FILES = ["桌宠.py", "main.py", "pet_actions.py", "pet_ai.py", "pet_alarm.py", "pet_anim.py",
               "pet_audio.py", "pet_balance.py", "pet_behaviors.py", "pet_book.py", "pet_chat.py",
               "pet_config.py", "pet_dialogs.py", "pet_export.py", "pet_fx.py", "pet_lines.py",
+              "pet_io.py",   # v2.3.1：全仓共用原子 IO（被 8 个模块 import，漏了包必崩）
               "pet_log.py", "pet_main.py", "pet_menu.py", "pet_mood.py", "pet_physics.py",
               "pet_resources.py", "pet_screen.py", "pet_tools.py", "pet_voice.py", "pet_wander.py",
               "pet_weather.py", "pet_widgets.py", "version_info.txt", "_verify_green.py",

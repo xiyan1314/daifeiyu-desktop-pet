@@ -39,6 +39,7 @@ import subprocess
 import threading
 import time
 
+import pet_io   # v2.3.1：全仓共用原子写（分锁 + 线程唯一临时名 + replace 重试）
 import pet_log
 import requests
 
@@ -558,15 +559,22 @@ def _decode_json_audio(resp, who):
                 try:
                     r = requests.get(v, timeout=60)
                     if r.status_code == 200 and r.content:
-                        return r.content, ""
+                        # v2.3.1（P3-1）：与 base64 分支同口径做魔数校验——
+                        # 服务把文本/HTML/错误页当音频递过来时，别写进缓存后无声播放
+                        if _looks_like_audio(r.content):
+                            return r.content, ""
+                        return None, "%s 下载到的 %s 不是音频数据（已拒绝）" % (who, k)
                 except Exception as e:
                     return None, "%s 下载音频失败：%s" % (who, e)
             elif os.path.isfile(v):
                 try:
                     with open(v, "rb") as f:
-                        return f.read(), ""
+                        raw = f.read()
                 except Exception as e:
                     return None, "%s 读取音频失败：%s" % (who, e)
+                if _looks_like_audio(raw):
+                    return raw, ""
+                return None, "%s 读取到的 %s 不是音频数据（已拒绝）" % (who, k)
     return None, "%s 返回里没有音频数据" % who
 
 
@@ -619,13 +627,9 @@ class VoiceLauncher:
             return {}  # 有意忽略：首次运行/损坏 → 视为没启动过
 
     def _save_state(self):
-        try:
-            tmp = self._state_path + ".tmp"
-            with open(tmp, "w", encoding="utf-8") as f:
-                json.dump(self._state, f, ensure_ascii=False, indent=2)
-            os.replace(tmp, self._state_path)
-        except Exception as e:
-            self._log("voice backend state save failed: %r" % (e,))  # 有意忽略：丢状态不影响运行
+        # v2.3.1：统一走 pet_io（分锁 + 线程唯一临时名 + replace 重试）；
+        # 有意忽略返回值：丢状态不影响运行，失败已由 pet_io 记日志
+        pet_io.atomic_write_json(self._state_path, self._state, log=self._log)
 
     def _clear_state(self):
         self._state = {}
@@ -828,14 +832,13 @@ class VoiceService:
         self._clips = clips
 
     def _save(self):
+        # v2.3.1：统一走 pet_io（分锁 + 线程唯一临时名 + replace 重试）
         try:
-            os.makedirs(self._dir, exist_ok=True)
-            tmp = self._index + ".tmp"
-            with open(tmp, "w", encoding="utf-8") as f:
-                json.dump({"version": 2, "clips": self._clips}, f, ensure_ascii=False, indent=2)
-            os.replace(tmp, self._index)
+            os.makedirs(self._dir, exist_ok=True)   # 保留原副作用：voice/ 目录随片段库一起建
         except Exception as e:
-            self._log("voice index save failed: %r" % (e,))
+            self._log("voice dir create failed: %r" % (e,))
+        pet_io.atomic_write_json(self._index, {"version": 2, "clips": self._clips},
+                                 log=self._log)
 
     # ---------------- 变更/播放通知（轻量回调，零 Qt） ----------------
     def on_speaking_started(self, cb):
@@ -1083,17 +1086,13 @@ class VoiceService:
             return False
 
     def _write_cache(self, path, data):
-        try:
-            os.makedirs(self._cache_dir, exist_ok=True)
-            tmp = path + ".tmp"
-            with open(tmp, "wb") as f:
-                f.write(data)
-            os.replace(tmp, path)  # 原子写：半截文件不会被当作缓存命中
-            self._prune_cache()
-            return True
-        except Exception as e:
-            self._log("voice cache write failed: %r" % (e,))
+        # v2.3.1：统一走 pet_io（分锁 + 线程唯一临时名 + replace 重试）——
+        # 此前是固定 "<cache>.tmp"，worker 线程与主线程同时合成会互相截断
+        err = pet_io.atomic_write_bytes(path, data, log=self._log)
+        if err is not None:
             return False
+        self._prune_cache()
+        return True
 
     def _persist_cloned(self, backend_id, cloned):
         """把云端后端新克隆出的 voice_id 写回配置（下次同素材直接复用，不重复克隆）。"""
@@ -1253,7 +1252,13 @@ class VoiceService:
         params = self._params_for(bid)
         params["_slot"] = vs  # M8：云端后端按"声音素材槽位"复用已克隆声线
         backend = get_backend(bid)
-        key = (self._cfg() or {}).get("voice", {}).get("backend_keys", {}) or {}
+        # v2.3.1（P2-2 复核）：backend_keys 既可能是空 dict，也可能是手改配置后的坏类型。
+        # 旧口径的 "or ''" 会把**空 dict**（falsy）变成字符串，随后 .get 抛 AttributeError
+        # 让本地后端全部哑火；这里统一先归一成 dict 再取键（空/坏一律按没配 Key 处理）。
+        _vcfg = (self._cfg() or {}).get("voice")
+        _vcfg = _vcfg if isinstance(_vcfg, dict) else {}
+        _bkeys = _vcfg.get("backend_keys")
+        key = _bkeys if isinstance(_bkeys, dict) else {}
         api_key = str(key.get(bid) or "")
         if bid in ("openai", "sapi"):
             api_key = api_key or str((self._cfg() or {}).get("api_key") or "")

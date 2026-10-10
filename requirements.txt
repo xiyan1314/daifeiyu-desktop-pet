@@ -9,3 +9,7 @@ psutil>=5.9
 PyInstaller>=6.0
 # ---- 开发期脚本依赖（去背景.py / 生成占位角色.py，运行时不 import） ----
 Pillow>=9.0
+# ---- 测试（pytest 回归）----
+# v2.3.1：此前只在 requirements-lock.txt 与 CI 里装，requirements 漏声明——
+# 照本文件建环境的人跑不了 pytest（tests/ 是唯一的回归护栏）。
+pytest>=7.0

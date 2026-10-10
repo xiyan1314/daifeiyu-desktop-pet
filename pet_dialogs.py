@@ -643,7 +643,9 @@ def _extract_video_frames(src, out_dir, cancel=None, progress=None):
             if n > 120:
                 return None, "GIF 帧数太多（%d 帧），建议改用视频或减少帧数" % n
             take = min(int(pet_resources.FRAME_MAX or 24), n)  # P3-5+：上限用户可调
-            idxs = [int(round(i * (n - 1) / float(take - 1))) for i in range(take)]
+            # v2.3.1（P3-2）：take==1 时 take-1 会除零（FRAME_MAX 被设成 1 的唯一入口），
+            # 用 max(1, take-1) 兜底：单帧时全部取第 0 帧，不再抛 ZeroDivisionError
+            idxs = [int(round(i * (n - 1) / float(max(1, take - 1)))) for i in range(take)]
             need = set(idxs)
             # 顺序读帧并只保留采样点：部分 GIF 插件 jumpToImage 返回 False
             # 但 read() 仍按序推进——用顺序读最稳，且最多只驻留 take 帧的内存

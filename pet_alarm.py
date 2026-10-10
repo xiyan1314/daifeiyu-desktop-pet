@@ -15,12 +15,12 @@ MIT License
 到点语义：enabled 且 now 的 HH:MM >= time 且 last_fired_date != 今天 → 触发一次，
 触发后记 last_fired_date=今天（同日不重复响；跨天自动重新待命）。
 """
-import json
 import os
 import re
 import time
 import uuid
 
+import pet_io   # v2.3.1：全仓共用原子写/安全读（分锁 + 线程唯一临时名 + replace 重试）
 import pet_log
 
 TIME_RE = re.compile(r"^([01]?\d|2[0-3]):[0-5]\d$")
@@ -35,11 +35,28 @@ def valid_time(t):
 
 
 def normalize_time(t):
-    """归一到 "HH:MM" 两位补零；非法返回 ""。"""
-    if not valid_time(t):
+    """归一到 "HH:MM" 两位补零；非法返回 ""。
+
+    P1-1（v2.3.1）：先**宽松补零**再回退严格正则。历史/手编数据里的 "7:5"、"8:0"、
+    "07:30:00"（带秒）此前被判死丢弃（error.log 实测「时间格式应为 HH:MM」×15 次），
+    现在分别补成 "07:05"/"08:00"/"07:30" 予以挽回；仍不合法的（"25:00"/"abc"/"7"）
+    才丢弃。严格正则仍是**最终判据**，宽松解析只负责补零。
+    """
+    if valid_time(t):
+        h, m = t.split(":")
+        return "%02d:%02d" % (int(h), int(m))
+    if not isinstance(t, str):
         return ""
-    h, m = t.split(":")
-    return "%02d:%02d" % (int(h), int(m))
+    parts = t.strip().split(":")
+    if len(parts) not in (2, 3):      # 只认 HH:MM 与 HH:MM:SS（多一段就是坏格式）
+        return ""
+    try:
+        cand = "%02d:%02d" % (int(parts[0]), int(parts[1]))
+        if len(parts) == 3:
+            int(parts[2])             # 秒：必须存在且是数字，值本身忽略（"07:30:00" → "07:30"）
+    except (TypeError, ValueError):
+        return ""
+    return cand if valid_time(cand) else ""
 
 
 def now_hhmm():
@@ -83,37 +100,43 @@ class AlarmService:
 
     # ---------- 持久化 ----------
     def _load(self):
-        try:
-            with open(self._index, "r", encoding="utf-8") as f:
-                data = json.load(f)
-        except Exception:
-            data = None  # 有意忽略：首次运行/损坏 → 空库（首次运行常态）
+        """读闹钟库并归一化；**清洗过就回写愈合**（P0-2）。
+
+        此前把坏条目从内存丢掉却不落盘：坏数据留在 alarms.json 里，
+        每次启动都重报「时间格式应为 HH:MM」（error.log 实测 ×15）。
+        现在只要"损坏 / 丢条目 / 归一化确实改了内容"就 _save() 一次，
+        下次启动读到的是干净文件，报错不再复发。
+        """
+        data, corrupted = pet_io.read_json_or(self._index, dict, log=self._log)
         self._alarms = {}
+        dirty = corrupted   # 文件本身坏了：读完立刻用合法空库覆盖
         if isinstance(data, dict):
             raw = data.get("alarms")
             if not isinstance(raw, list):
                 if raw is not None:
                     self._log("alarm index alarms field not a list, reset to empty")
+                    dirty = True
                 raw = []
             for a in raw:
                 na, err = self._norm_alarm(a)
                 if na is None:
                     # 坏条目=用户数据损坏：记日志留痕（不弹窗，静默恢复）
                     self._log("alarm index dropped bad entry: %s" % (err or "格式非法"))
+                    dirty = True
                 elif na["id"] not in self._alarms:
                     self._alarms[na["id"]] = na
+                    if na != a:
+                        dirty = True   # 补零/清洗（如 "7:5"→"07:05"）也要落盘，避免每次启动重做
                 else:
                     self._log("alarm index dropped duplicate id: %s" % na["id"])
+                    dirty = True
+        if dirty:
+            self._save()   # 愈合回写（走 pet_io 的同一把路径锁，与在途写者串行）
 
     def _save(self):
-        try:
-            tmp = self._index + ".tmp"
-            with open(tmp, "w", encoding="utf-8") as f:
-                json.dump({"alarms": list(self._alarms.values())},
-                          f, ensure_ascii=False, indent=2)
-            os.replace(tmp, self._index)  # 原子写：半截文件不会被当作有效库
-        except Exception as e:
-            self._log("alarm index save failed: %r" % (e,))  # 有意忽略：写盘失败记日志（内存态仍可用）
+        err = pet_io.atomic_write_json(self._index, {"alarms": list(self._alarms.values())},
+                                       log=self._log)
+        # 有意忽略：写盘失败记日志（内存态仍可用）——pet_io 已在 except 里记过，这里不重复
 
     @staticmethod
     def _norm_alarm(a):
@@ -257,8 +280,12 @@ if __name__ == "__main__":
     _a, _e = _svc.add("07:30", "起床")
     assert _a is not None and not _e, _e
     assert valid_time("07:30") and valid_time("23:59") and not valid_time("24:00")
-    assert valid_time("00:00") and not valid_time("7:5")  # 严格 HH:MM（两位分钟）
+    assert valid_time("00:00") and not valid_time("7:5")  # valid_time 仍是严格 HH:MM
     assert normalize_time("07:05") == "07:05"
+    # v2.3.1（P1-1）：normalize_time 宽松补零（历史数据挽回），严格正则仍是最终判据
+    assert normalize_time("7:5") == "07:05" and normalize_time("8:0") == "08:00"
+    assert normalize_time("07:30:00") == "07:30"
+    assert normalize_time("24:00") == "" and normalize_time("abc") == "" and normalize_time("7") == ""
     _due = due_alarms(_svc.list(), "07:31", "2026-09-30")
     assert len(_due) == 1
     _svc.mark_fired(_a["id"], "2026-09-30")

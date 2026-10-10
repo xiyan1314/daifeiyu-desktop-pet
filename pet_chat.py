@@ -7,11 +7,11 @@ _py/_chat_history/_history_lock/_mem_epoch 等守卫状态仍归属 PetWindow（
 """
 import json
 import time
-import os
 import threading
 
 import requests
 
+import pet_io  # v2.3.1：全仓共用原子写（按路径分锁 + 线程唯一临时名 + replace 重试）
 import pet_tools  # v2.3.0（1.2）：工具注册表/执行器（Qt-free，无环）
 
 # ---------------- v2.0.4：其他模型 API（服务商预设 + 错误归类 + 连通性测试） ----------------
@@ -157,26 +157,31 @@ def test_api_connection(base_url, model, key, timeout=10):
 
 
 # ---------------- P1-6：对话记忆持久化（全量落盘，上下文只取最近 N 轮） ----------------
+def _empty_memory():
+    """合法的空 memory.json 结构（愈合回写用；long_term 段一并补成规范形状）。"""
+    return {"history": [], "long_term": sanitize_long_term(None)}
+
+
 def read_memory(path, max_entries, log=None):
-    """读取 memory.json 对话历史 [(role, content), ...]；缺失/损坏返回 []。"""
-    try:
-        with open(path, "r", encoding="utf-8") as f:
-            data = json.load(f)
-        if isinstance(data, dict) and isinstance(data.get("history"), list):
-            out = []
-            for item in data["history"]:
-                # 跳过畸形条目（非二元组/非字符串），不让一条坏数据毁掉整段记忆
-                if isinstance(item, (list, tuple)) and len(item) == 2:
-                    r, c = item
-                    if isinstance(r, str) and isinstance(c, str):
-                        out.append((r, c))
-            return out[-max_entries:]
-    except FileNotFoundError:
-        pass  # 首次运行还没有 memory.json：不是错误，别往 error.log 写吓人记录
-    except Exception as e:
-        if log is not None:
-            log("load_chat_memory 读取失败（从空记忆开始）: %r" % (e,))
-    return []
+    """读取 memory.json 对话历史 [(role, content), ...]；缺失/损坏返回 []。
+
+    P0-2（v2.3.1）：**损坏即愈合**——解析失败/结构非法时把合法空结构回写回去，
+    坏 JSON 不再每次启动重刷 error.log（历史实测：load_chat_memory 读取失败 ×140）。
+    愈合只在"文件仍然是坏的"时才写（pet_io.heal_json 在路径锁内复查），
+    与在途写者不打架。
+    """
+    data, corrupted = pet_io.heal_json(path, _empty_memory, log=log)
+    if corrupted:
+        return []
+    out = []
+    hist = data.get("history") if isinstance(data.get("history"), list) else []
+    for item in hist:
+        # 跳过畸形条目（非二元组/非字符串），不让一条坏数据毁掉整段记忆
+        if isinstance(item, (list, tuple)) and len(item) == 2:
+            r, c = item
+            if isinstance(r, str) and isinstance(c, str):
+                out.append((r, c))
+    return out[-max_entries:]
 
 
 # v2.3.0（1.1 长期记忆）：memory.json 增加 long_term 段，跨会话记住偏好/昵称/近期话题。
@@ -185,34 +190,33 @@ LONG_TERM_KEYS = ("user_name", "nicknames", "preferences", "dislikes", "recent_t
 
 
 def _read_memory_raw(path, log=None):
-    """读整个 memory.json（dict）。缺失/损坏 → {}。"""
-    try:
-        with open(path, "r", encoding="utf-8") as f:
-            data = json.load(f)
-        return data if isinstance(data, dict) else {}
-    except FileNotFoundError:
-        return {}   # 首次运行：不是错误
-    except Exception as e:
-        if log is not None:
-            log("memory.json 读取失败（按空处理）: %r" % (e,))
-        return {}
+    """读整个 memory.json（dict）。缺失/损坏 → {}。
+
+    这里**不愈合**：它只服务"读-改-写"路径，紧随其后的写盘天然会把文件修好；
+    只有只读路径（read_memory）才需要愈合写回。
+    """
+    data, _corrupted = pet_io.read_json_or(path, dict, log=log)
+    return data
 
 
 def _write_memory_file(path, hist=None, long_term=None, max_entries=3, log=None):
-    """原子写 memory.json：**history 与 long_term 合并写**，谁都不覆盖谁。"""
-    data = _read_memory_raw(path, log)
-    if hist is not None:
-        data["history"] = list(hist)[-max_entries:]
-    if long_term is not None:
-        data["long_term"] = sanitize_long_term(long_term)
-    try:
-        tmp = path + ".tmp"
-        with open(tmp, "w", encoding="utf-8") as f:
-            json.dump(data, f, ensure_ascii=False)
-        os.replace(tmp, path)
-    except Exception as e:
-        if log is not None:
-            log("save_chat_memory 写盘失败: %r" % (e,))
+    """原子写 memory.json：**history 与 long_term 合并写**，谁都不覆盖谁。
+
+    P0-1（v2.3.1）：整个"读 → 改 → 写"都在 pet_io 的**同一把路径锁**内完成。
+    此前临时名固定（path + ".tmp"）且无锁：AI worker 线程落盘与主线程「清日志/清 Key」
+    同时写时，两边抢同一个 tmp 互相截断（半截 JSON 上盘），而且主线程用**更早读到的
+    旧快照** os.replace，会把 worker 刚追加的一整轮对话覆盖回退。
+    加锁后两者串行、且写前读到的永远是最新磁盘内容（锁内读-改-写）。
+    """
+    lock = pet_io.path_lock(path)
+    with lock:
+        data = _read_memory_raw(path, log)
+        if hist is not None:
+            data["history"] = list(hist)[-max_entries:]
+        if long_term is not None:
+            data["long_term"] = sanitize_long_term(long_term)
+        # indent=None：保持 memory.json 原来的紧凑单行格式
+        pet_io.atomic_write_json(path, data, lock=lock, indent=None, log=log)
     return data
 
 

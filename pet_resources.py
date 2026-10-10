@@ -63,7 +63,6 @@ MIT License
 Copyright (c) 大肥鱼桌宠项目
 """
 
-import json
 import os
 import re
 import shutil
@@ -71,6 +70,7 @@ import time
 import uuid
 import wave
 
+import pet_io   # v2.3.1：全仓共用原子写/安全读（分锁 + 线程唯一临时名 + replace 重试）
 import pet_log
 
 # P3-5+：帧动画上限（读侧与导入管线共用；由 桌宠 启动时按 cfg["role_frame_max"] 同步，
@@ -254,39 +254,28 @@ def state_resource(role, form_idx, state):
         return None
     return (forms[form_idx].get("states") or {}).get(state)
 
-# ---------------- 通用 IO 助手（原子替换，降级不抛） ----------------
-def _read_json(path, factory=dict):
-    """读 JSON；文件缺失 / 损坏 / 结构非法时返回 factory() 默认值，绝不抛出。"""
-    try:
-        with open(path, "r", encoding="utf-8") as f:
-            data = json.load(f)
-        if isinstance(data, dict):
-            return data
-    except Exception as e:
-        # 首次运行无文件=正常（静默）；文件存在但读取失败=真实故障，记日志
-        if os.path.exists(path):
-            pet_log.log_error("pet_resources._read_json 读取失败（按默认值重建）: %r" % (e,))
-    return factory()
+# ---------------- 通用 IO 助手（v2.3.1：统一走 pet_io；原子替换，降级不抛） ----------------
+def _read_json(path, factory=dict, heal=True):
+    """读 JSON；文件缺失 / 损坏 / 结构非法时返回 factory() 默认值，绝不抛出。
+
+    P0-2：损坏（存在但解析不了 / 顶层不是对象）时**回写 factory() 结构**做愈合，
+    坏文件不再每次启动重报（error.log 实测 pet_resources 读取失败 ×2）。
+    heal=False 给"自己有更强恢复路径"的调用方：RoleLibrary._load 要先把原文件
+    备份成 roles.json.bak 再重建，不能让愈合先把它覆盖掉（备份要留原始坏内容）。
+    """
+    if not heal:
+        data, _corrupted = pet_io.read_json_or(path, factory, log=pet_log.log_error)
+        return data
+    data, _corrupted = pet_io.heal_json(path, factory, log=pet_log.log_error)
+    return data
 
 
 def _write_json(path, data):
-    """原子写 JSON（临时文件 + os.replace）；成功返回 None，失败返回错误字符串。"""
-    tmp = path + ".tmp"
-    try:
-        d = os.path.dirname(path)
-        if d:
-            os.makedirs(d, exist_ok=True)
-        with open(tmp, "w", encoding="utf-8") as f:
-            json.dump(data, f, ensure_ascii=False, indent=2)
-        os.replace(tmp, path)
-        return None
-    except Exception as e:
-        try:
-            if os.path.exists(tmp):
-                os.remove(tmp)
-        except Exception:
-            pass  # 有意忽略：临时文件清理尽力而为，失败不影响主流程
-        return str(e)
+    """原子写 JSON（pet_io：按路径分锁 + 线程唯一临时名 + replace 重试）。
+
+    成功返回 None，失败返回错误字符串（与旧口径一致，调用方按需消费）。
+    """
+    return pet_io.atomic_write_json(path, data, log=pet_log.log_error)
 
 
 def _probe_png(path):
@@ -513,7 +502,9 @@ class RoleLibrary:
         若 roles 是坏结构（dict/字符串等），先备份成 .bak 再重建空索引——
         避免把用户可恢复的元数据直接覆盖成空表（PNG 还在 roles/，索引没了就找不回）。
         """
-        data = _read_json(self._index)
+        # heal=False：下面这条分支自己会"先备份原文件再重建"（见 529-535），
+        # 交给它处理才不会让愈合把原始坏内容覆盖掉（备份要留证）
+        data = _read_json(self._index, heal=False)
         raw_roles = data.get("roles")
         roles_ok = isinstance(raw_roles, list)
         roles = raw_roles if roles_ok else []

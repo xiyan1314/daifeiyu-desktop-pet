@@ -9,7 +9,7 @@ load_config / save_config 因 tests/_verify_v13 monkeypatch 桌宠.CONFIG_PATH �
 import base64
 import ctypes
 import json
-import os
+import math
 import threading
 
 # v2.2.5：配置写盘互斥锁 + 唯一临时名。语音 worker 线程（云端 TTS 首次克隆出 voice_id 时
@@ -17,6 +17,7 @@ import threading
 # os.replace 可能因共享冲突抛 PermissionError 被 except 吞掉 → 该次配置写入静默丢失。
 _CFG_WRITE_LOCK = threading.Lock()
 
+import pet_io  # v2.3.1：全仓共用原子写（分锁 + 线程唯一临时名 + replace 重试）
 import pet_log  # P1-手感：物理参数非法时记日志（pet_log 无任何依赖，安全）
 import pet_physics  # P1-手感：默认值单一来源（pet_physics 无 Qt 依赖，无环）
 import pet_voice  # v2.0：语音配置归一化（pet_voice 无环）
@@ -141,7 +142,10 @@ def normalize_cfg(cfg, defaults, persona_ids):
     load_config 之后，运行时注入才可用）。
     """
     try:
-        cfg["scale"] = max(0.2, min(4.0, float(cfg.get("scale", 1.0))))
+        # v2.3.1（P3-3）：float("nan") 不抛异常，min/max 也拦不住 NaN——
+        # NaN 会一路传到 setFixedSize(nan, nan)。非有限值一律回退默认倍率。
+        _sc = float(cfg.get("scale", 1.0))
+        cfg["scale"] = max(0.2, min(4.0, _sc)) if math.isfinite(_sc) else 1.0
     except (TypeError, ValueError):
         cfg["scale"] = 1.0
     cfg["always_on_top"] = _to_bool(cfg.get("always_on_top", True))
@@ -275,19 +279,11 @@ def write_config(path, cfg, defaults, schema_version, log, encrypt_fn):
                 out["api_key"] = old_key if old_key.startswith("dpapi:") else ""
             except Exception:
                 out["api_key"] = ""
-        # v2.2.5：整段写盘加锁 + 临时文件带线程标识，避免两个线程抢同一个 tmp
-        with _CFG_WRITE_LOCK:
-            tmp = "%s.%d.tmp" % (path, threading.get_ident())
-            try:
-                with open(tmp, "w", encoding="utf-8") as f:
-                    json.dump(out, f, ensure_ascii=False, indent=2)
-                os.replace(tmp, path)
-            except Exception:
-                try:
-                    if os.path.exists(tmp):
-                        os.remove(tmp)  # 失败清理自己的 tmp（与 pet_book._write_json 同口径）
-                except Exception:
-                    pass  # 有意忽略：清理失败不影响主流程
-                raise
+        # v2.2.5：整段写盘加锁 + 临时文件带线程标识，避免两个线程抢同一个 tmp。
+        # v2.3.1：实现挪进 pet_io（多一层按路径分锁 + os.replace 共享冲突短重试），
+        # _CFG_WRITE_LOCK 作为调用方锁原样保留——并发语义不变。
+        err = pet_io.atomic_write_json(path, out, lock=_CFG_WRITE_LOCK, log=None)
+        if err is not None:
+            log("save_config failed: %s" % err)
     except Exception as e:
         log("save_config failed: %r" % (e,))

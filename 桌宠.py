@@ -2940,6 +2940,18 @@ class PetWindow(QWidget):
         self._position_badge()
         self._position_food_tray()
 
+    def closeEvent(self, event):
+        """v2.3.1（P2-4）：窗口被关闭（Alt+F4 / 任务栏关闭 / close()）也走统一退出清理。
+
+        setQuitOnLastWindowClosed(False) 下 Qt 不会自动退出，此前 close 只等于隐藏窗口，
+        退出清理（停全部定时器、清残留 tmp、结束后端进程）全部被跳过。_quit 幂等。
+        """
+        try:
+            event.accept()
+        except Exception:
+            pass  # 有意忽略：事件对象异常也不能挡住退出
+        self._quit()
+
     def _position_badge(self):
         if not self.badge.isVisible():
             return
@@ -4212,7 +4224,13 @@ class PetWindow(QWidget):
             _log_slot_error(name + ":recover", _e)  # 收尾再失败只能放弃了（已记日志）
 
     def _quit(self):
-        """退出：停止全部定时器/动画、隐藏窗口、清理临时文件，然后结束进程。"""
+        """退出：停止全部定时器/动画、隐藏窗口、清理临时文件，然后结束进程。
+
+        v2.3.1（P2-4）：托盘菜单 / app.aboutToQuit / closeEvent 三处都会调到这里，
+        开头加幂等守卫：重复调用（如托盘退出后 aboutToQuit 又回调一次）直接返回。
+        """
+        if self._closing:
+            return  # 幂等：已经在退出流程里，重入会把清理跑第二遍
         self._closing = True  # P1-5：先立退出标志，在途网络请求信号/气泡被守卫拦下
         # v2.1：停配音（清空队列 + 停播放），避免退出时后台线程还在合成
         try:
@@ -4388,6 +4406,10 @@ def main():
     app.setQuitOnLastWindowClosed(False)
     pet_main.cleanup_stale_mei()
     pet = PetWindow()
+    # v2.3.1（P2-4）：退出兜底——此前唯一退出入口是托盘菜单，关机/taskkill/父进程结束
+    # 等非正常退出会跳过全部 tmp 清理与状态保存。aboutToQuit 是事件循环的最后一站，
+    # 接上它保证任何退出路径都走一遍 _quit（_quit 自身幂等）。
+    app.aboutToQuit.connect(pet._quit)
     pet_main.check_memory(DATA_DIR)
     sys.exit(app.exec())
 

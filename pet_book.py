@@ -54,6 +54,7 @@ import os
 import threading
 import time
 
+import pet_io   # v2.3.1：全仓共用原子写/安全读（分锁 + 线程唯一临时名 + replace 重试）
 import pet_log
 
 # 归档保留策略
@@ -61,19 +62,14 @@ _ARCHIVE_MAX_DAYS = 365
 _DAY_MAX_RECORDS = 20000
 
 
-# ---------------- 通用 IO 助手（原子替换，降级不抛） ----------------
+# ---------------- 通用 IO 助手（v2.3.1：统一走 pet_io；原子替换，降级不抛） ----------------
 def _read_json(path, factory=dict):
-    """读 JSON；文件缺失 / 损坏时返回 factory() 默认值，绝不抛出。"""
-    try:
-        with open(path, "r", encoding="utf-8") as f:
-            data = json.load(f)
-        if isinstance(data, dict):
-            return data
-    except Exception as e:
-        # 首次运行无文件=正常（静默）；文件存在但读取失败=真实故障，记日志
-        if os.path.exists(path):
-            pet_log.log_error("pet_book._read_json 读取失败（按默认值重建）: %r" % (e,))
-    return factory()
+    """读 JSON；文件缺失 / 损坏 / 结构非法时返回 factory() 默认值，绝不抛出。
+
+    这里不愈合：Book.__init__ 末尾的 _save_all() 本来就会把内存态重写回磁盘。
+    """
+    data, _corrupted = pet_io.read_json_or(path, factory, log=pet_log.log_error)
+    return data
 
 
 # v2.3.0（兼容审查 M5）：账本此前假定"只有主线程写"。1.2/1.3 之后 worker 线程每条消息都会
@@ -83,27 +79,13 @@ _BOOK_WRITE_LOCK = threading.RLock()
 
 
 def _write_json(path, data):
-    """原子写 JSON（临时文件 + os.replace）；成功返回 None，失败返回错误字符串。
+    """原子写 JSON（v2.3.1：统一走 pet_io）；成功返回 None，失败返回错误字符串。
 
     v2.3.0：临时文件名带线程号 + 写盘段互斥（避免两个线程抢同一 .tmp 后各自 replace）。
+    v2.3.1：实现挪进 pet_io（按路径分锁 + 线程唯一临时名 + os.replace 冲突重试），
+    _BOOK_WRITE_LOCK 作为调用方锁**原样保留**（既有语义不变，额外多一层路径锁）。
     """
-    tmp = "%s.%d.tmp" % (path, threading.get_ident())
-    try:
-        d = os.path.dirname(path)
-        if d:
-            os.makedirs(d, exist_ok=True)
-        with _BOOK_WRITE_LOCK:
-            with open(tmp, "w", encoding="utf-8") as f:
-                json.dump(data, f, ensure_ascii=False, indent=2)
-            os.replace(tmp, path)
-        return None
-    except Exception as e:
-        try:
-            if os.path.exists(tmp):
-                os.remove(tmp)
-        except Exception:
-            pass  # 有意忽略：临时文件清理尽力而为，失败不影响主流程
-        return str(e)
+    return pet_io.atomic_write_json(path, data, lock=_BOOK_WRITE_LOCK, log=None)
 
 
 def _today():
@@ -311,8 +293,13 @@ class Book:
         days = self._archive["days"]
         existing = days.get(date)
         if existing:
-            seen = {r.get("ts") for r in existing["records"]}
-            merged = existing["records"] + [r for r in records if r.get("ts") not in seen]
+            # v2.3.1（P2-3）：去重键从 ts（秒级）改成 (ts, amount, note) 三元组——
+            # 同一秒内的多笔记账此前会被当成重复丢掉（真实金额静默丢失）。
+            seen = {(r.get("ts"), r.get("amount"), r.get("note"))
+                    for r in existing["records"]}
+            merged = existing["records"] + [
+                r for r in records
+                if (r.get("ts"), r.get("amount"), r.get("note")) not in seen]
         else:
             merged = list(records)
         merged.sort(key=lambda r: r.get("ts") or 0.0)
