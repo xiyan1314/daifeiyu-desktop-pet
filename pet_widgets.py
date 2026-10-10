@@ -17,6 +17,33 @@ import pet_log
 # 气泡样式（配置驱动；桌宠.apply_bubble_style 更新，Bubble.paintEvent 读取）
 BUBBLE_STYLE = {"bg": "#ffffff", "fg": "#203170", "border": "#203170", "font_size": 10, "radius": 16}
 
+# ---------------- 字体回退链 ----------------
+# v2.4.3（第三轮找茬 P2-2）：此前本模块 8 处直接写死 QFont("Microsoft YaHei", …)，没有
+# 候选族。现在统一走 ui_font()，族名按序排成一条链（QFont 的**列表重载**，Qt6 起支持；
+# 列表原样保存在 QFont.families() 里，渲染时由 Qt 逐族回退）。
+#
+# 机理口径（审查实测，别读成"修掉了一个必现缺陷"）：Qt 的 Windows 字体引擎自己会做
+# **字体链接**——候选族一个都不可用时 QFont 退到默认无衬线族（实测 Tahoma，exactMatch()
+# 为 False），但只要机器上还有**任意一份** CJK 字体，inFontUcs4(0x4E2D) 仍为 True、
+# advance("中") 仍算得出正常宽度，中文**可能**照常显示而不是豆腐块。所以这条链是
+# "多一层候选 + 显式兜底"（链上成员都是带 CJK 的族，含 Windows 可选组件里的
+# Arial Unicode MS），**不是**已证实的缺陷修复：真正一个 CJK 字体都没有的机器，
+# 新旧写法同样没救。
+UI_FONT_FAMILIES = ("Microsoft YaHei", "微软雅黑", "SimSun", "Arial Unicode MS")
+
+
+def ui_font(size, weight=None):
+    """按回退链构造 UI 字体（气泡 / 徽章 / 表情标记共用；别再散落字面字体名）。
+
+    参数语义与原来的 QFont("Microsoft YaHei", size, weight) 一致：
+    size = 点大小（int），weight = QFont.Weight（None = 默认 Normal）。
+    """
+    font = QFont(list(UI_FONT_FAMILIES))
+    font.setPointSize(int(size))
+    if weight is not None:
+        font.setWeight(weight)
+    return font
+
 
 # ---------------- 食物：图标 / 托盘 / 飞行 ----------------
 _FOOD_PIX_CACHE = {}
@@ -195,7 +222,7 @@ class Badge(QWidget):
     def set_info(self, line1, line2):
         self._line1 = line1
         self._line2 = line2
-        fm = QFontMetrics(QFont("Microsoft YaHei", 9, QFont.Weight.Bold))
+        fm = QFontMetrics(ui_font(9, QFont.Weight.Bold))
         w = max(100, max(fm.horizontalAdvance(line1), fm.horizontalAdvance(line2)) + 36)
         self.resize(w, 46)
         self.update()
@@ -207,10 +234,10 @@ class Badge(QWidget):
         p.setBrush(QColor("#ffffff"))
         p.drawRoundedRect(QRectF(1.5, 1.5, self.width() - 3, self.height() - 3), 10, 10)
         p.setPen(QColor("#203170"))
-        p.setFont(QFont("Microsoft YaHei", 9, QFont.Weight.Bold))
+        p.setFont(ui_font(9, QFont.Weight.Bold))
         p.drawText(QRectF(6, 2, self.width() - 12, 22), Qt.AlignmentFlag.AlignCenter, self._line1)
         p.setPen(QColor("#5a6b8c"))
-        p.setFont(QFont("Microsoft YaHei", 8))
+        p.setFont(ui_font(8))
         p.drawText(QRectF(6, 24, self.width() - 12, 19), Qt.AlignmentFlag.AlignCenter, self._line2)
 
 
@@ -244,7 +271,7 @@ class Bubble(QWidget):
             font_size = max(8, min(18, int(BUBBLE_STYLE.get("font_size", 10) or 10)))
         except Exception:
             font_size = 10
-        fm = QFontMetrics(QFont("Microsoft YaHei", font_size, QFont.Weight.Bold))
+        fm = QFontMetrics(ui_font(font_size, QFont.Weight.Bold))
         r = fm.boundingRect(0, 0, 190, 400, Qt.TextFlag.TextWordWrap, text)
         w = max(88, min(236, r.width() + 60))
         h = max(52, r.height() + 46)
@@ -297,7 +324,7 @@ class Bubble(QWidget):
         p.drawEllipse(QRectF(body.right() - 30, h - 22, 14, 10))
         p.drawEllipse(QRectF(body.right() - 13, h - 13, 7, 5))
         p.setPen(fg)
-        p.setFont(QFont("Microsoft YaHei", font_size, QFont.Weight.Bold))
+        p.setFont(ui_font(font_size, QFont.Weight.Bold))
         p.drawText(body.adjusted(14, 8, -14, -8), Qt.AlignmentFlag.AlignCenter | Qt.TextFlag.TextWordWrap, self._text)
 
     def mousePressEvent(self, event):
@@ -349,15 +376,15 @@ def _emote_mark(kind, size):
         p.drawEllipse(24, 46, 16, 16)
     elif kind == "question":
         p.setPen(QColor("#7fb2ff"))
-        p.setFont(QFont("Microsoft YaHei", 40, QFont.Weight.Bold))
+        p.setFont(ui_font(40, QFont.Weight.Bold))
         p.drawText(pm.rect(), Qt.AlignmentFlag.AlignCenter, "?")
     elif kind == "zzz":
         p.setPen(QColor("#9aa7b8"))
-        p.setFont(QFont("Microsoft YaHei", 28, QFont.Weight.Bold))
+        p.setFont(ui_font(28, QFont.Weight.Bold))
         p.drawText(pm.rect(), Qt.AlignmentFlag.AlignCenter, "z")
     elif kind == "note":
         p.setPen(QColor("#b58cff"))
-        p.setFont(QFont("Microsoft YaHei", 36, QFont.Weight.Bold))
+        p.setFont(ui_font(36, QFont.Weight.Bold))
         p.drawText(pm.rect(), Qt.AlignmentFlag.AlignCenter, "♪")
     p.end()
     if size != 64:

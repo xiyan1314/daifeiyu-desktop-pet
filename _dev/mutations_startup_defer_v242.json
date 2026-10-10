@@ -1,0 +1,69 @@
+{
+  "title": "启动延迟装载（帧集/状态图分片）变异验证",
+  "checked_at": "2026-10-10 22:54:49",
+  "total": 8,
+  "caught": 8,
+  "not_caught": 0,
+  "blocked": 0,
+  "items": [
+    {
+      "id": "M1 帧集不再推迟（构造期把四组都解完）",
+      "verdict": "CAUGHT",
+      "rc": 1,
+      "tail": "1 failed, 8 passed in 1.83s"
+    },
+    {
+      "id": "M2 状态图不再推迟（构造期全量构建）",
+      "verdict": "CAUGHT",
+      "rc": 1,
+      "tail": "3 failed, 6 passed in 2.16s"
+    },
+    {
+      "id": "M3 接力装载改成一轮做完（不再分片）",
+      "verdict": "CAUGHT",
+      "rc": 1,
+      "tail": "2 failed, 7 passed in 1.72s"
+    },
+    {
+      "id": "M4 _state_pix 不再按需补建",
+      "verdict": "CAUGHT",
+      "rc": 1,
+      "tail": "4 failed, 5 passed in 2.49s"
+    },
+    {
+      "id": "M5 _play_idle 不再补本形态帧集",
+      "verdict": "CAUGHT",
+      "rc": 1,
+      "tail": "2 failed, 7 passed in 1.64s"
+    },
+    {
+      "id": "M6 feed 不再补吃帧",
+      "verdict": "CAUGHT",
+      "rc": 1,
+      "tail": "2 failed, 7 passed in 1.67s"
+    },
+    {
+      "id": "M7 _start_petting 不再补 petpet 帧集",
+      "verdict": "CAUGHT",
+      "rc": 1,
+      "tail": "2 failed, 7 passed in 1.85s"
+    },
+    {
+      "id": "M8 接力收尾不再重注册帧集（eat 槽停在空集）",
+      "verdict": "CAUGHT",
+      "rc": 1,
+      "tail": "2 failed, 7 passed in 1.65s"
+    }
+  ],
+  "tests": "tests/test_startup_defer_v242.py",
+  "script": "_dev/mutate_startup_defer.py",
+  "note": "变异只在 %TEMP% 影子副本里做，真实仓库只读（只写 _dev/.mutation.lock）",
+  "repo_fingerprint": {
+    "桌宠.py": "059b7abfa512",
+    "pet_export.py": "aaab598792c4",
+    "pet_lines.py": "5332f60b5f26",
+    "pet_alarm.py": "1149e94deee3",
+    "pet_behaviors.py": "8f57255144f6",
+    "_check_release.py": "af1bc0935173"
+  }
+}

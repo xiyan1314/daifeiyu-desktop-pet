@@ -58,7 +58,16 @@ class BalanceService:
             return
         self.pet._fetching_balance = True
         self.pet._manual_pending = manual
-        threading.Thread(target=self._worker, args=(key,), daemon=True).start()
+        try:
+            threading.Thread(target=self._worker, args=(key,), daemon=True).start()
+        except Exception as e:
+            # v2.4.3（第三轮找茬复审 M1）：start() 自己也会抛（线程/句柄耗尽、解释器关闭期
+            # "can't start new thread"）。不兜住的话标志恒真，此后 refresh 一个线程都起不来
+            # ——症状与 P1-1 那条守卫泄漏一模一样（点"查询余额"毫无反应），而泄漏点在 worker
+            # 之外，worker 的 finally 兜不住。异常时复位标志 + 记日志 + 走 balance_err 路径。
+            self.pet._fetching_balance = False
+            self._log_safe("balance thread start failed: %r" % (e,))
+            self._emit("balance_err")
 
     def fetch(self):
         """菜单「查询余额」：无 Key 先弹设置框；随后手动刷新。"""
@@ -91,14 +100,78 @@ class BalanceService:
         except Exception as e:
             return False, repr(e)
 
+    def _closing(self):
+        """退出中？（emit 端也要判——槽端 on_updated/on_err 早就判了，emit 端此前没判）
+
+        取属性本身也可能抛（PetWindow 已销毁 → RuntimeError: wrapped C/C++ object ...），
+        所以**抛**的时候一律按"在退出"处理：宁可不发，也不把异常带进 daemon 线程。
+
+        v2.4.3（第三轮找茬复审 L①）：但"属性**不存在**"与"取属性抛"要分开——用
+        getattr(..., False)。审查实测：shiboken6.delete(w) 之后 w._closing 照常返回，
+        真正兜住"emit 到已删对象"的是 _emit 里的 except；而原先那种写法（直接访问 +
+        兜底 True）在属性哪天改名时会把余额结果**永久丢弃且一行日志都不记**（静默）。
+        改名后取到 False → 正常发；对象真销毁 → 取属性抛 → 仍按在退出处理。
+        """
+        try:
+            return bool(getattr(self.pet, "_closing", False))
+        except Exception:
+            return True
+
+    def _log_safe(self, msg):
+        """日志回调自身出错不影响 worker（与 pet_io._log 同口径）。"""
+        try:
+            self._log(msg)
+        except Exception:
+            pass  # 有意忽略：日志通道失败绝不影响余额状态机
+
+    def _emit(self, name, *args):
+        """emit 一个信号；返回 True = 真的交出去了（False = 没交，调用方按兜底处理）。
+
+        v2.4.3（第三轮找茬 P1-1）：退出中/对象已销毁一律不发——emit 到已 deleted 的
+        C++ 对象会抛 RuntimeError，而这是 daemon 线程，异常只会往 stderr 打一行就没了。
+        """
+        if self._closing():
+            return False
+        try:
+            getattr(self.signals, name).emit(*args)
+            return True
+        except Exception as e:
+            self._log_safe("balance emit %s failed: %r" % (name, e))
+            return False
+
     def _worker(self, key):
-        ok, payload = self._request_balance(key)
-        if ok:
-            total, currency, granted = payload
-            self.signals.balance_updated.emit(float(total), currency, float(granted))
-        else:
-            self._log("balance_worker: %s" % (payload,))
-            self.signals.balance_err.emit()
+        """后台查一次余额并 emit 结果（daemon 线程）。**绝不向上抛，绝不漏复位守卫**。
+
+        v2.4.3（第三轮找茬 P1-1）：此前 emit 裸露在 try 之外——① PetWindow 已销毁时
+        emit 打到 deleted 的 C++ 对象上（RuntimeError），daemon 线程静默崩；② 若
+        _request_balance 之后的某一行在 try 外抛，_fetching_balance 会**永真**，此后
+        所有轮询与手动查询都被"在途"挡住（静默失效：用户点"查询余额"毫无反应）。
+
+        现在：顶层 try/except/finally——
+          · emit 前判 pet._closing（见 _emit），销毁/退出中直接不发；
+          · 兜底 except 记日志并补发 balance_err（幂等：槽里已有 _closing 守卫）；
+          · finally 里**无条件**复位 _fetching_balance（幂等，重复置 False 无副作用）。
+        交出去的结果仍由槽（on_updated/on_err）按原语义处理；提前复位只影响"emit 已发出、
+        槽还没轮到跑"的那一小段窗口——那个窗口里再来一次手动查询至多多发一次 HTTP，
+        不会卡死，也不会丢掉排队的手动查询（_pending_manual 仍由槽消费）。
+        """
+        try:
+            ok, payload = self._request_balance(key)
+            if ok:
+                total, currency, granted = payload
+                self._emit("balance_updated", float(total), currency, float(granted))
+            else:
+                self._log_safe("balance_worker: %s" % (payload,))
+                self._emit("balance_err")
+        except Exception as e:
+            # _request_balance 内部已全兜；这里防的是"它之后的行"（含参数解包、标志读写）
+            self._log_safe("balance_worker crashed: %r" % (e,))
+            self._emit("balance_err")
+        finally:
+            try:
+                self.pet._fetching_balance = False
+            except Exception:
+                pass  # 有意忽略：pet 已销毁时连标志都不用管（进程正在退出）
 
     def fetch_sync(self):
         """v2.3.0（1.2 Function Calling）：工具 check_balance 的同步只读数据源。

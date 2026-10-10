@@ -25,7 +25,10 @@ jobs:
           # `from PIL import Image, ImageChops, ImageStat`（素材质量门），CI 不装 Pillow 时
           # 会在 collection 阶段直接 ImportError，整条流水线红。版本与 requirements-lock.txt 对齐。
           # 不用 importorskip 兜底：这是素材质量门，跳过等于把门丢掉。
-          pip install PySide6==6.11.2 requests==2.34.2 psutil==7.2.2 Pillow==12.1.1 pytest
+          # v2.4.3（第三轮找茬 P3-2）：pytest 也锁精确版本——其余依赖早就锁死了，唯独
+          # 它没锁；pytest 9.x → 10.x 若改收集/断言行为，CI 会毫无预兆地变红。
+          # 版本与 requirements-lock.txt 一致。
+          pip install PySide6==6.11.2 requests==2.34.2 psutil==7.2.2 Pillow==12.1.1 pytest==9.1.1
 
       - name: Pytest
         run: pytest

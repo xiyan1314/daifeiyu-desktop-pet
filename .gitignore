@@ -45,3 +45,19 @@ build/
 dist/
 大肥鱼桌宠_绿色版/
 *.zip
+# v2.4.3（第三轮找茬收口）：_dev/ 只入库**脚本与报告**——探针的原始逐轮数据复跑即得
+# （本轮 _dev 从 14 涨到 44 个文件、含 ~300KB 原始 JSON，git diff 全是噪音）。
+# 入库的是摘要（*_summary.json）、变异验证（mutations_*.json 的 results 段 /
+# results_*.json）、脚本（*.py）与报告（*.md）。
+# v2.4.3（兼容审查 L8）：此前是"点名忽略几个已知 json"，比复跑命令窄——
+# probe_export_cost.py 的 docstring 示例写着 `--json _dev/export_before.json`，
+# 照文档复跑就会落下一个**未跟踪**文件，直接撞上发布门的"未跟踪文件"判据（门红）。
+# 现在反过来：_dev/ 下除白名单外一律忽略，新增纯数据产物不必再回来补规则
+# （.mutation.lock/ 也被 _dev/* 覆盖）。
+_dev/*
+!_dev/*.py
+!_dev/*.md
+!_dev/*_summary.json
+!_dev/mutations_*.json
+!_dev/results_*.json
+!_dev/pytest_*_full.txt

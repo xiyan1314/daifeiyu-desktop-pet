@@ -1,0 +1,50 @@
+{
+  "title": "导出两段式（pet_export.BundleWriter + UI 分片）变异验证",
+  "checked_at": "2026-10-10 22:41:06",
+  "total": 5,
+  "caught": 5,
+  "not_caught": 0,
+  "items": [
+    {
+      "id": "E1 export_bundle 不再走两段式（自己内联写盘）",
+      "verdict": "CAUGHT",
+      "rc": 1,
+      "tail": "1 failed, 5 passed in 2.92s"
+    },
+    {
+      "id": "E2 step 忽略 budget_ms（一次写光）",
+      "verdict": "CAUGHT",
+      "rc": 1,
+      "tail": "3 failed, 3 passed in 2.49s"
+    },
+    {
+      "id": "E3 不写 manifest.json",
+      "verdict": "CAUGHT",
+      "rc": 1,
+      "tail": "4 failed, 2 passed in 2.42s"
+    },
+    {
+      "id": "E4 abort 不清理临时文件",
+      "verdict": "CAUGHT",
+      "rc": 1,
+      "tail": "1 failed, 5 passed in 2.74s"
+    },
+    {
+      "id": "E5 UI 侧不分片（budget_ms=None）",
+      "verdict": "CAUGHT",
+      "rc": 1,
+      "tail": "1 failed, 5 passed in 4.41s"
+    }
+  ],
+  "tests": "tests/test_export_slice_v242.py",
+  "script": "_dev/mutate_export_slice.py",
+  "note": "变异只在 %TEMP% 影子副本里做，真实仓库只读（只写 _dev/.mutation.lock）",
+  "repo_fingerprint": {
+    "桌宠.py": "059b7abfa512",
+    "pet_export.py": "aaab598792c4",
+    "pet_lines.py": "5332f60b5f26",
+    "pet_alarm.py": "1149e94deee3",
+    "pet_behaviors.py": "8f57255144f6",
+    "_check_release.py": "b2cec3adef96"
+  }
+}

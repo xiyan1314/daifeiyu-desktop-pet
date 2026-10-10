@@ -40,5 +40,54 @@
         "tests/test_heal_top_level_keys.py::test_behaviors_unknown_top_key_survives_user_edits"
       ]
     }
-  ]
+  ],
+  "results": {
+    "title": "变异验证 spec：mutations_q_item1.json",
+    "checked_at": "2026-10-10 22:40:49",
+    "total": 4,
+    "caught": 4,
+    "not_caught": 0,
+    "items": [
+      {
+        "id": "M-Q1",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 1.08s"
+      },
+      {
+        "id": "M-Q2",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 0.76s"
+      },
+      {
+        "id": "M-Q3",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 1.05s"
+      },
+      {
+        "id": "M-Q4",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 0.86s"
+      }
+    ],
+    "spec": "mutations_q_item1.json",
+    "tests": [
+      "tests/test_heal_top_level_keys.py::test_alarm_heal_keeps_top_level_unknown_keys",
+      "tests/test_heal_top_level_keys.py::test_alarm_unknown_top_key_survives_user_edits",
+      "tests/test_heal_top_level_keys.py::test_behaviors_heal_keeps_top_level_unknown_keys",
+      "tests/test_heal_top_level_keys.py::test_behaviors_unknown_top_key_survives_user_edits"
+    ],
+    "note": "变异只在 %TEMP% 影子副本里做，真实仓库只读（只写 _dev/.mutation.lock）",
+    "repo_fingerprint": {
+      "桌宠.py": "059b7abfa512",
+      "pet_export.py": "aaab598792c4",
+      "pet_lines.py": "5332f60b5f26",
+      "pet_alarm.py": "1149e94deee3",
+      "pet_behaviors.py": "8f57255144f6",
+      "_check_release.py": "b2cec3adef96"
+    }
+  }
 }

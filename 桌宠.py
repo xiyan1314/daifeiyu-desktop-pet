@@ -71,7 +71,7 @@ import pet_io  # v2.3.1：原子写/清扫临时文件（P2-B 导入恢复、L4 
 
 
 APP_NAME = "大肥鱼桌宠"
-VERSION = "2.4.2"
+VERSION = "2.4.3"
 PAD = 1.25  # 窗口相对角色的透明边距（为压扁/回弹预留空间）
 IDLE_FRAME_MS = 140      # 待机帧间隔
 IDLE_FORM_HOLD_SECS = 8  # v2.1.3：只有形态、没有动作可播时的展示期上限（到期回用户形态）
@@ -109,6 +109,17 @@ _DEFAULT_FRAME_SETS = (("idle", "", "idle", 10, "_idle_frames"),
                        ("idle_full", "", "idle_full", 10, "_idle_full_frames"),
                        ("eat", "", "eat", 7, "_eat_frames"),
                        ("petpet", "fx", "petpet", 10, "_fx_petpet"))
+# v2.4.3（第三轮找茬 P2-3）：上面四组是**默认角色**的素材。自定义角色的帧集走
+# forms[i].animations 的「形态×动作」表（_wire_anim_sets / _cur_form_anim），
+# idle/idle_full/eat 三组一个都用不到——只有 assets/fx/petpet（摸头特效）是共用的。
+# 所以构造期与接力装载都按角色取舍，见 __init__ 那次 _load_default_frame_set 与
+# _startup_frame_sets；切回默认角色时由 _play_idle → _ensure_default_frames 同步补齐。
+# v2.4.3（第三轮找茬 P2-2）：撒钱帧集（86 帧 ≈6.7MB）此前在启动 3s 后**一次性同步**解完，
+# 审查实测该窗口事件循环最大间隔 59.6ms（其余分片都 ≤16ms）——启动流程里唯一还在主线程
+# 长阻塞的点。现在按 _FRAME_SLICE_MS 分片接力（_preload_money_fx / _money_preload_step）；
+# 帧数与前缀在这里具名，分片预载与消费点 _fx_celebrate 共用同一口径。
+_MONEY_FRAME_COUNT = 86
+_MONEY_FRAME_PREFIX = "money"
 SLEEP_AFTER_SECONDS = 60 # 无交互多久入睡
 STATE_DURATION_MS = 2500 # 状态图默认展示时长
 # 跟随/散步行走参数（v1.4.2 降速档）实现迁至 pet_wander：此处保留模块级名字（tests/v13 依赖）
@@ -716,6 +727,17 @@ def _fill_state_pix(win, form, states, res, custom):
                 win.state_pix[form][s] = pix
 
 
+def _state_pending_count(pending):
+    """待建状态图**条目数**（各形态待建集合大小之和）；空/None 时为 0。
+
+    v2.4.3（第三轮找茬 P2-5①）：接力装载的"推进判据"——本轮解完与解之前的条目数相同
+    就说明一个都没建成（pending 里的名字不在 _STATE_MARK_MAP 名单内，当前不可达），
+    _build_state_pix_slice 据此清空 pending 自锁，免得 QTimer(0) 链永久自排空转。
+    放模块级：与 _fill_state_pix 同理，stub 也能调（纯函数、只读 dict）。
+    """
+    return sum(len(v) for v in (pending or {}).values())
+
+
 class PetWindow(QWidget):
     # v2.0.1：帧间隔默认值以类属性暴露（pet_actions 等服务不 import 桌宠，须经实例访问）
     IDLE_FRAME_MS = IDLE_FRAME_MS
@@ -949,7 +971,12 @@ class PetWindow(QWidget):
         self._eat_frames = []
         self._fx_petpet = []
         self._frames_loaded = {}          # 组名 -> 已解（幂等判据；_ensure_default_frames）
-        self._load_default_frame_set("idle")
+        # v2.4.3（第三轮找茬 P2-3）：自定义角色不解任何默认素材帧集（实测四组 37 帧
+        # ≈35ms，一个都用不到）。默认角色行为逐位不变——idle 仍必须在构造期就位，
+        # 理由见上面 _DEFAULT_FRAME_SETS 的注释（_verify_green 的成品检测）。自定义角色
+        # 下 _frames_loaded 不含 idle，切回默认角色时 _play_idle 的同步兜底会补上。
+        if not self._custom_role:
+            self._load_default_frame_set("idle")
         # v2.4.1：帧集注册指纹（见 _wire_anim_key）——初始 None 让首次注册必然执行
         self._wire_key = None
         # v2.4.1（UI 卡顿 C1/C2）：单帧解码缓存 + 在途的分片解码（见 _frame_pix /
@@ -962,6 +989,7 @@ class PetWindow(QWidget):
         self._anim_pending_restart = False  # 分片装好后是否欠一次 _play_idle 起播
         self._fx_money = []  # 86 帧较大：首次撒钱时才加载（约 6.7MB）
         self._fx_money_dir = os.path.join(assets_dir, "fx")
+        self._money_preload = None  # v2.4.3：在途的撒钱帧集分片预载状态；None = 没有
         self._wire_anim_sets()
         self.anim.frame_changed.connect(self._on_frame_changed)
         # v2.4.2（启动耗时 P2）：状态图同样只按需建——首屏只用得到开场表情那一张
@@ -1174,16 +1202,69 @@ class PetWindow(QWidget):
         # v1.3：有 Key 且开了 AI 对话（未开挂件）时，启动后补一次余额观测刷新账本基线
         if self.cfg.get("api_key") and self.cfg.get("ai_enabled") and not self.cfg.get("badge"):
             QTimer.singleShot(2500, self, lambda: self.balance.refresh(manual=False))
-        # B3：启动 3s 后预加载撒钱帧（主线程一次性 ~100ms），避免首次查余额瞬间卡顿
+        # B3：启动 3s 后预加载撒钱帧，避免首次查余额瞬间卡顿。
+        # v2.4.3（第三轮找茬 P2-2）：入口只登记在途状态 + 排下第一片，不再一次解 86 帧。
         QTimer.singleShot(3000, self, self._preload_money_fx)
 
     def _preload_money_fx(self):
-        """预热撒钱帧集（86 帧约 6.7MB）：在启动空闲期加载，首次撒钱不再卡。"""
+        """预热撒钱帧集（86 帧约 6.7MB）：启动 3s 后的空闲期**分片**加载，首次撒钱不再卡。
+
+        v2.4.3（第三轮找茬 P2-2）：旧实现是"到点后一次同步解 86 帧"——审查实测该窗口
+        事件循环最大间隔 59.6ms，是启动流程里唯一还在主线程长阻塞的点（其余分片都
+        ≤16ms）。现在本函数只登记在途状态 + 排第一片，解码在 _money_preload_step 里按
+        _FRAME_SLICE_MS 预算分片，片与片之间事件循环照常转（与 _anim_chunk_step 同一套
+        QTimer(0) 接力）。素材与一次性 load_frame_set 逐张相同（见该函数的口径注释）。
+        """
+        if self._money_preload is not None or self._fx_money:
+            return  # 已在解 / 已经解好（含 _fx_celebrate 抢跑解好的情况）：不重复排片
+        self._money_preload = {"k": 0, "frames": []}
+        QTimer.singleShot(0, self, self._gslot("money_preload", self._money_preload_step))
+
+    def _money_preload_step(self):
+        """撒钱帧集分片预载的一步：最多占主线程 _FRAME_SLICE_MS，没解完排下一轮。
+
+        与 pet_anim.load_frame_set(目录, "money", 86) 的结果**逐张相同**：同一文件名
+        序列（money_f00..f85）、同一条"QPixmap 为空就当坏帧跳过"的口径、同序同长度。
+        中途被 _fx_celebrate 抢跑（用户真的撒钱了 → 它自己同步解整批）或窗口退出时，
+        本批直接作废：不把半截帧集挂上去（_fx_money 要么空、要么是完整的一批）。
+        """
+        st = self._money_preload
+        if st is None:
+            return
+        if self._closing or self._fx_money:
+            self._money_preload = None  # 退出中 / 消费点已解好：本批作废
+            return
+        _rescheduled = False
         try:
-            if not self._fx_money:
-                self._fx_money = pet_anim.load_frame_set(self._fx_money_dir, "money", 86)
-        except Exception:
-            pass  # 有意忽略：预加载失败不碍事，撒钱时 _fx_money 为空会走完整检查并记日志
+            t0 = time.perf_counter()
+            while st["k"] < _MONEY_FRAME_COUNT:
+                _i = st["k"]
+                st["k"] += 1
+                _p = os.path.join(self._fx_money_dir,
+                                  "%s_f%02d.png" % (_MONEY_FRAME_PREFIX, _i))
+                try:
+                    pix = QPixmap(_p)
+                except Exception:
+                    pix = QPixmap()  # 坏文件按空帧处理（与 load_frame_set 同口径）
+                if not pix.isNull():
+                    st["frames"].append(pix)
+                if (time.perf_counter() - t0) * 1000.0 >= _FRAME_SLICE_MS:
+                    _rescheduled = True
+                    QTimer.singleShot(0, self,
+                                      self._gslot("money_preload", self._money_preload_step))
+                    return
+            self._fx_money = st["frames"]
+            # v2.4.3（第三轮找茬复审 L⑤）：素材缺张时**在这里**就要有诊断——预载装好后
+            # 消费点 _fx_celebrate 的"整段补齐"会被整体跳过，那里那条 incomplete 日志
+            # 永远不会出现（v2.4.2 起就是这样）。
+            if len(self._fx_money) != _MONEY_FRAME_COUNT:
+                _log_error("fx frames money incomplete (preload): %d/%d"
+                           % (len(self._fx_money), _MONEY_FRAME_COUNT))
+        finally:
+            if not _rescheduled:
+                # 正常收尾 / 半路抛错都清掉在途状态：抛错时 _gslot 只记日志不重排，留着会让
+                # _preload_money_fx 的"已在解"守卫永久拦住重试（消费点 _fx_celebrate 仍有兜底）。
+                self._money_preload = None
 
     # ---------- v2.4.2（启动耗时 P2）：首屏之后接力装载 ----------
     def _load_default_frame_set(self, name):
@@ -1227,6 +1308,40 @@ class PetWindow(QWidget):
                 loaded = True
         return loaded
 
+    def _startup_frame_sets(self):
+        """接力装载**本角色真正用得到的**默认帧集组名（见 _DEFAULT_FRAME_SETS）。
+
+        v2.4.3（第三轮找茬 P2-3）：自定义角色的 idle/idle_full/eat 一个都用不到——它的
+        帧集走 forms[i].animations 的「形态×动作」表；四组里只有 assets/fx/petpet
+        （摸头特效）是共用的。所以自定义角色只接力 petpet；其余组仍由消费点的同步
+        兜底按需补（切回默认角色时 _play_idle → _ensure_default_frames 会补 idle）。
+        """
+        if self._custom_role:
+            return ("petpet",)
+        return tuple(key for key, _sub, _prefix, _count, _attr in _DEFAULT_FRAME_SETS)
+
+    def _startup_frames_pending(self):
+        """还没就位的默认帧集组名（按 _startup_frame_sets 的角色口径）。"""
+        return [k for k in self._startup_frame_sets() if not self._frames_loaded.get(k)]
+
+    def _load_frame_sets_slice(self, keys):
+        """接力装载的一步：**只解一组**默认帧集（组 = 本支分片的最小粒度）。
+
+        v2.4.3（第三轮找茬 P2-4）——本支的"时间预算"就是**一组**，口径与理由：
+          · 组必须整体就位：消费方按组取帧，_frames_loaded 的"解过没有"与 _wire_anim_key
+            的帧集身份都以**组**为单位（上轮刚修过，不能再拆到两轮里），所以一组是原子单位；
+          · 一组实测 5~16ms（idle_full 10 帧 ≈11.6ms / eat 7 帧 ≈8.7ms / petpet 10 帧
+            ≈5.7ms），与状态图支一个切片（_FRAME_SLICE_MS = 12ms）同量级；
+          · **不把多组合并进同一轮**：合并会把单轮最坏从"一组"抬到"预算 + 一组"（实测
+            idle_full+eat 一轮 ≈20ms），比不合并还粗——而且会直接减少接力步数
+            （tests/test_startup_defer_v242 的"至少 3 步"判据测的就是这件事）。
+        所以每轮恰好推进一组：至少一组（保证推进、不会卡死），也不多解。
+        首轮另摊首绘（实测 50~90ms，见 __init__ 那次 QTimer(0) 的排期）——那是首屏必经的一笔。
+        入参是"还没就位的组名列表"（_startup_frames_pending），本函数只消费它的第一个。
+        """
+        if keys:
+            self._load_default_frame_set(keys[0])
+
     def _startup_assets_step(self):
         """启动接力装载的一步：每一轮事件循环只做**一小片**。
 
@@ -1236,26 +1351,40 @@ class PetWindow(QWidget):
         PetWindow() 构造时间），窗口要等这些解码做完才出现。现在改成：窗口先出画面，
         随后每个事件循环轮次解**一组帧**或建**几张状态图**，单轮阻塞不超过一个切片量级。
         全部装完后本任务自行结束（不再排下一轮）。
+
+        v2.4.3（第三轮找茬 P2-3/P2-4/P2-5②）：
+          · 帧集支按**本角色真正用得到的组**推进（_startup_frame_sets）：自定义角色只解
+            petpet，不再白解 idle_full/eat；
+          · 该支的粒度是**一组**（_load_frame_sets_slice）——一组实测 5~16ms，与状态图支
+            的一个切片（12ms）同量级；解完一组就排下一轮，不与状态图支挤同一轮；
+          · 整支用 finally 收口：_gslot 只记日志、**不会**重排，异常时链会永久停在半路
+            （_startup_assets_done 恒 False）。所以"跑完"和"抛错"都置位——剩下的素材
+            交回消费点的同步兜底，语义与旧版一致（只是不再空转重排）。
         """
         if self._closing:
             return  # 窗口正在退出：别再往它身上解素材（单发定时器与窗口同生命周期）
-        if len(self._frames_loaded) < len(_DEFAULT_FRAME_SETS):
-            for key, _sub, _prefix, _count, _attr in _DEFAULT_FRAME_SETS:
-                if not self._frames_loaded.get(key):
-                    self._load_default_frame_set(key)   # 一组 ≈5~12ms：本身就是一"片"
-                    break
-            if len(self._frames_loaded) >= len(_DEFAULT_FRAME_SETS):
-                # 帧集补齐了（eat 从空集变 7 帧）→ 指纹随之失配，按新帧集重注册一次。
-                # 只 add_set、不起播：_anim_ready 的 restart 标志此刻仍是 False。
-                self._wire_anim_sets()
-            QTimer.singleShot(0, self, self._gslot("startup_assets", self._startup_assets_step))
-            return
-        if self._state_pix_pending:
-            self._build_state_pix_slice()
-            if self._state_pix_pending:
+        _rescheduled = False
+        try:
+            if self._startup_frames_pending():
+                # 本支一轮只解一组（≈5~16ms，见 _load_frame_sets_slice）——解完就排下一轮，
+                # **不与状态图支挤在同一轮**：那是"一轮一片"的口径，也是接力步数的来源。
+                self._load_frame_sets_slice(self._startup_frames_pending())
+                if not self._startup_frames_pending():
+                    # 帧集补齐了（eat 从空集变 7 帧）→ 指纹随之失配，按新帧集重注册一次。
+                    # 只 add_set、不起播：_anim_ready 的 restart 标志此刻仍是 False。
+                    self._wire_anim_sets()
+                _rescheduled = True
                 QTimer.singleShot(0, self, self._gslot("startup_assets", self._startup_assets_step))
                 return
-        self._startup_assets_done = True
+            if self._state_pix_pending:
+                self._build_state_pix_slice()
+                if self._state_pix_pending:
+                    _rescheduled = True
+                    QTimer.singleShot(0, self, self._gslot("startup_assets", self._startup_assets_step))
+                    return
+        finally:
+            if not _rescheduled:
+                self._startup_assets_done = True
 
     # ---------- 角色加载 ----------
     def _load_img(self, names):
@@ -3116,15 +3245,25 @@ class PetWindow(QWidget):
 
         以**状态**为推进单位（而不是形态）：一个状态在多个形态上各建一张，逐状态推进
         才能让每步的粒度稳定在一个切片量级（默认角色单张 ≈1.3ms，自定义角色单张数 ms）。
+
+        v2.4.3（第三轮找茬 P2-5①）：**零推进自锁**。pending 里的名字若全都不在
+        _STATE_MARK_MAP 名单里（当前不可达，纯防御），下面的循环一次 _ensure_state_pix
+        都不会调，pending 永远清不掉 → 接力链的 QTimer(0) 会永久自排（主线程空转）。
+        所以本轮"待建条目数没变少"就直接清空 pending 收口（= 没有可建的）。
         """
         t0 = time.perf_counter()
-        for s in tuple(_STATE_MARK_MAP):
-            if not self._state_pix_pending:
-                return
-            if self._state_pending(s):
-                self._ensure_state_pix(s)
-            if (time.perf_counter() - t0) * 1000.0 >= budget_ms:
-                return
+        _before = _state_pending_count(self._state_pix_pending)
+        try:
+            for s in tuple(_STATE_MARK_MAP):
+                if not self._state_pix_pending:
+                    return
+                if self._state_pending(s):
+                    self._ensure_state_pix(s)
+                if (time.perf_counter() - t0) * 1000.0 >= budget_ms:
+                    return
+        finally:
+            if self._state_pix_pending and _state_pending_count(self._state_pix_pending) >= _before:
+                self._state_pix_pending = {}
 
     def _custom_state_pix(self, res_path, base, state):
         """P2-5 状态图合并点：资源图（forms[i].states[state]）优先；
@@ -3323,11 +3462,19 @@ class PetWindow(QWidget):
             self.fx_money_item.setPos((w - fw * self.scale) / 2, 0)
 
     def _fx_celebrate(self):
-        """余额到账：撒钱帧动画（借参考插件 money 动图概念，独立特效层）。"""
+        """余额到账：撒钱帧动画（借参考插件 money 动图概念，独立特效层）。
+
+        v2.4.3：预载是分片的，用户可能在这个窗口里真撒了一次钱——这里仍按旧口径同步
+        补齐（一次查余额触发的用户可见动作，几十 ms 可接受），并把在途预载作废，
+        免得它下一片醒来再解一遍（_money_preload_step 有同样的守卫，双保险）。
+        """
         if not self._fx_money:
-            self._fx_money = pet_anim.load_frame_set(self._fx_money_dir, "money", 86)
-            if len(self._fx_money) != 86:
-                _log_error("fx frames money incomplete: %d/86" % len(self._fx_money))
+            self._money_preload = None  # 抢跑：在途分片批次作废（它醒来会看到 _fx_money 非空）
+            self._fx_money = pet_anim.load_frame_set(self._fx_money_dir, _MONEY_FRAME_PREFIX,
+                                                     _MONEY_FRAME_COUNT)
+            if len(self._fx_money) != _MONEY_FRAME_COUNT:
+                _log_error("fx frames money incomplete: %d/%d"
+                           % (len(self._fx_money), _MONEY_FRAME_COUNT))
         if not self._fx_money:
             return
         self._fx_money_on = True
@@ -3825,7 +3972,11 @@ class PetWindow(QWidget):
         # v2.4.2（启动耗时 P2）：吃帧是延迟装载的三组之一，喂食前必须先补齐——否则
         # 下面读到的 anim._sets["eat"] 会是构造期注册的空集，喂食会错走"大笑表达"分支。
         # 补齐后指纹变了，_set_form 里的 _wire_anim_sets 会把真实吃帧注册进去。
-        if self._ensure_default_frames():
+        # v2.4.3（第三轮找茬复审 M3）：自定义角色的吃帧走 forms[i].animations（见
+        # _set_form / _wire_anim_sets 的那条支），默认三组一张都用不到——这里补三组等于把
+        # 成本从"启动后台接力"搬到"首次交互前台"（审查实测：首喂同步解 idle/idle_full/eat
+        # 共 62.07ms，而 anim._sets["eat"] 仍是空集）。与 _play_idle 的守卫同口径。
+        if not self._custom_role and self._ensure_default_frames():
             self._wire_anim_sets()
         # v2.1.4 修复（S1-c）：睡眠中投喂先正常唤醒（此前会在"睡着"状态下起吃帧，
         # 用户点一下就把 _eat_done 顶掉 → busy 永久卡死）
@@ -4418,7 +4569,11 @@ class PetWindow(QWidget):
         """v2.1：停止当前播放（配音 stop() 用）。winsound 与 QMediaPlayer 两条链路都停。"""
         try:
             import winsound
-            winsound.PlaySound(None, winsound.SND_PURGE)  # wav 链路：立即静音
+            # v2.4.3（第三轮找茬 P2-1）：SND_PURGE 自 Win2000 起就已废弃，微软文档明确
+            # "不再使用、现代 Windows 不支持"——Win10/11 上这个调用是 no-op，"停止配音"
+            # 因此完全无效（wav 片段会播到自然结束）。停止异步播放的正确写法是
+            # PlaySound(NULL, 0)：pszSound 为 NULL = 停掉正在播的声音，flags 传 0。
+            winsound.PlaySound(None, 0)  # wav 链路：立即停播（异步播放的停止语义）
         except Exception:
             pass  # 有意忽略：非 Windows / 无播放时无需处理
         try:

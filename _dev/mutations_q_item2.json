@@ -13,30 +13,30 @@
     },
     {
       "id": "M-Q6",
-      "why": "回退只接受「能解析成 JSON」的结果（坏 JSON 不得被当成读懂了）",
-      "file": "pet_lines.py",
-      "old": "        try:\n            data = json.loads(text)\n        except (ValueError, RecursionError):\n            return None, \"\"",
-      "new": "        try:\n            data = json.loads(text)\n        except (ValueError, RecursionError):\n            data = {}",
+      "why": "回退只接受「能解析成 JSON」的结果（坏 JSON 不得被当成读懂了）——v2.4.2 收口后实现从 pet_lines 搬到 pet_io.read_json_fallback，判据不变",
+      "file": "pet_io.py",
+      "old": "    try:\n        data = json.loads(text)\n    except (ValueError, RecursionError) as e:\n        _log(log, \"pet_io 回退读解码成功但 JSON 仍坏（按默认值继续）%s: %r\" % (path, e))\n        return None, \"\"",
+      "new": "    try:\n        data = json.loads(text)\n    except (ValueError, RecursionError) as e:\n        _log(log, \"pet_io 回退读解码成功但 JSON 仍坏（按默认值继续）%s: %r\" % (path, e))\n        data = {}  # MUTATION：坏 JSON 也当成读懂了",
       "tests": [
         "tests/test_io_v231.py::test_lines_gbk_broken_json_still_takes_dirty_read_path_v242"
       ]
     },
     {
       "id": "M-Q7",
-      "why": "回退只接受「顶层是对象」的结果",
-      "file": "pet_lines.py",
-      "old": "        return (data, enc) if isinstance(data, dict) else (None, \"\")",
-      "new": "        return (data, enc)",
+      "why": "回退只接受「顶层是 expect 类型（默认 dict）」的结果（实现搬去 pet_io 后判据不变）",
+      "file": "pet_io.py",
+      "old": "    if expect is not None and not isinstance(data, expect):\n        _log(log, \"pet_io 回退读顶层结构非法（按默认值继续）%s: %s\" % (path, type(data).__name__))",
+      "new": "    if False and not isinstance(data, expect):  # MUTATION：顶层类型不再校验\n        _log(log, \"pet_io 回退读顶层结构非法（按默认值继续）%s: %s\" % (path, type(data).__name__))",
       "tests": [
         "tests/test_io_v231.py::test_lines_gbk_broken_json_still_takes_dirty_read_path_v242"
       ]
     },
     {
       "id": "M-Q8",
-      "why": "回退前必须先自证「不是 UTF-8」（否则好文件被解成乱码）",
-      "file": "pet_lines.py",
-      "old": "            text = raw.decode(\"utf-8-sig\")",
-      "new": "            text = raw.decode(\"gbk\")",
+      "why": "回退前必须先自证「不是 UTF-8」（否则好文件被解成乱码；实现搬去 pet_io 后判据不变）",
+      "file": "pet_io.py",
+      "old": "        text = raw.decode(\"utf-8-sig\")   # 与 _read_json_status 同口径：UTF-8 with BOM 也算 UTF-8",
+      "new": "        text = raw.decode(\"gbk\")  # MUTATION：不再先自证「不是 UTF-8」",
       "tests": [
         "tests/test_io_v231.py::test_lines_transient_read_failure_recovers_without_dirty_v242",
         "tests/test_io_v231.py::test_lines_gbk_read_through_encoding_fallback_v242"
@@ -52,5 +52,59 @@
         "tests/test_io_v231.py::test_lines_gbk_read_through_encoding_fallback_v242"
       ]
     }
-  ]
+  ],
+  "results": {
+    "title": "变异验证 spec：mutations_q_item2.json",
+    "checked_at": "2026-10-10 22:43:14",
+    "total": 5,
+    "caught": 5,
+    "not_caught": 0,
+    "items": [
+      {
+        "id": "M-Q5",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "2 failed in 1.37s"
+      },
+      {
+        "id": "M-Q6",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 0.89s"
+      },
+      {
+        "id": "M-Q7",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 0.70s"
+      },
+      {
+        "id": "M-Q8",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "2 failed in 0.73s"
+      },
+      {
+        "id": "M-Q9",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 0.65s"
+      }
+    ],
+    "spec": "mutations_q_item2.json",
+    "tests": [
+      "tests/test_io_v231.py::test_lines_gbk_broken_json_still_takes_dirty_read_path_v242",
+      "tests/test_io_v231.py::test_lines_gbk_read_through_encoding_fallback_v242",
+      "tests/test_io_v231.py::test_lines_transient_read_failure_recovers_without_dirty_v242"
+    ],
+    "note": "变异只在 %TEMP% 影子副本里做，真实仓库只读（只写 _dev/.mutation.lock）",
+    "repo_fingerprint": {
+      "桌宠.py": "059b7abfa512",
+      "pet_export.py": "aaab598792c4",
+      "pet_lines.py": "5332f60b5f26",
+      "pet_alarm.py": "1149e94deee3",
+      "pet_behaviors.py": "8f57255144f6",
+      "_check_release.py": "b2cec3adef96"
+    }
+  }
 }

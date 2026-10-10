@@ -1,0 +1,287 @@
+{
+  "note": "v2.4.3 启动接力 / 撒钱预载分片 / 一行兼容修复（SND_PURGE）—— 把修复拿掉必须变红。判定口径 v2.4.3（质量审查 M5）：expect_fail 点名的用例必须真的出现在失败列表里，别的用例被抖红不算 CAUGHT。被 tests/test_relay_v243.py 的 7 组用例守护。",
+  "owner": "agent-compat-r3",
+  "mutations": [
+    {
+      "id": "M-R1",
+      "why": "停止配音退回已废弃的 SND_PURGE（Win10/11 上是 no-op，停止完全无效）",
+      "file": "桌宠.py",
+      "old": "            winsound.PlaySound(None, 0)  # wav 链路：立即停播（异步播放的停止语义）",
+      "new": "            winsound.PlaySound(None, winsound.SND_PURGE)  # MUTATION",
+      "tests": [
+        "tests/test_relay_v243.py::test_stop_voice_clip_uses_modern_stop_flags"
+      ],
+      "expect_fail": [
+        "tests/test_relay_v243.py::test_stop_voice_clip_uses_modern_stop_flags"
+      ]
+    },
+    {
+      "id": "M-R2",
+      "why": "撒钱预载入口退回「到点后一次解 86 帧」（本轮修掉的那条长阻塞）",
+      "file": "桌宠.py",
+      "old": "        if self._money_preload is not None or self._fx_money:\n            return  # 已在解 / 已经解好（含 _fx_celebrate 抢跑解好的情况）：不重复排片\n        self._money_preload = {\"k\": 0, \"frames\": []}\n        QTimer.singleShot(0, self, self._gslot(\"money_preload\", self._money_preload_step))",
+      "new": "        if self._money_preload is not None or self._fx_money:\n            return  # MUTATION\n        self._fx_money = pet_anim.load_frame_set(self._fx_money_dir, _MONEY_FRAME_PREFIX,\n                                                 _MONEY_FRAME_COUNT)  # MUTATION: 一次解完",
+      "tests": [
+        "tests/test_relay_v243.py::test_money_preload_is_sliced_and_matches_eager_load",
+        "tests/test_relay_v243.py::test_money_preload_is_sliced_even_with_a_zero_budget"
+      ],
+      "expect_fail": [
+        "tests/test_relay_v243.py::test_money_preload_is_sliced_and_matches_eager_load"
+      ]
+    },
+    {
+      "id": "M-R3",
+      "why": "消费点抢跑后不作废在途批次（_fx_money 已解好，下一片醒来还会再解一遍）",
+      "file": "桌宠.py",
+      "old": "        if not self._fx_money:\n            self._money_preload = None  # 抢跑：在途分片批次作废（它醒来会看到 _fx_money 非空）",
+      "new": "        if not self._fx_money:\n            pass  # MUTATION: 不作废在途批次",
+      "tests": [
+        "tests/test_relay_v243.py::test_money_preload_defers_to_the_consumer"
+      ],
+      "expect_fail": [
+        "tests/test_relay_v243.py::test_money_preload_defers_to_the_consumer"
+      ]
+    },
+    {
+      "id": "M-R4",
+      "why": "帧集支一轮全解（粒度从「一组」退化成「整支合并」）",
+      "file": "桌宠.py",
+      "old": "        if keys:\n            self._load_default_frame_set(keys[0])",
+      "new": "        for _k in keys:  # MUTATION: 一轮全解\n            self._load_default_frame_set(_k)",
+      "tests": [
+        "tests/test_relay_v243.py::test_frame_relay_slice_is_exactly_one_group_per_round",
+        "tests/test_relay_v243.py::test_default_relay_keeps_one_phase_per_round"
+      ],
+      "expect_fail": [
+        "tests/test_relay_v243.py::test_frame_relay_slice_is_exactly_one_group_per_round"
+      ]
+    },
+    {
+      "id": "M-R5",
+      "why": "自定义角色不再跳过默认四组帧集（白解 37 帧，本轮 P2-3 修掉的那条）",
+      "file": "桌宠.py",
+      "old": "        if self._custom_role:\n            return (\"petpet\",)\n        return tuple(key for key, _sub, _prefix, _count, _attr in _DEFAULT_FRAME_SETS)",
+      "new": "        return tuple(key for key, _sub, _prefix, _count, _attr in _DEFAULT_FRAME_SETS)  # MUTATION",
+      "tests": [
+        "tests/test_relay_v243.py::test_custom_role_skips_default_frame_sets_but_keeps_petpet"
+      ],
+      "expect_fail": [
+        "tests/test_relay_v243.py::test_custom_role_skips_default_frame_sets_but_keeps_petpet"
+      ]
+    },
+    {
+      "id": "M-R6",
+      "why": "构造期对自定义角色也解 idle（延迟装载的角色口径失效）",
+      "file": "桌宠.py",
+      "old": "        if not self._custom_role:\n            self._load_default_frame_set(\"idle\")",
+      "new": "        self._load_default_frame_set(\"idle\")  # MUTATION",
+      "tests": [
+        "tests/test_relay_v243.py::test_custom_role_skips_default_frame_sets_but_keeps_petpet"
+      ],
+      "expect_fail": [
+        "tests/test_relay_v243.py::test_custom_role_skips_default_frame_sets_but_keeps_petpet"
+      ]
+    },
+    {
+      "id": "M-R7",
+      "why": "接力链 finally 不收口（抛错后 _startup_assets_done 恒 False，链永久停在半路）",
+      "file": "桌宠.py",
+      "old": "        finally:\n            if not _rescheduled:\n                self._startup_assets_done = True",
+      "new": "        finally:\n            pass  # MUTATION: 收口拿掉",
+      "tests": [
+        "tests/test_relay_v243.py::test_relay_chain_closes_when_a_step_raises"
+      ],
+      "expect_fail": [
+        "tests/test_relay_v243.py::test_relay_chain_closes_when_a_step_raises"
+      ]
+    },
+    {
+      "id": "M-R8",
+      "why": "状态图分片零推进时不自锁（pending 清不掉 → QTimer(0) 链永久自排空转）",
+      "file": "桌宠.py",
+      "old": "            if self._state_pix_pending and _state_pending_count(self._state_pix_pending) >= _before:\n                self._state_pix_pending = {}",
+      "new": "            pass  # MUTATION: 零推进自锁拿掉",
+      "tests": [
+        "tests/test_relay_v243.py::test_state_slice_selflocks_on_zero_progress",
+        "tests/test_relay_v243.py::test_relay_terminates_with_unbuildable_pending"
+      ],
+      "expect_fail": [
+        "tests/test_relay_v243.py::test_state_slice_selflocks_on_zero_progress"
+      ]
+    },
+    {
+      "id": "M-R9",
+      "why": "起播前的同步兜底拿掉（自定义角色切回默认角色后 idle 帧集永远补不上）",
+      "file": "桌宠.py",
+      "old": "        if not self._custom_role:\n            self._ensure_default_frames((\"idle\", \"idle_full\") if self.form != self.form_keys[0]\n                                        else (\"idle\",))",
+      "new": "        if False:  # MUTATION: 同步兜底拿掉\n            self._ensure_default_frames((\"idle\", \"idle_full\") if self.form != self.form_keys[0]\n                                        else (\"idle\",))",
+      "tests": [
+        "tests/test_relay_v243.py::test_custom_role_switching_back_to_default_loads_idle"
+      ],
+      "expect_fail": [
+        "tests/test_relay_v243.py::test_custom_role_switching_back_to_default_loads_idle"
+      ]
+    },
+    {
+      "id": "M-R10",
+      "why": "撒钱预载的预算判断挪到解第一帧之前（预算 0 时一帧都不解 → 链永远推不动）",
+      "file": "桌宠.py",
+      "old": "            while st[\"k\"] < _MONEY_FRAME_COUNT:",
+      "new": "            while st[\"k\"] < _MONEY_FRAME_COUNT and (time.perf_counter() - t0) * 1000.0 < _FRAME_SLICE_MS:  # MUTATION",
+      "tests": [
+        "tests/test_relay_v243.py::test_money_preload_is_sliced_even_with_a_zero_budget"
+      ],
+      "expect_fail": [
+        "tests/test_relay_v243.py::test_money_preload_is_sliced_even_with_a_zero_budget"
+      ]
+    },
+    {
+      "id": "M-R11",
+      "why": "帧集支做完不 return，同一轮又落到状态图支（一轮一阶段并成一轮两阶段）",
+      "file": "桌宠.py",
+      "old": "                _rescheduled = True\n                QTimer.singleShot(0, self, self._gslot(\"startup_assets\", self._startup_assets_step))\n                return\n            if self._state_pix_pending:",
+      "new": "                _rescheduled = True\n                QTimer.singleShot(0, self, self._gslot(\"startup_assets\", self._startup_assets_step))  # MUTATION: 不 return\n            if self._state_pix_pending:",
+      "tests": [
+        "tests/test_relay_v243.py::test_default_relay_keeps_one_phase_per_round"
+      ],
+      "expect_fail": [
+        "tests/test_relay_v243.py::test_default_relay_keeps_one_phase_per_round"
+      ]
+    }
+  ],
+  "results": {
+    "title": "变异验证 spec：mutations_relay_v243.json",
+    "checked_at": "2026-10-10 23:44:03",
+    "total": 11,
+    "caught": 11,
+    "not_caught": 0,
+    "blocked": 0,
+    "items": [
+      {
+        "id": "M-R1",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 0.93s",
+        "failed": [
+          "test_stop_voice_clip_uses_modern_stop_flags"
+        ]
+      },
+      {
+        "id": "M-R2",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "2 failed in 0.82s",
+        "failed": [
+          "test_money_preload_is_sliced_and_matches_eager_load",
+          "test_money_preload_is_sliced_even_with_a_zero_budget"
+        ]
+      },
+      {
+        "id": "M-R3",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 0.90s",
+        "failed": [
+          "test_money_preload_defers_to_the_consumer"
+        ]
+      },
+      {
+        "id": "M-R4",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "2 failed in 0.86s",
+        "failed": [
+          "test_frame_relay_slice_is_exactly_one_group_per_round",
+          "test_default_relay_keeps_one_phase_per_round"
+        ]
+      },
+      {
+        "id": "M-R5",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 0.98s",
+        "failed": [
+          "test_custom_role_skips_default_frame_sets_but_keeps_petpet"
+        ]
+      },
+      {
+        "id": "M-R6",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 0.94s",
+        "failed": [
+          "test_custom_role_skips_default_frame_sets_but_keeps_petpet"
+        ]
+      },
+      {
+        "id": "M-R7",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 0.74s",
+        "failed": [
+          "test_relay_chain_closes_when_a_step_raises"
+        ]
+      },
+      {
+        "id": "M-R8",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "2 failed in 0.88s",
+        "failed": [
+          "test_state_slice_selflocks_on_zero_progress",
+          "test_relay_terminates_with_unbuildable_pending"
+        ]
+      },
+      {
+        "id": "M-R9",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 0.83s",
+        "failed": [
+          "test_custom_role_switching_back_to_default_loads_idle"
+        ]
+      },
+      {
+        "id": "M-R10",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 0.73s",
+        "failed": [
+          "test_money_preload_is_sliced_even_with_a_zero_budget"
+        ]
+      },
+      {
+        "id": "M-R11",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 0.77s",
+        "failed": [
+          "test_default_relay_keeps_one_phase_per_round"
+        ]
+      }
+    ],
+    "spec": "mutations_relay_v243.json",
+    "tests": [
+      "tests/test_relay_v243.py::test_custom_role_skips_default_frame_sets_but_keeps_petpet",
+      "tests/test_relay_v243.py::test_custom_role_switching_back_to_default_loads_idle",
+      "tests/test_relay_v243.py::test_default_relay_keeps_one_phase_per_round",
+      "tests/test_relay_v243.py::test_frame_relay_slice_is_exactly_one_group_per_round",
+      "tests/test_relay_v243.py::test_money_preload_defers_to_the_consumer",
+      "tests/test_relay_v243.py::test_money_preload_is_sliced_and_matches_eager_load",
+      "tests/test_relay_v243.py::test_money_preload_is_sliced_even_with_a_zero_budget",
+      "tests/test_relay_v243.py::test_relay_chain_closes_when_a_step_raises",
+      "tests/test_relay_v243.py::test_relay_terminates_with_unbuildable_pending",
+      "tests/test_relay_v243.py::test_state_slice_selflocks_on_zero_progress",
+      "tests/test_relay_v243.py::test_stop_voice_clip_uses_modern_stop_flags"
+    ],
+    "note": "变异只在 %TEMP% 影子副本里做，真实仓库只读（只写 _dev/.mutation.lock）",
+    "repo_fingerprint": {
+      "桌宠.py": "b5896376b7eb",
+      "pet_export.py": "2fe39233056b",
+      "pet_lines.py": "5332f60b5f26",
+      "pet_alarm.py": "1149e94deee3",
+      "pet_behaviors.py": "8f57255144f6",
+      "_check_release.py": "13d464ff5eaa"
+    }
+  }
+}

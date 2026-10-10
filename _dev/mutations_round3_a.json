@@ -1,0 +1,356 @@
+{
+  "note": "第三轮找茬代理 A（v2.4.3）：P1-1/P2-2/P2-3/P3-1/P3-2/P3-3/P3-4 + 注解口径 —— 把修复拿掉必须变红",
+  "owner": "agent-A-r3",
+  "mutations": [
+    {
+      "id": "M-A1",
+      "why": "balance worker 的 finally 不再复位 _fetching_balance（守卫泄漏）",
+      "file": "pet_balance.py",
+      "old": "        finally:\n            try:\n                self.pet._fetching_balance = False\n            except Exception:\n                pass  # 有意忽略：pet 已销毁时连标志都不用管（进程正在退出）",
+      "new": "        finally:\n            pass  # MUTATION: 守卫复位拿掉",
+      "tests": [
+        "tests/test_round3_a_fixes.py::test_worker_emits_result_and_resets_guard_on_success",
+        "tests/test_round3_a_fixes.py::test_worker_survives_request_exception_and_resets_guard",
+        "tests/test_round3_a_fixes.py::test_refresh_is_not_wedged_after_an_emit_failure"
+      ]
+    },
+    {
+      "id": "M-A2",
+      "why": "拿掉顶层 except：_request_balance 之后的行抛异常时直接冲出 daemon 线程",
+      "file": "pet_balance.py",
+      "old": "        except Exception as e:\n            # _request_balance 内部已全兜；这里防的是\"它之后的行\"（含参数解包、标志读写）\n            self._log_safe(\"balance_worker crashed: %r\" % (e,))\n            self._emit(\"balance_err\")\n        finally:",
+      "new": "        finally:",
+      "tests": [
+        "tests/test_round3_a_fixes.py::test_worker_survives_request_exception_and_resets_guard"
+      ]
+    },
+    {
+      "id": "M-A3",
+      "why": "emit 端不再判 _closing（回到槽端判、emit 端不判）",
+      "file": "pet_balance.py",
+      "old": "        if self._closing():\n            return False\n        try:\n            getattr(self.signals, name).emit(*args)",
+      "new": "        if False:  # MUTATION\n            return False\n        try:\n            getattr(self.signals, name).emit(*args)",
+      "tests": [
+        "tests/test_round3_a_fixes.py::test_worker_does_not_emit_while_closing",
+        "tests/test_round3_a_fixes.py::test_worker_treats_unreadable_closing_flag_as_closing"
+      ]
+    },
+    {
+      "id": "M-A4",
+      "why": "把一处字体构造退回硬编码族名（英文 Windows 上会显示方块）",
+      "file": "pet_widgets.py",
+      "old": "        fm = QFontMetrics(ui_font(9, QFont.Weight.Bold))",
+      "new": "        fm = QFontMetrics(QFont(\"Microsoft YaHei\", 9, QFont.Weight.Bold))  # MUTATION",
+      "tests": [
+        "tests/test_round3_a_fixes.py::test_widgets_never_hardcode_a_font_family"
+      ]
+    },
+    {
+      "id": "M-A5",
+      "why": "回退链被砍成单族（等于没有回退）",
+      "file": "pet_widgets.py",
+      "old": "UI_FONT_FAMILIES = (\"Microsoft YaHei\", \"微软雅黑\", \"SimSun\", \"Arial Unicode MS\")",
+      "new": "UI_FONT_FAMILIES = (\"Microsoft YaHei\",)  # MUTATION",
+      "tests": [
+        "tests/test_round3_a_fixes.py::test_ui_font_uses_the_fallback_chain"
+      ]
+    },
+    {
+      "id": "M-A6",
+      "why": "requests 上界被拿掉",
+      "file": "requirements.txt",
+      "old": "requests>=2.28,<3",
+      "new": "requests>=2.28",
+      "tests": [
+        "tests/test_round3_a_fixes.py::test_requests_and_pyinstaller_have_upper_bounds",
+        "tests/test_round3_a_fixes.py::test_lock_versions_fit_inside_the_new_bounds"
+      ]
+    },
+    {
+      "id": "M-A7",
+      "why": "PyInstaller 上界被拿掉",
+      "file": "requirements.txt",
+      "old": "PyInstaller>=6.0,<7",
+      "new": "PyInstaller>=6.0",
+      "tests": [
+        "tests/test_round3_a_fixes.py::test_requests_and_pyinstaller_have_upper_bounds",
+        "tests/test_round3_a_fixes.py::test_lock_versions_fit_inside_the_new_bounds"
+      ]
+    },
+    {
+      "id": "M-A8",
+      "why": "CI 退回不锁版本的 pytest",
+      "file": ".github/workflows/ci.yml",
+      "old": "pytest==9.1.1",
+      "new": "pytest",
+      "tests": [
+        "tests/test_round3_a_fixes.py::test_ci_pins_pytest_to_the_lock_version"
+      ]
+    },
+    {
+      "id": "M-A9",
+      "why": "last_updated 退回无时区格式",
+      "file": "pet_chat.py",
+      "old": "lt[\"last_updated\"] = time.strftime(\"%Y-%m-%dT%H:%M:%S%z\")",
+      "new": "lt[\"last_updated\"] = time.strftime(\"%Y-%m-%dT%H:%M:%S\")",
+      "tests": [
+        "tests/test_round3_a_fixes.py::test_last_updated_carries_timezone_offset"
+      ]
+    },
+    {
+      "id": "M-A10",
+      "why": "不再照抄 zipfile 私有属性 _compresslevel（产出字节口径静默失效）",
+      "file": "pet_export.py",
+      "old": "            zinfo._compresslevel = self._zf.compresslevel",
+      "new": "            pass  # MUTATION: 不再设置 zipfile 私有属性",
+      "tests": [
+        "tests/test_round3_a_fixes.py::test_zipinfo_compresslevel_is_still_consumed"
+      ]
+    },
+    {
+      "id": "M-A11",
+      "why": "_almost_utf8 的极小文件退化说明从 docstring 里拿掉",
+      "file": "pet_io.py",
+      "old": "    v2.4.3（第三轮找茬 P3-4）：判据一的段数上限对 **<200 字节**的文件退化成 max(1, 0) = 1\n    （见常量 _UTF8_DAMAGE_DIVISOR 处的说明）。这是**已知且有意保留**的退化：极小文件本来\n    就只可能有一两个损坏段，\"按比例\"没有意义；真正把纯西文文件挡在门外的是判据二，\n    两个判据联合后极小文件不会误判（有测试钉住这条边界）。",
+      "new": "    （有意省略：极小文件边界说明）",
+      "tests": [
+        "tests/test_round3_a_fixes.py::test_almost_utf8_documents_the_small_file_degradation"
+      ]
+    },
+    {
+      "id": "M-A12",
+      "why": "常量区的极小文件退化说明被拿掉",
+      "file": "pet_io.py",
+      "old": "# v2.4.3（第三轮找茬 P3-4）：**极小文件会退化**——总字节数 < 200 时整除结果为 0，被 max()",
+      "new": "# v2.4.3（第三轮找茬 P3-4）：极小文件的边界说明见 _almost_utf8 的 docstring",
+      "tests": [
+        "tests/test_round3_a_fixes.py::test_almost_utf8_documents_the_small_file_degradation"
+      ]
+    },
+    {
+      "id": "M-A13",
+      "why": "README 注解表格数字改成与 AST 实测不符",
+      "file": "README.md",
+      "old": "| ✅ 39/39 |",
+      "new": "| ✅ 38/39 |",
+      "tests": [
+        "tests/test_round3_a_fixes.py::test_readme_annotation_scope_matches_the_code"
+      ]
+    },
+    {
+      "id": "M-A14",
+      "why": "README 的口径小节标题被改掉（口径澄清丢失）",
+      "file": "README.md",
+      "old": "## 🧾 类型注解口径（v2.4.3 澄清）",
+      "new": "## 🧾 注解（v2.4.3）",
+      "tests": [
+        "tests/test_round3_a_fixes.py::test_readme_says_the_big_files_are_not_done"
+      ]
+    },
+    {
+      "id": "M-A15",
+      "why": "pet_io 头注释里的注解口径说明被拿掉",
+      "file": "pet_io.py",
+      "old": "类型注解口径（v2.4.3 澄清，第三轮找茬的\"口径误导\"一条）\n--------------------------------------------------------\n本模块的注解范围 = **公开 API 与纯函数**（25/28；未标的 3 个是 _MergeGuard 的\n__init__/__enter__/__exit__）。全仓口径见 README「类型注解口径」一节：v2.4.1 那句\n「pet_tools + pet_lines 82 个函数补全注解」只覆盖那两个 Qt-free 模块；桌宠、pet_dialogs、\npet_voice 等大文件仍是零注解，属**单独立项**——别把 82/82 读成\"全仓注解完成\"。\n（本模块自己不再扩注解范围：这轮只澄清口径。）",
+      "new": "（有意省略：注解口径说明）",
+      "tests": [
+        "tests/test_round3_a_fixes.py::test_module_docstrings_state_the_annotation_scope"
+      ]
+    },
+    {
+      "id": "M-A16",
+      "why": "pet_chat 头注释里的注解口径说明被拿掉",
+      "file": "pet_chat.py",
+      "old": "类型注解口径（v2.4.3 澄清）：本模块**零注解**（29 个函数、0 个带返回注解），不在 v2.4.1\n那句「pet_tools + pet_lines 82 个函数补全注解」的口径内；全仓口径见 README\n「类型注解口径」一节——桌宠、pet_dialogs 等大文件同样未做，属单独立项。",
+      "new": "（有意省略：注解口径说明）",
+      "tests": [
+        "tests/test_round3_a_fixes.py::test_module_docstrings_state_the_annotation_scope"
+      ]
+    }
+  ],
+  "results": {
+    "title": "变异验证 spec：mutations_round3_a.json",
+    "checked_at": "2026-10-10 23:44:46",
+    "total": 16,
+    "caught": 16,
+    "not_caught": 0,
+    "blocked": 0,
+    "items": [
+      {
+        "id": "M-A1",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "3 failed in 0.77s",
+        "failed": [
+          "test_worker_emits_result_and_resets_guard_on_success",
+          "test_worker_survives_request_exception_and_resets_guard",
+          "test_refresh_is_not_wedged_after_an_emit_failure"
+        ]
+      },
+      {
+        "id": "M-A2",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 0.51s",
+        "failed": [
+          "test_worker_survives_request_exception_and_resets_guard"
+        ]
+      },
+      {
+        "id": "M-A3",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "2 failed in 0.62s",
+        "failed": [
+          "test_worker_does_not_emit_while_closing",
+          "test_worker_treats_unreadable_closing_flag_as_closing"
+        ]
+      },
+      {
+        "id": "M-A4",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 0.53s",
+        "failed": [
+          "test_widgets_never_hardcode_a_font_family"
+        ]
+      },
+      {
+        "id": "M-A5",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 0.52s",
+        "failed": [
+          "test_ui_font_uses_the_fallback_chain"
+        ]
+      },
+      {
+        "id": "M-A6",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed, 1 passed in 0.53s",
+        "failed": [
+          "test_requests_and_pyinstaller_have_upper_bounds"
+        ]
+      },
+      {
+        "id": "M-A7",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed, 1 passed in 0.52s",
+        "failed": [
+          "test_requests_and_pyinstaller_have_upper_bounds"
+        ]
+      },
+      {
+        "id": "M-A8",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 0.51s",
+        "failed": [
+          "test_ci_pins_pytest_to_the_lock_version"
+        ]
+      },
+      {
+        "id": "M-A9",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 0.53s",
+        "failed": [
+          "test_last_updated_carries_timezone_offset"
+        ]
+      },
+      {
+        "id": "M-A10",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 0.59s",
+        "failed": [
+          "test_zipinfo_compresslevel_is_still_consumed"
+        ]
+      },
+      {
+        "id": "M-A11",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 0.54s",
+        "failed": [
+          "test_almost_utf8_documents_the_small_file_degradation"
+        ]
+      },
+      {
+        "id": "M-A12",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 0.56s",
+        "failed": [
+          "test_almost_utf8_documents_the_small_file_degradation"
+        ]
+      },
+      {
+        "id": "M-A13",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 0.52s",
+        "failed": [
+          "test_readme_annotation_scope_matches_the_code"
+        ]
+      },
+      {
+        "id": "M-A14",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 0.50s",
+        "failed": [
+          "test_readme_says_the_big_files_are_not_done"
+        ]
+      },
+      {
+        "id": "M-A15",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 0.50s",
+        "failed": [
+          "test_module_docstrings_state_the_annotation_scope"
+        ]
+      },
+      {
+        "id": "M-A16",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 0.55s",
+        "failed": [
+          "test_module_docstrings_state_the_annotation_scope"
+        ]
+      }
+    ],
+    "spec": "mutations_round3_a.json",
+    "tests": [
+      "tests/test_round3_a_fixes.py::test_almost_utf8_documents_the_small_file_degradation",
+      "tests/test_round3_a_fixes.py::test_ci_pins_pytest_to_the_lock_version",
+      "tests/test_round3_a_fixes.py::test_last_updated_carries_timezone_offset",
+      "tests/test_round3_a_fixes.py::test_lock_versions_fit_inside_the_new_bounds",
+      "tests/test_round3_a_fixes.py::test_module_docstrings_state_the_annotation_scope",
+      "tests/test_round3_a_fixes.py::test_readme_annotation_scope_matches_the_code",
+      "tests/test_round3_a_fixes.py::test_readme_says_the_big_files_are_not_done",
+      "tests/test_round3_a_fixes.py::test_refresh_is_not_wedged_after_an_emit_failure",
+      "tests/test_round3_a_fixes.py::test_requests_and_pyinstaller_have_upper_bounds",
+      "tests/test_round3_a_fixes.py::test_ui_font_uses_the_fallback_chain",
+      "tests/test_round3_a_fixes.py::test_widgets_never_hardcode_a_font_family",
+      "tests/test_round3_a_fixes.py::test_worker_does_not_emit_while_closing",
+      "tests/test_round3_a_fixes.py::test_worker_emits_result_and_resets_guard_on_success",
+      "tests/test_round3_a_fixes.py::test_worker_survives_request_exception_and_resets_guard",
+      "tests/test_round3_a_fixes.py::test_worker_treats_unreadable_closing_flag_as_closing",
+      "tests/test_round3_a_fixes.py::test_zipinfo_compresslevel_is_still_consumed"
+    ],
+    "note": "变异只在 %TEMP% 影子副本里做，真实仓库只读（只写 _dev/.mutation.lock）",
+    "repo_fingerprint": {
+      "桌宠.py": "b5896376b7eb",
+      "pet_export.py": "2fe39233056b",
+      "pet_lines.py": "5332f60b5f26",
+      "pet_alarm.py": "1149e94deee3",
+      "pet_behaviors.py": "8f57255144f6",
+      "_check_release.py": "13d464ff5eaa"
+    }
+  }
+}

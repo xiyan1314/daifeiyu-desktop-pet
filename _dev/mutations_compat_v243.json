@@ -1,0 +1,334 @@
+{
+  "note": "v2.4.3 兼容审查（M1 QSS 字体回退 / M2 README 安装行 / M3 依赖上界单一来源 / M4 机理措辞）+ 质量审查（M1 README 大文件数字 / M4 变异证据指纹 / L2 gitignore 素材 / L3 判据没生效）+ 找茬复审（M3 自定义角色首喂 / M5 manifest 时间戳 / M1 refresh start() / L① _closing）—— 把修复拿掉必须变红。判定口径 v2.4.3（质量审查 M5）：expect_fail 点名的用例必须真的在失败列表里。",
+  "owner": "agent-compat-r3",
+  "mutations": [
+    {
+      "id": "M-C1",
+      "why": "QSS 的 font-family 退回单族字面量（等于没有回退）",
+      "file": "pet_dialogs.py",
+      "old": "    font-family: __UI_FONT_FAMILIES__;",
+      "new": "    font-family: \"Microsoft YaHei\";  # MUTATION",
+      "tests": [
+        "tests/test_round3_a_fixes.py::test_no_shipped_source_hardcodes_a_single_font_family",
+        "tests/test_round3_a_fixes.py::test_dialog_qss_uses_the_single_source_fallback_chain"
+      ],
+      "expect_fail": [
+        "tests/test_round3_a_fixes.py::test_no_shipped_source_hardcodes_a_single_font_family"
+      ]
+    },
+    {
+      "id": "M-C2",
+      "why": "QSS 的族列表不再由 UI_FONT_FAMILIES 拼出（两处各写一份）",
+      "file": "pet_dialogs.py",
+      "old": "DIALOG_FONT_FAMILY = _qss_font_family(_UI_FONT_FAMILIES)",
+      "new": "DIALOG_FONT_FAMILY = '\"Microsoft YaHei\"'  # MUTATION",
+      "tests": [
+        "tests/test_round3_a_fixes.py::test_dialog_qss_uses_the_single_source_fallback_chain"
+      ],
+      "expect_fail": [
+        "tests/test_round3_a_fixes.py::test_dialog_qss_uses_the_single_source_fallback_chain"
+      ]
+    },
+    {
+      "id": "M-C3",
+      "why": "机理注释退回「回退到默认无衬线 → 显示成方块」的绝对说法（复审 M4）",
+      "file": "pet_widgets.py",
+      "old": "# **字体链接**——候选族一个都不可用时 QFont 退到默认无衬线族（实测 Tahoma，exactMatch()",
+      "new": "# 就回退到默认无衬线 → 中文气泡与余额徽章显示成方块  # MUTATION",
+      "tests": [
+        "tests/test_round3_a_fixes.py::test_font_fallback_mechanism_comment_is_hedged"
+      ],
+      "expect_fail": [
+        "tests/test_round3_a_fixes.py::test_font_fallback_mechanism_comment_is_hedged"
+      ]
+    },
+    {
+      "id": "M-C4",
+      "why": "pytest 的上界被拿掉（requirements 里唯一没有上界的包）",
+      "file": "requirements.txt",
+      "old": "pytest>=7.0,<10",
+      "new": "pytest>=7.0  # MUTATION",
+      "tests": [
+        "tests/test_deps_bounds_v24.py::test_every_declared_package_has_an_upper_bound",
+        "tests/test_round3_a_fixes.py::test_requests_and_pyinstaller_have_upper_bounds"
+      ],
+      "expect_fail": [
+        "tests/test_deps_bounds_v24.py::test_every_declared_package_has_an_upper_bound"
+      ]
+    },
+    {
+      "id": "M-C5",
+      "why": "README 的 桌宠.py 函数数字改错（此前那行没有任何用例看着）",
+      "file": "README.md",
+      "old": "`桌宠.py`（253 函数）",
+      "new": "`桌宠.py`（999 函数）",
+      "tests": [
+        "tests/test_round3_a_fixes.py::test_readme_annotation_scope_matches_the_code"
+      ],
+      "expect_fail": [
+        "tests/test_round3_a_fixes.py::test_readme_annotation_scope_matches_the_code"
+      ]
+    },
+    {
+      "id": "M-C6",
+      "why": "发布门的 git status 退回八进制转义（中文路径不可读）",
+      "file": "_check_release.py",
+      "old": "st = subprocess.run([\"git\", \"-c\", \"core.quotepath=false\", \"status\", \"--porcelain\"],",
+      "new": "st = subprocess.run([\"git\", \"status\", \"--porcelain\"],  # MUTATION",
+      "tests": [
+        "tests/test_release_check.py::test_clean_tree_shows_utf8_paths_not_octal_escapes"
+      ],
+      "expect_fail": [
+        "tests/test_release_check.py::test_clean_tree_shows_utf8_paths_not_octal_escapes"
+      ]
+    },
+    {
+      "id": "M-C7",
+      "why": "素材清单的「未入库」判据不再排除 gitignore 的文件（复审 L2）",
+      "file": "_check_release.py",
+      "old": "return asset_manifest_problems(tracked, disk_assets(base), untracked_assets(base))",
+      "new": "return asset_manifest_problems(tracked, disk_assets(base))  # MUTATION",
+      "tests": [
+        "tests/test_release_check.py::test_asset_manifest_ignores_gitignored_files"
+      ],
+      "expect_fail": [
+        "tests/test_release_check.py::test_asset_manifest_ignores_gitignored_files"
+      ]
+    },
+    {
+      "id": "M-C8",
+      "why": "自定义角色首喂又在前台同步解默认帧集（复审 M3）",
+      "file": "桌宠.py",
+      "old": "        if not self._custom_role and self._ensure_default_frames():",
+      "new": "        if self._ensure_default_frames():  # MUTATION",
+      "tests": [
+        "tests/test_relay_v243.py::test_custom_role_first_feed_does_not_decode_default_sets"
+      ],
+      "expect_fail": [
+        "tests/test_relay_v243.py::test_custom_role_first_feed_does_not_decode_default_sets"
+      ]
+    },
+    {
+      "id": "M-C9",
+      "why": "manifest 条目时间戳退回当前时钟（复审 M5：隔 2 秒导出字节就变）",
+      "file": "pet_export.py",
+      "old": "            _zi = zipfile.ZipInfo(MANIFEST_NAME, date_time=(1980, 1, 1, 0, 0, 0))\n            _zi.compress_type = self._zf.compression\n            _zi._compresslevel = self._zf.compresslevel\n            _zi.external_attr = 0o600 << 16\n            self._zf.writestr(_zi,\n                              json.dumps(self.plan[\"manifest\"], ensure_ascii=False, indent=2))",
+      "new": "            self._zf.writestr(MANIFEST_NAME,  # MUTATION\n                              json.dumps(self.plan[\"manifest\"], ensure_ascii=False, indent=2))",
+      "tests": [
+        "tests/test_compat_v242_fixes.py::test_manifest_timestamp_is_fixed_so_exports_are_reproducible"
+      ],
+      "expect_fail": [
+        "tests/test_compat_v242_fixes.py::test_manifest_timestamp_is_fixed_so_exports_are_reproducible"
+      ]
+    },
+    {
+      "id": "M-C10",
+      "why": "refresh() 的 start() 又不在兜底里（复审 M1：标志恒真、查询毫无反应）",
+      "file": "pet_balance.py",
+      "old": "        try:\n            threading.Thread(target=self._worker, args=(key,), daemon=True).start()\n        except Exception as e:",
+      "new": "        if True:  # MUTATION\n            threading.Thread(target=self._worker, args=(key,), daemon=True).start()\n        elif False:",
+      "tests": [
+        "tests/test_round3_a_fixes.py::test_refresh_resets_guard_when_thread_start_fails"
+      ],
+      "expect_fail": [
+        "tests/test_round3_a_fixes.py::test_refresh_resets_guard_when_thread_start_fails"
+      ]
+    },
+    {
+      "id": "M-C11",
+      "why": "_closing 属性改名后余额结果被静默丢弃（复审 L①）",
+      "file": "pet_balance.py",
+      "old": "            return bool(getattr(self.pet, \"_closing\", False))",
+      "new": "            return bool(self.pet._closing)  # MUTATION",
+      "tests": [
+        "tests/test_round3_a_fixes.py::test_closing_flag_renamed_does_not_silently_drop_results"
+      ],
+      "expect_fail": [
+        "tests/test_round3_a_fixes.py::test_closing_flag_renamed_does_not_silently_drop_results"
+      ]
+    },
+    {
+      "id": "M-C12",
+      "why": "变异证据指纹过期不再提示（质量审查 M4）",
+      "file": "_check_release.py",
+      "old": "    if not isinstance(recorded, dict) or not recorded:\n        return []",
+      "new": "    if True:  # MUTATION\n        return []",
+      "tests": [
+        "tests/test_release_check.py::test_mutation_evidence_notes_flags_a_stale_result_json",
+        "tests/test_release_check.py::test_stale_fingerprints_reports_only_mismatches"
+      ],
+      "expect_fail": [
+        "tests/test_release_check.py::test_mutation_evidence_notes_flags_a_stale_result_json"
+      ]
+    },
+    {
+      "id": "M-C13",
+      "why": "素材清单判据没生效时不再出声（复审 L③）",
+      "file": "_check_release.py",
+      "old": "    if not os.path.isdir(os.path.join(base, ASSET_DIR)):\n        return [\"素材清单判据没生效：%s 目录不存在\" % ASSET_DIR]\n    if not tracked_assets(base):",
+      "new": "    if True:  # MUTATION\n        return []\n    if not tracked_assets(base):",
+      "tests": [
+        "tests/test_release_check.py::test_asset_manifest_notes_when_the_check_cannot_run"
+      ],
+      "expect_fail": [
+        "tests/test_release_check.py::test_asset_manifest_notes_when_the_check_cannot_run"
+      ]
+    }
+  ],
+  "results": {
+    "title": "变异验证 spec：mutations_compat_v243.json",
+    "checked_at": "2026-10-10 23:43:07",
+    "total": 13,
+    "caught": 13,
+    "not_caught": 0,
+    "blocked": 0,
+    "items": [
+      {
+        "id": "M-C1",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "2 failed in 2.05s",
+        "failed": [
+          "test_no_shipped_source_hardcodes_a_single_font_family",
+          "test_dialog_qss_uses_the_single_source_fallback_chain"
+        ]
+      },
+      {
+        "id": "M-C2",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 0.86s",
+        "failed": [
+          "test_dialog_qss_uses_the_single_source_fallback_chain"
+        ]
+      },
+      {
+        "id": "M-C3",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 0.79s",
+        "failed": [
+          "test_font_fallback_mechanism_comment_is_hedged"
+        ]
+      },
+      {
+        "id": "M-C4",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed, 1 passed in 0.70s",
+        "failed": [
+          "test_every_declared_package_has_an_upper_bound"
+        ]
+      },
+      {
+        "id": "M-C5",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 0.88s",
+        "failed": [
+          "test_readme_annotation_scope_matches_the_code"
+        ]
+      },
+      {
+        "id": "M-C6",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 1.33s",
+        "failed": [
+          "test_clean_tree_shows_utf8_paths_not_octal_escapes"
+        ]
+      },
+      {
+        "id": "M-C7",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 1.12s",
+        "failed": [
+          "test_asset_manifest_ignores_gitignored_files"
+        ]
+      },
+      {
+        "id": "M-C8",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 1.66s",
+        "failed": [
+          "test_custom_role_first_feed_does_not_decode_default_sets"
+        ]
+      },
+      {
+        "id": "M-C9",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 0.61s",
+        "failed": [
+          "test_manifest_timestamp_is_fixed_so_exports_are_reproducible"
+        ]
+      },
+      {
+        "id": "M-C10",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 0.66s",
+        "failed": [
+          "test_refresh_resets_guard_when_thread_start_fails"
+        ]
+      },
+      {
+        "id": "M-C11",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 0.63s",
+        "failed": [
+          "test_closing_flag_renamed_does_not_silently_drop_results"
+        ]
+      },
+      {
+        "id": "M-C12",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "2 failed in 0.58s",
+        "failed": [
+          "test_mutation_evidence_notes_flags_a_stale_result_json",
+          "test_stale_fingerprints_reports_only_mismatches"
+        ]
+      },
+      {
+        "id": "M-C13",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 0.61s",
+        "failed": [
+          "test_asset_manifest_notes_when_the_check_cannot_run"
+        ]
+      }
+    ],
+    "spec": "mutations_compat_v243.json",
+    "tests": [
+      "tests/test_compat_v242_fixes.py::test_manifest_timestamp_is_fixed_so_exports_are_reproducible",
+      "tests/test_deps_bounds_v24.py::test_every_declared_package_has_an_upper_bound",
+      "tests/test_relay_v243.py::test_custom_role_first_feed_does_not_decode_default_sets",
+      "tests/test_release_check.py::test_asset_manifest_ignores_gitignored_files",
+      "tests/test_release_check.py::test_asset_manifest_notes_when_the_check_cannot_run",
+      "tests/test_release_check.py::test_clean_tree_shows_utf8_paths_not_octal_escapes",
+      "tests/test_release_check.py::test_mutation_evidence_notes_flags_a_stale_result_json",
+      "tests/test_release_check.py::test_stale_fingerprints_reports_only_mismatches",
+      "tests/test_round3_a_fixes.py::test_closing_flag_renamed_does_not_silently_drop_results",
+      "tests/test_round3_a_fixes.py::test_dialog_qss_uses_the_single_source_fallback_chain",
+      "tests/test_round3_a_fixes.py::test_font_fallback_mechanism_comment_is_hedged",
+      "tests/test_round3_a_fixes.py::test_no_shipped_source_hardcodes_a_single_font_family",
+      "tests/test_round3_a_fixes.py::test_readme_annotation_scope_matches_the_code",
+      "tests/test_round3_a_fixes.py::test_refresh_resets_guard_when_thread_start_fails",
+      "tests/test_round3_a_fixes.py::test_requests_and_pyinstaller_have_upper_bounds"
+    ],
+    "note": "变异只在 %TEMP% 影子副本里做，真实仓库只读（只写 _dev/.mutation.lock）",
+    "repo_fingerprint": {
+      "桌宠.py": "b5896376b7eb",
+      "pet_export.py": "2fe39233056b",
+      "pet_lines.py": "5332f60b5f26",
+      "pet_alarm.py": "1149e94deee3",
+      "pet_behaviors.py": "8f57255144f6",
+      "_check_release.py": "13d464ff5eaa"
+    }
+  }
+}

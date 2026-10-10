@@ -3,14 +3,20 @@
 # 会被 pip 拒绝或静默降级到不兼容版本（绿色版实测携带 Python 3.10.2，口径以它为准）。
 # ---- 运行时依赖 ----
 PySide6>=6.5,<7
-requests>=2.28
+# v2.4.3（第三轮找茬 P2-3）：requests 此前只有下界——3.x 若发布，Session/Response.json
+# 与异常层级都可能变，全新环境一次 pip install 就可能装到未验证的大版本。
+# 上界 3 与 requirements-lock.txt 的实测版本 2.34.2 一致（2.34.2 < 3）。
+requests>=2.28,<3
 # v2.4：psutil 是**运行时**依赖（主程序读内存/CPU 负载），必须给上界——
 # psutil 6.x/7.x 都改过 Process/内存相关 API 与支持范围，无上界时全新环境一次
 # pip install 就可能装到未验证的下一个大版本，桌宠直接起不来。
 # 上界 8 与 requirements-lock.txt 的实测版本 7.2.2 一致（7.2.2 < 8）。
 psutil>=5.9,<8
 # ---- 构建/打包依赖（仅生成 exe 时需要） ----
-PyInstaller>=6.0
+# v2.4.3（第三轮找茬 P2-3）：PyInstaller 同样补上界——7.x 会改 spec/分析器行为，
+# 打包脚本（大肥鱼桌宠.spec）与 _verify_green.py 的产物口径都按 6.x 验证过。
+# 上界 7 与 requirements-lock.txt 的实测版本 6.22.2 一致（6.22.2 < 7）。
+PyInstaller>=6.0,<7
 # ---- 开发期脚本依赖（去背景.py / 生成占位角色.py，运行时不 import） ----
 # v2.4：Pillow 同样补上界——10.0 删掉了 Image.ANTIALIAS、废弃 textsize 等，
 # 这两个脚本用的正是老 API 附近的接口。上界 13 与 lock 的实测版本 12.1.1 一致。
@@ -18,4 +24,9 @@ Pillow>=9.0,<13
 # ---- 测试（pytest 回归）----
 # v2.3.1：此前只在 requirements-lock.txt 与 CI 里装，requirements 漏声明——
 # 照本文件建环境的人跑不了 pytest（tests/ 是唯一的回归护栏）。
-pytest>=7.0
+# v2.4.3（兼容审查 M3）：补上界——本文件里别的包都写了上界，唯独 pytest 没有，
+# 与 CI 自己那条"pytest 9.x → 10.x 若改收集/断言行为，CI 会毫无预兆地变红"
+# 的理由自相矛盾。上界 10 与 requirements-lock.txt 的实测版本 9.1.1 一致。
+# 口径由 tests/helpers_deps_bounds.py 单一来源守：**本文件声明的每个包都必须有上界**，
+# 新增依赖忘了写上界会直接变红（此前两个测试文件各写一份包名清单，pytest 就是这么漏的）。
+pytest>=7.0,<10

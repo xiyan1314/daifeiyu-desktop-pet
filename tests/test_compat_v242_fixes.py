@@ -229,6 +229,55 @@ def test_big_entry_is_written_across_slices_and_bytes_stay_identical(tmp_path):
             "分块写与一次性写的整包字节不同（对外产出格式被改了）"
 
 
+def test_manifest_timestamp_is_fixed_so_exports_are_reproducible(tmp_path, monkeypatch):
+    """manifest 条目的时间戳必须**确定**：同一个 plan 隔几秒再导出仍逐字节相同。
+
+    审查实测（复审 M5）：此前走 writestr(str)，它用 time.localtime(time.time())；
+    同一 plan 连写两次在同 2 秒桶内相同，**隔 2.3 秒就不同**（差异只在两处 DOS 时间字段：
+    本地文件头偏移 10、中央目录偏移 1140），"产出逐位不变"跨 2 秒即失效——上一条整包
+    字节比较的偶发红就是它，不是测试的锅。
+
+    能真失败：把 _open() 退回 writestr(MANIFEST_NAME, ...) → 假时钟往后拨 2 秒后整包
+    字节不同（且 manifest 条目的 date_time 不再是 1980-01-01）→ 两条断言红。
+    用注入的假时钟而不是 sleep(2.3s)：跨 2 秒桶是唯一差异来源，sleep 又慢又不确定。
+    """
+    plan = _plan(tmp_path, n_small=2)
+
+    class _Clock(object):
+        """假时钟：只骗 writestr 的"当前时间"，from_file 仍按源文件真实 mtime。"""
+
+        def __init__(self, epoch):
+            self.epoch = epoch
+
+        def time(self):
+            return self.epoch
+
+        def localtime(self, t=None):
+            return time.localtime(self.epoch if t is None else t)
+
+    base = time.time()
+    clock = _Clock(base)
+    monkeypatch.setattr(pet_export.zipfile, "time", clock)   # zipfile 就在 pet_export 命名空间里
+    first = str(tmp_path / "a.dfypet.zip")
+    second = str(tmp_path / "b.dfypet.zip")
+    w1 = pet_export.BundleWriter(plan, first)
+    w1.step()
+    assert w1.finish()[0]
+    clock.epoch = base + 2.3                       # 跨过 2 秒的 DOS 时间桶
+    w2 = pet_export.BundleWriter(plan, second)
+    w2.step()
+    assert w2.finish()[0]
+    with open(first, "rb") as f1, open(second, "rb") as f2:
+        assert f1.read() == f2.read(), \
+            "隔 2 秒导出同一个 plan 字节就变了（manifest 时间戳还在取当前时钟）"
+    with pet_export.zipfile.ZipFile(second) as z:
+        zi = z.getinfo(pet_export.MANIFEST_NAME)
+        assert zi.date_time == (1980, 1, 1, 0, 0, 0), \
+            "manifest 条目时间戳不是固定值：%r" % (zi.date_time,)
+        assert zi.compress_type == pet_export.zipfile.ZIP_DEFLATED, \
+            "手工构造 ZipInfo 改掉了 manifest 的压缩方式（外部产出格式变了）"
+
+
 # ===================== M3：编码回退顺序 + 单字节页护栏 =====================
 
 def _patch_locale(monkeypatch, enc):

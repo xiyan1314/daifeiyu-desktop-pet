@@ -1,0 +1,92 @@
+{
+  "mutations": [
+    {
+      "id": "G-D1",
+      "why": "工作树 D 条目不再单独点名（退回一句'有未提交改动'）——本轮素材被删就是这样蒙混过去的",
+      "file": "_check_release.py",
+      "old": "    if cls[\"deleted\"]:",
+      "new": "    if False:  # MUTATION：D 条目不再点名",
+      "tests": [
+        "tests/test_release_check.py::test_clean_tree_points_at_deleted_entries",
+        "tests/test_release_check.py::test_clean_tree_reports_a_really_deleted_file"
+      ]
+    },
+    {
+      "id": "G-A1",
+      "why": "素材清单不再查 missing（工作区少一张 shipped 素材看不见）",
+      "file": "_check_release.py",
+      "old": "    missing = sorted(set(tracked) - set(on_disk))",
+      "new": "    missing = []  # MUTATION：不查缺件",
+      "tests": [
+        "tests/test_release_check.py::test_asset_manifest_catches_a_deleted_asset",
+        "tests/test_release_check.py::test_asset_manifest_reports_a_missing_shipped_asset"
+      ]
+    },
+    {
+      "id": "G-L1",
+      "why": "变异锁恒返回空（变异进行中照样放行，结果不可信也不说）",
+      "file": "_check_release.py",
+      "old": "    entries = _lock_entries(path, now)",
+      "new": "    entries = []  # MUTATION：看不见锁（目录/文件两种形态都不读）",
+      "tests": [
+        "tests/test_release_check.py::test_mutation_lock_blocks_or_warns"
+      ]
+    }
+  ],
+  "results": {
+    "title": "变异验证 spec：mutations_release_door.json",
+    "checked_at": "2026-10-10 23:44:13",
+    "total": 3,
+    "caught": 3,
+    "not_caught": 0,
+    "blocked": 0,
+    "items": [
+      {
+        "id": "G-D1",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "2 failed in 1.00s",
+        "failed": [
+          "test_clean_tree_points_at_deleted_entries",
+          "test_clean_tree_reports_a_really_deleted_file"
+        ]
+      },
+      {
+        "id": "G-A1",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "2 failed in 1.10s",
+        "failed": [
+          "test_asset_manifest_catches_a_deleted_asset",
+          "test_asset_manifest_reports_a_missing_shipped_asset"
+        ]
+      },
+      {
+        "id": "G-L1",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 0.50s",
+        "failed": [
+          "test_mutation_lock_blocks_or_warns"
+        ]
+      }
+    ],
+    "spec": "mutations_release_door.json",
+    "tests": [
+      "tests/test_release_check.py::test_asset_manifest_catches_a_deleted_asset",
+      "tests/test_release_check.py::test_asset_manifest_reports_a_missing_shipped_asset",
+      "tests/test_release_check.py::test_clean_tree_points_at_deleted_entries",
+      "tests/test_release_check.py::test_clean_tree_reports_a_really_deleted_file",
+      "tests/test_release_check.py::test_mutation_lock_blocks_or_warns"
+    ],
+    "note": "变异只在 %TEMP% 影子副本里做，真实仓库只读（只写 _dev/.mutation.lock）",
+    "repo_fingerprint": {
+      "桌宠.py": "b5896376b7eb",
+      "pet_export.py": "2fe39233056b",
+      "pet_lines.py": "5332f60b5f26",
+      "pet_alarm.py": "1149e94deee3",
+      "pet_behaviors.py": "8f57255144f6",
+      "_check_release.py": "13d464ff5eaa"
+    }
+  }
+}

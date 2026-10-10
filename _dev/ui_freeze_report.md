@@ -1,7 +1,8 @@
 # UI 卡顿收口报告（v2.4.1 · B 区 C1–C3）
 
 > 复现脚本：`python _dev/repro_frame_freeze.py --label <名字>`（只读测量，不改产品代码）
-> 原始数据：`_dev/ui_freeze_raw.json`（按 label 分段）· 深度归因工具：`_dev/probe_ui_freeze.py`
+> 原始数据：`python _dev/repro_frame_freeze.py --label <名字>` 生成，按 label 写进 `_dev/ui_freeze_raw.json`
+> （**该文件已被 .gitignore 忽略**，复跑即得；入库的是摘要 `_dev/ui_freeze_summary.json`）· 深度归因工具：`_dev/probe_ui_freeze.py`
 
 ## 1. 卡在哪（探针归因，不是猜）
 
@@ -11,8 +12,8 @@ PNG 会被反复解码**。
 | 阶段 | 证据 | 关键数字 |
 |---|---|---|
 | ① 原始（v2.4.0 / 未修） | `apply_role` 单次最长 597.7 ms；`_wire_anim_sets` 409.2 ms；`_play_idle` 单次最长 184.4 ms | 一次 `apply_role(60帧×4形态512px)` 解 69 个 PNG。**这一行的原始 json（`_freeze3.json`）没有入库**，只作背景，别当成可在仓库里复现的证据 |
-| ② 指纹缓存（前一位代理） | `_play_idle` 12 次 **690.2 ms → 10.1 ms**；解码批次 64 → 32 | 治好了**热路径重复注册**；冷加载仍 408–728 ms。这组数字来自 `probe_ui_freeze.py` 的**计数器插桩**（其 json 输出未入库）；**已入库**的同一阶段基线见 `_dev/ui_freeze_raw.json` 的 `before` 段 |
-| ③ 本轮：解码缓存 + 时间片分摊 | 见下表；原始数据 = **`_dev/ui_freeze_raw.json` 的 `after/after2/final` 三段**（仓库里可复现的那份证据） | 冷加载的**最长连续阻塞**降到 ≈1 个切片（12 ms 预算）+ 非解码工作 |
+| ② 指纹缓存（前一位代理） | `_play_idle` 12 次 **690.2 ms → 10.1 ms**；解码批次 64 → 32 | 治好了**热路径重复注册**；冷加载仍 408–728 ms。这组数字来自 `probe_ui_freeze.py` 的**计数器插桩**（其 json 输出未入库）；同一阶段基线（`before` 段）的摘要在 `_dev/ui_freeze_summary.json`，逐场景原始数据复跑即得 |
+| ③ 本轮：解码缓存 + 时间片分摊 | 见下表（`after/after2/final` 三次实测范围）；逐场景原始数据由 `repro_frame_freeze.py` 生成、不入库，摘要在 `_dev/ui_freeze_summary.json` | 冷加载的**最长连续阻塞**降到 ≈1 个切片（12 ms 预算）+ 非解码工作 |
 
 根因链条：`_play_idle`（每次待机/形态重查）→ `_wire_anim_sets` → 无条件把当前形态
 整批帧重新解码。前一位代理用**指纹缓存**解决了"重复注册"；本轮补的是"**第一次也得解**"
@@ -62,8 +63,8 @@ tests 全仓无引用），按本仓既有惯例（v2.4 删 `_role_frames`）删
 
 > **最长连续阻塞 456.8 ms → ~60 ms（总解码耗时基本不变，界面不再假死）。**
 
-上表里"修前/修后"两列的真实数据都在 `_dev/ui_freeze_raw.json`（`before` 段 vs
-`after/after2/final` 段），可用第 5 节的命令重跑复现。
+上表里"修前/修后"两列就是实测值本身（原话口径见第 3 节）；完整逐场景数据可用第 5 节的命令重跑
+复现（写进 `_dev/ui_freeze_raw.json`，已 gitignore），入库摘要见 `_dev/ui_freeze_summary.json`。
 
 对照（前一位代理用 `probe_ui_freeze.py` 的计数器式插桩，低方差）：
 `_play_idle` 12 次 690.2 ms / 单次最大 199.5 ms → 10.1 ms / 3.1 ms；解码批次 64 → 32。
@@ -73,7 +74,7 @@ tests 全仓无引用），按本仓既有惯例（v2.4 删 `_role_frames`）删
 （修前 456.8 ms）。`loop_gap_ms` 就是"主线程连续阻塞"的直接测量。
 该脚本的"帧集就绪"判据是 **`win._anim_pending is None`**（这一批分片收尾的权威信号）——
 **不要退回"idle 帧集非空"**：分片在途时那上面还挂着上一次注册的帧集，判据恒真 →
-`ready_ms` 会恒等于 `main_thread_ms`（历史 `ui_freeze_raw.json` 里 40 行全部相等就是这个坑）。
+`ready_ms` 会恒等于 `main_thread_ms`（早先那版原始数据里 40 行全部相等就是这个坑）。
 
 ## 4. 老实说：没修的和没修好的
 
@@ -91,7 +92,7 @@ tests 全仓无引用），按本仓既有惯例（v2.4 删 `_role_frames`）删
 
 ## 5. 怎么复跑
 
-    # 主测量（会打印表格并把结果按 label 累积进 _dev/ui_freeze_raw.json）
+    # 主测量（打印表格 + 按 label 累积进 _dev/ui_freeze_raw.json；该文件已 gitignore，不入库）
     python _dev/repro_frame_freeze.py --label myrun
 
     # 深度归因（场景段 + 稳态 sys.setprofile 画像 + 内部函数插桩）

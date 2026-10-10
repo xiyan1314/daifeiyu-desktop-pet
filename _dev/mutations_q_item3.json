@@ -60,5 +60,67 @@
         "tests/test_voice.py::test_normalize_defaults"
       ]
     }
-  ]
+  ],
+  "results": {
+    "title": "变异验证 spec：mutations_q_item3.json",
+    "checked_at": "2026-10-10 22:41:34",
+    "total": 6,
+    "caught": 6,
+    "not_caught": 0,
+    "items": [
+      {
+        "id": "M-Q10",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 0.88s"
+      },
+      {
+        "id": "M-Q11",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 1.08s"
+      },
+      {
+        "id": "M-Q12",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 0.90s"
+      },
+      {
+        "id": "M-Q13",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 1.31s"
+      },
+      {
+        "id": "M-Q14",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 0.91s"
+      },
+      {
+        "id": "M-Q15",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 0.82s"
+      }
+    ],
+    "spec": "mutations_q_item3.json",
+    "tests": [
+      "tests/test_constants_sync.py::test_voice_events_match",
+      "tests/test_io_v231.py::test_lines_corrupt_file_heals_with_bak",
+      "tests/test_persistence_consistency.py::test_book_corrupt_ledger_heals_with_bak",
+      "tests/test_voice.py::test_normalize_defaults",
+      "tests/test_voice_contracts_v24.py::test_error_code_mapping_is_stable"
+    ],
+    "note": "变异只在 %TEMP% 影子副本里做，真实仓库只读（只写 _dev/.mutation.lock）",
+    "repo_fingerprint": {
+      "桌宠.py": "059b7abfa512",
+      "pet_export.py": "aaab598792c4",
+      "pet_lines.py": "5332f60b5f26",
+      "pet_alarm.py": "1149e94deee3",
+      "pet_behaviors.py": "8f57255144f6",
+      "_check_release.py": "b2cec3adef96"
+    }
+  }
 }

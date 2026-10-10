@@ -1,0 +1,73 @@
+{
+  "title": "护栏能真失败自检（tests/test_guardrails_v24.py 的用例 / 定向变异）",
+  "checked_at": "2026-10-10 22:40:28",
+  "total": 9,
+  "caught": 9,
+  "not_caught": 0,
+  "items": [
+    {
+      "id": "a1",
+      "verdict": "CAUGHT",
+      "rc": 0,
+      "tail": "CAUGHT   a1   test_a1_readonly_direct_and_write_gated              ← ('add_manual_record', {'ok': True, 'opened': True})"
+    },
+    {
+      "id": "a2",
+      "verdict": "CAUGHT",
+      "rc": 0,
+      "tail": "CAUGHT   a2   test_a2_refused_writes_keep_ledger_budget_alarms     ← ('add_manual_record', {'ok': True})"
+    },
+    {
+      "id": "a3",
+      "verdict": "CAUGHT",
+      "rc": 0,
+      "tail": "CAUGHT   a3   test_a3_ai_context_privacy_switch                    ← ''"
+    },
+    {
+      "id": "a4",
+      "verdict": "CAUGHT",
+      "rc": 0,
+      "tail": "CAUGHT   a4   test_a4_memory_history_and_long_term_do_not_clobber  ← 写 history 把 long_term 冲掉了：{'user_name': '', 'nicknames': [], 'preferen"
+    },
+    {
+      "id": "a5c",
+      "verdict": "CAUGHT",
+      "rc": 0,
+      "tail": "CAUGHT   a5c  test_a5_tool_rounds_and_calls_are_capped             ← 超量调用没有拿到「跳过」tool 消息：0"
+    },
+    {
+      "id": "a5r",
+      "verdict": "CAUGHT",
+      "rc": 0,
+      "tail": "CAUGHT   a5r  test_a5_tool_rounds_and_calls_are_capped             ← 工具轮数没有卡在 2 轮（posts=10）"
+    },
+    {
+      "id": "a6",
+      "verdict": "CAUGHT",
+      "rc": 0,
+      "tail": "CAUGHT   a6   test_a6_persona_file_overrides_builtin               ← 人设文件没有生效：'你是一只叫大肥鱼的桌面宠物，又娇又耍赖、贪吃、被吓到就浑身发抖。性格参考绝区零的'"
+    },
+    {
+      "id": "b7",
+      "verdict": "CAUGHT",
+      "rc": 0,
+      "tail": "CAUGHT   b7   test_b7_static_signal_arity_check                    ← 故意违规没被检出：[]"
+    },
+    {
+      "id": "b8",
+      "verdict": "CAUGHT",
+      "rc": 0,
+      "tail": "CAUGHT   b8   test_b8_static_thread_write_check                    ← open(...,'w') 没被检出：[]"
+    }
+  ],
+  "script": "_dev/verify_guardrails_can_fail.py",
+  "note": "变异只在 %TEMP% 影子副本里做，真实仓库只读（只写 _dev/.mutation.lock）",
+  "repo_fingerprint": {
+    "桌宠.py": "059b7abfa512",
+    "pet_export.py": "aaab598792c4",
+    "pet_lines.py": "5332f60b5f26",
+    "pet_alarm.py": "1149e94deee3",
+    "pet_behaviors.py": "8f57255144f6",
+    "_check_release.py": "b2cec3adef96"
+  }
+}

@@ -1,0 +1,154 @@
+{
+  "what": "UI 卡顿探针的摘要（原始 40+ 行按 label 分段的逐场景数据不入库；完整对照表见 _dev/ui_freeze_report.md）",
+  "labels": {
+    "before": {
+      "n": 12,
+      "worst_gap_ms": 548.7,
+      "main_thread_ms_median": 133.6,
+      "top6_slowest": [
+        {
+          "scene": "_import_role_bundle(60 帧 512px 真实美术包)",
+          "main_thread_ms": 548.7,
+          "ready_ms": 548.7
+        },
+        {
+          "scene": "apply_role(60 帧×4 形态 512px)",
+          "main_thread_ms": 481.7,
+          "ready_ms": 481.7
+        },
+        {
+          "scene": "apply_role(60 帧 512px 真实美术)",
+          "main_thread_ms": 456.8,
+          "ready_ms": 456.8
+        },
+        {
+          "scene": "PetWindow() 构造（启动）",
+          "main_thread_ms": 411.3,
+          "ready_ms": 411.3
+        },
+        {
+          "scene": "apply_role(60 帧 512px) 第二次（预热）",
+          "main_thread_ms": 240.8,
+          "ready_ms": 240.8
+        },
+        {
+          "scene": "pet_export.export_bundle(60 帧 512px 真实美术)",
+          "main_thread_ms": 199.3,
+          "ready_ms": 199.3
+        }
+      ]
+    },
+    "after": {
+      "n": 12,
+      "worst_gap_ms": 364.3,
+      "main_thread_ms_median": 64.0,
+      "top6_slowest": [
+        {
+          "scene": "PetWindow() 构造（启动）",
+          "main_thread_ms": 364.1,
+          "ready_ms": 364.1
+        },
+        {
+          "scene": "pet_export.export_bundle(60 帧 512px 真实美术)",
+          "main_thread_ms": 205.9,
+          "ready_ms": 205.9
+        },
+        {
+          "scene": "_import_role_bundle(60 帧 512px 真实美术包)",
+          "main_thread_ms": 203.1,
+          "ready_ms": 203.1
+        },
+        {
+          "scene": "apply_role(60 帧×4 形态 512px)",
+          "main_thread_ms": 156.5,
+          "ready_ms": 156.5
+        },
+        {
+          "scene": "apply_role(60 帧 512px 真实美术)",
+          "main_thread_ms": 71.4,
+          "ready_ms": 71.4
+        },
+        {
+          "scene": "apply_role(60 帧 512px) 第二次（预热）",
+          "main_thread_ms": 67.1,
+          "ready_ms": 67.1
+        }
+      ]
+    },
+    "after2": {
+      "n": 14,
+      "worst_gap_ms": 204.8,
+      "main_thread_ms_median": 71.8,
+      "top6_slowest": [
+        {
+          "scene": "pet_export.export_bundle(60 帧 512px 真实美术)",
+          "main_thread_ms": 204.8,
+          "ready_ms": 204.8
+        },
+        {
+          "scene": "_import_role_bundle(60 帧 512px 真实美术包)",
+          "main_thread_ms": 178.2,
+          "ready_ms": 178.2
+        },
+        {
+          "scene": "PetWindow() 构造（启动）",
+          "main_thread_ms": 173.3,
+          "ready_ms": 173.3
+        },
+        {
+          "scene": "apply_role(60 帧×4 形态 512px)",
+          "main_thread_ms": 138.8,
+          "ready_ms": 138.8
+        },
+        {
+          "scene": "apply_role(小角色 8 帧 64px)",
+          "main_thread_ms": 75.1,
+          "ready_ms": 75.1
+        },
+        {
+          "scene": "apply_role(60 帧 512px 真实美术)",
+          "main_thread_ms": 72.5,
+          "ready_ms": 72.5
+        }
+      ]
+    },
+    "final": {
+      "n": 14,
+      "worst_gap_ms": 177.7,
+      "main_thread_ms_median": 30.9,
+      "top6_slowest": [
+        {
+          "scene": "PetWindow() 构造（启动）",
+          "main_thread_ms": 177.7,
+          "ready_ms": 177.7
+        },
+        {
+          "scene": "_import_role_bundle(60 帧 512px 真实美术包)",
+          "main_thread_ms": 130.3,
+          "ready_ms": 130.3
+        },
+        {
+          "scene": "pet_export.export_bundle(60 帧 512px 真实美术)",
+          "main_thread_ms": 124.6,
+          "ready_ms": 124.6
+        },
+        {
+          "scene": "apply_role(60 帧×4 形态 512px)",
+          "main_thread_ms": 95.7,
+          "ready_ms": 95.7
+        },
+        {
+          "scene": "apply_role(60 帧 512px 真实美术)",
+          "main_thread_ms": 60.9,
+          "ready_ms": 60.9
+        },
+        {
+          "scene": "apply_role(默认) 后 _play_idle() ×5",
+          "main_thread_ms": 32.6,
+          "ready_ms": 32.6
+        }
+      ]
+    }
+  },
+  "rerun": "python _dev/repro_frame_freeze.py（会把原始数据按 label 追加进 _dev/ui_freeze_raw.json，该文件已被 .gitignore 忽略）"
+}

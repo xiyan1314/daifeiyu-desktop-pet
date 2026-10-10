@@ -4,6 +4,10 @@ AI 对话线程 + 对话记忆持久化（P1-6 / P1-10 / P3-3 / v2.0.4 多模型
 
 独立模块：不 import 桌宠.py。signals / cfg / 人设构造 / 表情解析 / 记忆读写全部注入；
 _py/_chat_history/_history_lock/_mem_epoch 等守卫状态仍归属 PetWindow（语义不变）。
+
+类型注解口径（v2.4.3 澄清）：本模块**零注解**（29 个函数、0 个带返回注解），不在 v2.4.1
+那句「pet_tools + pet_lines 82 个函数补全注解」的口径内；全仓口径见 README
+「类型注解口径」一节——桌宠、pet_dialogs 等大文件同样未做，属单独立项。
 """
 import inspect
 import json
@@ -330,7 +334,12 @@ def write_long_term(path, long_term, max_entries=3, log=None, expect_epoch=None,
     expect_epoch/epoch_of 同上：清 Key/清记忆之后，在途请求抽取出的长期记忆不再写回。
     """
     lt = sanitize_long_term(long_term)
-    lt["last_updated"] = time.strftime("%Y-%m-%dT%H:%M:%S")
+    # v2.4.3（第三轮找茬 P3-1）：带时区偏移（%z，如 +0800）。此前是裸本地时间，跨时区
+    # 出差（中国 ↔ 海外）时同一条记录会跟着本机时区变含义。影响面：该字段**只做展示/留痕**
+    # ——sanitize_long_term 里原样 str() 透传，全仓没有任何比较/排序/过期计算读它；升级后
+    # 新旧记录混存（老记录无偏移）也不影响解析（没人解析）。%z 在 Windows 上实测可用；
+    # 万一某平台给空串，退化成旧格式，不会写坏数据。
+    lt["last_updated"] = time.strftime("%Y-%m-%dT%H:%M:%S%z")
     _write_memory_file(path, long_term=lt, max_entries=max_entries, log=log,
                        expect_epoch=expect_epoch, epoch_of=epoch_of)
     return lt

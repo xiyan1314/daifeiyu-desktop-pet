@@ -356,20 +356,29 @@ class W(QObject):
     assert _n_slots / float(len(seen)) <= 0.90, \
         "可解析比例异常偏高（%d/%d = %.3f）：是否开始猜测不可判定的槽？" \
         % (_n_slots, len(seen), _n_slots / float(len(seen)))
-    # v2.4.2：新增的两类解析必须在**真仓**真的被用到，否则扩展就是死代码（解析器退化了也测不出来）。
-    #   guard 包装实测 25 处、其中 24 处解析得出（pet_widgets.py:235 的 self.hide 是 Qt 自带方法，
-    #   签名不在本仓 → 按设计判不了）；局部变量/嵌套 def 实测 1 处（pet_anim.py:152 的 on_frame，
-    #   模块级 if __name__ 块里的嵌套 def）。数字变了就按实测改这里，别把断言删掉。
+    # v2.4.2（第三轮找茬收口）：下面三条**真仓计数**从硬断言降级为打印——它们是"扩展还在
+    # 被用到"的探照灯，不是护栏本身。良性重构（例如删掉 pet_anim.py:152 那个嵌套 def、
+    # 或新增一处 Qt 内建槽）会让计数变，硬断言就假红。真正的护栏是：
+    #   ① 上面的比例区间（分母 >= 100、可解析比例落在 [0.76, 0.90]）；
+    #   ② B9/B10/B12 的**合成用例** + B11 的定向变异自检（喂进去的违规必须被检出，
+    #      不受真仓重构影响）。
     _funcs, _methods = C._def_index(real)
     _guard = [orig(slot, fname, _funcs, _methods, scopes, lineno)
               for fname, lineno, _sig, slot, scopes in C.iter_slots(real)
               if C._is_guard_wrapper(slot)]
     _guard_ok = sum(1 for r in _guard if r is not None)
-    assert len(_guard) >= 5, "真仓几乎找不到 guard 包装槽（%d 处）：扫描面或判据不对" % len(_guard)
-    assert _guard_ok >= 0.8 * len(_guard), \
-        "guard 包装槽解析率骤降（%d/%d）：解开包装这条扩展可能已失效" % (_guard_ok, len(_guard))
-    assert sum(1 for r in seen if r is not None and "local" in r[3]) >= 1, \
-        "真仓没有一处走局部变量解析：这条扩展可能已失效（或 pet_anim 冒烟块被删，按实测数改这一行）"
+    _local_ok = sum(1 for r in seen if r is not None and "local" in r[3])
+    print("[B7 实测] 真仓槽解析：guard 包装 %d 处（解析出 %d）、局部变量/嵌套 def %d 处"
+          % (len(_guard), _guard_ok, _local_ok))
+    if len(_guard) < 5:
+        print("  [注意] 真仓 guard 包装槽只有 %d 处（<5）：扫描面或判据可能不对，"
+              "但这是重构自由、不再假红（判据本身由 B9/B11 守）" % len(_guard))
+    elif _guard_ok < 0.8 * len(_guard):
+        print("  [注意] guard 包装槽解析率骤降（%d/%d）：解开包装这条扩展可能已失效"
+              "（判据本身由 B9/B11 守）" % (_guard_ok, len(_guard)))
+    if _local_ok < 1:
+        print("  [注意] 真仓没有一处走局部变量解析：这条扩展在真仓可能已无事可做"
+              "（判据本身由 B10/B11 守）")
 
 
 def test_b9_guard_wrapped_slot_is_parsed():

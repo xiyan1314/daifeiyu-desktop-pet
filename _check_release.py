@@ -5,6 +5,12 @@
   check_version()  版本三处一致：桌宠.py VERSION == version_info.txt 双字段 == _verify_green.py 断言
   check_sync()     绿色版目录里每个运行时代码/文档文件与仓库逐字节一致
   check_zip()      发布包干净（无运行时数据/开发文件）、含关键内容、包内版本不是旧版
+  check_clean_tree()     工作树必须已提交；**删除（D）条目单独点名**（v2.4.3）
+  check_asset_manifest() 工作区 assets 清单完整：git 索引 vs 磁盘（v2.4.3）
+  check_shipped_files()  SYNC_FILES（代码/文档）在磁盘上都还在（v2.4.3）
+  mutation_lock_problems() 变异验证进行中 → 结果不可信，拒绝判定（v2.4.3）
+  mutation_evidence_notes() 变异结果 JSON 的源码指纹过期 → 提示"该证据需复跑"（v2.4.3）
+  asset_manifest_notes() 素材清单判据没生效（无 git / 素材未入库）→ 提示（v2.4.3）
 
 用法：python _check_release.py [zip路径]；退出码 0=通过，1=有问题（逐条打印）
 """
@@ -188,25 +194,28 @@ def check_version():
     return version_problems(version, vi, vg, cl)
 
 
-def check_clean_tree():
+def check_clean_tree(root=None):
     """发布时才跑：运行时代码必须已提交（有未提交改动 = 还没定版）。
 
     单独成一个检查（而不是塞进 check_version()），否则开发期间本地护栏长期假红。
+
+    v2.4.3（第三轮找茬收口）：判据抽成纯函数 clean_tree_problems()——删除（D）条目与
+    普通未提交改动必须**分别点名**（见那里的说明）。root 可换，便于用合成 git 仓库做
+    "能真失败"的对照用例。
     """
+    base = os.path.abspath(root or ROOT)
     try:
         import subprocess
         # v2.2：扩展为**全仓** git status（此前只盯 SYNC_FILES，根目录散落的临时 .py /
         # 未提交脚本拦不住——发布物必须从干净的树打出去）
-        st = subprocess.run(["git", "status", "--porcelain"],
-                            capture_output=True, text=True, cwd=ROOT, timeout=15)
+        # v2.4.3（兼容审查 L9）：-c core.quotepath=false + 显式 utf-8 解码。此前 git 把非
+        # ASCII 路径按八进制转义输出（桌宠.py 显示成 \346\241\214...），最该一眼看到的入口
+        # 文件反而最难认；关掉 quotepath 后 git 输出 UTF-8 原始路径，必须按 utf-8 解。
+        st = subprocess.run(["git", "-c", "core.quotepath=false", "status", "--porcelain"],
+                            capture_output=True, text=True, encoding="utf-8",
+                            errors="replace", cwd=base, timeout=15)
         if st.returncode == 0 and st.stdout.strip():
-            # v2.3.0（兼容审查 L7）：用 splitlines + 去状态前缀——此前 strip() 吃掉首行
-            # 前导空格后再 [3:] 会把首字符切掉（实测输出 "et_ai.py"）
-            dirty = [(l[3:] if len(l) > 3 else l).strip()
-                     for l in st.stdout.splitlines() if l.strip()]
-            # v2.4.1（质量审查 L1）：与 _full_list 同口径——此前只列前 3 条、且**不提示还有多少**，
-            # 用户看到 3 条就以为只有 3 条（"看不见"正是发布门最不该有的失败模式）。
-            return ["运行时代码有未提交改动（发布前先提交并定版）：%s" % _full_list(dirty)]
+            return clean_tree_problems(st.stdout)
     except Exception:
         pass  # 无 git（绿色版/离线环境）：跳过
     return []
@@ -229,6 +238,332 @@ def _full_list(items):
             total, _FULL_LIST_MAX)
     tail = "（共 %d 条）" % total if total > 8 else ""
     return ", ".join(items) + tail
+
+
+# ---------------- v2.4.3（第三轮找茬收口）：工作树删除 / 素材清单 / 变异锁 ----------------
+# 三条都是本轮**真实踩到**的口子，且共同点是"只有全量门能抓，探针不变量照样 PASS"：
+#   ① assets/idle_f03.png 被外部脚本删掉（工作树出现 ` D` 条目），3 条用例变红，
+#      而"首屏至少 9 帧非空图"这条不变量依然 PASS（9 帧仍然成立）——从失败现象完全看不出
+#      是"素材被删"还是"代码改坏了"；check_clean_tree 当时只说"有未提交改动"。
+#   ② check_zip 只比对**包内** assets（包齐不齐），工作区少一张 shipped 素材它看不见。
+#   ③ _dev 的变异脚本此前**原地覆写**产品源码：变异窗口里跑全量门会看到来源不明的红。
+
+def classify_status(status_text):
+    """git status --porcelain 文本 → {"deleted","renamed","changed","untracked"} 四类清单。
+
+    条目名按 v2.3.0（兼容审查 L7）的口径取：splitlines + 去掉两字符状态 + strip
+    （**不要**先 strip 整行再切片，会把首字符切掉）。
+    """
+    out = {"deleted": [], "renamed": [], "changed": [], "untracked": []}
+    for line in (status_text or "").splitlines():
+        if not line.strip():
+            continue
+        xy = line[:2]
+        name = (line[3:] if len(line) > 3 else line).strip().strip('"')
+        if xy == "??":
+            out["untracked"].append(name)
+        elif "R" in xy:
+            out["renamed"].append(name)
+        elif "D" in xy:
+            out["deleted"].append(name)
+        else:
+            out["changed"].append(name)
+    return out
+
+
+def clean_tree_problems(status_text):
+    """纯函数：git status --porcelain 文本 → 失败说明列表（空文本 = 干净）。
+
+    分类而不是一句话概括（便于以后一眼分辨"素材被删"与"代码未提交"）：
+      删除（D） → 受版本控制的文件在磁盘上没了。**独立一条**，因为它是"发布物缺件"
+                   而不是"还没定版"；素材被外部脚本/清理工具带走就是这个形态。
+      改动/改名  → 常见形态：代码改了还没提交。
+      未跟踪（??）→ 也会随发布物流出的新文件。
+    """
+    cls = classify_status(status_text)
+    fails = []
+    if cls["deleted"]:
+        fails.append("工作树里有**删除（D）**条目 %d 条（受版本控制的文件在磁盘上没了，"
+                     "素材被外部脚本删掉就是这种形态；探针不变量可能照样 PASS）：%s"
+                     % (len(cls["deleted"]), _full_list(cls["deleted"])))
+    rest = cls["changed"] + cls["renamed"]
+    if rest:
+        fails.append("运行时代码有未提交改动（发布前先提交并定版）：%s" % _full_list(rest))
+    if cls["untracked"]:
+        fails.append("工作树里有未跟踪文件（发布物必须从干净的树打出去）：%s"
+                     % _full_list(cls["untracked"]))
+    return fails
+
+
+ASSET_DIR = "assets"
+
+
+def asset_manifest_problems(tracked, on_disk, new_files=None):
+    """纯函数：git 索引里的 assets 清单 vs 磁盘实际文件 → 失败说明列表。
+
+    tracked / on_disk 都是仓库相对路径（正斜杠）。两个方向都要报，各自对应一种真实事故：
+      ① 索引里有、磁盘上没有 → "工作区少了一张 shipped 素材"（本轮真踩到的那条：
+         idle_full 帧/角色图少一张时，包内自检与探针都可能照样过）。
+      ② 磁盘上有、索引里没有 → 新素材没入库（发布包里那份与仓库不一致，且第二天
+         别人 clone 就少文件）。
+
+    v2.4.3（质量审查 L2）：② 只对**未被 .gitignore 忽略**的文件报（new_files 传
+    git ls-files -o --exclude-standard 的结果）。此前实测：.gitignore 加一条 *.bak、
+    assets/ 下再放个 a.png.bak，发布门就把它报成"未入库素材"——被明确忽略的文件不是
+    "忘了 git add"，真仓今天不误报只是因为恰好没有 assets 相关的忽略规则。
+    new_files=None（无 git / 老调用方）退回旧口径：所有磁盘多出来的都报。
+    """
+    missing = sorted(set(tracked) - set(on_disk))
+    extra = sorted(set(on_disk) - set(tracked))
+    if new_files is not None:
+        extra = sorted(set(extra) & set(new_files))
+    fails = []
+    if missing:
+        fails.append("工作区缺少已入库素材 %d 个（git 里有、磁盘上没有：素材被删或被清理工具"
+                     "带走）：%s" % (len(missing), _full_list(missing)))
+    if extra:
+        fails.append("工作区有未入库素材 %d 个（磁盘上有、git 里没有：先 git add 再发布）：%s"
+                     % (len(extra), _full_list(extra)))
+    return fails
+
+
+def _git_out(root, args, timeout=20):
+    """git 命令 → stdout（rc!=0 或无 git 返回 None）。"""
+    import subprocess
+    try:
+        r = subprocess.run(["git"] + list(args), capture_output=True, text=True,
+                           encoding="utf-8", errors="replace", cwd=root, timeout=timeout)
+    except Exception:
+        return None
+    return r.stdout if r.returncode == 0 else None
+
+
+def tracked_assets(root=None):
+    """git 索引里的 assets/ 文件清单（正斜杠相对路径，排序）；无 git/无 assets → []。"""
+    base = os.path.abspath(root or ROOT)
+    out = _git_out(base, ["ls-files", "-z", "--", ASSET_DIR])
+    if not out:
+        return []
+    return sorted(p.replace("\\", "/") for p in out.split("\0") if p.strip())
+
+
+def disk_assets(root=None):
+    """磁盘上 assets/ 下的全部文件（正斜杠相对路径，排序）。"""
+    base = os.path.abspath(root or ROOT)
+    top = os.path.join(base, ASSET_DIR)
+    out = []
+    if not os.path.isdir(top):
+        return out
+    for cur, _dirs, files in os.walk(top):
+        for f in files:
+            out.append(os.path.relpath(os.path.join(cur, f), base).replace("\\", "/"))
+    return sorted(out)
+
+
+def untracked_assets(root=None):
+    """assets/ 下**未被 .gitignore 忽略**的新文件（正斜杠相对路径，排序）。
+
+    无 git / 命令失败 → None（调用方退回旧口径，不因读不到而放行整个判据）。
+    """
+    base = os.path.abspath(root or ROOT)
+    try:
+        import subprocess
+        r = subprocess.run(["git", "ls-files", "-o", "--exclude-standard", "-z", "--", ASSET_DIR],
+                           capture_output=True, cwd=base, timeout=20)
+    except Exception:
+        return None
+    if r.returncode != 0:
+        return None
+    text = r.stdout.decode("utf-8", "replace")
+    return sorted(p.replace("\\", "/") for p in text.split("\0") if p.strip())
+
+
+def check_asset_manifest(root=None):
+    """工作区素材清单完整性（v2.4.3 新增）。
+
+    为什么单独一条：check_zip 只比对**包内**条目、check_sync 只比对**绿色版目录**——
+    两个都发现不了"仓库工作区少了一张 shipped 素材"（包从工作区构建，工作区缺件才会
+    让包缺件；但那时的报错是"包缺关键内容"，排查方向被带偏）。无 git（绿色版/离线）跳过。
+    """
+    base = os.path.abspath(root or ROOT)
+    if not os.path.isdir(os.path.join(base, ASSET_DIR)):
+        return []
+    tracked = tracked_assets(base)
+    if not tracked:
+        return []   # 无 git / assets 未入库：交给 check_clean_tree 的未跟踪判据
+    return asset_manifest_problems(tracked, disk_assets(base), untracked_assets(base))
+
+
+def asset_manifest_notes(root=None):
+    """素材清单判据**没有生效**时的一句提示（不挡发布，但绝不静默）。
+
+    v2.4.3（第三轮找茬复审 L③）：此前 tracked_assets() 为空（无 git / assets 未入库 /
+    assets 目录不存在）时 check_asset_manifest() 直接 return []——看起来"通过"，其实这条
+    判据一次都没跑。真仓/绿色版都可能落到这个分支，所以给一句提示。
+    """
+    base = os.path.abspath(root or ROOT)
+    if not os.path.isdir(os.path.join(base, ASSET_DIR)):
+        return ["素材清单判据没生效：%s 目录不存在" % ASSET_DIR]
+    if not tracked_assets(base):
+        return ["素材清单判据没生效：git 里读不到 %s 的清单（无 git，或素材全未入库）"
+                "——'工作区缺件'这一路这次没有检查" % ASSET_DIR]
+    return []
+
+
+def check_shipped_files(root=None):
+    """SYNC_FILES（运行时代码 + 文档）在工作区是否都还在。缺失 = 同样的"发布物缺件"。"""
+    base = os.path.abspath(root or ROOT)
+    gone = [n for n in SYNC_FILES
+            if not os.path.isfile(os.path.join(base, n.replace("/", os.sep)))]
+    if not gone:
+        return []
+    return ["工作区缺少运行时/文档文件 %d 个（发布物清单里有、磁盘上没有）：%s"
+            % (len(gone), _full_list(gone))]
+
+
+MUTATION_LOCK = os.path.join(ROOT, "_dev", ".mutation.lock")
+MUTATION_LOCK_STALE_H = 2.0   # 超过这么久的锁按"陈旧"处理（进程崩了别把发布门永久卡死）
+
+
+def _lock_entries(path, now):
+    """锁路径 → [(条目名, info, 小时数)]。
+
+    两种形态都认：**目录**（新口径：一个持有者一个 <pid>.json，能同时挂多个变异进程）与
+    **文件**（旧版单文件锁，仍可能是别人手上留下的）。
+    """
+    import json as _json
+    if os.path.isdir(path):
+        paths = [os.path.join(path, n) for n in sorted(os.listdir(path))
+                 if os.path.isfile(os.path.join(path, n))]
+    elif os.path.isfile(path):
+        paths = [path]
+    else:
+        return []
+    out = []
+    for p in paths:
+        try:
+            info = _json.load(open(p, encoding="utf-8"))
+        except Exception:
+            info = {}
+        try:
+            age = (now - os.path.getmtime(p)) / 3600.0
+        except OSError:
+            age = 0.0
+        out.append((os.path.basename(p), info, age))
+    return out
+
+
+def _lock_who(info):
+    """锁条目里的人类可读身份（pid/what/开始时间）；读不出来就空串。"""
+    if not isinstance(info, dict):
+        return ""
+    return " pid=%s what=%s started=%s" % (info.get("pid", "?"), info.get("what", "?"),
+                                           info.get("started_at", "?"))
+
+
+def mutation_lock_problems(root=None, now=None):
+    """变异验证运行锁 → (fails, notes)。
+
+    v2.4.3：_dev 的变异脚本现在一律在 %TEMP% 影子副本里变异（真实仓库只读），这个锁是
+    **双保险**：万一手工在树内做了变异（或旧脚本还在跑），发布门要明确说"此刻的测试结果
+    不可信"，而不是让人对着一堆无关用例的失败猜（本轮真发生过，浪费了两位审查员的时间）。
+    活的锁 → fails（拒绝判定）；陈旧锁（进程崩了没清）→ notes（只提示，不挡发布）。
+    """
+    import time as _time
+    base = os.path.abspath(root or ROOT)
+    path = os.path.join(base, "_dev", os.path.basename(MUTATION_LOCK))
+    if now is None:
+        now = _time.time()
+    entries = _lock_entries(path, now)
+    live = [e for e in entries if e[2] <= MUTATION_LOCK_STALE_H]
+    stale = [e for e in entries if e[2] > MUTATION_LOCK_STALE_H]
+    fails, notes = [], []
+    if live:
+        fails.append("变异验证正在运行（%s%s）：此刻的测试/门禁结果不可信——等它跑完"
+                     "（或确认进程已停后清掉该锁）再重跑发布检查。"
+                     % (path, "".join(_lock_who(i) for _n, i, _a in live)))
+    if stale:
+        notes.append("发现**陈旧**的变异锁 %s（%s）：进程大概已崩，确认没有变异在跑后清掉它即可"
+                     "（现在的变异脚本都在 %%TEMP%% 影子副本里跑，正常退出不会留锁）。"
+                     % (path, "；".join("%s：%.1f 小时前%s" % (n, a, _lock_who(i))
+                                        for n, i, a in stale)))
+    return fails, notes
+
+
+# ---------------- v2.4.3（质量审查 M4）：变异证据的源码指纹必须对着出货修订 ----------------
+# _dev/_mutate_lib.repo_fingerprint 记录的是**变异当时**那几个关键文件的 sha256 前 12 位，
+# 但此前没有任何人比对：结果 JSON 里 桌宠.py 记的是 059b7abfa512 / 2ac5743967b1，当前树是
+# 另一个值 —— 也就是说那些"N/N 全抓到"不是对着出货的那份源码测的。
+# 这里只做**提示**（不进 fails）：证据过期是开发期的正常中间态；但绝不能静默。
+# 文件清单与 _dev/_mutate_lib.repo_fingerprint 同口径，由 tests/test_release_check.py 的
+# 一条用例钉住"两处清单不许漂移"。
+MUTATION_FINGERPRINT_FILES = ("桌宠.py", "pet_export.py", "pet_lines.py", "pet_alarm.py",
+                              "pet_behaviors.py", "_check_release.py")
+
+
+def file_fingerprint(path):
+    """sha256 前 12 位；读不到 → 空串（与 _dev/_mutate_lib.repo_fingerprint 同口径）。"""
+    import hashlib
+    try:
+        with open(path, "rb") as f:
+            return hashlib.sha256(f.read()).hexdigest()[:12]
+    except OSError:
+        return ""
+
+
+def tree_fingerprint(root=None):
+    """当前树的关键文件指纹（只在文件存在时收录）。"""
+    base = os.path.abspath(root or ROOT)
+    out = {}
+    for rel in MUTATION_FINGERPRINT_FILES:
+        p = os.path.join(base, rel)
+        if os.path.isfile(p):
+            out[rel] = file_fingerprint(p)
+    return out
+
+
+def stale_fingerprints(recorded, current):
+    """记录指纹 vs 当前指纹 → 不一致项（"文件: 旧→新"）。recorded 为空/非 dict → []。"""
+    if not isinstance(recorded, dict) or not recorded:
+        return []
+    out = []
+    for rel in sorted(recorded):
+        got, want = recorded.get(rel), (current or {}).get(rel)
+        if got and want and got != want:
+            out.append("%s: %s→%s" % (rel, got, want))
+    return out
+
+
+def mutation_evidence_notes(root=None, current=None):
+    """_dev/*.json 里记的源码指纹 ≠ 当前树 → 每条一句"该证据已过期，需复跑"提示。
+
+    两种落盘形态都认：结果 JSON 顶层 repo_fingerprint、以及 spec 内嵌的
+    results.repo_fingerprint（mutate_check.py 回写的那种）。没有指纹段的 JSON 跳过。
+    """
+    import json as _json
+    base = os.path.abspath(root or ROOT)
+    dev = os.path.join(base, "_dev")
+    cur = current if current is not None else tree_fingerprint(base)
+    notes = []
+    if not os.path.isdir(dev):
+        return notes
+    for name in sorted(os.listdir(dev)):
+        if not name.endswith(".json"):
+            continue
+        try:
+            with open(os.path.join(dev, name), encoding="utf-8") as f:
+                data = _json.load(f)
+        except Exception:
+            continue
+        rec = data.get("repo_fingerprint") if isinstance(data, dict) else None
+        if not isinstance(rec, dict) and isinstance(data, dict):
+            res = data.get("results")
+            rec = res.get("repo_fingerprint") if isinstance(res, dict) else None
+        stale = stale_fingerprints(rec, cur)
+        if stale:
+            notes.append("变异证据 %s 的源码指纹已过期（不是对着当前树测的，复核前请重跑"
+                         "对应 spec）：%s" % (name, "；".join(stale)))
+    return notes
 
 
 def green_residue(root=None):
@@ -445,6 +780,17 @@ def main():
     print("[1] 版本一致：%s" % version)
     fails += check_version()
     fails += check_clean_tree()  # v2.1.4：发布时运行时代码必须已提交（定版）
+    # v2.4.3（第三轮找茬收口）：工作区缺件与素材清单——本轮 assets/idle_f03.png 被外部
+    # 脚本删掉时只有全量 pytest 变红，发布门（check_clean_tree）只说"有未提交改动"、
+    # check_zip 只查包内，谁都没点名"少了一张 shipped 素材"。
+    _lock_fails, _lock_notes = mutation_lock_problems()
+    fails += _lock_fails
+    for _note in _lock_notes + mutation_evidence_notes() + asset_manifest_notes():
+        print("  [提示] %s" % _note)
+    print("[1b] 工作区清单：assets 索引 %d 个 / 磁盘 %d 个，SYNC_FILES %d 个"
+          % (len(tracked_assets()), len(disk_assets()), len(SYNC_FILES)))
+    fails += check_shipped_files()
+    fails += check_asset_manifest()
     fails += check_static()  # v2.1.4：静态体检（入口解析/配置键/空池/类型转换/定时器/线程…）
     # v2.2.2：用户数据是用户实时数据，永不要求清除（只查目录存在 + 残留点名）
     fails += check_green_dir()

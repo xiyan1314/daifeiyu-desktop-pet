@@ -1,9 +1,16 @@
 # 大肥鱼桌宠 · CHANGELOG
 
-> 逐版变更摘要（详情见 [docs/release-notes/](docs/release-notes/) 各版本说明）。
+> 逐版变更摘要（详情见 [_release_notes_v2xx.md（仓库根）](_release_notes_v2xx.md（仓库根）) 各版本说明）。
 > 发布节奏：v1.5.x 每批按「三轮审查 → 全面检查 → 绿色版检测 → Release」流水线交付。
 > v1.3.0 起才有逐版说明；更早的 v1.0 / v1.2.0 见 git 历史（bfb1aa6 / 35e9d1a）。
 
+## v2.4.3（2026-10-10）
+- 用户可感知：修复「停止配音」在 Win10/11 上无效（SND_PURGE 自 Win2000 起废弃、现代 Windows 是空操作 → 改 PlaySound(None, 0)，测试含 AST 结构判据）· pet_widgets 8 处写死字体加回退链（英文 Windows 上中文可能不再变方块（防御性加固，机理见发布说明））
+- 性能：撒钱预载不再卡（该窗口事件循环最大间隔 60~82ms → 单片不超过 12.6ms，86 帧逐张 toImage 全等）· 自定义角色启动跳过默认四组帧集（省 37 帧）· 帧集接力口径明确为一轮恰解一组（实测 5 步、单轮 ≤13.2ms）
+- 健壮性：pet_balance worker 加顶层兜底（不再可能因 emit 到已销毁对象静默崩、或 _fetching_balance 永真卡死）· 导出重入守卫与带序号临时名 · 大条目跨片续写 · requests<3 与 PyInstaller<7 上界 · CI 锁 pytest==9.1.1 · lines.json 顶层未知键保存时也不再丢 · last_updated 加时区
+- 工程：发布门新增「 D 条目」单独点名与工作区素材清单双向比对（本轮真实事故：一张 shipped 素材被外部脚本删掉，首屏探针照样通过、只有全量门能抓）· 变异验证改为 %TEMP% 影子副本 + 运行锁（不再原地改产品源码造成假红）· _dev 减重 215KB 并新增 README · 真仓计数降级为软断言 · README 注解口径按 AST 实测重写并加「表格必须等于实测」的测试
+- 行为变更补充：修复「停止配音」后，进程级的 PlaySound(None, 0) 会**顺带停掉正在播的音效**（回复音/金币音等，走同一条 SND_ASYNC 通道）；旧实现因 SND_PURGE 是空操作此前不会。音效本就会互相抢占，影响很小，但如实记录。
+- 回归：pytest 691 例；护栏 v13 273 项 0 FAILS / 静态 0 问题 0 待确认
 ## v2.4.2（2026-10-10）
 - 性能：PetWindow 构造 102.9 -> 46.9ms（中位；独立复核 -37% 方向一致）· 构造期解码 58 -> 16 张 · 首绘 144.9 -> 91.9ms（口径：轻载下约 -53ms，重载下不显著）· 导出写盘改成每片至少一条或一块、实测单片不超过 21ms（大条目跨片续写，16MB 成员 439.7 -> 20.4ms），整包字节与一次性写完全相等
 - 缺陷与数据安全：lines.json 非 UTF-8 可回退读且首次落盘前留 .bak（气泡说出真实编码、不虚假承诺）· alarms.json 与 behaviors.json 同样回退读加首次写前 .bak（此前 GBK 文件第一次增删就整份覆盖不可恢复）· 顶层未知键全口径保留（alarms/behaviors 的愈合与 _save、lines 的 _save）
@@ -238,7 +245,7 @@
 - 护栏：pytest 80 例、_verify_v13 135 项、绿色版检测 0 FAILS
 
 ## v1.5.4（2026-09-30）
-- P2-2 仓库卫生：CHANGELOG.md 建立、历史说明归档 docs/release-notes/、删除根目录重复角色图
+- P2-2 仓库卫生：CHANGELOG.md 建立、历史说明归档 _release_notes_v2xx.md（仓库根）、删除根目录重复角色图
 - P2-3 文档对齐：阶段计划 R3-2 改为实际退出行为 + R 条目测试映射（未覆盖项如实标注）
 - P2-7 依赖锁定：requirements-lock.txt 最小依赖集精确锁定
 - 本批无运行时功能变化；护栏：pytest 69 例、_verify_v13 132 项
@@ -284,6 +291,6 @@
 ---
 
 ## 工程备注
-- **仓库卫生（P2-2，v1.5.4 批）**：根目录与 assets/ 重复的 character*.png 已删（保留 assets/ 版本，运行时仍支持根目录同名文件覆盖）；历史版本说明归档至 docs/release-notes/。
+- **仓库卫生（P2-2，v1.5.4 批）**：根目录与 assets/ 重复的 character*.png 已删（保留 assets/ 版本，运行时仍支持根目录同名文件覆盖）；历史版本说明归档至 _release_notes_v2xx.md（仓库根）。
 - **验证素材**：_verify_assets/sample.mp4|gif 为 v13 自检与 CI 的测试夹具（共约 80KB），**保留在仓库**（CI 依赖，缺失会使 offscreen smoke 检查失败）。
 - **依赖锁定（P2-7）**：requirements-lock.txt 为最小依赖集精确锁定（运行时 PySide6 6.11.2 全套 / requests 2.34.2 / psutil 7.2.2；打包 PyInstaller 6.22.2；脚本 Pillow 12.1.1；测试 pytest 9.1.1）；requirements.txt 仍保留宽松区间供打包参考。

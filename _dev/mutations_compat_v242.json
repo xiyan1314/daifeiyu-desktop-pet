@@ -153,63 +153,65 @@
     }
   ],
   "results": {
-    "checked_at": "2026-10-10 21:57:05",
+    "title": "变异验证 spec：mutations_compat_v242.json",
+    "checked_at": "2026-10-10 22:46:18",
     "total": 15,
+    "caught": 15,
     "not_caught": 0,
     "items": [
       {
         "id": "M-C1",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 1.29s"
+        "tail": "1 failed in 1.47s"
       },
       {
         "id": "M-C2",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.53s"
+        "tail": "1 failed in 0.52s"
       },
       {
         "id": "M-C3",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 2.52s"
+        "tail": "1 failed in 1.52s"
       },
       {
         "id": "M-C4",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.56s"
+        "tail": "1 failed in 0.53s"
       },
       {
         "id": "M-C5",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.52s"
+        "tail": "1 failed in 0.53s"
       },
       {
         "id": "M-C6",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.54s"
+        "tail": "1 failed in 0.78s"
       },
       {
         "id": "M-C7",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "2 failed, 1 passed in 0.74s"
+        "tail": "2 failed, 1 passed in 0.59s"
       },
       {
         "id": "M-C8",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.53s"
+        "tail": "1 failed in 0.61s"
       },
       {
         "id": "M-C9",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed, 1 passed in 0.70s"
+        "tail": "1 failed, 1 passed in 0.56s"
       },
       {
         "id": "M-C10",
@@ -221,32 +223,59 @@
         "id": "M-C11",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.96s"
+        "tail": "1 failed in 0.94s"
       },
       {
         "id": "M-C12",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.90s"
+        "tail": "1 failed in 1.12s"
       },
       {
         "id": "M-C13",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.93s"
+        "tail": "1 failed in 0.97s"
       },
       {
         "id": "M-C14",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.56s"
+        "tail": "1 failed in 0.49s"
       },
       {
         "id": "M-C15",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.50s"
+        "tail": "1 failed in 0.49s"
       }
-    ]
+    ],
+    "spec": "mutations_compat_v242.json",
+    "tests": [
+      "tests/test_compat_v242_fixes.py::test_alarms_gbk_index_survives_the_first_write",
+      "tests/test_compat_v242_fixes.py::test_behaviors_gbk_index_survives_the_first_write",
+      "tests/test_compat_v242_fixes.py::test_big_entry_is_written_across_slices_and_bytes_stay_identical",
+      "tests/test_compat_v242_fixes.py::test_broken_utf8_is_not_caught_by_cp1252",
+      "tests/test_compat_v242_fixes.py::test_cp932_locale_reads_shift_jis_lines_correctly",
+      "tests/test_compat_v242_fixes.py::test_export_role_refuses_reentry_and_finishes_the_first_package",
+      "tests/test_compat_v242_fixes.py::test_finish_after_abort_reports_cancelled",
+      "tests/test_compat_v242_fixes.py::test_lines_keeps_top_level_unknown_keys_on_save",
+      "tests/test_compat_v242_fixes.py::test_play_action_ensures_frames_before_frame_action",
+      "tests/test_compat_v242_fixes.py::test_play_idle_skips_default_frames_for_custom_role",
+      "tests/test_compat_v242_fixes.py::test_quit_aborts_inflight_export",
+      "tests/test_compat_v242_fixes.py::test_start_petting_does_not_load_frames_on_early_return",
+      "tests/test_compat_v242_fixes.py::test_startup_bubble_is_wired_to_the_real_encoding",
+      "tests/test_compat_v242_fixes.py::test_two_writers_never_share_a_tmp_name",
+      "tests/test_compat_v242_fixes.py::test_undecodable_index_is_backed_up_before_first_write"
+    ],
+    "note": "变异只在 %TEMP% 影子副本里做，真实仓库只读（只写 _dev/.mutation.lock）",
+    "repo_fingerprint": {
+      "桌宠.py": "059b7abfa512",
+      "pet_export.py": "aaab598792c4",
+      "pet_lines.py": "5332f60b5f26",
+      "pet_alarm.py": "1149e94deee3",
+      "pet_behaviors.py": "8f57255144f6",
+      "_check_release.py": "b2cec3adef96"
+    }
   }
 }

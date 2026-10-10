@@ -114,14 +114,35 @@ import pet_alarm  # v2.0.5：闹钟服务（AlarmDialog 共用时间校验/铃�
 import pet_lines  # v2.1：台词库（类别/标签单一来源；LinesDialog 直接用服务接口）
 import pet_voice  # v2.1：可插拔配音后端清单（VoiceDialog 用）
 from pet_widgets import BUBBLE_STYLE as _BUBBLE_STYLE  # v2.1.2：气泡默认样式单一来源
+# v2.4.3（兼容审查 M1）：对话框 QSS 的 font-family 也取同一条回退链——此前这里是单族
+# "Microsoft YaHei"，而它被 24 处 setStyleSheet 用在**中文文本量最大**的对话框上。
+# Qt 的 QSS 支持**逗号回退列表**（实测：QDialog.font().families() 拿到的就是整条链，
+# 且与旧单族的度量逐项相等），所以候选不再两处各写一份，改由单一来源拼出来。
+from pet_widgets import UI_FONT_FAMILIES as _UI_FONT_FAMILIES
 # （pet_widgets 只依赖 pet_screen + Qt，不反向依赖本模块，无循环）
 
+
+def _qss_font_family(families):
+    """族名序列 → QSS 的 font-family 值（逗号分隔的回退列表；含空格的族名要带引号）。"""
+    out = []
+    for fam in families:
+        fam = str(fam).strip()
+        if not fam:
+            continue
+        out.append('"%s"' % fam if (" " in fam or "," in fam) else fam)
+    return ", ".join(out)
+
+
+DIALOG_FONT_FAMILY = _qss_font_family(_UI_FONT_FAMILIES)
+# 用占位符替换，不用 % / .format()：QSS 正文全是 {} 与 #rrggbb，格式化语法会互相咬
+DIALOG_QSS_FONT_TOKEN = "__UI_FONT_FAMILIES__"
+
 # ---------------- 主题 ----------------
-DIALOG_QSS = """
+DIALOG_QSS = ("""
 QDialog {
     background-color: #1e2234;
     color: #e8ecff;
-    font-family: "Microsoft YaHei";
+    font-family: __UI_FONT_FAMILIES__;
     font-size: 12px;
 }
 QWidget { color: #e8ecff; }
@@ -187,7 +208,7 @@ QScrollBar:horizontal { background: #262b40; height: 10px; border-radius: 5px; }
 QScrollBar::handle:horizontal { background: #3d477f; border-radius: 5px; min-width: 24px; }
 QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal { width: 0; }
 QMessageBox, QInputDialog, QFileDialog { background-color: #1e2234; color: #e8ecff; }
-"""
+""").replace(DIALOG_QSS_FONT_TOKEN, DIALOG_FONT_FAMILY)
 
 # 音效组槽位：kind -> 面板行标签
 _SLOT_LABELS = (("press", "戳一下"), ("release", "松开"), ("feed", "喂食"),

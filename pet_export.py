@@ -311,7 +311,18 @@ class BundleWriter(object):
         if self._zf is None:
             self._zf = zipfile.ZipFile(self.tmp, "w", zipfile.ZIP_DEFLATED,
                                        compresslevel=self.compresslevel)
-            self._zf.writestr(MANIFEST_NAME,
+            # v2.4.3（第三轮找茬复审 M5）：manifest 条目的时间戳**必须确定**——此前走
+            # writestr(str)，它按 time.localtime(time.time()) 取当前时钟，于是同一个 plan
+            # 隔 2 秒再导出就逐字节不同（差异只在两处 DOS 时间字段），"导出逐位不变"的结论
+            # 跨 2 秒即失效，整包字节比较的用例也变成偶发红。
+            # 固定成 zip 的 DOS 时间原点 1980-01-01；其余属性手工对齐 writestr(str) 分支
+            # （compress_type/_compresslevel/external_attr）——数据条目走
+            # ZipInfo.from_file，用源文件 mtime，本来就是确定的。
+            _zi = zipfile.ZipInfo(MANIFEST_NAME, date_time=(1980, 1, 1, 0, 0, 0))
+            _zi.compress_type = self._zf.compression
+            _zi._compresslevel = self._zf.compresslevel
+            _zi.external_attr = 0o600 << 16
+            self._zf.writestr(_zi,
                               json.dumps(self.plan["manifest"], ensure_ascii=False, indent=2))
 
     def _cleanup_tmp(self):
@@ -344,6 +355,16 @@ class BundleWriter(object):
         try:
             zinfo = zipfile.ZipInfo.from_file(src, arc)
             zinfo.compress_type = self._zf.compression
+            # v2.4.3（第三轮找茬 P3-3）：_compresslevel 是 CPython zipfile 的**私有**属性，
+            # 不是公开 API——这里有意照抄 zipfile.ZipFile.write() 的实现（同一行就是
+            # "zinfo._compresslevel = self.compresslevel"）。不设它，zf.open(zinfo, "w")
+            # 会用 ZipInfo 自己的默认级别（None → zlib 默认 6），产出字节与 zf.write()
+            # 不再逐位相同（_dev 实测 sha256 相等的那条结论即失效）。
+            # 依赖的 CPython：3.10.2（绿色版实测）～3.12，ZipInfo.__init__ 都不设该属性，
+            # 只有 ZipFile.write/_open_to_write 这条路径会读它（_get_compressor 取级别）。
+            # Python 升级后若改名/改语义，tests/test_round3_a_fixes.py 里
+            # test_zipinfo_compresslevel_is_still_consumed 会立刻变红（它用"换压缩级别
+            # 必须换产出字节"反证该属性真被消费），不会静默退化。
             zinfo._compresslevel = self._zf.compresslevel
             self._big_src = src_f
             self._big = self._zf.open(zinfo, "w")

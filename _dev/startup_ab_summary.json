@@ -1,0 +1,86 @@
+{
+  "what": "启动耗时 A/B（基线树 vs 当前树，交替成对采样）——原始逐轮数据太大（172KB，含每轮 144 个解码文件名），入库的只有摘要",
+  "baseline": "E:\\deep seek\\wt-p-baseline",
+  "current": "E:\\deep seek\\desktop-pet",
+  "baseline_rows": {
+    "n": 10,
+    "init_ms": {
+      "n": 10,
+      "min": 84.3,
+      "median": 102.9,
+      "max": 119.2
+    },
+    "t_show_call_ms": {
+      "n": 10,
+      "min": 83.6,
+      "median": 101.6,
+      "max": 118.3
+    },
+    "t_first_paint_ms": {
+      "n": 10,
+      "min": 116.8,
+      "median": 144.9,
+      "max": 170.9
+    },
+    "decodes": {
+      "n": 10,
+      "min": 144,
+      "median": 144,
+      "max": 144
+    },
+    "all_first_paint_seen": true,
+    "all_first_pix_ok": true
+  },
+  "current_rows": {
+    "n": 10,
+    "init_ms": {
+      "n": 10,
+      "min": 42.3,
+      "median": 46.9,
+      "max": 58.5
+    },
+    "t_show_call_ms": {
+      "n": 10,
+      "min": 38.9,
+      "median": 43.5,
+      "max": 54.2
+    },
+    "t_first_paint_ms": {
+      "n": 10,
+      "min": 87.8,
+      "median": 91.9,
+      "max": 135.9
+    },
+    "decodes": {
+      "n": 10,
+      "min": 144,
+      "median": 144,
+      "max": 144
+    },
+    "all_first_paint_seen": true,
+    "all_first_pix_ok": true
+  },
+  "verdict": {
+    "init_ms_median": "102.9 -> 46.9 ms（-54.4%，负数=更快）",
+    "decodes_median": "144.0 -> 144.0",
+    "first_paint_median": "144.9 -> 91.9 ms"
+  },
+  "rerun": "先 git worktree add ../wt-p-baseline <旧版本提交>（把不参与改动的文件抄齐），再 python _dev/compare_startup_baseline.py --baseline \"E:\\deep seek\\wt-p-baseline\" --rounds 5 --json _dev/startup_ab.json（原始 json 已被 .gitignore 忽略）",
+  "baseline_commit": "eb7b590c7b4e9721d25632f1cd15ea9c97a70866",
+  "baseline_commit_short": "eb7b590",
+  "baseline_commit_subject": "v2.4.1 文档更正：把两处实际已在本版修复的条目从已知限制移到已修复",
+  "baseline_commit_date": "2026-10-10 20:59:29 +0800",
+  "baseline_commit_evidence": "worktree 已删、仓库里没有它的 ref，所以用 %TEMP% 里留存的 wt-p-baseline-uncommitted-20261010-224443.patch 复核：该 patch 的 7 个 index 旧侧 blob 与 git rev-parse eb7b590:<路径> 逐条相等（11a3dbe/19e616e/657e6da/98b9fc3/6b05c41/81dd8b5/a794916）→ 基线树就是 eb7b590（v2.4.1 定版后的最后一个提交）。",
+  "baseline_tree": "E:\\deep seek\\wt-p-baseline（已 git worktree remove --force；重建：git worktree add ../wt-p-baseline eb7b590）",
+  "adapted_files_sha256_12": {
+    "_check_static.py": "8129b3c887ff",
+    "pet_alarm.py": "1149e94deee3",
+    "pet_behaviors.py": "8f57255144f6",
+    "pet_lines.py": "5332f60b5f26",
+    "tests/test_deadcode_types_v241.py": "0f46f837debf",
+    "tests/test_guardrails_v24.py": "17ccfd8680a8",
+    "tests/test_io_v231.py": "f296aab3976e"
+  },
+  "adapted_files_note": "这 7 个是当时从主线抄进基线树、不参与 A/B 改动的适配文件（patch 记 7 个文件 688+/96-）。上面的 sha256 是当前主线版本的前 12 位——重跑 A/B 前先核一遍：不一致说明适配已漂移，抄进基线的应当是当前主线这份。",
+  "decodes_note": "两侧 decodes 中位都是 144 张（解码工作量不变）"
+}

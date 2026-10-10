@@ -17,6 +17,7 @@ import types
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
 sys.path.insert(0, os.path.join(ROOT, "tests"))
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))   # _dev/_mutate_lib.py
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 try:
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
@@ -26,6 +27,7 @@ except Exception:
 import pet_chat  # noqa: E402
 import pet_io  # noqa: E402
 import pet_tools  # noqa: E402
+from _mutate_lib import repo_fingerprint, shadow, write_results  # noqa: E402
 
 
 # ---------------- 变体定义 ----------------
@@ -139,22 +141,38 @@ def _child(case):
 
 
 def _driver():
+    """驱动器：影子副本里逐条跑子进程（真实仓库只读，只写运行锁与结果 JSON）。"""
     import subprocess
+    real = ROOT
     bad = 0
+    results = []
     print("=== 变异测试：每条护栏被定向破坏后，对应用例必须变红 ===")
-    for case in ("a1", "a2", "a3", "a4", "a5c", "a5r", "a6", "b7", "b8"):
-        p = subprocess.run([sys.executable, os.path.abspath(__file__), case],
-                           cwd=ROOT, capture_output=True, timeout=300,
-                           env={**os.environ, "QT_QPA_PLATFORM": "offscreen",
-                                "PYTHONIOENCODING": "utf-8"})
-        out = (p.stdout or b"").decode("utf-8", errors="replace").strip()
-        err = (p.stderr or b"").decode("utf-8", errors="replace").strip().splitlines()
-        print(out or ("NO OUTPUT rc=%d %s" % (p.returncode, err[-1] if err else "")))
-        if p.returncode != 0:
-            bad += 1
+    print("（变异只在 %TEMP% 影子副本里做：真实仓库只读，发布门会看到 _dev/.mutation.lock）")
+    with shadow(root=real, what="verify_guardrails_can_fail") as tree:
+        script = os.path.join(tree, "_dev", os.path.basename(os.path.abspath(__file__)))
+        env = {k: v for k, v in os.environ.items() if k != "PYTHONPATH"}
+        env["QT_QPA_PLATFORM"] = "offscreen"
+        env["PYTHONIOENCODING"] = "utf-8"
+        for case in ("a1", "a2", "a3", "a4", "a5c", "a5r", "a6", "b7", "b8"):
+            p = subprocess.run([sys.executable, script, case],
+                               cwd=tree, capture_output=True, timeout=300, env=env)
+            out = (p.stdout or b"").decode("utf-8", errors="replace").strip()
+            err = (p.stderr or b"").decode("utf-8", errors="replace").strip().splitlines()
+            line = out or ("NO OUTPUT rc=%d %s" % (p.returncode, err[-1] if err else ""))
+            print(line)
+            tail = line.splitlines()[-1][:160] if line else ""
+            results.append((case, "CAUGHT" if p.returncode == 0 else "SURVIVED",
+                            p.returncode, tail))
+            if p.returncode != 0:
+                bad += 1
     print("")
     print("变异 %d 条，未被抓住 %d 条" % (len(MUTATIONS), bad))
     print("GUARDRAIL MUTATION %s" % ("ALL CAUGHT" if bad == 0 else "HAS SURVIVORS"))
+    write_results(os.path.join(real, "_dev", "results_guardrails_can_fail.json"),
+                  "护栏能真失败自检（tests/test_guardrails_v24.py 的用例 / 定向变异）", results,
+                  {"script": "_dev/verify_guardrails_can_fail.py",
+                   "note": "变异只在 %TEMP% 影子副本里做，真实仓库只读（只写 _dev/.mutation.lock）",
+                   "repo_fingerprint": repo_fingerprint(real)})
     return 1 if bad else 0
 
 

@@ -1,0 +1,152 @@
+{
+  "what": "撒钱帧集预载的事件循环缺口（每轮一个新进程，1ms PreciseTimer 心跳，交替采样）",
+  "repo": "E:\\deep seek\\desktop-pet",
+  "rounds": 4,
+  "checked_at": "2026-10-10 23:41:43",
+  "eager_v242": {
+    "loop_gap_ms": {
+      "n": 4,
+      "min": 67.3,
+      "median": 70.9,
+      "max": 82.3
+    },
+    "entry_ms": {
+      "n": 4,
+      "min": 55.4,
+      "median": 58.6,
+      "max": 68.2
+    }
+  },
+  "sliced_v243": {
+    "loop_gap_ms": {
+      "n": 4,
+      "min": 25.3,
+      "median": 25.5,
+      "max": 26.6
+    },
+    "entry_ms": {
+      "n": 4,
+      "min": 0,
+      "median": 0,
+      "max": 0
+    },
+    "slice_max_ms": {
+      "n": 4,
+      "min": 12.3,
+      "median": 12.6,
+      "max": 12.6
+    },
+    "slices": {
+      "n": 4,
+      "min": 5,
+      "median": 5,
+      "max": 6
+    },
+    "materials_equal": true
+  },
+  "rows": [
+    {
+      "mode": "eager",
+      "repo": "E:\\deep seek\\desktop-pet",
+      "ok": true,
+      "error": "",
+      "loop_gap_ms": 71.6,
+      "entry_ms": 59.3,
+      "slice_max_ms": null,
+      "slices": 0,
+      "frames": 86,
+      "materials_equal": null
+    },
+    {
+      "mode": "sliced",
+      "repo": "E:\\deep seek\\desktop-pet",
+      "ok": true,
+      "error": "",
+      "loop_gap_ms": 25.7,
+      "entry_ms": 0,
+      "slice_max_ms": 12.5,
+      "slices": 5,
+      "frames": 86,
+      "materials_equal": true
+    },
+    {
+      "mode": "sliced",
+      "repo": "E:\\deep seek\\desktop-pet",
+      "ok": true,
+      "error": "",
+      "loop_gap_ms": 25.4,
+      "entry_ms": 0,
+      "slice_max_ms": 12.3,
+      "slices": 5,
+      "frames": 86,
+      "materials_equal": true
+    },
+    {
+      "mode": "eager",
+      "repo": "E:\\deep seek\\desktop-pet",
+      "ok": true,
+      "error": "",
+      "loop_gap_ms": 82.3,
+      "entry_ms": 68.2,
+      "slice_max_ms": null,
+      "slices": 0,
+      "frames": 86,
+      "materials_equal": null
+    },
+    {
+      "mode": "eager",
+      "repo": "E:\\deep seek\\desktop-pet",
+      "ok": true,
+      "error": "",
+      "loop_gap_ms": 70.3,
+      "entry_ms": 58,
+      "slice_max_ms": null,
+      "slices": 0,
+      "frames": 86,
+      "materials_equal": null
+    },
+    {
+      "mode": "sliced",
+      "repo": "E:\\deep seek\\desktop-pet",
+      "ok": true,
+      "error": "",
+      "loop_gap_ms": 25.3,
+      "entry_ms": 0,
+      "slice_max_ms": 12.6,
+      "slices": 5,
+      "frames": 86,
+      "materials_equal": true
+    },
+    {
+      "mode": "sliced",
+      "repo": "E:\\deep seek\\desktop-pet",
+      "ok": true,
+      "error": "",
+      "loop_gap_ms": 26.6,
+      "entry_ms": 0,
+      "slice_max_ms": 12.6,
+      "slices": 6,
+      "frames": 86,
+      "materials_equal": true
+    },
+    {
+      "mode": "eager",
+      "repo": "E:\\deep seek\\desktop-pet",
+      "ok": true,
+      "error": "",
+      "loop_gap_ms": 67.3,
+      "entry_ms": 55.4,
+      "slice_max_ms": null,
+      "slices": 0,
+      "frames": 86,
+      "materials_equal": null
+    }
+  ],
+  "rerun": "python _dev/probe_money_preload_gap.py --rounds 4 --json _dev/money_preload_summary.json",
+  "interpretation": {
+    "eager_v242": "v2.4.2 原样：到点后一次同步解 86 帧。同步块本身 55.4~68.2ms，事件循环最大间隔 67.3~82.3ms（中位 70.9）。与质量审查自写探针的 60.2~94.3ms 同量级（同为真 QApplication.exec() + 1ms PreciseTimer 心跳、每轮新进程）。",
+    "sliced_v243": "v2.4.3：入口 0.0ms（只登记在途状态）、5~6 片、**单片最大 12.3~12.6ms**（= _FRAME_SLICE_MS 预算的实测值）、86/86 帧与一次性 load_frame_set 逐张 toImage 全等。",
+    "loop_gap_vs_slice": "注意两个数不是一回事：单片 12.5ms，但**事件循环最大间隔** 25.3~26.6ms ≈ 两片——单片跑完排的是 QTimer.singleShot(0)，下一片在 1ms 心跳再次到期之前就绪，于是同一轮事件循环会连着跑掉两片。_FRAME_SLICE_MS 只约束**单片**，不约束'一轮里跑几片'；要卡事件循环间隔得再加一层'本轮预算'。这条口径以本文件的 loop_gap_ms 为准。",
+    "old_claim": "CHANGELOG 原写「149~182ms → 13.5ms」：13.5ms 与单片量级吻合，149~182ms 在本机复现不出来（本机 eager 67~82ms、质量审查 60~94ms）。已按实测口径改写。"
+  }
+}
