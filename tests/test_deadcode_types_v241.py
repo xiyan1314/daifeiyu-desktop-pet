@@ -200,8 +200,11 @@ _PINNED = {
                 "MainThreadCall.__init__", "MainThreadCall.resolve", "MainThreadCall.wait",
                 "ToolConfirmRequest.__init__", "ToolConfirmRequest.resolve",
                 "ToolConfirmRequest.wait", "ToolContext.__init__"],
-    pet_lines: ["_seed_source", "_food_key",
-                "LineService.__init__", "LineService.dirty_read", "LineService._load",
+    pet_lines: ["_seed_source", "_food_key", "_fallback_encodings", "notice_for_encoding",
+                "LineService.__init__", "LineService.dirty_read",
+                "LineService.gbk_read", "LineService.read_encoding", "LineService.read_trusted",
+                "LineService.read_is_gbk", "LineService.read_notice",
+                "LineService._load", "LineService._read_fallback",
                 "LineService._merge_builtins", "LineService._reindex", "LineService._save",
                 "LineService._norm_line_checked", "LineService._norm_line",
                 "LineService._norm_dialogue", "LineService._emit_changed",
@@ -447,6 +450,14 @@ def test_lines_annotations_match_real_return_shapes(tmp_path):
     """
     svc = pet_lines.LineService(str(tmp_path))
     assert isinstance(svc.dirty_read, bool)                        # @property -> bool
+    assert isinstance(svc.gbk_read, bool)                          # @property -> bool
+    # v2.4.2（兼容 M1）：UI 侧按实际编码取文案用的三个新属性（+ 模块级的选择函数）
+    assert isinstance(svc.read_encoding, str)
+    assert isinstance(svc.read_trusted, bool)
+    assert isinstance(svc.read_is_gbk, bool)
+    assert isinstance(svc.read_notice, str)
+    _check_return(pet_lines.notice_for_encoding,
+                  pet_lines.notice_for_encoding("gbk", True), "notice_for_encoding")
     _check_return(pet_lines.LineService.count, svc.count(), "count")
     _check_return(pet_lines.LineService.categories, svc.categories(), "categories")
     _check_return(pet_lines.LineService.lines, svc.lines(), "lines")

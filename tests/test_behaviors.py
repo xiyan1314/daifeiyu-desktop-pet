@@ -167,7 +167,7 @@ def test_default_cfg_sane():
     assert pet_behaviors.TRANSFORM_SECS_MIN <= d["transform_seconds"] <= pet_behaviors.TRANSFORM_SECS_MAX
 
 
-def test_voice_events_match_pet_voice():
-    """行为语音事件白名单与 pet_voice.VOICE_EVENTS 等值（防两处硬编码漂移）。"""
-    import pet_voice
-    assert tuple(pet_behaviors.BEHAVIOR_VOICE_EVENTS) == tuple(pet_voice.VOICE_EVENTS)
+# A11 去重（v2.4.2，代理 Q）：这里原本是 test_voice_events_match_pet_voice——
+# tuple(BEHAVIOR_VOICE_EVENTS) == tuple(VOICE_EVENTS)，与
+# tests/test_constants_sync.py::test_voice_events_match 同一句（那一处是严格等值 + 两侧
+# 容器类型断言，更强）。跨模块常量同步归 test_constants_sync.py 这一处维护，不再两份。

@@ -1,0 +1,524 @@
+{
+ "baseline": {
+  "ok": true,
+  "order": [
+   "manifest.json",
+   "roles/fp_00.png",
+   "roles/fp_01.png",
+   "roles/fp_02.png",
+   "roles/fp_03.png",
+   "roles/fp_04.png",
+   "roles/fp_05.png",
+   "roles/fp_06.png",
+   "roles/fp_07.png",
+   "roles/fp_08.png",
+   "roles/fp_09.png",
+   "roles/fp_10.png",
+   "roles/fp_11.png",
+   "roles/fp_12.png",
+   "roles/fp_13.png",
+   "roles/fp_14.png",
+   "roles/fp_15.png",
+   "roles/fp_16.png",
+   "roles/fp_17.png",
+   "roles/fp_18.png",
+   "roles/fp_19.png",
+   "roles/fp_20.png",
+   "roles/fp_21.png",
+   "roles/fp_22.png",
+   "roles/fp_23.png"
+  ],
+  "entries": {
+   "manifest.json": [
+    2068,
+    908055257,
+    "6e85b253e2c477fba28ea5d5c35bbc878883c6cfd6adadabee7e53dc0b9401f8"
+   ],
+   "roles/fp_00.png": [
+    62780,
+    1450028744,
+    "7720a606c2293645504bb5e95d3bcdbf29b1dd406702498af4e92fbefd4aca42"
+   ],
+   "roles/fp_01.png": [
+    66664,
+    2553359819,
+    "1d9348654f056f0633d5e5ff2c974b91f30be13c206f9c0727f81e1a125c7a04"
+   ],
+   "roles/fp_02.png": [
+    68056,
+    762434540,
+    "ac19e54eb8fde47ac2e3140a61c1294dfc37660b898c8f044c6e7f6b15d22bf2"
+   ],
+   "roles/fp_03.png": [
+    70517,
+    3520705465,
+    "d9b788804f9785977c6e789fb7fd3b5ea553f3b1abb25efe68bcc89066388da4"
+   ],
+   "roles/fp_04.png": [
+    61014,
+    589171363,
+    "4315d3600e303c7d3ee2dd18ccb19b0208d0ccdad925f343e0d0fc1ed87ff4d0"
+   ],
+   "roles/fp_05.png": [
+    67512,
+    1909057653,
+    "5d4d4baa8e72bca53dca05955b05439b9752c536f5709b227223f2c51bbb1f38"
+   ],
+   "roles/fp_06.png": [
+    69466,
+    3359020032,
+    "c6b0bdbb138feb51caea6c822af0e6a30c52fcf8c3dab5047edb713542f7521c"
+   ],
+   "roles/fp_07.png": [
+    46746,
+    740668094,
+    "1b7cae25477e4ac62c47a166f0ca62ad85a2a463f1dca81b57c1cb89db06fd85"
+   ],
+   "roles/fp_08.png": [
+    47014,
+    3366279745,
+    "abcf377464e2d5fb6130e8ff74ed04e86df43ba36cc2fe2f1e5b6cfd5e007ef0"
+   ],
+   "roles/fp_09.png": [
+    47275,
+    1998733660,
+    "6a624878031d108e9697afe59af99d8b286b05670c951f76fffc5b991758d742"
+   ],
+   "roles/fp_10.png": [
+    47711,
+    4285721878,
+    "a000d918fa568f512394f7b6dc4cbb066c8d6a3658c54358aa06785aa9204ab9"
+   ],
+   "roles/fp_11.png": [
+    48133,
+    2800861297,
+    "951892baacc39aeeb8168c3979c9785a409bec3c5553f93a696b8b7d1ff885de"
+   ],
+   "roles/fp_12.png": [
+    46564,
+    1052091152,
+    "9922873a89a789efebfa5165bf6d514f304fd512f220ae123d613b32f7454577"
+   ],
+   "roles/fp_13.png": [
+    48157,
+    1764917611,
+    "66b8c4cfa1f1e0c3a0d8c4e96b62e0dfe00db937949bd473967238f336b8cfc0"
+   ],
+   "roles/fp_14.png": [
+    48519,
+    3803635744,
+    "1edcc333fd74b17313c2dd8876a10d6f8d97c1effc6c5799112b324baac97b61"
+   ],
+   "roles/fp_15.png": [
+    47636,
+    2322899025,
+    "acea9283ad3c108f5461bbb07f58093ce31363dedfb09c4c5bf77504d673246d"
+   ],
+   "roles/fp_16.png": [
+    49288,
+    2575263125,
+    "a5be18ae6027351cc81cab509abf773fa34d5ec0bddc66fe81a5ede341fb7117"
+   ],
+   "roles/fp_17.png": [
+    66236,
+    2415496368,
+    "372d4d536ee0a3bd42c26ea26e233b3264124a339062a49bf893d41801b6b55b"
+   ],
+   "roles/fp_18.png": [
+    67097,
+    3209968132,
+    "4228f662a49d7b0cea010bd4b48b5764a4eac3d65b4709852cbf6f57efc1d0fd"
+   ],
+   "roles/fp_19.png": [
+    67403,
+    738196815,
+    "0b32c4e9a23ddd3740f527db29190e95c894a45764ada5a92f589df95f145920"
+   ],
+   "roles/fp_20.png": [
+    67273,
+    273703551,
+    "3f26f3886f7399eabba21f606b9f027b62a2ba1f7230e13bb71085b832c1a718"
+   ],
+   "roles/fp_21.png": [
+    66607,
+    1559142596,
+    "03cfd56853372c7e78a0938ed60f8c924c46be1ac987217c7b62d93f072bad3d"
+   ],
+   "roles/fp_22.png": [
+    66186,
+    3063634740,
+    "ad08dfcc00278225be140c61b2544463467361a4d54f95cad2eef64abdc02657"
+   ],
+   "roles/fp_23.png": [
+    66217,
+    3220733498,
+    "3167dc5524160d0b4f7337420e3212fe4d30e834b5f66f6aa6f2df290dd0b5ef"
+   ]
+  },
+  "manifest": {
+   "format": "dfypet-role",
+   "version": 1,
+   "meta": {},
+   "role": {
+    "id": "fp1",
+    "name": "指纹角色",
+    "file": "fp_00.png",
+    "form": "dual",
+    "file_full": "fp_01.png",
+    "forms": [
+     {
+      "name": "常态",
+      "file": "fp_00.png",
+      "front": "fp_02.png",
+      "anchor": {
+       "x": 0.5,
+       "y": 0.5
+      },
+      "animations": {
+       "idle": [
+        "fp_00.png",
+        "fp_01.png",
+        "fp_02.png",
+        "fp_03.png",
+        "fp_04.png",
+        "fp_05.png",
+        "fp_06.png",
+        "fp_07.png",
+        "fp_08.png",
+        "fp_09.png",
+        "fp_10.png",
+        "fp_11.png",
+        "fp_12.png",
+        "fp_13.png",
+        "fp_14.png",
+        "fp_15.png",
+        "fp_16.png",
+        "fp_17.png",
+        "fp_18.png",
+        "fp_19.png",
+        "fp_20.png",
+        "fp_21.png",
+        "fp_22.png",
+        "fp_23.png"
+       ],
+       "eat": [
+        "fp_00.png",
+        "fp_01.png",
+        "fp_02.png"
+       ]
+      },
+      "states": {
+       "angry": "fp_03.png",
+       "blush": "fp_04.png"
+      }
+     },
+     {
+      "name": "吃饱",
+      "file": "fp_01.png",
+      "front": "fp_01.png",
+      "anchor": {
+       "x": 0.5,
+       "y": 0.5
+      }
+     }
+    ],
+    "frames": [
+     "fp_00.png",
+     "fp_01.png",
+     "fp_02.png",
+     "fp_03.png",
+     "fp_04.png",
+     "fp_05.png",
+     "fp_06.png",
+     "fp_07.png",
+     "fp_08.png",
+     "fp_09.png",
+     "fp_10.png",
+     "fp_11.png",
+     "fp_12.png",
+     "fp_13.png",
+     "fp_14.png",
+     "fp_15.png",
+     "fp_16.png",
+     "fp_17.png",
+     "fp_18.png",
+     "fp_19.png",
+     "fp_20.png",
+     "fp_21.png",
+     "fp_22.png",
+     "fp_23.png"
+    ],
+    "added": "",
+    "v2": true
+   },
+   "behaviors": [],
+   "config": {},
+   "excluded": [],
+   "alarms": null,
+   "lines": null,
+   "dialogues": null,
+   "voice_assets": null
+  }
+ },
+ "current": {
+  "ok": true,
+  "order": [
+   "manifest.json",
+   "roles/fp_00.png",
+   "roles/fp_01.png",
+   "roles/fp_02.png",
+   "roles/fp_03.png",
+   "roles/fp_04.png",
+   "roles/fp_05.png",
+   "roles/fp_06.png",
+   "roles/fp_07.png",
+   "roles/fp_08.png",
+   "roles/fp_09.png",
+   "roles/fp_10.png",
+   "roles/fp_11.png",
+   "roles/fp_12.png",
+   "roles/fp_13.png",
+   "roles/fp_14.png",
+   "roles/fp_15.png",
+   "roles/fp_16.png",
+   "roles/fp_17.png",
+   "roles/fp_18.png",
+   "roles/fp_19.png",
+   "roles/fp_20.png",
+   "roles/fp_21.png",
+   "roles/fp_22.png",
+   "roles/fp_23.png"
+  ],
+  "entries": {
+   "manifest.json": [
+    2068,
+    908055257,
+    "6e85b253e2c477fba28ea5d5c35bbc878883c6cfd6adadabee7e53dc0b9401f8"
+   ],
+   "roles/fp_00.png": [
+    62780,
+    1450028744,
+    "7720a606c2293645504bb5e95d3bcdbf29b1dd406702498af4e92fbefd4aca42"
+   ],
+   "roles/fp_01.png": [
+    66664,
+    2553359819,
+    "1d9348654f056f0633d5e5ff2c974b91f30be13c206f9c0727f81e1a125c7a04"
+   ],
+   "roles/fp_02.png": [
+    68056,
+    762434540,
+    "ac19e54eb8fde47ac2e3140a61c1294dfc37660b898c8f044c6e7f6b15d22bf2"
+   ],
+   "roles/fp_03.png": [
+    70517,
+    3520705465,
+    "d9b788804f9785977c6e789fb7fd3b5ea553f3b1abb25efe68bcc89066388da4"
+   ],
+   "roles/fp_04.png": [
+    61014,
+    589171363,
+    "4315d3600e303c7d3ee2dd18ccb19b0208d0ccdad925f343e0d0fc1ed87ff4d0"
+   ],
+   "roles/fp_05.png": [
+    67512,
+    1909057653,
+    "5d4d4baa8e72bca53dca05955b05439b9752c536f5709b227223f2c51bbb1f38"
+   ],
+   "roles/fp_06.png": [
+    69466,
+    3359020032,
+    "c6b0bdbb138feb51caea6c822af0e6a30c52fcf8c3dab5047edb713542f7521c"
+   ],
+   "roles/fp_07.png": [
+    46746,
+    740668094,
+    "1b7cae25477e4ac62c47a166f0ca62ad85a2a463f1dca81b57c1cb89db06fd85"
+   ],
+   "roles/fp_08.png": [
+    47014,
+    3366279745,
+    "abcf377464e2d5fb6130e8ff74ed04e86df43ba36cc2fe2f1e5b6cfd5e007ef0"
+   ],
+   "roles/fp_09.png": [
+    47275,
+    1998733660,
+    "6a624878031d108e9697afe59af99d8b286b05670c951f76fffc5b991758d742"
+   ],
+   "roles/fp_10.png": [
+    47711,
+    4285721878,
+    "a000d918fa568f512394f7b6dc4cbb066c8d6a3658c54358aa06785aa9204ab9"
+   ],
+   "roles/fp_11.png": [
+    48133,
+    2800861297,
+    "951892baacc39aeeb8168c3979c9785a409bec3c5553f93a696b8b7d1ff885de"
+   ],
+   "roles/fp_12.png": [
+    46564,
+    1052091152,
+    "9922873a89a789efebfa5165bf6d514f304fd512f220ae123d613b32f7454577"
+   ],
+   "roles/fp_13.png": [
+    48157,
+    1764917611,
+    "66b8c4cfa1f1e0c3a0d8c4e96b62e0dfe00db937949bd473967238f336b8cfc0"
+   ],
+   "roles/fp_14.png": [
+    48519,
+    3803635744,
+    "1edcc333fd74b17313c2dd8876a10d6f8d97c1effc6c5799112b324baac97b61"
+   ],
+   "roles/fp_15.png": [
+    47636,
+    2322899025,
+    "acea9283ad3c108f5461bbb07f58093ce31363dedfb09c4c5bf77504d673246d"
+   ],
+   "roles/fp_16.png": [
+    49288,
+    2575263125,
+    "a5be18ae6027351cc81cab509abf773fa34d5ec0bddc66fe81a5ede341fb7117"
+   ],
+   "roles/fp_17.png": [
+    66236,
+    2415496368,
+    "372d4d536ee0a3bd42c26ea26e233b3264124a339062a49bf893d41801b6b55b"
+   ],
+   "roles/fp_18.png": [
+    67097,
+    3209968132,
+    "4228f662a49d7b0cea010bd4b48b5764a4eac3d65b4709852cbf6f57efc1d0fd"
+   ],
+   "roles/fp_19.png": [
+    67403,
+    738196815,
+    "0b32c4e9a23ddd3740f527db29190e95c894a45764ada5a92f589df95f145920"
+   ],
+   "roles/fp_20.png": [
+    67273,
+    273703551,
+    "3f26f3886f7399eabba21f606b9f027b62a2ba1f7230e13bb71085b832c1a718"
+   ],
+   "roles/fp_21.png": [
+    66607,
+    1559142596,
+    "03cfd56853372c7e78a0938ed60f8c924c46be1ac987217c7b62d93f072bad3d"
+   ],
+   "roles/fp_22.png": [
+    66186,
+    3063634740,
+    "ad08dfcc00278225be140c61b2544463467361a4d54f95cad2eef64abdc02657"
+   ],
+   "roles/fp_23.png": [
+    66217,
+    3220733498,
+    "3167dc5524160d0b4f7337420e3212fe4d30e834b5f66f6aa6f2df290dd0b5ef"
+   ]
+  },
+  "manifest": {
+   "format": "dfypet-role",
+   "version": 1,
+   "meta": {},
+   "role": {
+    "id": "fp1",
+    "name": "指纹角色",
+    "file": "fp_00.png",
+    "form": "dual",
+    "file_full": "fp_01.png",
+    "forms": [
+     {
+      "name": "常态",
+      "file": "fp_00.png",
+      "front": "fp_02.png",
+      "anchor": {
+       "x": 0.5,
+       "y": 0.5
+      },
+      "animations": {
+       "idle": [
+        "fp_00.png",
+        "fp_01.png",
+        "fp_02.png",
+        "fp_03.png",
+        "fp_04.png",
+        "fp_05.png",
+        "fp_06.png",
+        "fp_07.png",
+        "fp_08.png",
+        "fp_09.png",
+        "fp_10.png",
+        "fp_11.png",
+        "fp_12.png",
+        "fp_13.png",
+        "fp_14.png",
+        "fp_15.png",
+        "fp_16.png",
+        "fp_17.png",
+        "fp_18.png",
+        "fp_19.png",
+        "fp_20.png",
+        "fp_21.png",
+        "fp_22.png",
+        "fp_23.png"
+       ],
+       "eat": [
+        "fp_00.png",
+        "fp_01.png",
+        "fp_02.png"
+       ]
+      },
+      "states": {
+       "angry": "fp_03.png",
+       "blush": "fp_04.png"
+      }
+     },
+     {
+      "name": "吃饱",
+      "file": "fp_01.png",
+      "front": "fp_01.png",
+      "anchor": {
+       "x": 0.5,
+       "y": 0.5
+      }
+     }
+    ],
+    "frames": [
+     "fp_00.png",
+     "fp_01.png",
+     "fp_02.png",
+     "fp_03.png",
+     "fp_04.png",
+     "fp_05.png",
+     "fp_06.png",
+     "fp_07.png",
+     "fp_08.png",
+     "fp_09.png",
+     "fp_10.png",
+     "fp_11.png",
+     "fp_12.png",
+     "fp_13.png",
+     "fp_14.png",
+     "fp_15.png",
+     "fp_16.png",
+     "fp_17.png",
+     "fp_18.png",
+     "fp_19.png",
+     "fp_20.png",
+     "fp_21.png",
+     "fp_22.png",
+     "fp_23.png"
+    ],
+    "added": "",
+    "v2": true
+   },
+   "behaviors": [],
+   "config": {},
+   "excluded": [],
+   "alarms": null,
+   "lines": null,
+   "dialogues": null,
+   "voice_assets": null
+  }
+ }
+}

@@ -392,6 +392,14 @@ class BehaviorService:
         self._index = os.path.join(data_dir, "behaviors.json")
         self._log = log or pet_log.log_error
         self._behaviors = {}  # {id: behavior}
+        # v2.4.2（Q）：behaviors.json 顶层未知键的暂存（读取时收集，_save 时原样带回）
+        self._top_extra = {}
+        # v2.4.2（兼容 M4）：这次启动"文件在磁盘上却没读到"（编码不是 UTF-8 且回退也解不开 /
+        # 权限 / 共享占用）或"按回退编码读到、原文不是 UTF-8"。两种情况下用户**第一次**
+        # 增删行为都会把原文改掉，所以首次写前必须先留一份 .bak——与 pet_lines/pet_book 同口径。
+        self._read_failed = False
+        self._reencoded_read = False
+        self._backed_before_write = False
         self._load()
 
     # ---------- 持久化 ----------
@@ -410,6 +418,11 @@ class BehaviorService:
         是两次独立操作，口径容易与 pet_io 漂移）。
         """
         self._behaviors = {}
+        self._top_extra = {}
+        self._read_failed = False
+        self._reencoded_read = False
+        self._backed_before_write = False
+        _normalize_ran = []      # 判据跑过 = pet_io 这次**真读到了**文件内容（见文件末尾）
 
         def _normalize(data):
             """内层结构判据（交给 heal_json）→ (fixed, reason)。
@@ -417,6 +430,7 @@ class BehaviorService:
             reason 非空 = 内存态与盘上内容不一致（损坏 / 丢条目 / 别名迁移）→ 需要回写愈合；
             为空 = **一个字节都不写**。data 一定是 dict（read_json_ex 的 expect=dict 兜着）。
             """
+            _normalize_ran.append(True)   # 判据只在"真读到内容"时才被调（见 read_json_ex 的 unreadable 口径）
             clean = {}
             dirty = False
             for b in (data.get("behaviors") or []):
@@ -431,16 +445,59 @@ class BehaviorService:
                         dirty = True   # 别名迁移/字段清洗：磁盘与内存口径必须一致
             # 内存态与**本次真读到的**内容一致（含愈合后的）；一个字节都不写时也走这里
             self._behaviors = clean
+            self._top_extra = {k: v for k, v in data.items() if k != "behaviors"}
             if not dirty:
                 return data, None
-            return {"behaviors": list(clean.values())}, "behaviors 索引含坏条目/非法结构"
+            # v2.4.2（Q）：愈合回写**保留顶层未知键**（与 pet_alarm._load 同口径）。
+            # 条目级未知键早就保留（_norm_behavior 复制原条目再覆盖已知键），顶层此前整份重建 →
+            # 用户手加的段/未来版本的键在愈合时永久消失。fixed 只覆盖已知段，坏条目不回带。
+            fixed = dict(data)
+            fixed["behaviors"] = list(clean.values())
+            return fixed, "behaviors 索引含坏条目/非法结构"
 
-        pet_io.heal_json(self._index, lambda: {"behaviors": []}, log=self._log,
-                         normalize=_normalize)
+        _data, _corrupted = pet_io.heal_json(self._index, lambda: {"behaviors": []},
+                                             log=self._log, normalize=_normalize)
+        # v2.4.2（兼容 M4）：heal_json 的 unreadable 分支**不跑判据**（那时手里只有 factory()
+        # 默认值，拿它判"脏"就是对着没读到过的文件回写——v2.4.1 找茬 S1 的口径，不动）。
+        # 于是"判据没跑过 + 文件确实存在"就等于"这次没读到"：编码不是 UTF-8（记事本「ANSI」
+        # 另存）或权限/共享占用。前者先试编码回退（与 pet_lines 同一个 pet_io 实现）——
+        # 能读到就一条不丢；连回退都解不开才置 _read_failed（首次写前留 .bak，见 _save）。
+        # 修之前这里是**零保护**：GBK 的 behaviors.json 读到空库，用户第一次加行为就把原文
+        # 整份覆盖成 {"behaviors": [新条目]}，旧条目与自定义顶层键一起消失、不可恢复。
+        if not _normalize_ran and not _corrupted and os.path.exists(self._index):
+            fb, _enc = pet_io.read_json_fallback(self._index, expect=dict, log=self._log)
+            if fb is not None:
+                _normalize(fb)          # 同一套清洗判据（只改内存态，不写盘）
+                self._reencoded_read = bool(_enc)
+                if _enc:
+                    self._log("behaviors.json 不是 UTF-8，已按 %s 读取（内容正常，未改写原文件）"
+                              % str(_enc).upper())
+            else:
+                self._read_failed = True
+                self._log("behaviors.json 在磁盘上但读不出来（编码/占用），本次按空库继续；"
+                          "改动前会先备份成 behaviors.json.bak")
 
     def _save(self):
-        pet_io.atomic_write_json(self._index, {"behaviors": list(self._behaviors.values())},
-                                 log=self._log)
+        # v2.4.2（Q）：顶层未知键原样带回（与 pet_alarm._save 同口径）。
+        data = dict(self._top_extra)
+        data["behaviors"] = list(self._behaviors.values())
+        # v2.4.2（兼容 M4）：本次启动没读到原文（脏读）→ 这一写会把用户原文整份覆盖成内存里的
+        # 空库 + 新条目；回退读到的原文同样会在这一写里被改成 UTF-8。两种情况下**写前**先留
+        # 一份 .bak（一次脏读只留一份：写失败重试不重复覆盖，成功后清标记回到正常路径）。
+        _reencode = self._read_failed or self._reencoded_read
+        if _reencode and not self._backed_before_write:
+            if pet_io.backup_before_overwrite(self._index, self._log):
+                self._backed_before_write = True
+        err = pet_io.atomic_write_json(self._index, data, log=self._log)
+        if err is None and _reencode:
+            _had_bak = self._backed_before_write
+            _why = ("原文件不是 UTF-8（回退读取），本次已转存为 UTF-8"
+                    if self._reencoded_read else "原文件此前读不到")
+            self._read_failed = False
+            self._reencoded_read = False
+            self._backed_before_write = False
+            self._log("behaviors.json 已按 UTF-8 重建（%s；%s）"
+                      % (_why, "原文已留 .bak" if _had_bak else "**备份失败**，原文已被覆盖"))
 
     @staticmethod
     def _norm_behavior(b):

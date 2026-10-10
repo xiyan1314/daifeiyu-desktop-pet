@@ -116,7 +116,10 @@ def test_backend_registry_and_normalize():
     assert n["backend_keys"]["minimax"] == "k"
     assert n["backend_params"]["gpt_sovits"]["base_url"] == "http://x"
     assert n["backend_params"]["f5_tts"]["base_url"]  # 默认值补齐
-    assert pet_voice.normalize_voice(None) == pet_voice.DEFAULT_VOICE
+    # A11 去重（v2.4.2，代理 Q）：原先这里还有一句
+    # assert normalize_voice(None) == DEFAULT_VOICE——与 tests/test_voice.py::test_normalize_defaults
+    # 逐字同句（那边还逐字段核对 enabled/tts_mode/backend/bindings/backend_params），已合并过去。
+    # 本条只留"传入坏 backend 配置时的归一化"这一独有部分。
 
 
 def test_bind_and_resolve(tmp_path):

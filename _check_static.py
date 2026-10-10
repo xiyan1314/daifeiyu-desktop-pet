@@ -9,7 +9,7 @@
   F 定时器清单     构造的 QTimer 是否都在退出时停止
   G 线程安全       threading.Thread 的目标函数里是否直接碰 Qt 控件
   M 信号参数        Signal(...) 声明与 connect 槽的必需参数个数必须匹配（错了 emit 时 TypeError）
-  P 线程裸写盘      线程目标（含它直接调用的模块级函数）里的裸写盘/模块级容器写 → 提醒走 pet_io
+  P 线程裸写盘      线程目标（含同文件模块级函数，再跨模块追一层）里的裸写盘/模块级容器写 → 走 pet_io
   H 未使用导入
   I 死常量        模块级大写常量零引用
   L 散落 print     非 __main__ 块里的 print
@@ -109,36 +109,226 @@ def _def_index(files):
     return funcs, methods
 
 
-def _slot_arity(slot, fname, funcs, methods):
-    """槽表达式 → (必需个数, 上限 or None, 描述)；判定不了返回 None（**一律跳过，不猜**）。
+# ---------------- v2.4.2：M 槽解析补两类盲区（guard 包装 / 局部变量） ----------------
+# 旧口径只认内联 lambda、self.x 方法名、裸模块级函数名。实测本仓 145 处候选中 29 处判不了
+# （23 处 Qt/内建方法 + 6 处局部变量）。槽签名写错在 PySide 里是**静默坏**（emit 内部的
+# TypeError 只往 stderr 打一行 traceback，调用方完全看不见），所以"判不了"就等于漏检。
+# 这里补两类，判据一律要求"证据唯一"，认不出仍旧跳过（宁可漏检也不误报）：
+#   ① guard 包装：pet_log.guard_slot("名", fn) / self._gslot("名", fn)。包装体是
+#      functools.wraps(fn) + `def _run(*a, **k): return fn(*a, **k)` → 参数约束**等价于 fn**。
+#      PySide6 6.11.2 实测：包装器收 *args，PySide **不会**替它裁掉多余实参（直接连接时
+#      多余实参会被丢弃）。所以包装槽"少收"和"多收"都会 TypeError，只是被 guard 记进日志、
+#      槽**实际不执行**——报告文案据此区分，别照抄直接连接那句"多余参数被丢弃"。
+#   ② 局部变量 / 嵌套 def：`_cb = self._on_x`、`_cb = lambda ...`、`def _cb(...)`。
+#      只在作用域内该名字**唯一绑定且绑定在使用之前**时解析；凡出现 for/with/except/
+#      import/global/nonlocal、元组解包、海象、推导式绑定或多次赋值 → 整份丢弃。
+#   ③ 内建方法（deleteLater / reject / accept / list.append）**仍然不解析**：签名不在本仓，
+#      且不适用"多余参数被丢弃"这条规则——实测 `list.append` 收到 2 个实参直接 TypeError
+#      并被吞进 stderr。猜了必然误报，保持跳过。
+_GUARD_WRAPPERS = {"guard_slot", "_gslot"}
+_ALIAS_MAX_DEPTH = 4
 
-    只认三种写法：内联 lambda、self.x / a.b.c 方法名、裸模块级函数名。
-    局部变量（_cb）、list.append 这类内建、guard_slot(...) 包装一律不解析——
-    宁可漏检也不误报（本检查的价值在"改了签名忘了改槽"，不在穷举）。
-    """
-    if isinstance(slot, ast.Lambda):
-        req, cap = _callable_arity(slot, "lambda")
-        return req, cap, "lambda"
-    target = None
-    if isinstance(slot, ast.Name):
-        target = slot.id
-        pool = [c for c in (funcs.get(target) or []) if c[0] == fname] or (funcs.get(target) or [])
-    elif isinstance(slot, ast.Attribute):
-        target = slot.attr
-        pool = [c for c in (methods.get(target) or []) if c[0] == fname] or (methods.get(target) or [])
-    else:
-        return None
-    pool = [c[1] for c in pool]
-    if not pool:
-        return None
-    # 同名多个定义（_save 之类）取**最宽松**的口径：任一个收得下就不算错 → 不误报
+
+def _pool_for(pool_map, target, fname):
+    """同名定义的候选池：优先**同文件**，再退回全仓（沿用 v2.4 口径）。"""
+    return ([c for c in (pool_map.get(target) or []) if c[0] == fname]
+            or (pool_map.get(target) or []))
+
+
+def _pool_arity(pool):
+    """同名多个定义（_save 之类）取**最宽松**的口径：任一个收得下就不算错 → 不误报。"""
     reqs, caps = [], []
     for fn in pool:
         r, c = _callable_arity(fn, "def")
         reqs.append(r)
         caps.append(c)
+    if not reqs:
+        return None
     cap = None if any(c is None for c in caps) else max(caps)
-    return min(reqs), cap, target
+    return min(reqs), cap
+
+
+def _is_guard_wrapper(node):
+    """节点是不是槽守卫包装调用（pet_log.guard_slot(...) / self._gslot(...)）。"""
+    if not isinstance(node, ast.Call):
+        return False
+    f = node.func
+    name = f.attr if isinstance(f, ast.Attribute) else getattr(f, "id", "")
+    return name in _GUARD_WRAPPERS
+
+
+def _scope_bindings(body):
+    """作用域内（**不下钻**嵌套函数体 / lambda / 类体）的名字绑定。
+
+    → (vals: {名: [值表达式]}, defs: {名: [嵌套 FunctionDef]}, bad: 有歧义的名集合)
+
+    歧义来源一律进 bad，bad 里的名字**永不解析**（宁可漏检）：元组/列表解包、for /
+    with / except / import / global / nonlocal、海象、增强赋值、推导式绑定。
+    """
+    vals, defs, bad = {}, {}, set()
+
+    def _bad(target):
+        for n in ast.walk(target):
+            if isinstance(n, ast.Name):
+                bad.add(n.id)
+
+    def _bind(target, value):
+        if isinstance(target, ast.Name):
+            vals.setdefault(target.id, []).append(value)
+        else:
+            _bad(target)          # 解包 / 属性 / 下标：一个值不唯一对应一个名字
+
+    def _visit(node):
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            defs.setdefault(node.name, []).append(node)
+            return                # 不下钻函数体（那是另一个作用域）
+        if isinstance(node, (ast.Lambda, ast.ClassDef)):
+            return                # lambda 体 / 类体是独立命名空间
+        if isinstance(node, ast.Assign):
+            for t in node.targets:
+                _bind(t, node.value)
+        elif isinstance(node, ast.AnnAssign):
+            if node.value is None:
+                _bad(node.target)
+            else:
+                _bind(node.target, node.value)
+        elif isinstance(node, (ast.NamedExpr, ast.AugAssign)):
+            _bad(node.target)
+        elif isinstance(node, (ast.For, ast.AsyncFor)):
+            _bad(node.target)
+        elif isinstance(node, (ast.With, ast.AsyncWith)):
+            for it in node.items:
+                if it.optional_vars is not None:
+                    _bad(it.optional_vars)
+        elif isinstance(node, ast.ExceptHandler) and node.name:
+            bad.add(node.name)
+        elif isinstance(node, (ast.Import, ast.ImportFrom)):
+            for a in node.names:
+                bad.add((a.asname or a.name).split(".")[0])
+        elif isinstance(node, (ast.Global, ast.Nonlocal)):
+            bad.update(node.names)
+        elif isinstance(node, ast.comprehension):
+            _bad(node.target)
+        for ch in ast.iter_child_nodes(node):
+            _visit(ch)
+
+    for stmt in body:
+        _visit(stmt)
+    return vals, defs, bad
+
+
+def _scope_table(tree):
+    """文件的作用域表 → [(lo, hi, vals, defs, bad)]，含模块级（lo=-1, hi=+inf）。
+
+    查表时取"包含该行、且 lo 最大"的那个 = 最内层作用域。模块级 defs 只留
+    **非顶层**（col_offset != 0）的嵌套 def：顶层 def 走既有的 funcs 池，口径不变。
+    """
+    out = []
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            vals, defs, bad = _scope_bindings(node.body)
+            hi = getattr(node, "end_lineno", None) or node.lineno
+            out.append((node.lineno, hi, vals, defs, bad))
+    vals, defs, bad = _scope_bindings(tree.body)
+    nested = {k: [d for d in v if d.col_offset != 0] for k, v in defs.items()}
+    out.append((-1, float("inf"), vals, {k: v for k, v in nested.items() if v}, bad))
+    return out
+
+
+def _scope_at(scopes, lineno):
+    """包含 lineno 的最内层作用域（lo 最大者）；scopes 为空返回 None。"""
+    best = None
+    for sc in scopes or ():
+        if sc[0] <= lineno <= sc[1] and (best is None or sc[0] > best[0]):
+            best = sc
+    return best
+
+
+def _resolve(expr, fname, lineno, scopes, funcs, methods, depth, via):
+    """槽 / 值表达式 → (必需, 上限, 描述, tags)；判定不了返回 None（**一律跳过，不猜**）。
+
+    tags 记录解析路径（"guard"=解开过守卫包装、"local"=经过局部变量），报告文案与
+    "解析器真的在解析"的回归都靠它。
+    """
+    if depth > _ALIAS_MAX_DEPTH:
+        return None
+    if isinstance(expr, ast.Lambda):
+        req, cap = _callable_arity(expr, "lambda")
+        return req, cap, "lambda", ()
+    if _is_guard_wrapper(expr):
+        # 守卫名是字符串常量 → 跳过它，取第一个能解析成槽的实参（位置参数或关键字）
+        cands = [a for a in expr.args
+                 if not (isinstance(a, ast.Constant) and isinstance(a.value, str))]
+        cands += [kw.value for kw in expr.keywords if kw.arg]
+        for arg in cands:
+            inner = _resolve(arg, fname, lineno, scopes, funcs, methods, depth + 1, via)
+            if inner is not None:
+                req, cap, desc, tags = inner
+                return req, cap, "guard_slot(%s)" % desc, ("guard",) + tags
+        return None
+    if isinstance(expr, ast.Attribute):
+        ar = _pool_arity([c[1] for c in _pool_for(methods, expr.attr, fname)])
+        return None if ar is None else (ar[0], ar[1], expr.attr, ())
+    if isinstance(expr, ast.Name):
+        name = expr.id
+        if name == via:                      # _cb = _cb → 判不了
+            return None
+        scope = _scope_at(scopes, lineno)
+        if scope is not None:
+            _lo, _hi, vals, defs, bad = scope
+            if name in bad:
+                return None                  # 本地歧义绑定遮住模块级同名 → 判不了
+            v = list(vals.get(name) or [])
+            d = list(defs.get(name) or [])
+            if len(v) + len(d) > 1:
+                return None                  # 多次绑定 → 判不了
+            if v or d:
+                first = (v or d)[0]
+                if getattr(first, "lineno", 0) >= lineno:
+                    return None              # 绑在使用之后（或同一行）→ 不算
+                if d:
+                    ar = _pool_arity(d)
+                    return None if ar is None else (ar[0], ar[1], name, ("local",))
+                inner = _resolve(v[0], fname, lineno, scopes, funcs, methods,
+                                 depth + 1, name)
+                if inner is None:
+                    return None
+                req, cap, desc, tags = inner
+                return req, cap, "%s→%s" % (name, desc), ("local",) + tags
+        ar = _pool_arity([c[1] for c in _pool_for(funcs, name, fname)])
+        return None if ar is None else (ar[0], ar[1], name, ())
+    return None
+
+
+def _slot_arity(slot, fname, funcs, methods, scopes=None, lineno=0):
+    """槽表达式 → (必需个数, 上限 or None, 描述, tags)；判定不了返回 None（**一律跳过，不猜**）。
+
+    认：内联 lambda、self.x / a.b.c 方法名、裸模块级函数名、guard 包装（解开继续解析）、
+    局部变量与嵌套 def（唯一绑定才认）。不认：内建方法、歧义绑定——理由见文件顶部注释。
+    """
+    return _resolve(slot, fname, lineno, scopes, funcs, methods, 0, None)
+
+
+def iter_slots(files):
+    """遍历 `X.<信号>.connect(槽)`：→ (文件, 行号, 信号名, 槽表达式, 该文件作用域表)。
+
+    抽成公共迭代器是为了让"解析覆盖面"的回归（tests/test_guardrails_v24.py）走**同一条**
+    扫描路径：测试数出来的候选数与检查器实际看到的完全一致，不会两处口径漂移。
+    """
+    for name, raw in files:
+        try:
+            tree = ast.parse(raw)
+        except SyntaxError:
+            continue
+        scopes = _scope_table(tree)
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Call) or not node.args:
+                continue
+            fn = node.func
+            if not (isinstance(fn, ast.Attribute) and fn.attr == "connect"
+                    and isinstance(fn.value, ast.Attribute)):
+                continue
+            yield name, node.lineno, fn.value.attr, node.args[0], scopes
 
 
 def check_signal_arity(files):
@@ -160,35 +350,28 @@ def check_signal_arity(files):
             decl_local.setdefault((name, m.group(1)), set()).add(_nargs)
     funcs, methods = _def_index(files)
     problems, notes = [], []
-    for name, raw in files:
-        try:
-            tree = ast.parse(raw)
-        except SyntaxError:
+    for name, lineno, sig, slot_expr, scopes in iter_slots(files):
+        # X.<信号名>.connect(槽)：只认**连到本仓 Signal 声明**的那些（Qt 自带信号无从判定）
+        if sig not in decl:
             continue
-        for node in ast.walk(tree):
-            if not isinstance(node, ast.Call) or not node.args:
-                continue
-            fn = node.func
-            # X.<信号名>.connect(槽)：只认**连到本仓 Signal 声明**的那些（Qt 自带信号无从判定）
-            if not (isinstance(fn, ast.Attribute) and fn.attr == "connect"
-                    and isinstance(fn.value, ast.Attribute)):
-                continue
-            sig = fn.value.attr
-            if sig not in decl:
-                continue
-            got = _slot_arity(node.args[0], name, funcs, methods)
-            if got is None:
-                continue
-            req, cap, desc = got
-            for n in sorted(decl_local.get((name, sig)) or decl[sig]):
-                if req > n:
-                    problems.append(
-                        "M 信号 %s(%d 个参数) 连到 %s（要 %d 个）→ emit 时 TypeError @ %s:%d"
-                        % (sig, n, desc, req, name, node.lineno))
-                elif cap is not None and cap < n:
-                    notes.append(
-                        "M? 信号 %s(%d 个参数) 连到 %s（只收 %d 个，多余参数被丢弃）@ %s:%d"
-                        % (sig, n, desc, cap, name, node.lineno))
+        got = _slot_arity(slot_expr, name, funcs, methods, scopes, lineno)
+        if got is None:
+            continue
+        req, cap, desc, tags = got
+        wrapped = "guard" in tags
+        for n in sorted(decl_local.get((name, sig)) or decl[sig]):
+            if req > n:
+                problems.append(
+                    "M 信号 %s(%d 个参数) 连到 %s（要 %d 个）→ emit 时 TypeError%s @ %s:%d"
+                    % (sig, n, desc, req,
+                       "（guard 包装会记日志，但槽实际不执行）" if wrapped
+                       else "（PySide 吞掉，只往 stderr 打 traceback）", name, lineno))
+            elif cap is not None and cap < n:
+                notes.append(
+                    "M? 信号 %s(%d 个参数) 连到 %s（只收 %d 个）→ %s @ %s:%d"
+                    % (sig, n, desc, cap,
+                       "guard 包装不裁多余参数，槽同样 TypeError（有日志但不执行）" if wrapped
+                       else "多余参数被丢弃", name, lineno))
     return problems, notes
 
 
@@ -198,6 +381,9 @@ _DISK_WRITE_ATTRS = ("replace", "rename", "remove", "unlink", "rmtree", "move",
 # 会改容器内容的 list/dict/set 方法
 _MUT_METHODS = ("append", "extend", "insert", "update", "pop", "clear", "setdefault",
                 "remove", "discard", "add", "sort", "reverse")
+# v2.4.2：跨模块只追一层，且**不下钻**这两个模块——它们是本仓约定的写盘/日志出口，
+# "线程里走 pet_io"正是本检查给出的建议，把 pet_io 自己的 os.replace 报成裸写盘自相矛盾。
+_P_SKIP_MODULES = {"pet_io", "pet_log"}
 
 
 def _module_containers(tree):
@@ -245,15 +431,88 @@ def _write_hit(node, containers, globals_):
     return None
 
 
+def _import_map(tree):
+    """模块级导入映射：{本地名: (模块名, 原名 or None)}。
+
+    `import m [as x]` → x: ("m", None)（`x.f()` 里的 f 再到 m 里找）；
+    `from m import f [as g]` → g: ("m", "f")。
+    `import a.b`（无 as）绑的是根名 a 但拿不到成员 → 不记（保守，判不了就跳过）；
+    函数内 import 的作用域不同 → 只看 tree.body。
+    """
+    out = {}
+    for node in tree.body:
+        if isinstance(node, ast.Import):
+            for a in node.names:
+                if a.asname is None:
+                    if "." in a.name:
+                        continue
+                    out[a.name] = (a.name, None)
+                else:
+                    out[a.asname] = (a.name, None)
+        elif isinstance(node, ast.ImportFrom):
+            if node.level or not node.module:
+                continue
+            for a in node.names:
+                if a.name != "*":
+                    out[a.asname or a.name] = (node.module, a.name)
+    return out
+
+
+def _cross_module_bodies(bodies, imports, modules, skip_modules):
+    """bodies（(文件名, 节点)）里**直接调用**的其它仓内模块函数 → [(文件名, 节点)]（一层，不递归）。
+
+    豁免 skip_modules：pet_io / pet_log 是本仓约定的写盘与日志出口，"线程里走 pet_io"
+    正是检查结论要求的做法；下钻进去把 pet_io 自己的 os.replace 报成"裸写盘"自相矛盾。
+    """
+    out, seen = [], set()
+    for _fname, body in bodies:
+        for call in ast.walk(body):
+            if not isinstance(call, ast.Call):
+                continue
+            f = call.func
+            mod = fname2 = None
+            if isinstance(f, ast.Name):
+                pair = imports.get(f.id)
+                if pair and pair[1] is not None:
+                    mod, fname2 = pair
+            elif isinstance(f, ast.Attribute) and isinstance(f.value, ast.Name):
+                pair = imports.get(f.value.id)
+                if pair and pair[1] is None:
+                    mod, fname2 = pair[0], f.attr
+            if not mod or not fname2 or mod in skip_modules:
+                continue
+            entry = modules.get(mod)
+            if entry is None:
+                continue
+            fn = entry[1].get(fname2)
+            if fn is not None and id(fn) not in seen:
+                seen.add(id(fn))
+                out.append((entry[0], fn))
+    return out
+
+
 def check_thread_writes(files):
-    """线程目标（含它**直接调用**的模块级函数）里的裸写盘 / 模块级容器写（P）→ 待确认。
+    """线程目标（含它直接调用的同文件模块级函数，再跨模块一层）里的裸写盘 / 模块级容器写（P）。
 
     低误报口径（有意为之）：
       - 只认 open(..., "w/a/x/+") 与 os./shutil. 的写、改模块级容器；open(p) 只读不报
-      - 只内联**同文件**的模块级函数（跨模块走 module.fn() 的调用不追，追不准）
+      - 追两层：线程目标 → 同文件模块级函数 → **其它仓内模块**函数（一层，不递归；避免爆炸）。
+        跨模块只认模块级 `import m` / `from m import f`，认不出（`import a.b`、函数内
+        import、`getattr` 动态派发）就跳过；pet_io / pet_log 豁免（见 _cross_module_bodies）
       - 输出是"待确认"而非"问题"：线程里写盘不必然错，但 v2.3.1 起应统一走 pet_io
         （线程唯一临时名 + 路径锁 + os.replace 重试），这里只负责把人叫醒
     """
+    modules = {}          # 模块名 → (文件名, {模块级函数名: 节点}, 模块级容器集)
+    for name, raw in files:
+        try:
+            tree = ast.parse(raw)
+        except SyntaxError:
+            continue
+        mfuncs = {}
+        for node in ast.walk(tree):
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.col_offset == 0:
+                mfuncs.setdefault(node.name, node)
+        modules[os.path.splitext(name)[0]] = (name, mfuncs, _module_containers(tree))
     notes = []
     for name, raw in files:
         try:
@@ -265,25 +524,35 @@ def check_thread_writes(files):
         for node in ast.walk(tree):
             if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
                 (funcs if node.col_offset == 0 else methods).setdefault(node.name, node)
+        imports = _import_map(tree)
         for m in re.finditer(r"threading\.Thread\(\s*target\s*=\s*([A-Za-z_][\w.]*)", raw):
             tgt = m.group(1)
             head = tgt.split(".")[-1]
             fn = methods.get(head) or funcs.get(head)
             if fn is None:
                 continue  # 目标不在本文件（跨模块）/ 不是函数：不猜
-            bodies = [fn]
+            bodies = [(name, fn)]
+            seen = {id(fn)}
             for call in ast.walk(fn):  # 直接调用的同文件模块级函数（一层，不递归）
                 if isinstance(call, ast.Call) and isinstance(call.func, ast.Name) \
-                        and call.func.id in funcs:
-                    bodies.append(funcs[call.func.id])
+                        and call.func.id in funcs and id(funcs[call.func.id]) not in seen:
+                    seen.add(id(funcs[call.func.id]))
+                    bodies.append((name, funcs[call.func.id]))
+            # v2.4.2：再跨模块一层（上面这批 body 里直接调用的其它仓内模块函数）
+            for cfname, cnode in _cross_module_bodies(bodies, imports, modules,
+                                                      _P_SKIP_MODULES):
+                if id(cnode) not in seen:
+                    seen.add(id(cnode))
+                    bodies.append((cfname, cnode))
             hits = []
-            for body in bodies:
+            for bname, body in bodies:
+                bcont = modules[os.path.splitext(bname)[0]][2]
                 globs = {g for node in ast.walk(body) if isinstance(node, ast.Global)
                          for g in node.names}
                 for node in ast.walk(body):
-                    hit = _write_hit(node, containers, globs)
+                    hit = _write_hit(node, bcont, globs)
                     if hit:
-                        hits.append("%s:%d %s" % (name, getattr(node, "lineno", 0), hit))
+                        hits.append("%s:%d %s" % (bname, getattr(node, "lineno", 0), hit))
             if hits:
                 notes.append("P? 线程目标 %s 里直接写盘/改共享状态（建议走 pet_io 原子写）@ %s"
                              % (tgt, "; ".join(sorted(set(hits))[:4])))

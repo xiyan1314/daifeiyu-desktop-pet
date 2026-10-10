@@ -1,0 +1,44 @@
+{
+  "mutations": [
+    {
+      "id": "M-Q1",
+      "why": "pet_alarm 愈合回写保留顶层未知键",
+      "file": "pet_alarm.py",
+      "old": "            fixed = dict(data)\n            fixed[\"alarms\"]",
+      "new": "            fixed = {}\n            fixed[\"alarms\"]",
+      "tests": [
+        "tests/test_heal_top_level_keys.py::test_alarm_heal_keeps_top_level_unknown_keys"
+      ]
+    },
+    {
+      "id": "M-Q2",
+      "why": "pet_behaviors 愈合回写保留顶层未知键",
+      "file": "pet_behaviors.py",
+      "old": "            fixed = dict(data)\n            fixed[\"behaviors\"]",
+      "new": "            fixed = {}\n            fixed[\"behaviors\"]",
+      "tests": [
+        "tests/test_heal_top_level_keys.py::test_behaviors_heal_keeps_top_level_unknown_keys"
+      ]
+    },
+    {
+      "id": "M-Q3",
+      "why": "pet_alarm 普通保存带回顶层未知键",
+      "file": "pet_alarm.py",
+      "old": "        data = dict(self._top_extra)",
+      "new": "        data = {}",
+      "tests": [
+        "tests/test_heal_top_level_keys.py::test_alarm_unknown_top_key_survives_user_edits"
+      ]
+    },
+    {
+      "id": "M-Q4",
+      "why": "pet_behaviors 普通保存带回顶层未知键",
+      "file": "pet_behaviors.py",
+      "old": "        data = dict(self._top_extra)",
+      "new": "        data = {}",
+      "tests": [
+        "tests/test_heal_top_level_keys.py::test_behaviors_unknown_top_key_survives_user_edits"
+      ]
+    }
+  ]
+}

@@ -154,10 +154,21 @@ def _classify_try_body(try_node):
         elif last in NET_ATTRS and base in {"session", "s", "http", "client", "conn"}:
             net = True
             why.append("%s()@%d" % (dotted, getattr(call, "lineno", 0)))
-        if last in PROC_ATTRS and base in {"subprocess", "os", "QProcess", "psutil", "shutil"}:
+        if (last in PROC_ATTRS and base in {"subprocess", "os", "QProcess", "psutil", "shutil"}
+                and not _is_signal0_probe(call)):
             proc = True
             why.append("%s()@%d" % (dotted, getattr(call, "lineno", 0)))
     return persist, net, proc, why[:4]
+
+
+def _is_signal0_probe(call):
+    """`os.kill(pid, 0)`：信号 0 不投递任何信号，纯粹是"进程还在不在"的探针（v2.4.2 收紧⑤）。
+
+    此前它按 PROC_ATTRS 的 "kill" 被算成 A3"后端启停被吞"；但探针的 False 表示"进程没了"，
+    正是 is_running 之类的安全答案，不是被吞掉的错误。
+    """
+    return (_dotted(call.func) == "os.kill" and len(call.args) >= 2
+            and isinstance(call.args[1], ast.Constant) and call.args[1].value == 0)
 
 
 CLEANUP_ATTRS = {"remove", "unlink", "rmtree", "rmdir", "removedirs"}
@@ -272,6 +283,14 @@ def _handler_body_trivial(handler):
 #   ① 重试 / 轮询循环：handler 只把异常存进变量，循环结束统一 return/raise/记日志；
 #   ② 防御性读取：try 体只做取字段 / 类型转换，坏了用常量兜底，不改变用户可见结果；
 #   ③ 同一 try 的多个 handler：同一次写盘被数成 2-3 条 A。
+# v2.4.2（B2）再收紧一轮，把 19→4 之后剩下的三类误报也摘掉（同样全是证据式）：
+#   ④ 纯轮转：try 体只把**已有文件改名到它自己的备份名**（X → X + "后缀"）。改名是原子的，
+#      失败时文件仍在原名下——既不丢数据也不会让用户"以为成功"。日志轮转是典型写法。
+#   ⑤ 信号 0 探针：`os.kill(pid, 0)` 不投递任何信号，是"进程还在不在"的探测；
+#      探针失败＝进程不在了，对 is_running 这类函数 False 正是安全答案，不是被吞的错误。
+#   ⑥ 回滚里的回滚：handler 嵌在一个**已经上报错误**的 handler 内部（外层以 return 错误/
+#      raise 结尾）。用户已经看到失败提示，内层清理失败不会让他以为成功——只降 A→B，
+#      不降成 C，报告里仍旧留着这条。
 # 判据都写成"证据式"的：认不出证据就保持原判（宁可留着让人看，也不悄悄放宽）。
 
 def _handler_lines_text(src, handler):
@@ -359,6 +378,91 @@ def _reported_later(func_node, try_node, names):
     return False
 
 
+def _is_backup_rename(call):
+    """`os.replace(X, X + "后缀")`：把文件轮转到**它自己的备份名**（v2.4.2 收紧④）。
+
+    改名是原子的——失败时文件仍老老实实待在原名下，成功也只是换个名字；既不丢数据，
+    也不会让用户"以为成功其实没有"。判据要**看得见证据**：目的名必须是"源名 + 非空字符串
+    常量后缀"（AST 逐字比对源表达式），认不出就不降档。
+    """
+    dotted = _dotted(call.func)
+    base = dotted.split(".")[0] if dotted else ""
+    if base not in FILE_MODULES or dotted.split(".")[-1] not in (
+            "replace", "rename", "renames", "move"):
+        return False
+    if len(call.args) < 2:
+        return False
+    src, dst = call.args[0], call.args[1]
+    if not (isinstance(dst, ast.BinOp) and isinstance(dst.op, ast.Add)):
+        return False
+    if not (isinstance(dst.right, ast.Constant) and isinstance(dst.right.value, str)
+            and dst.right.value):
+        return False
+    return ast.dump(dst.left) == ast.dump(src)
+
+
+def _is_pure_rotation(try_node):
+    """try 体只做"轮转已有文件"：备份名改名 + 只读判断，没有任何写入/创建/删除/网络/进程。
+
+    与 `_is_pure_cleanup` 同构（证据式）：认不出的一律 False——未知调用**不放行**，
+    宁可让它继续算 A 档让人看。任何写盘/网络/进程调用出现即 False。
+    """
+    saw = False
+    for call in [n for n in ast.walk(try_node) if isinstance(n, ast.Call)]:
+        dotted = _dotted(call.func)
+        base = dotted.split(".")[0] if dotted else ""
+        last = dotted.split(".")[-1] if dotted else ""
+        if _is_backup_rename(call):
+            saw = True
+            continue
+        if base == "open":
+            return False        # 出现打开文件（读或写）就不按纯轮转放行
+        if last in READONLY_ATTRS:
+            continue            # getsize / exists / isfile … 只读判断
+        if (last in PERSIST_ATTRS or last in PERSIST_ATTRS_QUALIFIED
+                or base in PERSIST_MODULES or last in PROC_ATTRS or base in NET_MODULES):
+            return False
+        return False            # 未知调用：不放行（保守）
+    return saw
+
+
+def _nested_handler_map(tree):
+    """ExceptHandler 节点 id → 它**最近的外层** ExceptHandler（None＝不在任何 handler 里）。"""
+    out = {}
+
+    def _walk(node, cur):
+        if isinstance(node, ast.ExceptHandler):
+            out[id(node)] = cur
+            cur = node
+        for ch in ast.iter_child_nodes(node):
+            _walk(ch, cur)
+
+    _walk(tree, None)
+    return out
+
+
+def _rollback_in_reporting_handler(nested_map, handler, try_node):
+    """"回滚里的回滚"：删残留的清理，嵌在一个**已经上报错误**的 handler 内部（v2.4.2 收紧⑥）。
+
+    两个证据都要看见才降档（只降 A→B，报告里仍旧留着，不降成 C）：
+      ① try 体是`_is_pure_cleanup`（只删残留；独立写盘/恢复备份**不放行**，继续保持 A）；
+      ② 沿外层 handler 链往上找，**必须真的看到**某层以 return 非零值 / raise 结尾
+         （`_ends_with_report`）——用户已经看到失败提示，不会以为操作成功了。
+    """
+    # 注意：try 体是"删残留"且**被 _classify_try_body 认出写盘**时，上面 `cleanup_only`
+    # 已经把它降成 C 了；这条真正兜住的是"cleanup 认得出、persist 认不出"的组合
+    # （receiver 不是文件模块，例如 role_lib._data["roles"].remove(...) + _save()），
+    # 那种组合只剩"函数名带强动词 → A4"会把回滚报成"用户动作失败无提示"。
+    if not _is_pure_cleanup(try_node):
+        return False
+    outer = nested_map.get(id(handler))
+    while outer is not None:
+        if _ends_with_report(outer.body):
+            return True
+        outer = nested_map.get(id(outer))
+    return False
+
+
 def _pure_defensive_read(try_node):
     """try 体只做"取字段 / 类型转换"这类无副作用动作（坏了就用常量兜底）→ True。
 
@@ -416,21 +520,27 @@ def scan(root):
     a_seen = set()   # 同一 try 只计一次 A（v2.4.1 B1：多 handler 不重复计数）
     for path in sorted(_iter_targets(root)):
         rel = os.path.relpath(path, root).replace("\\", "/")
+        # 非生产路径：tests/_dev + 仓库根的下划线维护脚本（_verify_*/_check_* 等，不随包发布）
+        # v2.4.2：这段必须在 try **之前**算——解析失败的文件同样要按路径归属，否则
+        # tests/_dev 下的坏文件会被算成"生产路径"，把三档统计的分母污染掉。
+        nonprod = (rel.startswith("tests/") or rel.startswith("_dev/")
+                   or (("/" not in rel) and os.path.basename(rel).startswith("_")))
+        basename = os.path.basename(rel)
         try:
-            with io.open(path, "r", encoding="utf-8") as f:
+            # v2.4.2：用 utf-8-sig 读——带 BOM 的 .py 是**合法 Python**（CPython 自己认），
+            # 而 ast.parse 拿到残留的 \ufeff 会直接 SyntaxError，此前这种文件被整份 SKIP
+            # ＝一整片盲区。utf-8-sig 对无 BOM 文件与 utf-8 完全等价，行号也不受影响。
+            with io.open(path, "r", encoding="utf-8-sig") as f:
                 src = f.read()
             lines = src.splitlines()
             tree = ast.parse(src)
         except (SyntaxError, UnicodeDecodeError, OSError) as e:
             findings.append(dict(tier="SKIP", file=rel, line=0, func="", reason="%r" % (e,),
                                  snippet="", editable=False, forbidden=False,
-                                 annotated=False, nonprod=False))
+                                 annotated=False, nonprod=nonprod))
             continue
         owner = _enclosing_map(tree)
-        # 非生产路径：tests/_dev + 仓库根的下划线维护脚本（_verify_*/_check_* 等，不随包发布）
-        nonprod = (rel.startswith("tests/") or rel.startswith("_dev/")
-                   or (("/" not in rel) and os.path.basename(rel).startswith("_")))
-        basename = os.path.basename(rel)
+        nested_handlers = _nested_handler_map(tree)
         for node in ast.walk(tree):
             if not isinstance(node, ast.Try):
                 continue
@@ -447,18 +557,25 @@ def scan(root):
                     exempt = "写权限探针：失败＝目录不可写（回退信号，不是错误）"
                 n_calls = len([n for n in ast.walk(node) if isinstance(n, ast.Call)])
                 cleanup_only = persist and _is_pure_cleanup(node)
+                rotation_only = persist and _is_pure_rotation(node)
                 if not silent:
                     tier, reason = "OK", "已处理（有 log/raise/弹窗）"
                 elif exempt:
                     tier, reason = "C", "良性（显式豁免）：" + exempt
                 elif cleanup_only:
                     tier, reason = "C", "良性：仅删除孤儿/残留文件，失败只留文件，无数据丢失"
+                elif rotation_only:
+                    tier, reason = "C", ("良性：仅把已有文件轮转到它自己的备份名"
+                                         "（失败＝没改名，数据仍在原名下）")
                 elif _returns_report(handler) or _handler_ends_with_report(handler):
                     tier, reason = "B", "失败以返回值/哨兵上报调用方（静态看不到调用方怎么处理）"
                 elif _reported_later(_innermost_func(tree, node), node,
                                      _assigned_names(handler)):
                     tier, reason = "B", ("重试/轮询循环：handler 只存错误，其后"
                                          " return/raise/日志统一上报（不是吞掉）")
+                elif _rollback_in_reporting_handler(nested_handlers, handler, node):
+                    tier, reason = "B", ("回滚里的回滚：删残留的清理，嵌在**已上报错误**的"
+                                         " handler 内部（用户已经看到失败提示）")
                 elif persist:
                     tier, reason = "A", "A1 写盘被吞: " + ",".join(why)
                 elif net:

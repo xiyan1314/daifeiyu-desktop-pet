@@ -1,0 +1,64 @@
+{
+  "mutations": [
+    {
+      "id": "M-Q10",
+      "why": "G1：删掉 test_voice.py 的 in 断言后，幸存条（精确等值）必须仍能抓到 TTS_API_ERRORS 改坏",
+      "file": "pet_voice.py",
+      "old": "    401: \"密钥无效\",",
+      "new": "    401: \"认证失败\",",
+      "tests": [
+        "tests/test_voice_contracts_v24.py::test_error_code_mapping_is_stable"
+      ]
+    },
+    {
+      "id": "M-Q11",
+      "why": "G2：白名单少一项，幸存条（constants_sync）必须红",
+      "file": "pet_behaviors.py",
+      "old": "BEHAVIOR_VOICE_EVENTS = (\"reply\", \"feed\", \"poke\", \"sleep\", \"wake\")",
+      "new": "BEHAVIOR_VOICE_EVENTS = (\"reply\", \"feed\", \"poke\", \"sleep\")",
+      "tests": [
+        "tests/test_constants_sync.py::test_voice_events_match"
+      ]
+    },
+    {
+      "id": "M-Q12",
+      "why": "G2：容器类型从 tuple 变 list——幸存条（新加的 isinstance）必须红（被删的 tuple()==tuple() 形态抓不到）",
+      "file": "pet_behaviors.py",
+      "old": "BEHAVIOR_VOICE_EVENTS = (\"reply\", \"feed\", \"poke\", \"sleep\", \"wake\")",
+      "new": "BEHAVIOR_VOICE_EVENTS = [\"reply\", \"feed\", \"poke\", \"sleep\", \"wake\"]",
+      "tests": [
+        "tests/test_constants_sync.py::test_voice_events_match"
+      ]
+    },
+    {
+      "id": "M-Q13",
+      "why": "G7：删掉 test_lines 的愈合重复段后，幸存条（test_io_v231 的 .bak 版）必须仍能抓到「坏文件不愈合」",
+      "file": "pet_lines.py",
+      "old": "        if corrupted or (data is None and not _unreadable):",
+      "new": "        if False:",
+      "tests": [
+        "tests/test_io_v231.py::test_lines_corrupt_file_heals_with_bak"
+      ]
+    },
+    {
+      "id": "M-Q14",
+      "why": "G8：删掉 test_book 的 today_usage 重复断言后，幸存条里那条断言必须仍然有效",
+      "file": "pet_book.py",
+      "old": "        return round(sum(float(r[\"amount\"]) for r in self._ledger[\"records\"]), 2)",
+      "new": "        return round(sum(float(r[\"amount\"]) for r in self._ledger[\"records\"]), 2) + 1.0",
+      "tests": [
+        "tests/test_persistence_consistency.py::test_book_corrupt_ledger_heals_with_bak"
+      ]
+    },
+    {
+      "id": "M-Q15",
+      "why": "G12：删掉 test_voice_v21 的重复尾巴后，幸存条（test_voice 的 normalize_defaults）必须仍能抓到归一化不等默认值",
+      "file": "pet_voice.py",
+      "old": "    if not isinstance(v, dict):\n        v = {}\n",
+      "new": "    if not isinstance(v, dict):\n        v = {\"speak_daily\": True}\n",
+      "tests": [
+        "tests/test_voice.py::test_normalize_defaults"
+      ]
+    }
+  ]
+}

@@ -133,6 +133,27 @@ def drain_anim_slices(win, limit=400):
     return steps
 
 
+def drain_startup_assets(win, limit_s=3.0):
+    """把"首帧之后的接力装载"跑完（v2.4.2 启动耗时 P2）。
+
+    v2.4.2 起，PetWindow() 构造期只同步解 idle 帧集 + 开场表情状态图；idle_full/eat/
+    petpet 三组帧集与其余状态图由 QTimer(0) 接力装载（_startup_assets_step），
+    每轮事件循环解一小片。生产路径里这发生在窗口出画面之后（用户无感），但**用例**
+    若在构造后立刻断言这些素材，就必须先把接力装载驱动完——本函数就是那个驱动器
+    （与 drain_anim_slices 同思路：同步驱动，不依赖事件循环时序）。
+
+    返回是否真的跑完（False = 超时，调用方自行断言）。
+    """
+    import time as _t
+    from PySide6.QtWidgets import QApplication
+    t0 = _t.time()
+    while not getattr(win, "_startup_assets_done", False) and _t.time() - t0 < limit_s:
+        QApplication.processEvents()
+        _t.sleep(0.002)
+    QApplication.processEvents()
+    return bool(getattr(win, "_startup_assets_done", False))
+
+
 def quiet_pet_timers(win):
     """停掉会自行插进 _play_idle / 状态机的周期定时器（用例要确定性的起播计数）。"""
     for attr in ("_idle_check_timer", "mood_timer", "_mood_timer", "_alarm_timer",

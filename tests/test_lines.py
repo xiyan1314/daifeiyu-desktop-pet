@@ -136,11 +136,15 @@ def test_changed_callbacks(tmp_path):
     assert len(hits) == 1  # 注销后不再回调
 
 
-def test_corrupt_file_recovers(tmp_path):
+def test_empty_text_entry_is_dropped(tmp_path):
+    """空文本脏条目直接丢弃（不复活成空台词）。
+
+    A11 去重（v2.4.2，代理 Q）：本条原先叫 test_corrupt_file_recovers，前半段
+    "坏 lines.json → count() > 0 自动重建种子" 归
+    tests/test_io_v231.py::test_lines_corrupt_file_heals_with_bak——那边还多验 .bak 原文、
+    愈合后盘上是合法 JSON 且 lines 非空、愈合留痕，严格更强。这里只留原来独有的这一半。
+    """
     p = tmp_path / "lines.json"
-    p.write_text("{ not json", encoding="utf-8")
-    svc = pet_lines.LineService(str(tmp_path))
-    assert svc.count() > 0  # 损坏自动重建种子
     p.write_text(json.dumps({"lines": [{"id": "x", "text": ""}]}), encoding="utf-8")
-    svc2 = pet_lines.LineService(str(tmp_path))
-    assert svc2.get("x") is None  # 空文本脏条目丢弃
+    svc = pet_lines.LineService(str(tmp_path))
+    assert svc.get("x") is None  # 空文本脏条目丢弃

@@ -32,9 +32,12 @@ class LineService(data_dir, log=None)
         missing_role, missing_voice, reason}]
   通知：on_changed(cb) / off_changed(cb) / on_invalid_reference(cb) / off_invalid_reference(cb)
         / emit_invalid_reference(items)
+  状态：dirty_read（磁盘上有文件却连编码回退都读不到）/ gbk_read（不是 UTF-8 但按本地编码读到了）
+        / read_encoding + read_trusted + read_notice（回退命中的编码、是否本机 ANSI 页、该弹哪条文案）
 """
 import copy
 import hashlib
+import json
 import os
 import uuid
 from typing import Any, Callable, Iterable
@@ -193,10 +196,50 @@ CATEGORY_LABELS = {
 TEXT_MAX = 2000         # 单条台词长度上限（**超出明确报错**，不静默截断；数量不限）
 DEFAULT_CATEGORY = "idle"
 
-# v2.4（M4）："脏读"（lines.json 在磁盘上却读不到——记事本「ANSI」另存成 GBK、共享占用）
-# 时启动弹一次的文案。措辞必须与事实一致：.bak 是**下一次保存前**才落的，此刻还没有。
-DIRTY_READ_NOTICE = ("lines.json 不是 UTF-8（记事本另存成 ANSI 了？），本次已忽略原文件；"
+# v2.4（M4）："脏读"（lines.json 在磁盘上却读不到——记事本「ANSI」另存、共享占用、回退也
+# 救不回来）时启动弹一次的文案。措辞必须与事实一致：.bak 是**下一次保存前**才落的，此刻还没有。
+DIRTY_READ_NOTICE = ("lines.json 读不出来（不是 UTF-8，或文件被占用），本次已忽略原文件；"
                      "改台词前会先把它备份成 lines.json.bak")
+# v2.4.2（Q）：编码回退——记事本「ANSI」另存的文件（中文=GBK/cp936、日文=cp932、繁体=cp950…）
+# 内容完全可读，旧口径却整份忽略（用户看到的是"我的台词全没了"）。候选顺序由
+# pet_io.fallback_encodings() 给（单一来源：本机 locale 页 → GBK/cp936 → 单字节西文页最后）。
+# 文案分三类（v2.4.2 兼容 M1）：命中编码**就是本机 ANSI 页**才敢说"台词都还在"；单字节
+# 西文页与"猜出来的页"一律谨慎表述——实测 cp1252 会把"坏了一个字节的 UTF-8"整份接住
+# 并给出 mojibake（ÿ½ å¥½ï¼Œä¸–ç•Œ），这时说"都还在"是假话。
+GBK_READ_NOTICE = ("lines.json 不是 UTF-8（记事本另存成 ANSI 了？），已按 GBK 读取，"
+                   "你的台词都还在；下次保存会写成 UTF-8（原文会先备份成 lines.json.bak）")
+FALLBACK_READ_NOTICE = ("lines.json 不是 UTF-8（记事本另存成 ANSI 了？），已按 %s 读取，"
+                        "你的台词都还在；下次保存会写成 UTF-8（原文会先备份成 lines.json.bak）")
+GUESSED_READ_NOTICE = ("lines.json 不是 UTF-8，已按 %s 猜测读取：看到的字**可能是乱码**，"
+                       "请先核对台词；下次保存会写成 UTF-8（原文会先备份成 lines.json.bak）")
+# lines.json 的**已知顶层段**：除此之外的顶层键都当"用户手加 / 未来版本"原样带回（见 _save）。
+_KNOWN_TOP_KEYS = ("version", "lines", "dialogues", "deleted_builtins")
+
+
+def _fallback_encodings() -> list[str]:
+    """编码回退候选顺序（v2.4.2：实现搬去 pet_io.fallback_encodings，这里是薄壳）。
+
+    保留本名字（模块的历史入口，死代码清单与用例都认它）。完整说明见 pet_io——要点：
+    本机 locale 是多字节页（cp932/cp950/cp949/cp936）时**先试它**，否则日文 cp932 台词库
+    会被 GBK 抢先解成乱码，而乱码**照样能过 JSON 解析**（= 谎称"读到了"、首次保存把乱码
+    转成 UTF-8）；其余情况 GBK/cp936 在前；单字节西文页（cp1252/cp1251/latin-1…）一律最后。
+    """
+    return pet_io.fallback_encodings()
+
+
+def notice_for_encoding(enc: str, trusted: bool = False) -> str:
+    """按**实际命中编码**选提示文案（单一来源；UI 侧取 LineService.read_notice 属性）。
+
+    trusted=True 表示这次回退读命中的就是本机 ANSI 页（pet_io.is_local_encoding）——
+    只有这种情况下"你的台词都还在"才是实话。GBK 命中本机页时用老文案（逐字不变）；
+    其余（别的 CJK 页、单字节西文页、多字节页猜的）内容可能已经是 mojibake，必须让用户核对。
+    """
+    name = str(enc or "").upper()
+    if pet_io.is_gbk_encoding(enc) and trusted and not pet_io.is_single_byte_encoding(enc):
+        return GBK_READ_NOTICE
+    if trusted and not pet_io.is_single_byte_encoding(enc):
+        return FALLBACK_READ_NOTICE % name
+    return GUESSED_READ_NOTICE % name
 
 
 def _seed_source() -> list[tuple[str, str, str, str]]:
@@ -237,6 +280,10 @@ class LineService:
         self._log = log or pet_log.log_error
         self._lines = []          # [{id,text,category,role_slot,voice_slot,order,builtin,food}]
         self._dialogues = []      # [{id,name,line_ids}]
+        # v2.4.2（兼容 B）：顶层未知键的暂存（读取时收集，_save 时原样带回）——与
+        # pet_alarm/pet_behaviors 的 _top_extra 同口径。用户手加的段 / 未来版本写入的新键
+        # 此前会在"读一次 → 存一次"这一步被永久删掉。
+        self._top_extra = {}
         self._deleted = []        # 用户删掉的内置 id（防复活）
         self._undo = None         # 最近一次破坏性操作的快照（内存，会话内可撤销）
         self._changed_cbs = []
@@ -246,12 +293,52 @@ class LineService:
         # 就会把原文整体覆盖成 UTF-8 种子库，所以写前必须留 .bak（见 _save）。
         self._dirty_read = False
         self._dirty_backed = False
+        # v2.4.2（Q）：本次启动是按本地编码（GBK/ANSI）回退读到的 → 气泡/日志要说清楚，
+        # 且第一次落盘前仍要先留 .bak（原文毕竟不是 UTF-8，转存会改编码）。
+        self._gbk_read = False
+        self._gbk_encoding = ""
         self._load()
 
     @property
     def dirty_read(self) -> bool:
         """启动时 lines.json 在磁盘上却没读到 → True（调用方据此弹一次提示气泡）。"""
         return self._dirty_read
+
+    @property
+    def gbk_read(self) -> bool:
+        """启动时 lines.json 不是 UTF-8、但**按 GBK/本地编码读出来了** → True。
+
+        与 dirty_read 互斥：dirty_read=True 表示这次连回退都读不到（内存里只有内置种子，
+        用户台词确实看不见）；本属性=True 表示用户台词一条没丢，只是原文编码不是 UTF-8。
+        调用方据此弹 GBK_READ_NOTICE（而不是 DIRTY_READ_NOTICE）。
+        """
+        return self._gbk_read
+
+    @property
+    def read_encoding(self) -> str:
+        """回退读命中的编码名（"gbk"/"cp932"/"cp1252"…）；没走回退时是空串。
+
+        v2.4.2（兼容 M1）：UI 侧要按**实际**编码说话（此前的写死文案会对非中文 Windows
+        的用户说假话："日志说 CP1252、气泡却说 GBK"）。公开属性，调用方不必读私有字段。
+        """
+        return self._gbk_encoding
+
+    @property
+    def read_trusted(self) -> bool:
+        """这次回退读命中的是不是**本机 ANSI 页**（只有"是"才敢说"内容没丢"）。"""
+        return bool(self._gbk_read) and pet_io.is_local_encoding(self._gbk_encoding)
+
+    @property
+    def read_is_gbk(self) -> bool:
+        """回退命中的是不是 GBK 家族（cp936 与 gbk 是同一个编解码器）。"""
+        return bool(self._gbk_read) and pet_io.is_gbk_encoding(self._gbk_encoding)
+
+    @property
+    def read_notice(self) -> str:
+        """启动时该弹的那条文案（按实际编码与信任度选；没走回退时是空串）。"""
+        if not self._gbk_read:
+            return ""
+        return notice_for_encoding(self._gbk_encoding, self.read_trusted)
 
     # ---------------- 持久化 ----------------
     def _load(self) -> None:
@@ -270,11 +357,33 @@ class LineService:
                                               log=self._log)
         # data is None 且不是"损坏" → 要么文件不存在（首次运行），要么这次没读到（不写）
         _unreadable = data is None and os.path.exists(self._path)
+        self._gbk_read = False
+        self._gbk_encoding = ""
+        if _unreadable and not corrupted:
+            # v2.4.2（Q）：UTF-8 读不到时先试**本地编码回退**（记事本「ANSI」= GBK/cp936）。
+            # 读出来了就正常用：用户台词一条不丢，也不再打"脏读"标记（不弹"已忽略原文件"）。
+            # 仍失败才落回下面的脏读路径——一个字节都不写、改前先备份。
+            fb, enc = self._read_fallback()
+            if fb is not None:
+                data = fb
+                _unreadable = False
+                self._gbk_read = bool(enc)
+                self._gbk_encoding = enc
+                if enc:
+                    self._log("lines.json 不是 UTF-8，已按 %s 读取（内容正常，未改写原文件）"
+                              % enc.upper())
+                else:
+                    # 文件本来就是 UTF-8：刚才那次失败是瞬时 IO（共享冲突），重读就对了
+                    self._log("lines.json 首次读取失败、重读成功（本来就是 UTF-8；未改写原文件）")
         # v2.4（M4）：脏读标记。corrupted 那条路径下面已经留了 .bak 并主动愈合，
         # 不算脏读（否则 _save 会再覆盖一次 .bak 并多记一行"旧备份被覆盖"）。
         self._dirty_read = bool(_unreadable and not corrupted)
         self._dirty_backed = False
         self._lines, self._dialogues, self._deleted = [], [], []
+        # v2.4.2（兼容 B）：顶层未知键暂存（与 pet_alarm/pet_behaviors 同口径）。读不到/
+        # 回退也解不开时是空的——那时内存里本来就没有可带回的内容（原文由 .bak 兜底）。
+        self._top_extra = ({k: v for k, v in data.items() if k not in _KNOWN_TOP_KEYS}
+                           if isinstance(data, dict) else {})
         if isinstance(data, dict):
             for ln in (data.get("lines") or []):
                 nl = self._norm_line_checked(ln)  # 超长截断会留痕（不静默砍数据）
@@ -305,6 +414,19 @@ class LineService:
             if err:
                 self._log("lines heal save failed: %s" % err)
 
+    def _read_fallback(self) -> tuple[Any, str]:
+        """UTF-8 读失败后的**恢复读**（v2.4.2：实现搬去 pet_io.read_json_fallback，薄壳）。
+
+        保留本名字（模块的历史入口，死代码清单与用例都认它）。返回 (data, 编码名)：
+        编码名 "" = 文件本来就是 UTF-8（刚才那次失败是瞬时 IO）；非空 = 确实按本地编码
+        （GBK/cp932/ANSI…）读出来的。失败一律 (None, "")，调用方走脏读路径。
+
+        完整理由见 pet_io.read_json_fallback：先按字节读（"读不到"与"解码失败"必须区别
+        对待）、候选顺序（本机 locale 页 → GBK → 单字节西文页最后）、只认"能解析成顶层
+        dict"的结果、以及"几乎就是 UTF-8"的文件不许被单字节页接住。
+        """
+        return pet_io.read_json_fallback(self._path, expect=dict, log=self._log)
+
     def _merge_builtins(self, force: bool = False) -> None:
         """补入缺失的内置台词：跳过用户删过的 id（防复活）；force=首次种子化。"""
         have = {ln["id"] for ln in self._lines}
@@ -321,28 +443,41 @@ class LineService:
             ln["order"] = i
 
     def _save(self) -> str:
-        data = {
+        # v2.4.2（兼容 B）：顶层未知键原样带回（先铺未知键、再覆盖已知段），与 pet_alarm/
+        # pet_behaviors 的 _save 同口径——否则 GBK 回退读到的文件"读一次 + 存一次"就把
+        # 用户手加的顶层段删了。
+        data = dict(self._top_extra)
+        data.update({
             "version": self.VERSION,
             "lines": self._lines,
             "dialogues": self._dialogues,
             "deleted_builtins": self._deleted,
-        }
+        })
         # v2.4（M4）：本次启动是脏读时，内存里只有内置种子——这一写就把用户原文永久覆盖了。
         # 与 pet_book._read_failed 同口径：**写前**先留一份 .bak（一次脏读只留一份，写失败
         # 重试不重复覆盖），保存成功后清标记回到正常路径。
-        if self._dirty_read and not self._dirty_backed:
-            if pet_io.backup_before_heal(self._path, self._log):
+        # v2.4.2（Q）：GBK 回退读到的文件同样先留 .bak——内容虽然读全了，但这一写会把它改成
+        # UTF-8，而 _save 只写已知段（顶层未知键不在其中），留一份原文才可追溯。
+        _reencode = self._dirty_read or self._gbk_read
+        if _reencode and not self._dirty_backed:
+            # 写前留原文快照：backup_before_overwrite 与 backup_before_heal 落盘动作同一份
+            # 实现，区别只是触发点（这里不是"读到坏"，是"这次没读到/不是 UTF-8"）。
+            if pet_io.backup_before_overwrite(self._path, self._log):
                 self._dirty_backed = True
         # v2.3.1：统一走 pet_io（分锁 + 线程唯一临时名 + replace 重试）——
         # 此前固定 "<lines>.tmp" 且无锁，两个保存点交错会互相截断
         err = pet_io.atomic_write_json(self._path, data, log=self._log)
         if err is None:
-            if self._dirty_read:
+            if _reencode:
                 _had_bak = self._dirty_backed   # 备份失败时日志不能谎称已留证
+                _why = ("原文件是 %s（回退读取），本次已转存为 UTF-8" % self._gbk_encoding.upper()
+                        if self._gbk_read else "原文件此前不是 UTF-8 或读不到")
                 self._dirty_read = False
+                self._gbk_read = False
+                self._gbk_encoding = ""
                 self._dirty_backed = False
-                self._log("lines.json 已按 UTF-8 重建（原文件此前不是 UTF-8 或读不到；%s）"
-                          % ("原文已留 .bak" if _had_bak else "**备份失败**，原文已被覆盖"))
+                self._log("lines.json 已按 UTF-8 重建（%s；%s）"
+                          % (_why, "原文已留 .bak" if _had_bak else "**备份失败**，原文已被覆盖"))
             return ""
         return "台词保存失败：%s" % err
 

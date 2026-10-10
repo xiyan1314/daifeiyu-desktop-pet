@@ -686,37 +686,106 @@ def _gbk_lines_json(path, text="用户的台词，记事本 ANSI 另存"):
     return raw
 
 
-def test_lines_gbk_dirty_read_backs_up_before_first_edit_v24(tmp_path):
-    """M4：GBK lines.json 启动不动磁盘，但**用户下一次编辑**不许把原文永久覆盖掉。
+def _garbled_lines_json(path):
+    """写一个**真乱码** lines.json：UTF-8 与 GBK 都解不出来（UTF-16LE+BOM，0xFF 不是 GBK 合法字节）。
 
-    修复前实测：启动后字节不变 ✓、日志一条 ✓，但 svc.lines() 只有 88 条内置种子，
-    随后一次 svc.add(...) 就把 UTF-8 种子库整体盖上去，GBK 原文永久消失、无 .bak。
+    返回原始字节——脏读路径必须让它**逐字节不变**。
+    """
+    raw = b"\xff\xfe" + json.dumps(
+        {"version": 1, "lines": [{"id": "u_bad", "text": "乱码台词", "category": "idle",
+                                  "order": 1}]}, ensure_ascii=False).encode("utf-16-le")
+    path.write_bytes(raw)
+    return raw
+
+
+def test_lines_gbk_read_through_encoding_fallback_v242(tmp_path):
+    """v2.4.2（Q）：GBK（记事本「ANSI」）lines.json 能正常读出来，用户台词不再"消失"。
+
+    旧前提（v2.4/M4）：GBK 一律判脏读 → svc.lines() 只有内置种子、用户台词看不见，只弹提示。
+    新行为：UTF-8 失败后按 GBK 回退读到了 → 正常使用；启动阶段仍然一个字节都不写、
+    **不需要** .bak（内容一条没丢）；第一次真落盘（改台词）之前才留 .bak，原文逐字节进备份。
     """
     p = tmp_path / "lines.json"
     raw = _gbk_lines_json(p)
     logs = []
     svc = pet_lines.LineService(str(tmp_path), log=logs.append)
-    assert svc._dirty_read is True, "没有打脏读标记 → 下一次编辑会无备份覆盖"
-    assert svc.dirty_read is True, "对外只读属性与内部标记不一致"
+    got = svc.get("u_gbk")
+    assert got is not None, "GBK 回退没生效：用户台词仍然看不见"
+    assert got["text"] == "用户的台词，记事本 ANSI 另存", got
+    assert svc.gbk_read is True, "没有 GBK 回退标记 → 气泡无法对用户说明实情"
+    assert svc.dirty_read is False, "读出来了还报脏读 → 会弹「已忽略原文件」的错误提示"
+    assert any("GBK" in m for m in logs), "回退读取没有留痕：%r" % (logs,)
     assert p.read_bytes() == raw, "启动阶段就不该动文件（v2.3.1 口径）"
-    assert not (tmp_path / "lines.json.bak").exists(), "启动阶段留 .bak 是多余的写盘"
-    assert svc.get("u_gbk") is None, "前提不成立：用户台词本次确实看不见"
+    assert not (tmp_path / "lines.json.bak").exists(), "读出来了就不该在启动阶段留 .bak"
 
     ln, err = svc.add("新加的台词", "happy")
     assert ln is not None and not err, err
     bak = tmp_path / "lines.json.bak"
-    assert bak.is_file(), "覆盖 GBK 原文之前没留 .bak —— 用户数据永久消失"
+    assert bak.is_file(), "转存为 UTF-8 之前没留 .bak —— 原文编码信息永久消失"
     assert bak.read_bytes() == raw, "备份的必须是 GBK 原文（逐字节）"
-    assert svc._dirty_read is False, "保存成功后没有清脏读标记"
-    assert svc.get(ln["id"]) is not None, "新台词没写进去"
-    assert _read(p)["lines"], "新内容没落盘"
+    assert svc.gbk_read is False, "转存成功后没有清 GBK 标记"
+    on_disk = {x["id"] for x in _read(p)["lines"]}
+    assert {"u_gbk", ln["id"]} <= on_disk, "转存把用户原有台词弄丢了"
+    assert "用户的台词" in p.read_text(encoding="utf-8"), "盘上已经不是 UTF-8"
+
+
+def test_lines_garbled_file_still_takes_dirty_read_path_v242(tmp_path):
+    """回退的**边界**：真乱码（UTF-8 与 GBK 都解不出来）仍走脏读路径——不写、不备份、要提示。
+
+    回退绝不能让"其实读不懂"的文件被当成读懂了再用种子库覆盖回去。
+    """
+    p = tmp_path / "lines.json"
+    raw = _garbled_lines_json(p)
+    logs = []
+    svc = pet_lines.LineService(str(tmp_path), log=logs.append)
+    assert svc.gbk_read is False, "乱码文件被误判成按 GBK 读出来了"
+    assert svc._dirty_read is True, "乱码文件没有走脏读路径"
+    assert svc.get("u_bad") is None
+    assert p.read_bytes() == raw, "脏读路径动了原文件（一个字节都不该写）"
+    assert not (tmp_path / "lines.json.bak").exists(), "启动阶段留 .bak 是多余的写盘"
+    svc.add("新加的台词", "happy")
+    assert (tmp_path / "lines.json.bak").read_bytes() == raw, "覆盖乱码原文之前没留 .bak"
+
+
+def test_lines_gbk_broken_json_still_takes_dirty_read_path_v242(tmp_path):
+    """GBK **能解码但 JSON 坏了** → 也走脏读路径（保守口径：不猜、不写、改前先备份）。
+
+    回退只接受"能解析成顶层对象"的结果；解出来是坏 JSON 说明这份文件没人能读懂，
+    这时按种子库回写 = 原地销毁用户数据（哪怕留了 .bak，也不该主动动手）。
+    """
+    p = tmp_path / "lines.json"
+    raw = "{ 这不是合法 json，但确实是 GBK".encode("gbk")
+    p.write_bytes(raw)
+    svc = pet_lines.LineService(str(tmp_path), log=lambda m: None)
+    assert svc.gbk_read is False and svc.dirty_read is True
+    assert p.read_bytes() == raw and not (tmp_path / "lines.json.bak").exists()
+    # 同口径：GBK 解出来但**顶层不是对象**（["中文条目"]）→ 一样算读不懂，走脏读路径。
+    # 注意必须是**非 ASCII** 的 GBK 文件：纯 ASCII 的 [1,2,3] 按 UTF-8 就读得出来，
+    # 走的是"顶层结构非法"的愈合路径，压根到不了编码回退（那样断言会变成空转）。
+    d2 = tmp_path / "list_dir"
+    d2.mkdir()
+    q = d2 / "lines.json"
+    raw2 = json.dumps(["中文条目"], ensure_ascii=False).encode("gbk")
+    q.write_bytes(raw2)
+    svc2 = pet_lines.LineService(str(d2), log=lambda m: None)
+    assert svc2.gbk_read is False and svc2.dirty_read is True
+    assert q.read_bytes() == raw2 and not (d2 / "lines.json.bak").exists()
 
 
 def test_lines_dirty_read_flag_lifecycle_v24(tmp_path, monkeypatch):
-    """M4：写盘失败保持脏标记（保护不中断），恢复后清标记且 .bak 只留一份。"""
+    """M4：写盘失败保持脏标记（保护不中断），恢复后清标记且 .bak 只留一份。
+
+    v2.4.2（Q）：脏读态改用**持续读不到**（共享占用/权限）来造——GBK 文件现在能按编码
+    回退读出来，不再是脏读（那条路径见 test_lines_gbk_read_through_encoding_fallback_v242）。
+    """
     p = tmp_path / "lines.json"
-    raw = _gbk_lines_json(p)
-    svc = pet_lines.LineService(str(tmp_path), log=lambda m: None)
+    raw = json.dumps({"version": 1, "lines": [
+        {"id": "u_keep", "text": "我的台词", "category": "idle", "order": 1}]},
+        ensure_ascii=False).encode("utf-8")
+    p.write_bytes(raw)
+    with monkeypatch.context() as m:
+        _deny_open(m, "lines.json", times=None)     # 构造期间一直读不到 → 脏读态
+        svc = pet_lines.LineService(str(tmp_path), log=lambda m2: None)
     assert svc._dirty_read is True
     real = pet_io.atomic_write_json
     monkeypatch.setattr(pet_io, "atomic_write_json", lambda *a, **kw: "磁盘满了")
@@ -734,7 +803,7 @@ def test_lines_dirty_read_flag_lifecycle_v24(tmp_path, monkeypatch):
     assert bak.read_bytes() == raw, "恢复写入时又覆盖了一次 .bak"
     svc.add("第二条", "idle")   # 标记已清 → 不该再备份
     assert bak.read_bytes() == raw, \
-        "脏标记清了还在备份：.bak 被新内容盖掉，GBK 原文反而没了"
+        "脏标记清了还在备份：.bak 被新内容盖掉，原文反而没了"
 
 
 def test_lines_clean_file_is_not_dirty_v24(tmp_path):
@@ -750,16 +819,47 @@ def test_lines_clean_file_is_not_dirty_v24(tmp_path):
     assert not (tmp_path / "lines.json.bak").exists(), "没脏读却留了 .bak"
 
 
-def test_lines_read_failure_also_marks_dirty_v24(tmp_path, monkeypatch):
-    """M4：读取失败（PermissionError）同样是脏读——之后编辑也不能无备份覆盖。"""
+def test_lines_transient_read_failure_recovers_without_dirty_v242(tmp_path, monkeypatch):
+    """一次**瞬时**读失败（共享冲突）→ 重读成功就用真内容：不打脏标记、不动盘、不留 .bak。
+
+    旧行为：一次瞬时 PermissionError 就让整个会话退回内置种子（用户以为台词全没了），
+    只能靠"改前备份"兜底。新行为：pet_io 读失败后按字节重读一次——读得到就是好文件，
+    一条数据没丢，也就没有"脏"可言。
+    """
     p = tmp_path / "lines.json"
     raw = json.dumps({"version": 1, "lines": [
         {"id": "u_keep", "text": "我的台词", "category": "happy", "order": 1}]},
         ensure_ascii=False).encode("utf-8")
     p.write_bytes(raw)
-    _deny_open(monkeypatch, "lines.json")          # 只挡构造时那一次读
-    svc = pet_lines.LineService(str(tmp_path), log=lambda m: None)
+    logs = []
+    with monkeypatch.context() as m:
+        _deny_open(m, "lines.json", times=1)        # 只挡构造时那一次读
+        svc = pet_lines.LineService(str(tmp_path), log=logs.append)
+    assert svc.get("u_keep") is not None, "瞬时读失败没能恢复 → 又退回内置种子"
+    assert svc.get("u_keep")["text"] == "我的台词", \
+        "UTF-8 文件被按 GBK「解」成了乱码（回退必须先自证不是 UTF-8）"
+    assert svc.dirty_read is False, "本来就是 UTF-8 的好文件却被打了脏读标记"
+    assert svc.gbk_read is False, "正常 UTF-8 文件被误标成「按 GBK 读取」"
+    assert p.read_bytes() == raw, "恢复读动了原文件"
+    assert not (tmp_path / "lines.json.bak").exists(), "启动阶段留 .bak 是多余的写盘"
+    svc.add("新台词", "happy")
+    assert not (tmp_path / "lines.json.bak").exists(), "没脏读却留了 .bak"
+
+
+def test_lines_persistent_read_failure_still_marks_dirty_v24(tmp_path, monkeypatch):
+    """M4（仍然成立）：**持续**读不到（权限/共享占用）依旧是脏读——之后编辑不能无备份覆盖。"""
+    p = tmp_path / "lines.json"
+    raw = json.dumps({"version": 1, "lines": [
+        {"id": "u_keep", "text": "我的台词", "category": "happy", "order": 1}]},
+        ensure_ascii=False).encode("utf-8")
+    p.write_bytes(raw)
+    with monkeypatch.context() as m:
+        _deny_open(m, "lines.json", times=None)     # 构造期间一直读不到
+        svc = pet_lines.LineService(str(tmp_path), log=lambda m2: None)
     assert svc._dirty_read is True
+    assert svc.gbk_read is False
+    assert svc.get("u_keep") is None, "读不到就是读不到（内存里只该有内置种子）"
+    assert p.read_bytes() == raw, "读不到时不该动原文件"
     svc.add("新台词", "happy")
     bak = tmp_path / "lines.json.bak"
     assert bak.is_file() and bak.read_bytes() == raw, "读失败路径没有留备份"
@@ -786,16 +886,34 @@ def test_lines_dirty_read_bubble_is_wired_v24(tmp_path):
     assert "lines.json" in notice and "UTF-8" in notice and ".bak" in notice
     assert "已备份" not in notice, \
         "文案声称『已备份』，但 .bak 是下一次保存前才落的——启动时还没有，不能这么写"
+    # v2.4.2（Q）：GBK 回退读到的情况要弹**另一条**文案（台词都还在，只是编码不同），
+    # 两条不能混用——dirty_read 说"已忽略原文件"，对 GBK 成功读取是假话。
+    assert "self.lines_lib.gbk_read" in src, "GBK 回退读取没有接到气泡上"
+    assert "pet_lines.GBK_READ_NOTICE" in src, "GBK 提示文案没有接到气泡上"
+    gbk_notice = pet_lines.GBK_READ_NOTICE
+    assert "GBK" in gbk_notice and "UTF-8" in gbk_notice and ".bak" in gbk_notice, gbk_notice
+    assert gbk_notice != notice, "两条提示混成一条 → 用户分不清是「读到了」还是「没读到」"
 
 
 def test_lines_hidden_until_edit_premise_v24(tmp_path):
-    """M4 前提复核：脏读实例的台词确实只有内置种子（用户条目一条都看不见）。"""
+    """M4 前提复核（v2.4.2 收紧）：只有**回退也读不到**时内存才只剩内置种子。
+
+    旧前提是"GBK 即脏读"；现在 GBK 能读出来了，这条前提只在真乱码/真读不到时成立。
+    本用例自带对照组：同一份内容换成 GBK 编码 → 用户条目必须可见。
+    """
     p = tmp_path / "lines.json"
-    _gbk_lines_json(p)
+    _garbled_lines_json(p)
     svc = pet_lines.LineService(str(tmp_path), log=lambda m: None)
     assert svc.count() == len(pet_lines._seed_source()), \
         "脏读时台词库不只有种子（%d 条），M4 的动机描述需要复核" % svc.count()
     assert all(x["builtin"] for x in svc.lines()), "脏读时竟然读出了非内置条目"
+    # 对照：能按编码回退读出来时，用户条目一条都不能少
+    d2 = tmp_path / "gbk_dir"
+    d2.mkdir()
+    _gbk_lines_json(d2 / "lines.json")
+    svc2 = pet_lines.LineService(str(d2), log=lambda m: None)
+    assert svc2.count() == len(pet_lines._seed_source()) + 1, "GBK 用户条目没读进来"
+    assert any(not x["builtin"] for x in svc2.lines()), "GBK 用户条目被当成内置了"
 
 
 def test_lines_corrupt_file_heals_with_bak(tmp_path):
@@ -1111,9 +1229,13 @@ def test_book_merge_records_dedupe_key_is_triple():
 # ---- P2-A：音频魔数 ----
 
 def test_audio_magics_accept_common_containers():
-    """P2-A：m4a(ftyp 在偏移 4)/webm(EBML)/aac-adif 等合法格式不得被静默拒播。"""
-    assert all(len(m) == 4 for m in pet_voice.AUDIO_MAGICS), \
-        "AUDIO_MAGICS 里还有 2 字节死项（对 4 字节 head 永远匹配不上）"
+    """P2-A：m4a(ftyp 在偏移 4)/webm(EBML)/aac-adif 等合法格式不得被静默拒播。
+
+    本条只负责**真实容器载荷**的正/负例。A11 去重（v2.4.2，代理 Q）：原先这里还有一句
+    "AUDIO_MAGICS 每项必须 4 字节"，归
+    tests/test_persistence_consistency.py::test_audio_magics_all_reachable_unique_and_load_bearing
+    ——那边逐项断言 isinstance+len==4、不重复、不被早分支抢、拿掉该项必变红，严格更强。
+    """
     good_samples = (
         b"RIFF....", b"ID3\x04\x00\x00", b"OggS\x00\x02\x00\x00",
         b"fLaC\x00\x00\x00\x00", b"FORM....AIFF", b"ADIF....", b"#!AMR\n\x00",

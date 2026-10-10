@@ -1,0 +1,9638 @@
+{
+ "baseline": "E:\\deep seek\\wt-p-baseline",
+ "current": "E:\\deep seek\\desktop-pet",
+ "baseline_rows": [
+  {
+   "run": 1,
+   "init_ms": 103.3,
+   "t_show_call_ms": 102.5,
+   "t_first_paint_ms": 143.5,
+   "first_paint_seen": true,
+   "first_pix_ok": true,
+   "first_pix": "256x256",
+   "decodes": 144,
+   "decode_names": [
+    "character.png",
+    "character_front.png",
+    "character_full.png",
+    "character_full_front.png",
+    "eat_f00.png",
+    "eat_f01.png",
+    "eat_f02.png",
+    "eat_f03.png",
+    "eat_f04.png",
+    "eat_f05.png",
+    "eat_f06.png",
+    "f_angry.png",
+    "f_blush.png",
+    "f_cry.png",
+    "f_laugh.png",
+    "f_puzzled.png",
+    "f_sleep.png",
+    "f_smug.png",
+    "idle_f00.png",
+    "idle_f01.png",
+    "idle_f02.png",
+    "idle_f03.png",
+    "idle_f04.png",
+    "idle_f05.png",
+    "idle_f06.png",
+    "idle_f07.png",
+    "idle_f08.png",
+    "idle_f09.png",
+    "idle_full_f00.png",
+    "idle_full_f01.png",
+    "idle_full_f02.png",
+    "idle_full_f03.png",
+    "idle_full_f04.png",
+    "idle_full_f05.png",
+    "idle_full_f06.png",
+    "idle_full_f07.png",
+    "idle_full_f08.png",
+    "idle_full_f09.png",
+    "money_f00.png",
+    "money_f01.png",
+    "money_f02.png",
+    "money_f03.png",
+    "money_f04.png",
+    "money_f05.png",
+    "money_f06.png",
+    "money_f07.png",
+    "money_f08.png",
+    "money_f09.png",
+    "money_f10.png",
+    "money_f11.png",
+    "money_f12.png",
+    "money_f13.png",
+    "money_f14.png",
+    "money_f15.png",
+    "money_f16.png",
+    "money_f17.png",
+    "money_f18.png",
+    "money_f19.png",
+    "money_f20.png",
+    "money_f21.png",
+    "money_f22.png",
+    "money_f23.png",
+    "money_f24.png",
+    "money_f25.png",
+    "money_f26.png",
+    "money_f27.png",
+    "money_f28.png",
+    "money_f29.png",
+    "money_f30.png",
+    "money_f31.png",
+    "money_f32.png",
+    "money_f33.png",
+    "money_f34.png",
+    "money_f35.png",
+    "money_f36.png",
+    "money_f37.png",
+    "money_f38.png",
+    "money_f39.png",
+    "money_f40.png",
+    "money_f41.png",
+    "money_f42.png",
+    "money_f43.png",
+    "money_f44.png",
+    "money_f45.png",
+    "money_f46.png",
+    "money_f47.png",
+    "money_f48.png",
+    "money_f49.png",
+    "money_f50.png",
+    "money_f51.png",
+    "money_f52.png",
+    "money_f53.png",
+    "money_f54.png",
+    "money_f55.png",
+    "money_f56.png",
+    "money_f57.png",
+    "money_f58.png",
+    "money_f59.png",
+    "money_f60.png",
+    "money_f61.png",
+    "money_f62.png",
+    "money_f63.png",
+    "money_f64.png",
+    "money_f65.png",
+    "money_f66.png",
+    "money_f67.png",
+    "money_f68.png",
+    "money_f69.png",
+    "money_f70.png",
+    "money_f71.png",
+    "money_f72.png",
+    "money_f73.png",
+    "money_f74.png",
+    "money_f75.png",
+    "money_f76.png",
+    "money_f77.png",
+    "money_f78.png",
+    "money_f79.png",
+    "money_f80.png",
+    "money_f81.png",
+    "money_f82.png",
+    "money_f83.png",
+    "money_f84.png",
+    "money_f85.png",
+    "n_angry.png",
+    "n_blush.png",
+    "n_cry.png",
+    "n_drool.png",
+    "n_hiss.png",
+    "n_laugh.png",
+    "n_puzzled.png",
+    "n_sleep.png",
+    "n_smug.png",
+    "n_surprised.png",
+    "petpet_f00.png",
+    "petpet_f01.png",
+    "petpet_f02.png",
+    "petpet_f03.png",
+    "petpet_f04.png",
+    "petpet_f05.png",
+    "petpet_f06.png",
+    "petpet_f07.png",
+    "petpet_f08.png",
+    "petpet_f09.png"
+   ],
+   "after_init": {
+    "has_frames": true,
+    "idle_frames": 10,
+    "idle_full_frames": 10,
+    "eat_frames": 7,
+    "fx_petpet": 10,
+    "anim_idle_set": 10,
+    "anim_eat_set": 7,
+    "state_states": 17,
+    "decodes_ctor": 58,
+    "decode_names_ctor": [
+     "character.png",
+     "character_front.png",
+     "character_full.png",
+     "character_full_front.png",
+     "eat_f00.png",
+     "eat_f01.png",
+     "eat_f02.png",
+     "eat_f03.png",
+     "eat_f04.png",
+     "eat_f05.png",
+     "eat_f06.png",
+     "f_angry.png",
+     "f_blush.png",
+     "f_cry.png",
+     "f_laugh.png",
+     "f_puzzled.png",
+     "f_sleep.png",
+     "f_smug.png",
+     "idle_f00.png",
+     "idle_f01.png",
+     "idle_f02.png",
+     "idle_f03.png",
+     "idle_f04.png",
+     "idle_f05.png",
+     "idle_f06.png",
+     "idle_f07.png",
+     "idle_f08.png",
+     "idle_f09.png",
+     "idle_full_f00.png",
+     "idle_full_f01.png",
+     "idle_full_f02.png",
+     "idle_full_f03.png",
+     "idle_full_f04.png",
+     "idle_full_f05.png",
+     "idle_full_f06.png",
+     "idle_full_f07.png",
+     "idle_full_f08.png",
+     "idle_full_f09.png",
+     "n_angry.png",
+     "n_blush.png",
+     "n_cry.png",
+     "n_drool.png",
+     "n_hiss.png",
+     "n_laugh.png",
+     "n_puzzled.png",
+     "n_sleep.png",
+     "n_smug.png",
+     "n_surprised.png",
+     "petpet_f00.png",
+     "petpet_f01.png",
+     "petpet_f02.png",
+     "petpet_f03.png",
+     "petpet_f04.png",
+     "petpet_f05.png",
+     "petpet_f06.png",
+     "petpet_f07.png",
+     "petpet_f08.png",
+     "petpet_f09.png"
+    ]
+   },
+   "settled": {
+    "has_frames": true,
+    "idle_frames": 10,
+    "idle_full_frames": 10,
+    "eat_frames": 7,
+    "fx_petpet": 10,
+    "anim_idle_set": 10,
+    "state_states": 17,
+    "max_settle_gap_ms": 63.4,
+    "anim_running": false
+   },
+   "timers": {
+    "桌宠.load_config": [
+     0.44,
+     0.44,
+     1
+    ],
+    "桌宠.ensure_persona_files": [
+     3.98,
+     3.98,
+     1
+    ],
+    "RoleLibrary._load": [
+     0.19,
+     0.19,
+     1
+    ],
+    "RoleLibrary.__init__": [
+     0.2,
+     0.2,
+     1
+    ],
+    "AudioLibrary.__init__": [
+     0.08,
+     0.08,
+     1
+    ],
+    "Book.__init__": [
+     4.7,
+     4.7,
+     1
+    ],
+    "LineService.__init__": [
+     3.33,
+     3.33,
+     1
+    ],
+    "VoiceAssetLibrary.__init__": [
+     0.21,
+     0.21,
+     1
+    ],
+    "桌宠.save_config": [
+     2.56,
+     2.56,
+     1
+    ],
+    "PetWindow._migrate_lines_extra": [
+     4.21,
+     4.21,
+     1
+    ],
+    "PetWindow._refresh_lines": [
+     0.03,
+     0.03,
+     1
+    ],
+    "Bubble.__init__": [
+     0.15,
+     0.15,
+     1
+    ],
+    "Badge.__init__": [
+     0.02,
+     0.02,
+     1
+    ],
+    "FoodTray.__init__": [
+     0.03,
+     0.03,
+     1
+    ],
+    "FoodFlyer.__init__": [
+     0.02,
+     0.02,
+     1
+    ],
+    "QWidget.winId": [
+     0.07,
+     0.04,
+     4
+    ],
+    "PetWindow._role_pix": [
+     0.0,
+     0.0,
+     1
+    ],
+    "桌宠.resource_path": [
+     3.56,
+     0.24,
+     28
+    ],
+    "QPixmap(路径)": [
+     63.07,
+     1.85,
+     58
+    ],
+    "PetWindow._load_img": [
+     29.63,
+     1.76,
+     24
+    ],
+    "PetWindow._build_sprites": [
+     6.34,
+     6.34,
+     1
+    ],
+    "PetWindow._compute_base_size": [
+     0.01,
+     0.01,
+     1
+    ],
+    "桌宠.resource_dir": [
+     0.28,
+     0.15,
+     2
+    ],
+    "load_frame_set[idle]": [
+     12.47,
+     12.47,
+     1
+    ],
+    "load_frame_set[TOTAL]": [
+     39.78,
+     12.48,
+     4
+    ],
+    "load_frame_set[idle_full]": [
+     12.26,
+     12.26,
+     1
+    ],
+    "load_frame_set[eat]": [
+     8.87,
+     8.87,
+     1
+    ],
+    "load_frame_set[petpet]": [
+     6.17,
+     6.17,
+     1
+    ],
+    "PetWindow._wire_anim_key": [
+     0.01,
+     0.01,
+     2
+    ],
+    "PetWindow._wire_anim_sets": [
+     0.02,
+     0.02,
+     2
+    ],
+    "PetWindow._build_state_pix": [
+     23.49,
+     23.49,
+     1
+    ],
+    "pet_audio._rebuild_effects": [
+     0.28,
+     0.28,
+     1
+    ],
+    "pet_audio.init": [
+     8.81,
+     8.81,
+     1
+    ],
+    "PetWindow._apply_sound_group": [
+     0.0,
+     0.0,
+     1
+    ],
+    "PetWindow._update_click_mask": [
+     0.01,
+     0.0,
+     2
+    ],
+    "PetWindow._apply_transform": [
+     0.05,
+     0.03,
+     2
+    ],
+    "PetWindow._show_state": [
+     0.03,
+     0.03,
+     1
+    ],
+    "PetWindow._pick_line": [
+     0.01,
+     0.01,
+     1
+    ],
+    "PetWindow._say_line": [
+     0.13,
+     0.13,
+     1
+    ],
+    "QSystemTrayIcon.show": [
+     0.0,
+     0.0,
+     1
+    ]
+   },
+   "timers_after": {
+    "QPixmap(路径)": [
+     45.93,
+     1.11,
+     86
+    ],
+    "load_frame_set[money]": [
+     46.92,
+     46.92,
+     1
+    ],
+    "load_frame_set[TOTAL]": [
+     46.92,
+     46.92,
+     1
+    ],
+    "PetWindow._preload_money_fx": [
+     46.94,
+     46.94,
+     1
+    ]
+   },
+   "samples": 0,
+   "leaf": [],
+   "near": [],
+   "leaf_total": 0,
+   "events": {
+    "frames_loaded": [
+     [
+      27.2,
+      "idle=10"
+     ],
+     [
+      39.7,
+      "idle_full=10"
+     ],
+     [
+      52.0,
+      "eat=7"
+     ],
+     [
+      60.9,
+      "petpet=10"
+     ],
+     [
+      1348.5,
+      "money=86"
+     ]
+    ]
+   }
+  },
+  {
+   "run": 2,
+   "init_ms": 102.6,
+   "t_show_call_ms": 100.7,
+   "t_first_paint_ms": 146.3,
+   "first_paint_seen": true,
+   "first_pix_ok": true,
+   "first_pix": "256x256",
+   "decodes": 144,
+   "decode_names": [
+    "character.png",
+    "character_front.png",
+    "character_full.png",
+    "character_full_front.png",
+    "eat_f00.png",
+    "eat_f01.png",
+    "eat_f02.png",
+    "eat_f03.png",
+    "eat_f04.png",
+    "eat_f05.png",
+    "eat_f06.png",
+    "f_angry.png",
+    "f_blush.png",
+    "f_cry.png",
+    "f_laugh.png",
+    "f_puzzled.png",
+    "f_sleep.png",
+    "f_smug.png",
+    "idle_f00.png",
+    "idle_f01.png",
+    "idle_f02.png",
+    "idle_f03.png",
+    "idle_f04.png",
+    "idle_f05.png",
+    "idle_f06.png",
+    "idle_f07.png",
+    "idle_f08.png",
+    "idle_f09.png",
+    "idle_full_f00.png",
+    "idle_full_f01.png",
+    "idle_full_f02.png",
+    "idle_full_f03.png",
+    "idle_full_f04.png",
+    "idle_full_f05.png",
+    "idle_full_f06.png",
+    "idle_full_f07.png",
+    "idle_full_f08.png",
+    "idle_full_f09.png",
+    "money_f00.png",
+    "money_f01.png",
+    "money_f02.png",
+    "money_f03.png",
+    "money_f04.png",
+    "money_f05.png",
+    "money_f06.png",
+    "money_f07.png",
+    "money_f08.png",
+    "money_f09.png",
+    "money_f10.png",
+    "money_f11.png",
+    "money_f12.png",
+    "money_f13.png",
+    "money_f14.png",
+    "money_f15.png",
+    "money_f16.png",
+    "money_f17.png",
+    "money_f18.png",
+    "money_f19.png",
+    "money_f20.png",
+    "money_f21.png",
+    "money_f22.png",
+    "money_f23.png",
+    "money_f24.png",
+    "money_f25.png",
+    "money_f26.png",
+    "money_f27.png",
+    "money_f28.png",
+    "money_f29.png",
+    "money_f30.png",
+    "money_f31.png",
+    "money_f32.png",
+    "money_f33.png",
+    "money_f34.png",
+    "money_f35.png",
+    "money_f36.png",
+    "money_f37.png",
+    "money_f38.png",
+    "money_f39.png",
+    "money_f40.png",
+    "money_f41.png",
+    "money_f42.png",
+    "money_f43.png",
+    "money_f44.png",
+    "money_f45.png",
+    "money_f46.png",
+    "money_f47.png",
+    "money_f48.png",
+    "money_f49.png",
+    "money_f50.png",
+    "money_f51.png",
+    "money_f52.png",
+    "money_f53.png",
+    "money_f54.png",
+    "money_f55.png",
+    "money_f56.png",
+    "money_f57.png",
+    "money_f58.png",
+    "money_f59.png",
+    "money_f60.png",
+    "money_f61.png",
+    "money_f62.png",
+    "money_f63.png",
+    "money_f64.png",
+    "money_f65.png",
+    "money_f66.png",
+    "money_f67.png",
+    "money_f68.png",
+    "money_f69.png",
+    "money_f70.png",
+    "money_f71.png",
+    "money_f72.png",
+    "money_f73.png",
+    "money_f74.png",
+    "money_f75.png",
+    "money_f76.png",
+    "money_f77.png",
+    "money_f78.png",
+    "money_f79.png",
+    "money_f80.png",
+    "money_f81.png",
+    "money_f82.png",
+    "money_f83.png",
+    "money_f84.png",
+    "money_f85.png",
+    "n_angry.png",
+    "n_blush.png",
+    "n_cry.png",
+    "n_drool.png",
+    "n_hiss.png",
+    "n_laugh.png",
+    "n_puzzled.png",
+    "n_sleep.png",
+    "n_smug.png",
+    "n_surprised.png",
+    "petpet_f00.png",
+    "petpet_f01.png",
+    "petpet_f02.png",
+    "petpet_f03.png",
+    "petpet_f04.png",
+    "petpet_f05.png",
+    "petpet_f06.png",
+    "petpet_f07.png",
+    "petpet_f08.png",
+    "petpet_f09.png"
+   ],
+   "after_init": {
+    "has_frames": true,
+    "idle_frames": 10,
+    "idle_full_frames": 10,
+    "eat_frames": 7,
+    "fx_petpet": 10,
+    "anim_idle_set": 10,
+    "anim_eat_set": 7,
+    "state_states": 17,
+    "decodes_ctor": 58,
+    "decode_names_ctor": [
+     "character.png",
+     "character_front.png",
+     "character_full.png",
+     "character_full_front.png",
+     "eat_f00.png",
+     "eat_f01.png",
+     "eat_f02.png",
+     "eat_f03.png",
+     "eat_f04.png",
+     "eat_f05.png",
+     "eat_f06.png",
+     "f_angry.png",
+     "f_blush.png",
+     "f_cry.png",
+     "f_laugh.png",
+     "f_puzzled.png",
+     "f_sleep.png",
+     "f_smug.png",
+     "idle_f00.png",
+     "idle_f01.png",
+     "idle_f02.png",
+     "idle_f03.png",
+     "idle_f04.png",
+     "idle_f05.png",
+     "idle_f06.png",
+     "idle_f07.png",
+     "idle_f08.png",
+     "idle_f09.png",
+     "idle_full_f00.png",
+     "idle_full_f01.png",
+     "idle_full_f02.png",
+     "idle_full_f03.png",
+     "idle_full_f04.png",
+     "idle_full_f05.png",
+     "idle_full_f06.png",
+     "idle_full_f07.png",
+     "idle_full_f08.png",
+     "idle_full_f09.png",
+     "n_angry.png",
+     "n_blush.png",
+     "n_cry.png",
+     "n_drool.png",
+     "n_hiss.png",
+     "n_laugh.png",
+     "n_puzzled.png",
+     "n_sleep.png",
+     "n_smug.png",
+     "n_surprised.png",
+     "petpet_f00.png",
+     "petpet_f01.png",
+     "petpet_f02.png",
+     "petpet_f03.png",
+     "petpet_f04.png",
+     "petpet_f05.png",
+     "petpet_f06.png",
+     "petpet_f07.png",
+     "petpet_f08.png",
+     "petpet_f09.png"
+    ]
+   },
+   "settled": {
+    "has_frames": true,
+    "idle_frames": 10,
+    "idle_full_frames": 10,
+    "eat_frames": 7,
+    "fx_petpet": 10,
+    "anim_idle_set": 10,
+    "state_states": 17,
+    "max_settle_gap_ms": 67.2,
+    "anim_running": false
+   },
+   "timers": {
+    "桌宠.load_config": [
+     0.36,
+     0.36,
+     1
+    ],
+    "桌宠.ensure_persona_files": [
+     3.15,
+     3.15,
+     1
+    ],
+    "RoleLibrary._load": [
+     0.18,
+     0.18,
+     1
+    ],
+    "RoleLibrary.__init__": [
+     0.19,
+     0.19,
+     1
+    ],
+    "AudioLibrary.__init__": [
+     0.08,
+     0.08,
+     1
+    ],
+    "Book.__init__": [
+     3.51,
+     3.51,
+     1
+    ],
+    "LineService.__init__": [
+     2.23,
+     2.23,
+     1
+    ],
+    "VoiceAssetLibrary.__init__": [
+     0.1,
+     0.1,
+     1
+    ],
+    "桌宠.save_config": [
+     1.95,
+     1.95,
+     1
+    ],
+    "PetWindow._migrate_lines_extra": [
+     3.47,
+     3.47,
+     1
+    ],
+    "PetWindow._refresh_lines": [
+     0.06,
+     0.06,
+     1
+    ],
+    "Bubble.__init__": [
+     0.16,
+     0.16,
+     1
+    ],
+    "Badge.__init__": [
+     0.03,
+     0.03,
+     1
+    ],
+    "FoodTray.__init__": [
+     0.03,
+     0.03,
+     1
+    ],
+    "FoodFlyer.__init__": [
+     0.03,
+     0.03,
+     1
+    ],
+    "QWidget.winId": [
+     0.08,
+     0.05,
+     4
+    ],
+    "PetWindow._role_pix": [
+     0.0,
+     0.0,
+     1
+    ],
+    "桌宠.resource_path": [
+     4.84,
+     0.44,
+     28
+    ],
+    "QPixmap(路径)": [
+     65.98,
+     2.08,
+     58
+    ],
+    "PetWindow._load_img": [
+     36.07,
+     2.43,
+     24
+    ],
+    "PetWindow._build_sprites": [
+     7.51,
+     7.51,
+     1
+    ],
+    "PetWindow._compute_base_size": [
+     0.01,
+     0.01,
+     1
+    ],
+    "桌宠.resource_dir": [
+     0.28,
+     0.14,
+     2
+    ],
+    "load_frame_set[idle]": [
+     11.91,
+     11.91,
+     1
+    ],
+    "load_frame_set[TOTAL]": [
+     38.27,
+     11.91,
+     4
+    ],
+    "load_frame_set[idle_full]": [
+     11.25,
+     11.25,
+     1
+    ],
+    "load_frame_set[eat]": [
+     8.76,
+     8.76,
+     1
+    ],
+    "load_frame_set[petpet]": [
+     6.34,
+     6.34,
+     1
+    ],
+    "PetWindow._wire_anim_key": [
+     0.01,
+     0.01,
+     2
+    ],
+    "PetWindow._wire_anim_sets": [
+     0.02,
+     0.02,
+     2
+    ],
+    "PetWindow._build_state_pix": [
+     28.89,
+     28.89,
+     1
+    ],
+    "pet_audio._rebuild_effects": [
+     0.23,
+     0.23,
+     1
+    ],
+    "pet_audio.init": [
+     5.2,
+     5.2,
+     1
+    ],
+    "PetWindow._apply_sound_group": [
+     0.0,
+     0.0,
+     1
+    ],
+    "PetWindow._update_click_mask": [
+     0.0,
+     0.0,
+     2
+    ],
+    "PetWindow._apply_transform": [
+     0.04,
+     0.02,
+     2
+    ],
+    "PetWindow._show_state": [
+     0.1,
+     0.1,
+     1
+    ],
+    "PetWindow._pick_line": [
+     0.01,
+     0.01,
+     1
+    ],
+    "PetWindow._say_line": [
+     0.49,
+     0.49,
+     1
+    ],
+    "QSystemTrayIcon.show": [
+     0.0,
+     0.0,
+     1
+    ]
+   },
+   "timers_after": {
+    "PetWindow._scan_invalid_refs": [
+     1.26,
+     1.26,
+     1
+    ],
+    "QPixmap(路径)": [
+     50.13,
+     1.16,
+     86
+    ],
+    "load_frame_set[money]": [
+     51.27,
+     51.27,
+     1
+    ],
+    "load_frame_set[TOTAL]": [
+     51.27,
+     51.27,
+     1
+    ],
+    "PetWindow._preload_money_fx": [
+     51.29,
+     51.29,
+     1
+    ]
+   },
+   "samples": 0,
+   "leaf": [],
+   "near": [],
+   "leaf_total": 0,
+   "events": {
+    "frames_loaded": [
+     [
+      25.0,
+      "idle=10"
+     ],
+     [
+      36.9,
+      "idle_full=10"
+     ],
+     [
+      48.2,
+      "eat=7"
+     ],
+     [
+      56.9,
+      "petpet=10"
+     ],
+     [
+      1445.5,
+      "money=86"
+     ]
+    ]
+   }
+  },
+  {
+   "run": 1,
+   "init_ms": 107.0,
+   "t_show_call_ms": 105.6,
+   "t_first_paint_ms": 147.9,
+   "first_paint_seen": true,
+   "first_pix_ok": true,
+   "first_pix": "256x256",
+   "decodes": 144,
+   "decode_names": [
+    "character.png",
+    "character_front.png",
+    "character_full.png",
+    "character_full_front.png",
+    "eat_f00.png",
+    "eat_f01.png",
+    "eat_f02.png",
+    "eat_f03.png",
+    "eat_f04.png",
+    "eat_f05.png",
+    "eat_f06.png",
+    "f_angry.png",
+    "f_blush.png",
+    "f_cry.png",
+    "f_laugh.png",
+    "f_puzzled.png",
+    "f_sleep.png",
+    "f_smug.png",
+    "idle_f00.png",
+    "idle_f01.png",
+    "idle_f02.png",
+    "idle_f03.png",
+    "idle_f04.png",
+    "idle_f05.png",
+    "idle_f06.png",
+    "idle_f07.png",
+    "idle_f08.png",
+    "idle_f09.png",
+    "idle_full_f00.png",
+    "idle_full_f01.png",
+    "idle_full_f02.png",
+    "idle_full_f03.png",
+    "idle_full_f04.png",
+    "idle_full_f05.png",
+    "idle_full_f06.png",
+    "idle_full_f07.png",
+    "idle_full_f08.png",
+    "idle_full_f09.png",
+    "money_f00.png",
+    "money_f01.png",
+    "money_f02.png",
+    "money_f03.png",
+    "money_f04.png",
+    "money_f05.png",
+    "money_f06.png",
+    "money_f07.png",
+    "money_f08.png",
+    "money_f09.png",
+    "money_f10.png",
+    "money_f11.png",
+    "money_f12.png",
+    "money_f13.png",
+    "money_f14.png",
+    "money_f15.png",
+    "money_f16.png",
+    "money_f17.png",
+    "money_f18.png",
+    "money_f19.png",
+    "money_f20.png",
+    "money_f21.png",
+    "money_f22.png",
+    "money_f23.png",
+    "money_f24.png",
+    "money_f25.png",
+    "money_f26.png",
+    "money_f27.png",
+    "money_f28.png",
+    "money_f29.png",
+    "money_f30.png",
+    "money_f31.png",
+    "money_f32.png",
+    "money_f33.png",
+    "money_f34.png",
+    "money_f35.png",
+    "money_f36.png",
+    "money_f37.png",
+    "money_f38.png",
+    "money_f39.png",
+    "money_f40.png",
+    "money_f41.png",
+    "money_f42.png",
+    "money_f43.png",
+    "money_f44.png",
+    "money_f45.png",
+    "money_f46.png",
+    "money_f47.png",
+    "money_f48.png",
+    "money_f49.png",
+    "money_f50.png",
+    "money_f51.png",
+    "money_f52.png",
+    "money_f53.png",
+    "money_f54.png",
+    "money_f55.png",
+    "money_f56.png",
+    "money_f57.png",
+    "money_f58.png",
+    "money_f59.png",
+    "money_f60.png",
+    "money_f61.png",
+    "money_f62.png",
+    "money_f63.png",
+    "money_f64.png",
+    "money_f65.png",
+    "money_f66.png",
+    "money_f67.png",
+    "money_f68.png",
+    "money_f69.png",
+    "money_f70.png",
+    "money_f71.png",
+    "money_f72.png",
+    "money_f73.png",
+    "money_f74.png",
+    "money_f75.png",
+    "money_f76.png",
+    "money_f77.png",
+    "money_f78.png",
+    "money_f79.png",
+    "money_f80.png",
+    "money_f81.png",
+    "money_f82.png",
+    "money_f83.png",
+    "money_f84.png",
+    "money_f85.png",
+    "n_angry.png",
+    "n_blush.png",
+    "n_cry.png",
+    "n_drool.png",
+    "n_hiss.png",
+    "n_laugh.png",
+    "n_puzzled.png",
+    "n_sleep.png",
+    "n_smug.png",
+    "n_surprised.png",
+    "petpet_f00.png",
+    "petpet_f01.png",
+    "petpet_f02.png",
+    "petpet_f03.png",
+    "petpet_f04.png",
+    "petpet_f05.png",
+    "petpet_f06.png",
+    "petpet_f07.png",
+    "petpet_f08.png",
+    "petpet_f09.png"
+   ],
+   "after_init": {
+    "has_frames": true,
+    "idle_frames": 10,
+    "idle_full_frames": 10,
+    "eat_frames": 7,
+    "fx_petpet": 10,
+    "anim_idle_set": 10,
+    "anim_eat_set": 7,
+    "state_states": 17,
+    "decodes_ctor": 58,
+    "decode_names_ctor": [
+     "character.png",
+     "character_front.png",
+     "character_full.png",
+     "character_full_front.png",
+     "eat_f00.png",
+     "eat_f01.png",
+     "eat_f02.png",
+     "eat_f03.png",
+     "eat_f04.png",
+     "eat_f05.png",
+     "eat_f06.png",
+     "f_angry.png",
+     "f_blush.png",
+     "f_cry.png",
+     "f_laugh.png",
+     "f_puzzled.png",
+     "f_sleep.png",
+     "f_smug.png",
+     "idle_f00.png",
+     "idle_f01.png",
+     "idle_f02.png",
+     "idle_f03.png",
+     "idle_f04.png",
+     "idle_f05.png",
+     "idle_f06.png",
+     "idle_f07.png",
+     "idle_f08.png",
+     "idle_f09.png",
+     "idle_full_f00.png",
+     "idle_full_f01.png",
+     "idle_full_f02.png",
+     "idle_full_f03.png",
+     "idle_full_f04.png",
+     "idle_full_f05.png",
+     "idle_full_f06.png",
+     "idle_full_f07.png",
+     "idle_full_f08.png",
+     "idle_full_f09.png",
+     "n_angry.png",
+     "n_blush.png",
+     "n_cry.png",
+     "n_drool.png",
+     "n_hiss.png",
+     "n_laugh.png",
+     "n_puzzled.png",
+     "n_sleep.png",
+     "n_smug.png",
+     "n_surprised.png",
+     "petpet_f00.png",
+     "petpet_f01.png",
+     "petpet_f02.png",
+     "petpet_f03.png",
+     "petpet_f04.png",
+     "petpet_f05.png",
+     "petpet_f06.png",
+     "petpet_f07.png",
+     "petpet_f08.png",
+     "petpet_f09.png"
+    ]
+   },
+   "settled": {
+    "has_frames": true,
+    "idle_frames": 10,
+    "idle_full_frames": 10,
+    "eat_frames": 7,
+    "fx_petpet": 10,
+    "anim_idle_set": 10,
+    "state_states": 17,
+    "max_settle_gap_ms": 78.8,
+    "anim_running": false
+   },
+   "timers": {
+    "桌宠.load_config": [
+     0.4,
+     0.4,
+     1
+    ],
+    "桌宠.ensure_persona_files": [
+     4.0,
+     4.0,
+     1
+    ],
+    "RoleLibrary._load": [
+     0.17,
+     0.17,
+     1
+    ],
+    "RoleLibrary.__init__": [
+     0.18,
+     0.18,
+     1
+    ],
+    "AudioLibrary.__init__": [
+     0.07,
+     0.07,
+     1
+    ],
+    "Book.__init__": [
+     4.19,
+     4.19,
+     1
+    ],
+    "LineService.__init__": [
+     2.83,
+     2.83,
+     1
+    ],
+    "VoiceAssetLibrary.__init__": [
+     0.12,
+     0.12,
+     1
+    ],
+    "桌宠.save_config": [
+     1.92,
+     1.92,
+     1
+    ],
+    "PetWindow._migrate_lines_extra": [
+     3.27,
+     3.27,
+     1
+    ],
+    "PetWindow._refresh_lines": [
+     0.03,
+     0.03,
+     1
+    ],
+    "Bubble.__init__": [
+     0.15,
+     0.15,
+     1
+    ],
+    "Badge.__init__": [
+     0.02,
+     0.02,
+     1
+    ],
+    "FoodTray.__init__": [
+     0.03,
+     0.03,
+     1
+    ],
+    "FoodFlyer.__init__": [
+     0.02,
+     0.02,
+     1
+    ],
+    "QWidget.winId": [
+     0.07,
+     0.04,
+     4
+    ],
+    "PetWindow._role_pix": [
+     0.0,
+     0.0,
+     1
+    ],
+    "桌宠.resource_path": [
+     3.93,
+     0.22,
+     28
+    ],
+    "QPixmap(路径)": [
+     70.39,
+     1.8,
+     58
+    ],
+    "PetWindow._load_img": [
+     34.34,
+     2.05,
+     24
+    ],
+    "PetWindow._build_sprites": [
+     6.87,
+     6.87,
+     1
+    ],
+    "PetWindow._compute_base_size": [
+     0.01,
+     0.01,
+     1
+    ],
+    "桌宠.resource_dir": [
+     0.32,
+     0.17,
+     2
+    ],
+    "load_frame_set[idle]": [
+     13.53,
+     13.53,
+     1
+    ],
+    "load_frame_set[TOTAL]": [
+     42.99,
+     13.53,
+     4
+    ],
+    "load_frame_set[idle_full]": [
+     11.97,
+     11.97,
+     1
+    ],
+    "load_frame_set[eat]": [
+     10.88,
+     10.88,
+     1
+    ],
+    "load_frame_set[petpet]": [
+     6.61,
+     6.61,
+     1
+    ],
+    "PetWindow._wire_anim_key": [
+     0.01,
+     0.01,
+     2
+    ],
+    "PetWindow._wire_anim_sets": [
+     0.03,
+     0.02,
+     2
+    ],
+    "PetWindow._build_state_pix": [
+     27.69,
+     27.69,
+     1
+    ],
+    "pet_audio._rebuild_effects": [
+     0.32,
+     0.32,
+     1
+    ],
+    "pet_audio.init": [
+     6.12,
+     6.12,
+     1
+    ],
+    "PetWindow._apply_sound_group": [
+     0.01,
+     0.01,
+     1
+    ],
+    "PetWindow._update_click_mask": [
+     0.01,
+     0.0,
+     2
+    ],
+    "PetWindow._apply_transform": [
+     0.05,
+     0.03,
+     2
+    ],
+    "PetWindow._show_state": [
+     0.03,
+     0.03,
+     1
+    ],
+    "PetWindow._pick_line": [
+     0.01,
+     0.01,
+     1
+    ],
+    "PetWindow._say_line": [
+     0.16,
+     0.16,
+     1
+    ],
+    "QSystemTrayIcon.show": [
+     0.0,
+     0.0,
+     1
+    ]
+   },
+   "timers_after": {
+    "QPixmap(路径)": [
+     61.45,
+     1.32,
+     86
+    ],
+    "load_frame_set[money]": [
+     62.98,
+     62.98,
+     1
+    ],
+    "load_frame_set[TOTAL]": [
+     62.98,
+     62.98,
+     1
+    ],
+    "PetWindow._preload_money_fx": [
+     63.01,
+     63.01,
+     1
+    ]
+   },
+   "samples": 0,
+   "leaf": [],
+   "near": [],
+   "leaf_total": 0,
+   "events": {
+    "frames_loaded": [
+     [
+      25.4,
+      "idle=10"
+     ],
+     [
+      38.9,
+      "idle_full=10"
+     ],
+     [
+      50.9,
+      "eat=7"
+     ],
+     [
+      61.8,
+      "petpet=10"
+     ],
+     [
+      1408.6,
+      "money=86"
+     ]
+    ]
+   }
+  },
+  {
+   "run": 2,
+   "init_ms": 119.2,
+   "t_show_call_ms": 118.3,
+   "t_first_paint_ms": 170.9,
+   "first_paint_seen": true,
+   "first_pix_ok": true,
+   "first_pix": "256x256",
+   "decodes": 144,
+   "decode_names": [
+    "character.png",
+    "character_front.png",
+    "character_full.png",
+    "character_full_front.png",
+    "eat_f00.png",
+    "eat_f01.png",
+    "eat_f02.png",
+    "eat_f03.png",
+    "eat_f04.png",
+    "eat_f05.png",
+    "eat_f06.png",
+    "f_angry.png",
+    "f_blush.png",
+    "f_cry.png",
+    "f_laugh.png",
+    "f_puzzled.png",
+    "f_sleep.png",
+    "f_smug.png",
+    "idle_f00.png",
+    "idle_f01.png",
+    "idle_f02.png",
+    "idle_f03.png",
+    "idle_f04.png",
+    "idle_f05.png",
+    "idle_f06.png",
+    "idle_f07.png",
+    "idle_f08.png",
+    "idle_f09.png",
+    "idle_full_f00.png",
+    "idle_full_f01.png",
+    "idle_full_f02.png",
+    "idle_full_f03.png",
+    "idle_full_f04.png",
+    "idle_full_f05.png",
+    "idle_full_f06.png",
+    "idle_full_f07.png",
+    "idle_full_f08.png",
+    "idle_full_f09.png",
+    "money_f00.png",
+    "money_f01.png",
+    "money_f02.png",
+    "money_f03.png",
+    "money_f04.png",
+    "money_f05.png",
+    "money_f06.png",
+    "money_f07.png",
+    "money_f08.png",
+    "money_f09.png",
+    "money_f10.png",
+    "money_f11.png",
+    "money_f12.png",
+    "money_f13.png",
+    "money_f14.png",
+    "money_f15.png",
+    "money_f16.png",
+    "money_f17.png",
+    "money_f18.png",
+    "money_f19.png",
+    "money_f20.png",
+    "money_f21.png",
+    "money_f22.png",
+    "money_f23.png",
+    "money_f24.png",
+    "money_f25.png",
+    "money_f26.png",
+    "money_f27.png",
+    "money_f28.png",
+    "money_f29.png",
+    "money_f30.png",
+    "money_f31.png",
+    "money_f32.png",
+    "money_f33.png",
+    "money_f34.png",
+    "money_f35.png",
+    "money_f36.png",
+    "money_f37.png",
+    "money_f38.png",
+    "money_f39.png",
+    "money_f40.png",
+    "money_f41.png",
+    "money_f42.png",
+    "money_f43.png",
+    "money_f44.png",
+    "money_f45.png",
+    "money_f46.png",
+    "money_f47.png",
+    "money_f48.png",
+    "money_f49.png",
+    "money_f50.png",
+    "money_f51.png",
+    "money_f52.png",
+    "money_f53.png",
+    "money_f54.png",
+    "money_f55.png",
+    "money_f56.png",
+    "money_f57.png",
+    "money_f58.png",
+    "money_f59.png",
+    "money_f60.png",
+    "money_f61.png",
+    "money_f62.png",
+    "money_f63.png",
+    "money_f64.png",
+    "money_f65.png",
+    "money_f66.png",
+    "money_f67.png",
+    "money_f68.png",
+    "money_f69.png",
+    "money_f70.png",
+    "money_f71.png",
+    "money_f72.png",
+    "money_f73.png",
+    "money_f74.png",
+    "money_f75.png",
+    "money_f76.png",
+    "money_f77.png",
+    "money_f78.png",
+    "money_f79.png",
+    "money_f80.png",
+    "money_f81.png",
+    "money_f82.png",
+    "money_f83.png",
+    "money_f84.png",
+    "money_f85.png",
+    "n_angry.png",
+    "n_blush.png",
+    "n_cry.png",
+    "n_drool.png",
+    "n_hiss.png",
+    "n_laugh.png",
+    "n_puzzled.png",
+    "n_sleep.png",
+    "n_smug.png",
+    "n_surprised.png",
+    "petpet_f00.png",
+    "petpet_f01.png",
+    "petpet_f02.png",
+    "petpet_f03.png",
+    "petpet_f04.png",
+    "petpet_f05.png",
+    "petpet_f06.png",
+    "petpet_f07.png",
+    "petpet_f08.png",
+    "petpet_f09.png"
+   ],
+   "after_init": {
+    "has_frames": true,
+    "idle_frames": 10,
+    "idle_full_frames": 10,
+    "eat_frames": 7,
+    "fx_petpet": 10,
+    "anim_idle_set": 10,
+    "anim_eat_set": 7,
+    "state_states": 17,
+    "decodes_ctor": 58,
+    "decode_names_ctor": [
+     "character.png",
+     "character_front.png",
+     "character_full.png",
+     "character_full_front.png",
+     "eat_f00.png",
+     "eat_f01.png",
+     "eat_f02.png",
+     "eat_f03.png",
+     "eat_f04.png",
+     "eat_f05.png",
+     "eat_f06.png",
+     "f_angry.png",
+     "f_blush.png",
+     "f_cry.png",
+     "f_laugh.png",
+     "f_puzzled.png",
+     "f_sleep.png",
+     "f_smug.png",
+     "idle_f00.png",
+     "idle_f01.png",
+     "idle_f02.png",
+     "idle_f03.png",
+     "idle_f04.png",
+     "idle_f05.png",
+     "idle_f06.png",
+     "idle_f07.png",
+     "idle_f08.png",
+     "idle_f09.png",
+     "idle_full_f00.png",
+     "idle_full_f01.png",
+     "idle_full_f02.png",
+     "idle_full_f03.png",
+     "idle_full_f04.png",
+     "idle_full_f05.png",
+     "idle_full_f06.png",
+     "idle_full_f07.png",
+     "idle_full_f08.png",
+     "idle_full_f09.png",
+     "n_angry.png",
+     "n_blush.png",
+     "n_cry.png",
+     "n_drool.png",
+     "n_hiss.png",
+     "n_laugh.png",
+     "n_puzzled.png",
+     "n_sleep.png",
+     "n_smug.png",
+     "n_surprised.png",
+     "petpet_f00.png",
+     "petpet_f01.png",
+     "petpet_f02.png",
+     "petpet_f03.png",
+     "petpet_f04.png",
+     "petpet_f05.png",
+     "petpet_f06.png",
+     "petpet_f07.png",
+     "petpet_f08.png",
+     "petpet_f09.png"
+    ]
+   },
+   "settled": {
+    "has_frames": true,
+    "idle_frames": 10,
+    "idle_full_frames": 10,
+    "eat_frames": 7,
+    "fx_petpet": 10,
+    "anim_idle_set": 10,
+    "state_states": 17,
+    "max_settle_gap_ms": 84.6,
+    "anim_running": false
+   },
+   "timers": {
+    "桌宠.load_config": [
+     0.44,
+     0.44,
+     1
+    ],
+    "桌宠.ensure_persona_files": [
+     4.99,
+     4.99,
+     1
+    ],
+    "RoleLibrary._load": [
+     0.25,
+     0.25,
+     1
+    ],
+    "RoleLibrary.__init__": [
+     0.27,
+     0.27,
+     1
+    ],
+    "AudioLibrary.__init__": [
+     0.1,
+     0.1,
+     1
+    ],
+    "Book.__init__": [
+     4.62,
+     4.62,
+     1
+    ],
+    "LineService.__init__": [
+     3.49,
+     3.49,
+     1
+    ],
+    "VoiceAssetLibrary.__init__": [
+     0.17,
+     0.17,
+     1
+    ],
+    "桌宠.save_config": [
+     3.37,
+     3.37,
+     1
+    ],
+    "PetWindow._migrate_lines_extra": [
+     5.11,
+     5.11,
+     1
+    ],
+    "PetWindow._refresh_lines": [
+     0.05,
+     0.05,
+     1
+    ],
+    "Bubble.__init__": [
+     0.17,
+     0.17,
+     1
+    ],
+    "Badge.__init__": [
+     0.03,
+     0.03,
+     1
+    ],
+    "FoodTray.__init__": [
+     0.03,
+     0.03,
+     1
+    ],
+    "FoodFlyer.__init__": [
+     0.02,
+     0.02,
+     1
+    ],
+    "QWidget.winId": [
+     0.1,
+     0.06,
+     4
+    ],
+    "PetWindow._role_pix": [
+     0.0,
+     0.0,
+     1
+    ],
+    "桌宠.resource_path": [
+     4.5,
+     0.32,
+     28
+    ],
+    "QPixmap(路径)": [
+     75.44,
+     2.09,
+     58
+    ],
+    "PetWindow._load_img": [
+     36.89,
+     2.13,
+     24
+    ],
+    "PetWindow._build_sprites": [
+     7.48,
+     7.48,
+     1
+    ],
+    "PetWindow._compute_base_size": [
+     0.1,
+     0.1,
+     1
+    ],
+    "桌宠.resource_dir": [
+     0.36,
+     0.19,
+     2
+    ],
+    "load_frame_set[idle]": [
+     13.41,
+     13.41,
+     1
+    ],
+    "load_frame_set[TOTAL]": [
+     46.56,
+     13.72,
+     4
+    ],
+    "load_frame_set[idle_full]": [
+     13.72,
+     13.72,
+     1
+    ],
+    "load_frame_set[eat]": [
+     11.78,
+     11.78,
+     1
+    ],
+    "load_frame_set[petpet]": [
+     7.63,
+     7.63,
+     1
+    ],
+    "PetWindow._wire_anim_key": [
+     0.01,
+     0.01,
+     2
+    ],
+    "PetWindow._wire_anim_sets": [
+     0.03,
+     0.02,
+     2
+    ],
+    "PetWindow._build_state_pix": [
+     29.67,
+     29.67,
+     1
+    ],
+    "pet_audio._rebuild_effects": [
+     0.3,
+     0.3,
+     1
+    ],
+    "pet_audio.init": [
+     6.76,
+     6.76,
+     1
+    ],
+    "PetWindow._apply_sound_group": [
+     0.0,
+     0.0,
+     1
+    ],
+    "PetWindow._update_click_mask": [
+     0.01,
+     0.0,
+     2
+    ],
+    "PetWindow._apply_transform": [
+     0.04,
+     0.03,
+     2
+    ],
+    "PetWindow._show_state": [
+     0.03,
+     0.03,
+     1
+    ],
+    "PetWindow._pick_line": [
+     0.01,
+     0.01,
+     1
+    ],
+    "PetWindow._say_line": [
+     0.13,
+     0.13,
+     1
+    ],
+    "QSystemTrayIcon.show": [
+     0.0,
+     0.0,
+     1
+    ]
+   },
+   "timers_after": {
+    "PetWindow._scan_invalid_refs": [
+     0.52,
+     0.52,
+     1
+    ],
+    "QPixmap(路径)": [
+     65.63,
+     1.66,
+     86
+    ],
+    "load_frame_set[money]": [
+     67.34,
+     67.34,
+     1
+    ],
+    "load_frame_set[TOTAL]": [
+     67.34,
+     67.34,
+     1
+    ],
+    "PetWindow._preload_money_fx": [
+     67.39,
+     67.39,
+     1
+    ]
+   },
+   "samples": 0,
+   "leaf": [],
+   "near": [],
+   "leaf_total": 0,
+   "events": {
+    "frames_loaded": [
+     [
+      31.9,
+      "idle=10"
+     ],
+     [
+      45.3,
+      "idle_full=10"
+     ],
+     [
+      59.0,
+      "eat=7"
+     ],
+     [
+      70.9,
+      "petpet=10"
+     ],
+     [
+      1432.9,
+      "money=86"
+     ]
+    ]
+   }
+  },
+  {
+   "run": 1,
+   "init_ms": 116.0,
+   "t_show_call_ms": 115.3,
+   "t_first_paint_ms": 160.6,
+   "first_paint_seen": true,
+   "first_pix_ok": true,
+   "first_pix": "256x256",
+   "decodes": 144,
+   "decode_names": [
+    "character.png",
+    "character_front.png",
+    "character_full.png",
+    "character_full_front.png",
+    "eat_f00.png",
+    "eat_f01.png",
+    "eat_f02.png",
+    "eat_f03.png",
+    "eat_f04.png",
+    "eat_f05.png",
+    "eat_f06.png",
+    "f_angry.png",
+    "f_blush.png",
+    "f_cry.png",
+    "f_laugh.png",
+    "f_puzzled.png",
+    "f_sleep.png",
+    "f_smug.png",
+    "idle_f00.png",
+    "idle_f01.png",
+    "idle_f02.png",
+    "idle_f03.png",
+    "idle_f04.png",
+    "idle_f05.png",
+    "idle_f06.png",
+    "idle_f07.png",
+    "idle_f08.png",
+    "idle_f09.png",
+    "idle_full_f00.png",
+    "idle_full_f01.png",
+    "idle_full_f02.png",
+    "idle_full_f03.png",
+    "idle_full_f04.png",
+    "idle_full_f05.png",
+    "idle_full_f06.png",
+    "idle_full_f07.png",
+    "idle_full_f08.png",
+    "idle_full_f09.png",
+    "money_f00.png",
+    "money_f01.png",
+    "money_f02.png",
+    "money_f03.png",
+    "money_f04.png",
+    "money_f05.png",
+    "money_f06.png",
+    "money_f07.png",
+    "money_f08.png",
+    "money_f09.png",
+    "money_f10.png",
+    "money_f11.png",
+    "money_f12.png",
+    "money_f13.png",
+    "money_f14.png",
+    "money_f15.png",
+    "money_f16.png",
+    "money_f17.png",
+    "money_f18.png",
+    "money_f19.png",
+    "money_f20.png",
+    "money_f21.png",
+    "money_f22.png",
+    "money_f23.png",
+    "money_f24.png",
+    "money_f25.png",
+    "money_f26.png",
+    "money_f27.png",
+    "money_f28.png",
+    "money_f29.png",
+    "money_f30.png",
+    "money_f31.png",
+    "money_f32.png",
+    "money_f33.png",
+    "money_f34.png",
+    "money_f35.png",
+    "money_f36.png",
+    "money_f37.png",
+    "money_f38.png",
+    "money_f39.png",
+    "money_f40.png",
+    "money_f41.png",
+    "money_f42.png",
+    "money_f43.png",
+    "money_f44.png",
+    "money_f45.png",
+    "money_f46.png",
+    "money_f47.png",
+    "money_f48.png",
+    "money_f49.png",
+    "money_f50.png",
+    "money_f51.png",
+    "money_f52.png",
+    "money_f53.png",
+    "money_f54.png",
+    "money_f55.png",
+    "money_f56.png",
+    "money_f57.png",
+    "money_f58.png",
+    "money_f59.png",
+    "money_f60.png",
+    "money_f61.png",
+    "money_f62.png",
+    "money_f63.png",
+    "money_f64.png",
+    "money_f65.png",
+    "money_f66.png",
+    "money_f67.png",
+    "money_f68.png",
+    "money_f69.png",
+    "money_f70.png",
+    "money_f71.png",
+    "money_f72.png",
+    "money_f73.png",
+    "money_f74.png",
+    "money_f75.png",
+    "money_f76.png",
+    "money_f77.png",
+    "money_f78.png",
+    "money_f79.png",
+    "money_f80.png",
+    "money_f81.png",
+    "money_f82.png",
+    "money_f83.png",
+    "money_f84.png",
+    "money_f85.png",
+    "n_angry.png",
+    "n_blush.png",
+    "n_cry.png",
+    "n_drool.png",
+    "n_hiss.png",
+    "n_laugh.png",
+    "n_puzzled.png",
+    "n_sleep.png",
+    "n_smug.png",
+    "n_surprised.png",
+    "petpet_f00.png",
+    "petpet_f01.png",
+    "petpet_f02.png",
+    "petpet_f03.png",
+    "petpet_f04.png",
+    "petpet_f05.png",
+    "petpet_f06.png",
+    "petpet_f07.png",
+    "petpet_f08.png",
+    "petpet_f09.png"
+   ],
+   "after_init": {
+    "has_frames": true,
+    "idle_frames": 10,
+    "idle_full_frames": 10,
+    "eat_frames": 7,
+    "fx_petpet": 10,
+    "anim_idle_set": 10,
+    "anim_eat_set": 7,
+    "state_states": 17,
+    "decodes_ctor": 58,
+    "decode_names_ctor": [
+     "character.png",
+     "character_front.png",
+     "character_full.png",
+     "character_full_front.png",
+     "eat_f00.png",
+     "eat_f01.png",
+     "eat_f02.png",
+     "eat_f03.png",
+     "eat_f04.png",
+     "eat_f05.png",
+     "eat_f06.png",
+     "f_angry.png",
+     "f_blush.png",
+     "f_cry.png",
+     "f_laugh.png",
+     "f_puzzled.png",
+     "f_sleep.png",
+     "f_smug.png",
+     "idle_f00.png",
+     "idle_f01.png",
+     "idle_f02.png",
+     "idle_f03.png",
+     "idle_f04.png",
+     "idle_f05.png",
+     "idle_f06.png",
+     "idle_f07.png",
+     "idle_f08.png",
+     "idle_f09.png",
+     "idle_full_f00.png",
+     "idle_full_f01.png",
+     "idle_full_f02.png",
+     "idle_full_f03.png",
+     "idle_full_f04.png",
+     "idle_full_f05.png",
+     "idle_full_f06.png",
+     "idle_full_f07.png",
+     "idle_full_f08.png",
+     "idle_full_f09.png",
+     "n_angry.png",
+     "n_blush.png",
+     "n_cry.png",
+     "n_drool.png",
+     "n_hiss.png",
+     "n_laugh.png",
+     "n_puzzled.png",
+     "n_sleep.png",
+     "n_smug.png",
+     "n_surprised.png",
+     "petpet_f00.png",
+     "petpet_f01.png",
+     "petpet_f02.png",
+     "petpet_f03.png",
+     "petpet_f04.png",
+     "petpet_f05.png",
+     "petpet_f06.png",
+     "petpet_f07.png",
+     "petpet_f08.png",
+     "petpet_f09.png"
+    ]
+   },
+   "settled": {
+    "has_frames": true,
+    "idle_frames": 10,
+    "idle_full_frames": 10,
+    "eat_frames": 7,
+    "fx_petpet": 10,
+    "anim_idle_set": 10,
+    "state_states": 17,
+    "max_settle_gap_ms": 71.6,
+    "anim_running": false
+   },
+   "timers": {
+    "桌宠.load_config": [
+     0.68,
+     0.68,
+     1
+    ],
+    "桌宠.ensure_persona_files": [
+     6.37,
+     6.37,
+     1
+    ],
+    "RoleLibrary._load": [
+     0.33,
+     0.33,
+     1
+    ],
+    "RoleLibrary.__init__": [
+     0.39,
+     0.39,
+     1
+    ],
+    "AudioLibrary.__init__": [
+     0.11,
+     0.11,
+     1
+    ],
+    "Book.__init__": [
+     4.45,
+     4.45,
+     1
+    ],
+    "LineService.__init__": [
+     3.46,
+     3.46,
+     1
+    ],
+    "VoiceAssetLibrary.__init__": [
+     0.16,
+     0.16,
+     1
+    ],
+    "桌宠.save_config": [
+     3.13,
+     3.13,
+     1
+    ],
+    "PetWindow._migrate_lines_extra": [
+     5.09,
+     5.09,
+     1
+    ],
+    "PetWindow._refresh_lines": [
+     0.03,
+     0.03,
+     1
+    ],
+    "Bubble.__init__": [
+     0.19,
+     0.19,
+     1
+    ],
+    "Badge.__init__": [
+     0.03,
+     0.03,
+     1
+    ],
+    "FoodTray.__init__": [
+     0.03,
+     0.03,
+     1
+    ],
+    "FoodFlyer.__init__": [
+     0.02,
+     0.02,
+     1
+    ],
+    "QWidget.winId": [
+     0.08,
+     0.05,
+     4
+    ],
+    "PetWindow._role_pix": [
+     0.0,
+     0.0,
+     1
+    ],
+    "桌宠.resource_path": [
+     3.93,
+     0.18,
+     28
+    ],
+    "QPixmap(路径)": [
+     70.02,
+     1.82,
+     58
+    ],
+    "PetWindow._load_img": [
+     32.34,
+     2.06,
+     24
+    ],
+    "PetWindow._build_sprites": [
+     7.53,
+     7.53,
+     1
+    ],
+    "PetWindow._compute_base_size": [
+     0.01,
+     0.01,
+     1
+    ],
+    "桌宠.resource_dir": [
+     0.31,
+     0.16,
+     2
+    ],
+    "load_frame_set[idle]": [
+     13.15,
+     13.15,
+     1
+    ],
+    "load_frame_set[TOTAL]": [
+     45.01,
+     13.62,
+     4
+    ],
+    "load_frame_set[idle_full]": [
+     13.62,
+     13.62,
+     1
+    ],
+    "load_frame_set[eat]": [
+     10.68,
+     10.68,
+     1
+    ],
+    "load_frame_set[petpet]": [
+     7.56,
+     7.56,
+     1
+    ],
+    "PetWindow._wire_anim_key": [
+     0.01,
+     0.0,
+     2
+    ],
+    "PetWindow._wire_anim_sets": [
+     0.02,
+     0.01,
+     2
+    ],
+    "PetWindow._build_state_pix": [
+     25.05,
+     25.05,
+     1
+    ],
+    "pet_audio._rebuild_effects": [
+     0.27,
+     0.27,
+     1
+    ],
+    "pet_audio.init": [
+     8.5,
+     8.5,
+     1
+    ],
+    "PetWindow._apply_sound_group": [
+     0.0,
+     0.0,
+     1
+    ],
+    "PetWindow._update_click_mask": [
+     0.01,
+     0.0,
+     2
+    ],
+    "PetWindow._apply_transform": [
+     0.05,
+     0.02,
+     2
+    ],
+    "PetWindow._show_state": [
+     0.02,
+     0.02,
+     1
+    ],
+    "PetWindow._pick_line": [
+     0.01,
+     0.01,
+     1
+    ],
+    "PetWindow._say_line": [
+     0.11,
+     0.11,
+     1
+    ],
+    "QSystemTrayIcon.show": [
+     0.0,
+     0.0,
+     1
+    ]
+   },
+   "timers_after": {
+    "QPixmap(路径)": [
+     54.82,
+     0.94,
+     86
+    ],
+    "load_frame_set[money]": [
+     55.97,
+     55.97,
+     1
+    ],
+    "load_frame_set[TOTAL]": [
+     55.98,
+     55.98,
+     1
+    ],
+    "PetWindow._preload_money_fx": [
+     56.0,
+     56.0,
+     1
+    ]
+   },
+   "samples": 0,
+   "leaf": [],
+   "near": [],
+   "leaf_total": 0,
+   "events": {
+    "frames_loaded": [
+     [
+      34.2,
+      "idle=10"
+     ],
+     [
+      47.3,
+      "idle_full=10"
+     ],
+     [
+      61.0,
+      "eat=7"
+     ],
+     [
+      71.7,
+      "petpet=10"
+     ],
+     [
+      1415.4,
+      "money=86"
+     ]
+    ]
+   }
+  },
+  {
+   "run": 2,
+   "init_ms": 111.6,
+   "t_show_call_ms": 110.4,
+   "t_first_paint_ms": 159.8,
+   "first_paint_seen": true,
+   "first_pix_ok": true,
+   "first_pix": "256x256",
+   "decodes": 144,
+   "decode_names": [
+    "character.png",
+    "character_front.png",
+    "character_full.png",
+    "character_full_front.png",
+    "eat_f00.png",
+    "eat_f01.png",
+    "eat_f02.png",
+    "eat_f03.png",
+    "eat_f04.png",
+    "eat_f05.png",
+    "eat_f06.png",
+    "f_angry.png",
+    "f_blush.png",
+    "f_cry.png",
+    "f_laugh.png",
+    "f_puzzled.png",
+    "f_sleep.png",
+    "f_smug.png",
+    "idle_f00.png",
+    "idle_f01.png",
+    "idle_f02.png",
+    "idle_f03.png",
+    "idle_f04.png",
+    "idle_f05.png",
+    "idle_f06.png",
+    "idle_f07.png",
+    "idle_f08.png",
+    "idle_f09.png",
+    "idle_full_f00.png",
+    "idle_full_f01.png",
+    "idle_full_f02.png",
+    "idle_full_f03.png",
+    "idle_full_f04.png",
+    "idle_full_f05.png",
+    "idle_full_f06.png",
+    "idle_full_f07.png",
+    "idle_full_f08.png",
+    "idle_full_f09.png",
+    "money_f00.png",
+    "money_f01.png",
+    "money_f02.png",
+    "money_f03.png",
+    "money_f04.png",
+    "money_f05.png",
+    "money_f06.png",
+    "money_f07.png",
+    "money_f08.png",
+    "money_f09.png",
+    "money_f10.png",
+    "money_f11.png",
+    "money_f12.png",
+    "money_f13.png",
+    "money_f14.png",
+    "money_f15.png",
+    "money_f16.png",
+    "money_f17.png",
+    "money_f18.png",
+    "money_f19.png",
+    "money_f20.png",
+    "money_f21.png",
+    "money_f22.png",
+    "money_f23.png",
+    "money_f24.png",
+    "money_f25.png",
+    "money_f26.png",
+    "money_f27.png",
+    "money_f28.png",
+    "money_f29.png",
+    "money_f30.png",
+    "money_f31.png",
+    "money_f32.png",
+    "money_f33.png",
+    "money_f34.png",
+    "money_f35.png",
+    "money_f36.png",
+    "money_f37.png",
+    "money_f38.png",
+    "money_f39.png",
+    "money_f40.png",
+    "money_f41.png",
+    "money_f42.png",
+    "money_f43.png",
+    "money_f44.png",
+    "money_f45.png",
+    "money_f46.png",
+    "money_f47.png",
+    "money_f48.png",
+    "money_f49.png",
+    "money_f50.png",
+    "money_f51.png",
+    "money_f52.png",
+    "money_f53.png",
+    "money_f54.png",
+    "money_f55.png",
+    "money_f56.png",
+    "money_f57.png",
+    "money_f58.png",
+    "money_f59.png",
+    "money_f60.png",
+    "money_f61.png",
+    "money_f62.png",
+    "money_f63.png",
+    "money_f64.png",
+    "money_f65.png",
+    "money_f66.png",
+    "money_f67.png",
+    "money_f68.png",
+    "money_f69.png",
+    "money_f70.png",
+    "money_f71.png",
+    "money_f72.png",
+    "money_f73.png",
+    "money_f74.png",
+    "money_f75.png",
+    "money_f76.png",
+    "money_f77.png",
+    "money_f78.png",
+    "money_f79.png",
+    "money_f80.png",
+    "money_f81.png",
+    "money_f82.png",
+    "money_f83.png",
+    "money_f84.png",
+    "money_f85.png",
+    "n_angry.png",
+    "n_blush.png",
+    "n_cry.png",
+    "n_drool.png",
+    "n_hiss.png",
+    "n_laugh.png",
+    "n_puzzled.png",
+    "n_sleep.png",
+    "n_smug.png",
+    "n_surprised.png",
+    "petpet_f00.png",
+    "petpet_f01.png",
+    "petpet_f02.png",
+    "petpet_f03.png",
+    "petpet_f04.png",
+    "petpet_f05.png",
+    "petpet_f06.png",
+    "petpet_f07.png",
+    "petpet_f08.png",
+    "petpet_f09.png"
+   ],
+   "after_init": {
+    "has_frames": true,
+    "idle_frames": 10,
+    "idle_full_frames": 10,
+    "eat_frames": 7,
+    "fx_petpet": 10,
+    "anim_idle_set": 10,
+    "anim_eat_set": 7,
+    "state_states": 17,
+    "decodes_ctor": 58,
+    "decode_names_ctor": [
+     "character.png",
+     "character_front.png",
+     "character_full.png",
+     "character_full_front.png",
+     "eat_f00.png",
+     "eat_f01.png",
+     "eat_f02.png",
+     "eat_f03.png",
+     "eat_f04.png",
+     "eat_f05.png",
+     "eat_f06.png",
+     "f_angry.png",
+     "f_blush.png",
+     "f_cry.png",
+     "f_laugh.png",
+     "f_puzzled.png",
+     "f_sleep.png",
+     "f_smug.png",
+     "idle_f00.png",
+     "idle_f01.png",
+     "idle_f02.png",
+     "idle_f03.png",
+     "idle_f04.png",
+     "idle_f05.png",
+     "idle_f06.png",
+     "idle_f07.png",
+     "idle_f08.png",
+     "idle_f09.png",
+     "idle_full_f00.png",
+     "idle_full_f01.png",
+     "idle_full_f02.png",
+     "idle_full_f03.png",
+     "idle_full_f04.png",
+     "idle_full_f05.png",
+     "idle_full_f06.png",
+     "idle_full_f07.png",
+     "idle_full_f08.png",
+     "idle_full_f09.png",
+     "n_angry.png",
+     "n_blush.png",
+     "n_cry.png",
+     "n_drool.png",
+     "n_hiss.png",
+     "n_laugh.png",
+     "n_puzzled.png",
+     "n_sleep.png",
+     "n_smug.png",
+     "n_surprised.png",
+     "petpet_f00.png",
+     "petpet_f01.png",
+     "petpet_f02.png",
+     "petpet_f03.png",
+     "petpet_f04.png",
+     "petpet_f05.png",
+     "petpet_f06.png",
+     "petpet_f07.png",
+     "petpet_f08.png",
+     "petpet_f09.png"
+    ]
+   },
+   "settled": {
+    "has_frames": true,
+    "idle_frames": 10,
+    "idle_full_frames": 10,
+    "eat_frames": 7,
+    "fx_petpet": 10,
+    "anim_idle_set": 10,
+    "state_states": 17,
+    "max_settle_gap_ms": 71.0,
+    "anim_running": false
+   },
+   "timers": {
+    "桌宠.load_config": [
+     0.46,
+     0.46,
+     1
+    ],
+    "桌宠.ensure_persona_files": [
+     4.32,
+     4.32,
+     1
+    ],
+    "RoleLibrary._load": [
+     0.24,
+     0.24,
+     1
+    ],
+    "RoleLibrary.__init__": [
+     0.25,
+     0.25,
+     1
+    ],
+    "AudioLibrary.__init__": [
+     0.09,
+     0.09,
+     1
+    ],
+    "Book.__init__": [
+     5.16,
+     5.16,
+     1
+    ],
+    "LineService.__init__": [
+     3.49,
+     3.49,
+     1
+    ],
+    "VoiceAssetLibrary.__init__": [
+     0.16,
+     0.16,
+     1
+    ],
+    "桌宠.save_config": [
+     2.09,
+     2.09,
+     1
+    ],
+    "PetWindow._migrate_lines_extra": [
+     3.77,
+     3.77,
+     1
+    ],
+    "PetWindow._refresh_lines": [
+     0.03,
+     0.03,
+     1
+    ],
+    "Bubble.__init__": [
+     0.16,
+     0.16,
+     1
+    ],
+    "Badge.__init__": [
+     0.03,
+     0.03,
+     1
+    ],
+    "FoodTray.__init__": [
+     0.03,
+     0.03,
+     1
+    ],
+    "FoodFlyer.__init__": [
+     0.02,
+     0.02,
+     1
+    ],
+    "QWidget.winId": [
+     0.07,
+     0.05,
+     4
+    ],
+    "PetWindow._role_pix": [
+     0.0,
+     0.0,
+     1
+    ],
+    "桌宠.resource_path": [
+     4.07,
+     0.19,
+     28
+    ],
+    "QPixmap(路径)": [
+     71.11,
+     2.31,
+     58
+    ],
+    "PetWindow._load_img": [
+     33.8,
+     2.0,
+     24
+    ],
+    "PetWindow._build_sprites": [
+     7.18,
+     7.18,
+     1
+    ],
+    "PetWindow._compute_base_size": [
+     0.01,
+     0.01,
+     1
+    ],
+    "桌宠.resource_dir": [
+     0.39,
+     0.22,
+     2
+    ],
+    "load_frame_set[idle]": [
+     12.82,
+     12.82,
+     1
+    ],
+    "load_frame_set[TOTAL]": [
+     44.74,
+     13.84,
+     4
+    ],
+    "load_frame_set[idle_full]": [
+     13.84,
+     13.84,
+     1
+    ],
+    "load_frame_set[eat]": [
+     11.55,
+     11.55,
+     1
+    ],
+    "load_frame_set[petpet]": [
+     6.53,
+     6.53,
+     1
+    ],
+    "PetWindow._wire_anim_key": [
+     0.01,
+     0.01,
+     2
+    ],
+    "PetWindow._wire_anim_sets": [
+     0.03,
+     0.02,
+     2
+    ],
+    "PetWindow._build_state_pix": [
+     26.86,
+     26.86,
+     1
+    ],
+    "pet_audio._rebuild_effects": [
+     0.29,
+     0.29,
+     1
+    ],
+    "pet_audio.init": [
+     6.11,
+     6.11,
+     1
+    ],
+    "PetWindow._apply_sound_group": [
+     0.0,
+     0.0,
+     1
+    ],
+    "PetWindow._update_click_mask": [
+     0.01,
+     0.0,
+     2
+    ],
+    "PetWindow._apply_transform": [
+     0.05,
+     0.03,
+     2
+    ],
+    "PetWindow._show_state": [
+     0.11,
+     0.11,
+     1
+    ],
+    "PetWindow._pick_line": [
+     0.01,
+     0.01,
+     1
+    ],
+    "PetWindow._say_line": [
+     0.18,
+     0.18,
+     1
+    ],
+    "QSystemTrayIcon.show": [
+     0.0,
+     0.0,
+     1
+    ]
+   },
+   "timers_after": {
+    "PetWindow._scan_invalid_refs": [
+     1.13,
+     1.13,
+     1
+    ],
+    "QPixmap(路径)": [
+     54.23,
+     1.02,
+     86
+    ],
+    "load_frame_set[money]": [
+     55.43,
+     55.43,
+     1
+    ],
+    "load_frame_set[TOTAL]": [
+     55.43,
+     55.43,
+     1
+    ],
+    "PetWindow._preload_money_fx": [
+     55.45,
+     55.45,
+     1
+    ]
+   },
+   "samples": 0,
+   "leaf": [],
+   "near": [],
+   "leaf_total": 0,
+   "events": {
+    "frames_loaded": [
+     [
+      29.2,
+      "idle=10"
+     ],
+     [
+      42.0,
+      "idle_full=10"
+     ],
+     [
+      55.9,
+      "eat=7"
+     ],
+     [
+      67.5,
+      "petpet=10"
+     ],
+     [
+      1430.9,
+      "money=86"
+     ]
+    ]
+   }
+  },
+  {
+   "run": 1,
+   "init_ms": 91.9,
+   "t_show_call_ms": 91.2,
+   "t_first_paint_ms": 116.8,
+   "first_paint_seen": true,
+   "first_pix_ok": true,
+   "first_pix": "256x256",
+   "decodes": 144,
+   "decode_names": [
+    "character.png",
+    "character_front.png",
+    "character_full.png",
+    "character_full_front.png",
+    "eat_f00.png",
+    "eat_f01.png",
+    "eat_f02.png",
+    "eat_f03.png",
+    "eat_f04.png",
+    "eat_f05.png",
+    "eat_f06.png",
+    "f_angry.png",
+    "f_blush.png",
+    "f_cry.png",
+    "f_laugh.png",
+    "f_puzzled.png",
+    "f_sleep.png",
+    "f_smug.png",
+    "idle_f00.png",
+    "idle_f01.png",
+    "idle_f02.png",
+    "idle_f03.png",
+    "idle_f04.png",
+    "idle_f05.png",
+    "idle_f06.png",
+    "idle_f07.png",
+    "idle_f08.png",
+    "idle_f09.png",
+    "idle_full_f00.png",
+    "idle_full_f01.png",
+    "idle_full_f02.png",
+    "idle_full_f03.png",
+    "idle_full_f04.png",
+    "idle_full_f05.png",
+    "idle_full_f06.png",
+    "idle_full_f07.png",
+    "idle_full_f08.png",
+    "idle_full_f09.png",
+    "money_f00.png",
+    "money_f01.png",
+    "money_f02.png",
+    "money_f03.png",
+    "money_f04.png",
+    "money_f05.png",
+    "money_f06.png",
+    "money_f07.png",
+    "money_f08.png",
+    "money_f09.png",
+    "money_f10.png",
+    "money_f11.png",
+    "money_f12.png",
+    "money_f13.png",
+    "money_f14.png",
+    "money_f15.png",
+    "money_f16.png",
+    "money_f17.png",
+    "money_f18.png",
+    "money_f19.png",
+    "money_f20.png",
+    "money_f21.png",
+    "money_f22.png",
+    "money_f23.png",
+    "money_f24.png",
+    "money_f25.png",
+    "money_f26.png",
+    "money_f27.png",
+    "money_f28.png",
+    "money_f29.png",
+    "money_f30.png",
+    "money_f31.png",
+    "money_f32.png",
+    "money_f33.png",
+    "money_f34.png",
+    "money_f35.png",
+    "money_f36.png",
+    "money_f37.png",
+    "money_f38.png",
+    "money_f39.png",
+    "money_f40.png",
+    "money_f41.png",
+    "money_f42.png",
+    "money_f43.png",
+    "money_f44.png",
+    "money_f45.png",
+    "money_f46.png",
+    "money_f47.png",
+    "money_f48.png",
+    "money_f49.png",
+    "money_f50.png",
+    "money_f51.png",
+    "money_f52.png",
+    "money_f53.png",
+    "money_f54.png",
+    "money_f55.png",
+    "money_f56.png",
+    "money_f57.png",
+    "money_f58.png",
+    "money_f59.png",
+    "money_f60.png",
+    "money_f61.png",
+    "money_f62.png",
+    "money_f63.png",
+    "money_f64.png",
+    "money_f65.png",
+    "money_f66.png",
+    "money_f67.png",
+    "money_f68.png",
+    "money_f69.png",
+    "money_f70.png",
+    "money_f71.png",
+    "money_f72.png",
+    "money_f73.png",
+    "money_f74.png",
+    "money_f75.png",
+    "money_f76.png",
+    "money_f77.png",
+    "money_f78.png",
+    "money_f79.png",
+    "money_f80.png",
+    "money_f81.png",
+    "money_f82.png",
+    "money_f83.png",
+    "money_f84.png",
+    "money_f85.png",
+    "n_angry.png",
+    "n_blush.png",
+    "n_cry.png",
+    "n_drool.png",
+    "n_hiss.png",
+    "n_laugh.png",
+    "n_puzzled.png",
+    "n_sleep.png",
+    "n_smug.png",
+    "n_surprised.png",
+    "petpet_f00.png",
+    "petpet_f01.png",
+    "petpet_f02.png",
+    "petpet_f03.png",
+    "petpet_f04.png",
+    "petpet_f05.png",
+    "petpet_f06.png",
+    "petpet_f07.png",
+    "petpet_f08.png",
+    "petpet_f09.png"
+   ],
+   "after_init": {
+    "has_frames": true,
+    "idle_frames": 10,
+    "idle_full_frames": 10,
+    "eat_frames": 7,
+    "fx_petpet": 10,
+    "anim_idle_set": 10,
+    "anim_eat_set": 7,
+    "state_states": 17,
+    "decodes_ctor": 58,
+    "decode_names_ctor": [
+     "character.png",
+     "character_front.png",
+     "character_full.png",
+     "character_full_front.png",
+     "eat_f00.png",
+     "eat_f01.png",
+     "eat_f02.png",
+     "eat_f03.png",
+     "eat_f04.png",
+     "eat_f05.png",
+     "eat_f06.png",
+     "f_angry.png",
+     "f_blush.png",
+     "f_cry.png",
+     "f_laugh.png",
+     "f_puzzled.png",
+     "f_sleep.png",
+     "f_smug.png",
+     "idle_f00.png",
+     "idle_f01.png",
+     "idle_f02.png",
+     "idle_f03.png",
+     "idle_f04.png",
+     "idle_f05.png",
+     "idle_f06.png",
+     "idle_f07.png",
+     "idle_f08.png",
+     "idle_f09.png",
+     "idle_full_f00.png",
+     "idle_full_f01.png",
+     "idle_full_f02.png",
+     "idle_full_f03.png",
+     "idle_full_f04.png",
+     "idle_full_f05.png",
+     "idle_full_f06.png",
+     "idle_full_f07.png",
+     "idle_full_f08.png",
+     "idle_full_f09.png",
+     "n_angry.png",
+     "n_blush.png",
+     "n_cry.png",
+     "n_drool.png",
+     "n_hiss.png",
+     "n_laugh.png",
+     "n_puzzled.png",
+     "n_sleep.png",
+     "n_smug.png",
+     "n_surprised.png",
+     "petpet_f00.png",
+     "petpet_f01.png",
+     "petpet_f02.png",
+     "petpet_f03.png",
+     "petpet_f04.png",
+     "petpet_f05.png",
+     "petpet_f06.png",
+     "petpet_f07.png",
+     "petpet_f08.png",
+     "petpet_f09.png"
+    ]
+   },
+   "settled": {
+    "has_frames": true,
+    "idle_frames": 10,
+    "idle_full_frames": 10,
+    "eat_frames": 7,
+    "fx_petpet": 10,
+    "anim_idle_set": 10,
+    "state_states": 17,
+    "max_settle_gap_ms": 64.2,
+    "anim_running": false
+   },
+   "timers": {
+    "桌宠.load_config": [
+     0.49,
+     0.49,
+     1
+    ],
+    "桌宠.ensure_persona_files": [
+     4.01,
+     4.01,
+     1
+    ],
+    "RoleLibrary._load": [
+     0.2,
+     0.2,
+     1
+    ],
+    "RoleLibrary.__init__": [
+     0.22,
+     0.22,
+     1
+    ],
+    "AudioLibrary.__init__": [
+     0.09,
+     0.09,
+     1
+    ],
+    "Book.__init__": [
+     3.37,
+     3.37,
+     1
+    ],
+    "LineService.__init__": [
+     1.95,
+     1.95,
+     1
+    ],
+    "VoiceAssetLibrary.__init__": [
+     0.09,
+     0.09,
+     1
+    ],
+    "桌宠.save_config": [
+     1.28,
+     1.28,
+     1
+    ],
+    "PetWindow._migrate_lines_extra": [
+     2.58,
+     2.58,
+     1
+    ],
+    "PetWindow._refresh_lines": [
+     0.03,
+     0.03,
+     1
+    ],
+    "Bubble.__init__": [
+     0.14,
+     0.14,
+     1
+    ],
+    "Badge.__init__": [
+     0.02,
+     0.02,
+     1
+    ],
+    "FoodTray.__init__": [
+     0.03,
+     0.03,
+     1
+    ],
+    "FoodFlyer.__init__": [
+     0.02,
+     0.02,
+     1
+    ],
+    "QWidget.winId": [
+     0.07,
+     0.04,
+     4
+    ],
+    "PetWindow._role_pix": [
+     0.0,
+     0.0,
+     1
+    ],
+    "桌宠.resource_path": [
+     3.59,
+     0.29,
+     28
+    ],
+    "QPixmap(路径)": [
+     58.51,
+     1.42,
+     58
+    ],
+    "PetWindow._load_img": [
+     28.01,
+     1.83,
+     24
+    ],
+    "PetWindow._build_sprites": [
+     6.95,
+     6.95,
+     1
+    ],
+    "PetWindow._compute_base_size": [
+     0.01,
+     0.01,
+     1
+    ],
+    "桌宠.resource_dir": [
+     0.25,
+     0.13,
+     2
+    ],
+    "load_frame_set[idle]": [
+     11.78,
+     11.78,
+     1
+    ],
+    "load_frame_set[TOTAL]": [
+     36.7,
+     11.78,
+     4
+    ],
+    "load_frame_set[idle_full]": [
+     11.55,
+     11.55,
+     1
+    ],
+    "load_frame_set[eat]": [
+     8.69,
+     8.69,
+     1
+    ],
+    "load_frame_set[petpet]": [
+     4.67,
+     4.67,
+     1
+    ],
+    "PetWindow._wire_anim_key": [
+     0.01,
+     0.0,
+     2
+    ],
+    "PetWindow._wire_anim_sets": [
+     0.02,
+     0.01,
+     2
+    ],
+    "PetWindow._build_state_pix": [
+     21.28,
+     21.28,
+     1
+    ],
+    "pet_audio._rebuild_effects": [
+     0.26,
+     0.26,
+     1
+    ],
+    "pet_audio.init": [
+     7.02,
+     7.02,
+     1
+    ],
+    "PetWindow._apply_sound_group": [
+     0.0,
+     0.0,
+     1
+    ],
+    "PetWindow._update_click_mask": [
+     0.0,
+     0.0,
+     2
+    ],
+    "PetWindow._apply_transform": [
+     0.04,
+     0.02,
+     2
+    ],
+    "PetWindow._show_state": [
+     0.02,
+     0.02,
+     1
+    ],
+    "PetWindow._pick_line": [
+     0.01,
+     0.01,
+     1
+    ],
+    "PetWindow._say_line": [
+     0.1,
+     0.1,
+     1
+    ],
+    "QSystemTrayIcon.show": [
+     0.0,
+     0.0,
+     1
+    ]
+   },
+   "timers_after": {
+    "QPixmap(路径)": [
+     47.27,
+     1.27,
+     86
+    ],
+    "load_frame_set[money]": [
+     48.3,
+     48.3,
+     1
+    ],
+    "load_frame_set[TOTAL]": [
+     48.31,
+     48.31,
+     1
+    ],
+    "PetWindow._preload_money_fx": [
+     48.33,
+     48.33,
+     1
+    ]
+   },
+   "samples": 0,
+   "leaf": [],
+   "near": [],
+   "leaf_total": 0,
+   "events": {
+    "frames_loaded": [
+     [
+      23.8,
+      "idle=10"
+     ],
+     [
+      35.6,
+      "idle_full=10"
+     ],
+     [
+      47.2,
+      "eat=7"
+     ],
+     [
+      55.9,
+      "petpet=10"
+     ],
+     [
+      1393.3,
+      "money=86"
+     ]
+    ]
+   }
+  },
+  {
+   "run": 2,
+   "init_ms": 88.1,
+   "t_show_call_ms": 87.4,
+   "t_first_paint_ms": 124.7,
+   "first_paint_seen": true,
+   "first_pix_ok": true,
+   "first_pix": "256x256",
+   "decodes": 144,
+   "decode_names": [
+    "character.png",
+    "character_front.png",
+    "character_full.png",
+    "character_full_front.png",
+    "eat_f00.png",
+    "eat_f01.png",
+    "eat_f02.png",
+    "eat_f03.png",
+    "eat_f04.png",
+    "eat_f05.png",
+    "eat_f06.png",
+    "f_angry.png",
+    "f_blush.png",
+    "f_cry.png",
+    "f_laugh.png",
+    "f_puzzled.png",
+    "f_sleep.png",
+    "f_smug.png",
+    "idle_f00.png",
+    "idle_f01.png",
+    "idle_f02.png",
+    "idle_f03.png",
+    "idle_f04.png",
+    "idle_f05.png",
+    "idle_f06.png",
+    "idle_f07.png",
+    "idle_f08.png",
+    "idle_f09.png",
+    "idle_full_f00.png",
+    "idle_full_f01.png",
+    "idle_full_f02.png",
+    "idle_full_f03.png",
+    "idle_full_f04.png",
+    "idle_full_f05.png",
+    "idle_full_f06.png",
+    "idle_full_f07.png",
+    "idle_full_f08.png",
+    "idle_full_f09.png",
+    "money_f00.png",
+    "money_f01.png",
+    "money_f02.png",
+    "money_f03.png",
+    "money_f04.png",
+    "money_f05.png",
+    "money_f06.png",
+    "money_f07.png",
+    "money_f08.png",
+    "money_f09.png",
+    "money_f10.png",
+    "money_f11.png",
+    "money_f12.png",
+    "money_f13.png",
+    "money_f14.png",
+    "money_f15.png",
+    "money_f16.png",
+    "money_f17.png",
+    "money_f18.png",
+    "money_f19.png",
+    "money_f20.png",
+    "money_f21.png",
+    "money_f22.png",
+    "money_f23.png",
+    "money_f24.png",
+    "money_f25.png",
+    "money_f26.png",
+    "money_f27.png",
+    "money_f28.png",
+    "money_f29.png",
+    "money_f30.png",
+    "money_f31.png",
+    "money_f32.png",
+    "money_f33.png",
+    "money_f34.png",
+    "money_f35.png",
+    "money_f36.png",
+    "money_f37.png",
+    "money_f38.png",
+    "money_f39.png",
+    "money_f40.png",
+    "money_f41.png",
+    "money_f42.png",
+    "money_f43.png",
+    "money_f44.png",
+    "money_f45.png",
+    "money_f46.png",
+    "money_f47.png",
+    "money_f48.png",
+    "money_f49.png",
+    "money_f50.png",
+    "money_f51.png",
+    "money_f52.png",
+    "money_f53.png",
+    "money_f54.png",
+    "money_f55.png",
+    "money_f56.png",
+    "money_f57.png",
+    "money_f58.png",
+    "money_f59.png",
+    "money_f60.png",
+    "money_f61.png",
+    "money_f62.png",
+    "money_f63.png",
+    "money_f64.png",
+    "money_f65.png",
+    "money_f66.png",
+    "money_f67.png",
+    "money_f68.png",
+    "money_f69.png",
+    "money_f70.png",
+    "money_f71.png",
+    "money_f72.png",
+    "money_f73.png",
+    "money_f74.png",
+    "money_f75.png",
+    "money_f76.png",
+    "money_f77.png",
+    "money_f78.png",
+    "money_f79.png",
+    "money_f80.png",
+    "money_f81.png",
+    "money_f82.png",
+    "money_f83.png",
+    "money_f84.png",
+    "money_f85.png",
+    "n_angry.png",
+    "n_blush.png",
+    "n_cry.png",
+    "n_drool.png",
+    "n_hiss.png",
+    "n_laugh.png",
+    "n_puzzled.png",
+    "n_sleep.png",
+    "n_smug.png",
+    "n_surprised.png",
+    "petpet_f00.png",
+    "petpet_f01.png",
+    "petpet_f02.png",
+    "petpet_f03.png",
+    "petpet_f04.png",
+    "petpet_f05.png",
+    "petpet_f06.png",
+    "petpet_f07.png",
+    "petpet_f08.png",
+    "petpet_f09.png"
+   ],
+   "after_init": {
+    "has_frames": true,
+    "idle_frames": 10,
+    "idle_full_frames": 10,
+    "eat_frames": 7,
+    "fx_petpet": 10,
+    "anim_idle_set": 10,
+    "anim_eat_set": 7,
+    "state_states": 17,
+    "decodes_ctor": 58,
+    "decode_names_ctor": [
+     "character.png",
+     "character_front.png",
+     "character_full.png",
+     "character_full_front.png",
+     "eat_f00.png",
+     "eat_f01.png",
+     "eat_f02.png",
+     "eat_f03.png",
+     "eat_f04.png",
+     "eat_f05.png",
+     "eat_f06.png",
+     "f_angry.png",
+     "f_blush.png",
+     "f_cry.png",
+     "f_laugh.png",
+     "f_puzzled.png",
+     "f_sleep.png",
+     "f_smug.png",
+     "idle_f00.png",
+     "idle_f01.png",
+     "idle_f02.png",
+     "idle_f03.png",
+     "idle_f04.png",
+     "idle_f05.png",
+     "idle_f06.png",
+     "idle_f07.png",
+     "idle_f08.png",
+     "idle_f09.png",
+     "idle_full_f00.png",
+     "idle_full_f01.png",
+     "idle_full_f02.png",
+     "idle_full_f03.png",
+     "idle_full_f04.png",
+     "idle_full_f05.png",
+     "idle_full_f06.png",
+     "idle_full_f07.png",
+     "idle_full_f08.png",
+     "idle_full_f09.png",
+     "n_angry.png",
+     "n_blush.png",
+     "n_cry.png",
+     "n_drool.png",
+     "n_hiss.png",
+     "n_laugh.png",
+     "n_puzzled.png",
+     "n_sleep.png",
+     "n_smug.png",
+     "n_surprised.png",
+     "petpet_f00.png",
+     "petpet_f01.png",
+     "petpet_f02.png",
+     "petpet_f03.png",
+     "petpet_f04.png",
+     "petpet_f05.png",
+     "petpet_f06.png",
+     "petpet_f07.png",
+     "petpet_f08.png",
+     "petpet_f09.png"
+    ]
+   },
+   "settled": {
+    "has_frames": true,
+    "idle_frames": 10,
+    "idle_full_frames": 10,
+    "eat_frames": 7,
+    "fx_petpet": 10,
+    "anim_idle_set": 10,
+    "state_states": 17,
+    "max_settle_gap_ms": 64.1,
+    "anim_running": false
+   },
+   "timers": {
+    "桌宠.load_config": [
+     0.41,
+     0.41,
+     1
+    ],
+    "桌宠.ensure_persona_files": [
+     3.0,
+     3.0,
+     1
+    ],
+    "RoleLibrary._load": [
+     0.15,
+     0.15,
+     1
+    ],
+    "RoleLibrary.__init__": [
+     0.16,
+     0.16,
+     1
+    ],
+    "AudioLibrary.__init__": [
+     0.08,
+     0.08,
+     1
+    ],
+    "Book.__init__": [
+     3.11,
+     3.11,
+     1
+    ],
+    "LineService.__init__": [
+     4.07,
+     4.07,
+     1
+    ],
+    "VoiceAssetLibrary.__init__": [
+     0.12,
+     0.12,
+     1
+    ],
+    "桌宠.save_config": [
+     1.51,
+     1.51,
+     1
+    ],
+    "PetWindow._migrate_lines_extra": [
+     2.79,
+     2.79,
+     1
+    ],
+    "PetWindow._refresh_lines": [
+     0.03,
+     0.03,
+     1
+    ],
+    "Bubble.__init__": [
+     0.14,
+     0.14,
+     1
+    ],
+    "Badge.__init__": [
+     0.02,
+     0.02,
+     1
+    ],
+    "FoodTray.__init__": [
+     0.03,
+     0.03,
+     1
+    ],
+    "FoodFlyer.__init__": [
+     0.02,
+     0.02,
+     1
+    ],
+    "QWidget.winId": [
+     0.06,
+     0.04,
+     4
+    ],
+    "PetWindow._role_pix": [
+     0.0,
+     0.0,
+     1
+    ],
+    "桌宠.resource_path": [
+     3.78,
+     0.45,
+     28
+    ],
+    "QPixmap(路径)": [
+     56.68,
+     2.01,
+     58
+    ],
+    "PetWindow._load_img": [
+     27.65,
+     1.78,
+     24
+    ],
+    "PetWindow._build_sprites": [
+     5.57,
+     5.57,
+     1
+    ],
+    "PetWindow._compute_base_size": [
+     0.01,
+     0.01,
+     1
+    ],
+    "桌宠.resource_dir": [
+     0.24,
+     0.13,
+     2
+    ],
+    "load_frame_set[idle]": [
+     12.27,
+     12.27,
+     1
+    ],
+    "load_frame_set[TOTAL]": [
+     35.52,
+     12.27,
+     4
+    ],
+    "load_frame_set[idle_full]": [
+     10.75,
+     10.75,
+     1
+    ],
+    "load_frame_set[eat]": [
+     7.9,
+     7.9,
+     1
+    ],
+    "load_frame_set[petpet]": [
+     4.6,
+     4.6,
+     1
+    ],
+    "PetWindow._wire_anim_key": [
+     0.01,
+     0.0,
+     2
+    ],
+    "PetWindow._wire_anim_sets": [
+     0.02,
+     0.01,
+     2
+    ],
+    "PetWindow._build_state_pix": [
+     22.26,
+     22.26,
+     1
+    ],
+    "pet_audio._rebuild_effects": [
+     0.22,
+     0.22,
+     1
+    ],
+    "pet_audio.init": [
+     4.87,
+     4.87,
+     1
+    ],
+    "PetWindow._apply_sound_group": [
+     0.0,
+     0.0,
+     1
+    ],
+    "PetWindow._update_click_mask": [
+     0.0,
+     0.0,
+     2
+    ],
+    "PetWindow._apply_transform": [
+     0.03,
+     0.02,
+     2
+    ],
+    "PetWindow._show_state": [
+     0.02,
+     0.02,
+     1
+    ],
+    "PetWindow._pick_line": [
+     0.01,
+     0.01,
+     1
+    ],
+    "PetWindow._say_line": [
+     0.1,
+     0.1,
+     1
+    ],
+    "QSystemTrayIcon.show": [
+     0.0,
+     0.0,
+     1
+    ]
+   },
+   "timers_after": {
+    "PetWindow._scan_invalid_refs": [
+     0.38,
+     0.38,
+     1
+    ],
+    "QPixmap(路径)": [
+     47.32,
+     0.96,
+     86
+    ],
+    "load_frame_set[money]": [
+     48.38,
+     48.38,
+     1
+    ],
+    "load_frame_set[TOTAL]": [
+     48.38,
+     48.38,
+     1
+    ],
+    "PetWindow._preload_money_fx": [
+     48.41,
+     48.41,
+     1
+    ]
+   },
+   "samples": 0,
+   "leaf": [],
+   "near": [],
+   "leaf_total": 0,
+   "events": {
+    "frames_loaded": [
+     [
+      22.7,
+      "idle=10"
+     ],
+     [
+      34.9,
+      "idle_full=10"
+     ],
+     [
+      45.7,
+      "eat=7"
+     ],
+     [
+      53.6,
+      "petpet=10"
+     ],
+     [
+      1443.2,
+      "money=86"
+     ]
+    ]
+   }
+  },
+  {
+   "run": 1,
+   "init_ms": 84.3,
+   "t_show_call_ms": 83.6,
+   "t_first_paint_ms": 117.6,
+   "first_paint_seen": true,
+   "first_pix_ok": true,
+   "first_pix": "256x256",
+   "decodes": 144,
+   "decode_names": [
+    "character.png",
+    "character_front.png",
+    "character_full.png",
+    "character_full_front.png",
+    "eat_f00.png",
+    "eat_f01.png",
+    "eat_f02.png",
+    "eat_f03.png",
+    "eat_f04.png",
+    "eat_f05.png",
+    "eat_f06.png",
+    "f_angry.png",
+    "f_blush.png",
+    "f_cry.png",
+    "f_laugh.png",
+    "f_puzzled.png",
+    "f_sleep.png",
+    "f_smug.png",
+    "idle_f00.png",
+    "idle_f01.png",
+    "idle_f02.png",
+    "idle_f03.png",
+    "idle_f04.png",
+    "idle_f05.png",
+    "idle_f06.png",
+    "idle_f07.png",
+    "idle_f08.png",
+    "idle_f09.png",
+    "idle_full_f00.png",
+    "idle_full_f01.png",
+    "idle_full_f02.png",
+    "idle_full_f03.png",
+    "idle_full_f04.png",
+    "idle_full_f05.png",
+    "idle_full_f06.png",
+    "idle_full_f07.png",
+    "idle_full_f08.png",
+    "idle_full_f09.png",
+    "money_f00.png",
+    "money_f01.png",
+    "money_f02.png",
+    "money_f03.png",
+    "money_f04.png",
+    "money_f05.png",
+    "money_f06.png",
+    "money_f07.png",
+    "money_f08.png",
+    "money_f09.png",
+    "money_f10.png",
+    "money_f11.png",
+    "money_f12.png",
+    "money_f13.png",
+    "money_f14.png",
+    "money_f15.png",
+    "money_f16.png",
+    "money_f17.png",
+    "money_f18.png",
+    "money_f19.png",
+    "money_f20.png",
+    "money_f21.png",
+    "money_f22.png",
+    "money_f23.png",
+    "money_f24.png",
+    "money_f25.png",
+    "money_f26.png",
+    "money_f27.png",
+    "money_f28.png",
+    "money_f29.png",
+    "money_f30.png",
+    "money_f31.png",
+    "money_f32.png",
+    "money_f33.png",
+    "money_f34.png",
+    "money_f35.png",
+    "money_f36.png",
+    "money_f37.png",
+    "money_f38.png",
+    "money_f39.png",
+    "money_f40.png",
+    "money_f41.png",
+    "money_f42.png",
+    "money_f43.png",
+    "money_f44.png",
+    "money_f45.png",
+    "money_f46.png",
+    "money_f47.png",
+    "money_f48.png",
+    "money_f49.png",
+    "money_f50.png",
+    "money_f51.png",
+    "money_f52.png",
+    "money_f53.png",
+    "money_f54.png",
+    "money_f55.png",
+    "money_f56.png",
+    "money_f57.png",
+    "money_f58.png",
+    "money_f59.png",
+    "money_f60.png",
+    "money_f61.png",
+    "money_f62.png",
+    "money_f63.png",
+    "money_f64.png",
+    "money_f65.png",
+    "money_f66.png",
+    "money_f67.png",
+    "money_f68.png",
+    "money_f69.png",
+    "money_f70.png",
+    "money_f71.png",
+    "money_f72.png",
+    "money_f73.png",
+    "money_f74.png",
+    "money_f75.png",
+    "money_f76.png",
+    "money_f77.png",
+    "money_f78.png",
+    "money_f79.png",
+    "money_f80.png",
+    "money_f81.png",
+    "money_f82.png",
+    "money_f83.png",
+    "money_f84.png",
+    "money_f85.png",
+    "n_angry.png",
+    "n_blush.png",
+    "n_cry.png",
+    "n_drool.png",
+    "n_hiss.png",
+    "n_laugh.png",
+    "n_puzzled.png",
+    "n_sleep.png",
+    "n_smug.png",
+    "n_surprised.png",
+    "petpet_f00.png",
+    "petpet_f01.png",
+    "petpet_f02.png",
+    "petpet_f03.png",
+    "petpet_f04.png",
+    "petpet_f05.png",
+    "petpet_f06.png",
+    "petpet_f07.png",
+    "petpet_f08.png",
+    "petpet_f09.png"
+   ],
+   "after_init": {
+    "has_frames": true,
+    "idle_frames": 10,
+    "idle_full_frames": 10,
+    "eat_frames": 7,
+    "fx_petpet": 10,
+    "anim_idle_set": 10,
+    "anim_eat_set": 7,
+    "state_states": 17,
+    "decodes_ctor": 58,
+    "decode_names_ctor": [
+     "character.png",
+     "character_front.png",
+     "character_full.png",
+     "character_full_front.png",
+     "eat_f00.png",
+     "eat_f01.png",
+     "eat_f02.png",
+     "eat_f03.png",
+     "eat_f04.png",
+     "eat_f05.png",
+     "eat_f06.png",
+     "f_angry.png",
+     "f_blush.png",
+     "f_cry.png",
+     "f_laugh.png",
+     "f_puzzled.png",
+     "f_sleep.png",
+     "f_smug.png",
+     "idle_f00.png",
+     "idle_f01.png",
+     "idle_f02.png",
+     "idle_f03.png",
+     "idle_f04.png",
+     "idle_f05.png",
+     "idle_f06.png",
+     "idle_f07.png",
+     "idle_f08.png",
+     "idle_f09.png",
+     "idle_full_f00.png",
+     "idle_full_f01.png",
+     "idle_full_f02.png",
+     "idle_full_f03.png",
+     "idle_full_f04.png",
+     "idle_full_f05.png",
+     "idle_full_f06.png",
+     "idle_full_f07.png",
+     "idle_full_f08.png",
+     "idle_full_f09.png",
+     "n_angry.png",
+     "n_blush.png",
+     "n_cry.png",
+     "n_drool.png",
+     "n_hiss.png",
+     "n_laugh.png",
+     "n_puzzled.png",
+     "n_sleep.png",
+     "n_smug.png",
+     "n_surprised.png",
+     "petpet_f00.png",
+     "petpet_f01.png",
+     "petpet_f02.png",
+     "petpet_f03.png",
+     "petpet_f04.png",
+     "petpet_f05.png",
+     "petpet_f06.png",
+     "petpet_f07.png",
+     "petpet_f08.png",
+     "petpet_f09.png"
+    ]
+   },
+   "settled": {
+    "has_frames": true,
+    "idle_frames": 10,
+    "idle_full_frames": 10,
+    "eat_frames": 7,
+    "fx_petpet": 10,
+    "anim_idle_set": 10,
+    "state_states": 17,
+    "max_settle_gap_ms": 63.2,
+    "anim_running": false
+   },
+   "timers": {
+    "桌宠.load_config": [
+     0.43,
+     0.43,
+     1
+    ],
+    "桌宠.ensure_persona_files": [
+     2.74,
+     2.74,
+     1
+    ],
+    "RoleLibrary._load": [
+     0.17,
+     0.17,
+     1
+    ],
+    "RoleLibrary.__init__": [
+     0.18,
+     0.18,
+     1
+    ],
+    "AudioLibrary.__init__": [
+     0.07,
+     0.07,
+     1
+    ],
+    "Book.__init__": [
+     4.35,
+     4.35,
+     1
+    ],
+    "LineService.__init__": [
+     1.99,
+     1.99,
+     1
+    ],
+    "VoiceAssetLibrary.__init__": [
+     0.09,
+     0.09,
+     1
+    ],
+    "桌宠.save_config": [
+     1.34,
+     1.34,
+     1
+    ],
+    "PetWindow._migrate_lines_extra": [
+     2.72,
+     2.72,
+     1
+    ],
+    "PetWindow._refresh_lines": [
+     0.02,
+     0.02,
+     1
+    ],
+    "Bubble.__init__": [
+     0.15,
+     0.15,
+     1
+    ],
+    "Badge.__init__": [
+     0.02,
+     0.02,
+     1
+    ],
+    "FoodTray.__init__": [
+     0.02,
+     0.02,
+     1
+    ],
+    "FoodFlyer.__init__": [
+     0.01,
+     0.01,
+     1
+    ],
+    "QWidget.winId": [
+     0.07,
+     0.04,
+     4
+    ],
+    "PetWindow._role_pix": [
+     0.0,
+     0.0,
+     1
+    ],
+    "桌宠.resource_path": [
+     3.19,
+     0.19,
+     28
+    ],
+    "QPixmap(路径)": [
+     54.02,
+     1.48,
+     58
+    ],
+    "PetWindow._load_img": [
+     25.96,
+     1.52,
+     24
+    ],
+    "PetWindow._build_sprites": [
+     5.68,
+     5.68,
+     1
+    ],
+    "PetWindow._compute_base_size": [
+     0.01,
+     0.01,
+     1
+    ],
+    "桌宠.resource_dir": [
+     0.41,
+     0.26,
+     2
+    ],
+    "load_frame_set[idle]": [
+     10.27,
+     10.27,
+     1
+    ],
+    "load_frame_set[TOTAL]": [
+     33.66,
+     10.27,
+     4
+    ],
+    "load_frame_set[idle_full]": [
+     9.84,
+     9.84,
+     1
+    ],
+    "load_frame_set[eat]": [
+     8.5,
+     8.5,
+     1
+    ],
+    "load_frame_set[petpet]": [
+     5.04,
+     5.04,
+     1
+    ],
+    "PetWindow._wire_anim_key": [
+     0.01,
+     0.0,
+     2
+    ],
+    "PetWindow._wire_anim_sets": [
+     0.02,
+     0.01,
+     2
+    ],
+    "PetWindow._build_state_pix": [
+     20.44,
+     20.44,
+     1
+    ],
+    "pet_audio._rebuild_effects": [
+     0.23,
+     0.23,
+     1
+    ],
+    "pet_audio.init": [
+     4.91,
+     4.91,
+     1
+    ],
+    "PetWindow._apply_sound_group": [
+     0.0,
+     0.0,
+     1
+    ],
+    "PetWindow._update_click_mask": [
+     0.0,
+     0.0,
+     2
+    ],
+    "PetWindow._apply_transform": [
+     0.04,
+     0.02,
+     2
+    ],
+    "PetWindow._show_state": [
+     0.02,
+     0.02,
+     1
+    ],
+    "PetWindow._pick_line": [
+     0.0,
+     0.0,
+     1
+    ],
+    "PetWindow._say_line": [
+     0.1,
+     0.1,
+     1
+    ],
+    "QSystemTrayIcon.show": [
+     0.0,
+     0.0,
+     1
+    ]
+   },
+   "timers_after": {
+    "QPixmap(路径)": [
+     46.57,
+     0.92,
+     86
+    ],
+    "load_frame_set[money]": [
+     47.61,
+     47.61,
+     1
+    ],
+    "load_frame_set[TOTAL]": [
+     47.61,
+     47.61,
+     1
+    ],
+    "PetWindow._preload_money_fx": [
+     47.62,
+     47.62,
+     1
+    ]
+   },
+   "samples": 0,
+   "leaf": [],
+   "near": [],
+   "leaf_total": 0,
+   "events": {
+    "frames_loaded": [
+     [
+      22.3,
+      "idle=10"
+     ],
+     [
+      32.6,
+      "idle_full=10"
+     ],
+     [
+      42.5,
+      "eat=7"
+     ],
+     [
+      51.0,
+      "petpet=10"
+     ],
+     [
+      1416.6,
+      "money=86"
+     ]
+    ]
+   }
+  },
+  {
+   "run": 2,
+   "init_ms": 85.5,
+   "t_show_call_ms": 84.8,
+   "t_first_paint_ms": 121.3,
+   "first_paint_seen": true,
+   "first_pix_ok": true,
+   "first_pix": "256x256",
+   "decodes": 144,
+   "decode_names": [
+    "character.png",
+    "character_front.png",
+    "character_full.png",
+    "character_full_front.png",
+    "eat_f00.png",
+    "eat_f01.png",
+    "eat_f02.png",
+    "eat_f03.png",
+    "eat_f04.png",
+    "eat_f05.png",
+    "eat_f06.png",
+    "f_angry.png",
+    "f_blush.png",
+    "f_cry.png",
+    "f_laugh.png",
+    "f_puzzled.png",
+    "f_sleep.png",
+    "f_smug.png",
+    "idle_f00.png",
+    "idle_f01.png",
+    "idle_f02.png",
+    "idle_f03.png",
+    "idle_f04.png",
+    "idle_f05.png",
+    "idle_f06.png",
+    "idle_f07.png",
+    "idle_f08.png",
+    "idle_f09.png",
+    "idle_full_f00.png",
+    "idle_full_f01.png",
+    "idle_full_f02.png",
+    "idle_full_f03.png",
+    "idle_full_f04.png",
+    "idle_full_f05.png",
+    "idle_full_f06.png",
+    "idle_full_f07.png",
+    "idle_full_f08.png",
+    "idle_full_f09.png",
+    "money_f00.png",
+    "money_f01.png",
+    "money_f02.png",
+    "money_f03.png",
+    "money_f04.png",
+    "money_f05.png",
+    "money_f06.png",
+    "money_f07.png",
+    "money_f08.png",
+    "money_f09.png",
+    "money_f10.png",
+    "money_f11.png",
+    "money_f12.png",
+    "money_f13.png",
+    "money_f14.png",
+    "money_f15.png",
+    "money_f16.png",
+    "money_f17.png",
+    "money_f18.png",
+    "money_f19.png",
+    "money_f20.png",
+    "money_f21.png",
+    "money_f22.png",
+    "money_f23.png",
+    "money_f24.png",
+    "money_f25.png",
+    "money_f26.png",
+    "money_f27.png",
+    "money_f28.png",
+    "money_f29.png",
+    "money_f30.png",
+    "money_f31.png",
+    "money_f32.png",
+    "money_f33.png",
+    "money_f34.png",
+    "money_f35.png",
+    "money_f36.png",
+    "money_f37.png",
+    "money_f38.png",
+    "money_f39.png",
+    "money_f40.png",
+    "money_f41.png",
+    "money_f42.png",
+    "money_f43.png",
+    "money_f44.png",
+    "money_f45.png",
+    "money_f46.png",
+    "money_f47.png",
+    "money_f48.png",
+    "money_f49.png",
+    "money_f50.png",
+    "money_f51.png",
+    "money_f52.png",
+    "money_f53.png",
+    "money_f54.png",
+    "money_f55.png",
+    "money_f56.png",
+    "money_f57.png",
+    "money_f58.png",
+    "money_f59.png",
+    "money_f60.png",
+    "money_f61.png",
+    "money_f62.png",
+    "money_f63.png",
+    "money_f64.png",
+    "money_f65.png",
+    "money_f66.png",
+    "money_f67.png",
+    "money_f68.png",
+    "money_f69.png",
+    "money_f70.png",
+    "money_f71.png",
+    "money_f72.png",
+    "money_f73.png",
+    "money_f74.png",
+    "money_f75.png",
+    "money_f76.png",
+    "money_f77.png",
+    "money_f78.png",
+    "money_f79.png",
+    "money_f80.png",
+    "money_f81.png",
+    "money_f82.png",
+    "money_f83.png",
+    "money_f84.png",
+    "money_f85.png",
+    "n_angry.png",
+    "n_blush.png",
+    "n_cry.png",
+    "n_drool.png",
+    "n_hiss.png",
+    "n_laugh.png",
+    "n_puzzled.png",
+    "n_sleep.png",
+    "n_smug.png",
+    "n_surprised.png",
+    "petpet_f00.png",
+    "petpet_f01.png",
+    "petpet_f02.png",
+    "petpet_f03.png",
+    "petpet_f04.png",
+    "petpet_f05.png",
+    "petpet_f06.png",
+    "petpet_f07.png",
+    "petpet_f08.png",
+    "petpet_f09.png"
+   ],
+   "after_init": {
+    "has_frames": true,
+    "idle_frames": 10,
+    "idle_full_frames": 10,
+    "eat_frames": 7,
+    "fx_petpet": 10,
+    "anim_idle_set": 10,
+    "anim_eat_set": 7,
+    "state_states": 17,
+    "decodes_ctor": 58,
+    "decode_names_ctor": [
+     "character.png",
+     "character_front.png",
+     "character_full.png",
+     "character_full_front.png",
+     "eat_f00.png",
+     "eat_f01.png",
+     "eat_f02.png",
+     "eat_f03.png",
+     "eat_f04.png",
+     "eat_f05.png",
+     "eat_f06.png",
+     "f_angry.png",
+     "f_blush.png",
+     "f_cry.png",
+     "f_laugh.png",
+     "f_puzzled.png",
+     "f_sleep.png",
+     "f_smug.png",
+     "idle_f00.png",
+     "idle_f01.png",
+     "idle_f02.png",
+     "idle_f03.png",
+     "idle_f04.png",
+     "idle_f05.png",
+     "idle_f06.png",
+     "idle_f07.png",
+     "idle_f08.png",
+     "idle_f09.png",
+     "idle_full_f00.png",
+     "idle_full_f01.png",
+     "idle_full_f02.png",
+     "idle_full_f03.png",
+     "idle_full_f04.png",
+     "idle_full_f05.png",
+     "idle_full_f06.png",
+     "idle_full_f07.png",
+     "idle_full_f08.png",
+     "idle_full_f09.png",
+     "n_angry.png",
+     "n_blush.png",
+     "n_cry.png",
+     "n_drool.png",
+     "n_hiss.png",
+     "n_laugh.png",
+     "n_puzzled.png",
+     "n_sleep.png",
+     "n_smug.png",
+     "n_surprised.png",
+     "petpet_f00.png",
+     "petpet_f01.png",
+     "petpet_f02.png",
+     "petpet_f03.png",
+     "petpet_f04.png",
+     "petpet_f05.png",
+     "petpet_f06.png",
+     "petpet_f07.png",
+     "petpet_f08.png",
+     "petpet_f09.png"
+    ]
+   },
+   "settled": {
+    "has_frames": true,
+    "idle_frames": 10,
+    "idle_full_frames": 10,
+    "eat_frames": 7,
+    "fx_petpet": 10,
+    "anim_idle_set": 10,
+    "state_states": 17,
+    "max_settle_gap_ms": 76.0,
+    "anim_running": false
+   },
+   "timers": {
+    "桌宠.load_config": [
+     0.53,
+     0.53,
+     1
+    ],
+    "桌宠.ensure_persona_files": [
+     3.38,
+     3.38,
+     1
+    ],
+    "RoleLibrary._load": [
+     0.16,
+     0.16,
+     1
+    ],
+    "RoleLibrary.__init__": [
+     0.18,
+     0.18,
+     1
+    ],
+    "AudioLibrary.__init__": [
+     0.08,
+     0.08,
+     1
+    ],
+    "Book.__init__": [
+     3.66,
+     3.66,
+     1
+    ],
+    "LineService.__init__": [
+     2.2,
+     2.2,
+     1
+    ],
+    "VoiceAssetLibrary.__init__": [
+     0.09,
+     0.09,
+     1
+    ],
+    "桌宠.save_config": [
+     1.36,
+     1.36,
+     1
+    ],
+    "PetWindow._migrate_lines_extra": [
+     2.66,
+     2.66,
+     1
+    ],
+    "PetWindow._refresh_lines": [
+     0.03,
+     0.03,
+     1
+    ],
+    "Bubble.__init__": [
+     0.13,
+     0.13,
+     1
+    ],
+    "Badge.__init__": [
+     0.03,
+     0.03,
+     1
+    ],
+    "FoodTray.__init__": [
+     0.02,
+     0.02,
+     1
+    ],
+    "FoodFlyer.__init__": [
+     0.01,
+     0.01,
+     1
+    ],
+    "QWidget.winId": [
+     0.06,
+     0.04,
+     4
+    ],
+    "PetWindow._role_pix": [
+     0.0,
+     0.0,
+     1
+    ],
+    "桌宠.resource_path": [
+     3.25,
+     0.22,
+     28
+    ],
+    "QPixmap(路径)": [
+     55.3,
+     1.44,
+     58
+    ],
+    "PetWindow._load_img": [
+     26.53,
+     1.5,
+     24
+    ],
+    "PetWindow._build_sprites": [
+     5.66,
+     5.66,
+     1
+    ],
+    "PetWindow._compute_base_size": [
+     0.01,
+     0.01,
+     1
+    ],
+    "桌宠.resource_dir": [
+     0.3,
+     0.18,
+     2
+    ],
+    "load_frame_set[idle]": [
+     10.48,
+     10.48,
+     1
+    ],
+    "load_frame_set[TOTAL]": [
+     34.42,
+     10.48,
+     4
+    ],
+    "load_frame_set[idle_full]": [
+     10.46,
+     10.46,
+     1
+    ],
+    "load_frame_set[eat]": [
+     8.2,
+     8.2,
+     1
+    ],
+    "load_frame_set[petpet]": [
+     5.28,
+     5.28,
+     1
+    ],
+    "PetWindow._wire_anim_key": [
+     0.01,
+     0.0,
+     2
+    ],
+    "PetWindow._wire_anim_sets": [
+     0.03,
+     0.02,
+     2
+    ],
+    "PetWindow._build_state_pix": [
+     21.03,
+     21.03,
+     1
+    ],
+    "pet_audio._rebuild_effects": [
+     0.23,
+     0.23,
+     1
+    ],
+    "pet_audio.init": [
+     5.37,
+     5.37,
+     1
+    ],
+    "PetWindow._apply_sound_group": [
+     0.0,
+     0.0,
+     1
+    ],
+    "PetWindow._update_click_mask": [
+     0.01,
+     0.0,
+     2
+    ],
+    "PetWindow._apply_transform": [
+     0.04,
+     0.02,
+     2
+    ],
+    "PetWindow._show_state": [
+     0.02,
+     0.02,
+     1
+    ],
+    "PetWindow._pick_line": [
+     0.01,
+     0.01,
+     1
+    ],
+    "PetWindow._say_line": [
+     0.1,
+     0.1,
+     1
+    ],
+    "QSystemTrayIcon.show": [
+     0.0,
+     0.0,
+     1
+    ]
+   },
+   "timers_after": {
+    "PetWindow._scan_invalid_refs": [
+     0.45,
+     0.45,
+     1
+    ],
+    "QPixmap(路径)": [
+     59.24,
+     1.19,
+     86
+    ],
+    "load_frame_set[money]": [
+     60.66,
+     60.66,
+     1
+    ],
+    "load_frame_set[TOTAL]": [
+     60.66,
+     60.66,
+     1
+    ],
+    "PetWindow._preload_money_fx": [
+     60.69,
+     60.69,
+     1
+    ]
+   },
+   "samples": 0,
+   "leaf": [],
+   "near": [],
+   "leaf_total": 0,
+   "events": {
+    "frames_loaded": [
+     [
+      21.7,
+      "idle=10"
+     ],
+     [
+      32.1,
+      "idle_full=10"
+     ],
+     [
+      42.6,
+      "eat=7"
+     ],
+     [
+      50.8,
+      "petpet=10"
+     ],
+     [
+      1439.0,
+      "money=86"
+     ]
+    ]
+   }
+  }
+ ],
+ "current_rows": [
+  {
+   "run": 1,
+   "init_ms": 46.0,
+   "t_show_call_ms": 42.6,
+   "t_first_paint_ms": 90.4,
+   "first_paint_seen": true,
+   "first_pix_ok": true,
+   "first_pix": "256x256",
+   "decodes": 144,
+   "decode_names": [
+    "character.png",
+    "character_front.png",
+    "character_full.png",
+    "character_full_front.png",
+    "eat_f00.png",
+    "eat_f01.png",
+    "eat_f02.png",
+    "eat_f03.png",
+    "eat_f04.png",
+    "eat_f05.png",
+    "eat_f06.png",
+    "f_angry.png",
+    "f_blush.png",
+    "f_cry.png",
+    "f_laugh.png",
+    "f_puzzled.png",
+    "f_sleep.png",
+    "f_smug.png",
+    "idle_f00.png",
+    "idle_f01.png",
+    "idle_f02.png",
+    "idle_f03.png",
+    "idle_f04.png",
+    "idle_f05.png",
+    "idle_f06.png",
+    "idle_f07.png",
+    "idle_f08.png",
+    "idle_f09.png",
+    "idle_full_f00.png",
+    "idle_full_f01.png",
+    "idle_full_f02.png",
+    "idle_full_f03.png",
+    "idle_full_f04.png",
+    "idle_full_f05.png",
+    "idle_full_f06.png",
+    "idle_full_f07.png",
+    "idle_full_f08.png",
+    "idle_full_f09.png",
+    "money_f00.png",
+    "money_f01.png",
+    "money_f02.png",
+    "money_f03.png",
+    "money_f04.png",
+    "money_f05.png",
+    "money_f06.png",
+    "money_f07.png",
+    "money_f08.png",
+    "money_f09.png",
+    "money_f10.png",
+    "money_f11.png",
+    "money_f12.png",
+    "money_f13.png",
+    "money_f14.png",
+    "money_f15.png",
+    "money_f16.png",
+    "money_f17.png",
+    "money_f18.png",
+    "money_f19.png",
+    "money_f20.png",
+    "money_f21.png",
+    "money_f22.png",
+    "money_f23.png",
+    "money_f24.png",
+    "money_f25.png",
+    "money_f26.png",
+    "money_f27.png",
+    "money_f28.png",
+    "money_f29.png",
+    "money_f30.png",
+    "money_f31.png",
+    "money_f32.png",
+    "money_f33.png",
+    "money_f34.png",
+    "money_f35.png",
+    "money_f36.png",
+    "money_f37.png",
+    "money_f38.png",
+    "money_f39.png",
+    "money_f40.png",
+    "money_f41.png",
+    "money_f42.png",
+    "money_f43.png",
+    "money_f44.png",
+    "money_f45.png",
+    "money_f46.png",
+    "money_f47.png",
+    "money_f48.png",
+    "money_f49.png",
+    "money_f50.png",
+    "money_f51.png",
+    "money_f52.png",
+    "money_f53.png",
+    "money_f54.png",
+    "money_f55.png",
+    "money_f56.png",
+    "money_f57.png",
+    "money_f58.png",
+    "money_f59.png",
+    "money_f60.png",
+    "money_f61.png",
+    "money_f62.png",
+    "money_f63.png",
+    "money_f64.png",
+    "money_f65.png",
+    "money_f66.png",
+    "money_f67.png",
+    "money_f68.png",
+    "money_f69.png",
+    "money_f70.png",
+    "money_f71.png",
+    "money_f72.png",
+    "money_f73.png",
+    "money_f74.png",
+    "money_f75.png",
+    "money_f76.png",
+    "money_f77.png",
+    "money_f78.png",
+    "money_f79.png",
+    "money_f80.png",
+    "money_f81.png",
+    "money_f82.png",
+    "money_f83.png",
+    "money_f84.png",
+    "money_f85.png",
+    "n_angry.png",
+    "n_blush.png",
+    "n_cry.png",
+    "n_drool.png",
+    "n_hiss.png",
+    "n_laugh.png",
+    "n_puzzled.png",
+    "n_sleep.png",
+    "n_smug.png",
+    "n_surprised.png",
+    "petpet_f00.png",
+    "petpet_f01.png",
+    "petpet_f02.png",
+    "petpet_f03.png",
+    "petpet_f04.png",
+    "petpet_f05.png",
+    "petpet_f06.png",
+    "petpet_f07.png",
+    "petpet_f08.png",
+    "petpet_f09.png"
+   ],
+   "after_init": {
+    "has_frames": true,
+    "idle_frames": 10,
+    "idle_full_frames": 0,
+    "eat_frames": 0,
+    "fx_petpet": 0,
+    "anim_idle_set": 10,
+    "anim_eat_set": 0,
+    "state_states": 2,
+    "decodes_ctor": 16,
+    "decode_names_ctor": [
+     "character.png",
+     "character_front.png",
+     "character_full.png",
+     "character_full_front.png",
+     "f_laugh.png",
+     "idle_f00.png",
+     "idle_f01.png",
+     "idle_f02.png",
+     "idle_f03.png",
+     "idle_f04.png",
+     "idle_f05.png",
+     "idle_f06.png",
+     "idle_f07.png",
+     "idle_f08.png",
+     "idle_f09.png",
+     "n_laugh.png"
+    ]
+   },
+   "settled": {
+    "has_frames": true,
+    "idle_frames": 10,
+    "idle_full_frames": 10,
+    "eat_frames": 7,
+    "fx_petpet": 10,
+    "anim_idle_set": 10,
+    "state_states": 17,
+    "max_settle_gap_ms": 65.4,
+    "anim_running": false
+   },
+   "timers": {
+    "桌宠.load_config": [
+     0.46,
+     0.46,
+     1
+    ],
+    "桌宠.ensure_persona_files": [
+     3.71,
+     3.71,
+     1
+    ],
+    "RoleLibrary._load": [
+     0.23,
+     0.23,
+     1
+    ],
+    "RoleLibrary.__init__": [
+     0.25,
+     0.25,
+     1
+    ],
+    "AudioLibrary.__init__": [
+     0.11,
+     0.11,
+     1
+    ],
+    "Book.__init__": [
+     3.15,
+     3.15,
+     1
+    ],
+    "LineService.__init__": [
+     2.03,
+     2.03,
+     1
+    ],
+    "VoiceAssetLibrary.__init__": [
+     0.09,
+     0.09,
+     1
+    ],
+    "桌宠.save_config": [
+     1.35,
+     1.35,
+     1
+    ],
+    "PetWindow._migrate_lines_extra": [
+     2.66,
+     2.66,
+     1
+    ],
+    "PetWindow._refresh_lines": [
+     0.02,
+     0.02,
+     1
+    ],
+    "Bubble.__init__": [
+     0.15,
+     0.15,
+     1
+    ],
+    "Badge.__init__": [
+     0.02,
+     0.02,
+     1
+    ],
+    "FoodTray.__init__": [
+     0.02,
+     0.02,
+     1
+    ],
+    "FoodFlyer.__init__": [
+     0.01,
+     0.01,
+     1
+    ],
+    "QWidget.winId": [
+     0.07,
+     0.04,
+     4
+    ],
+    "PetWindow._role_pix": [
+     0.0,
+     0.0,
+     1
+    ],
+    "桌宠.resource_path": [
+     1.14,
+     0.18,
+     10
+    ],
+    "QPixmap(路径)": [
+     17.96,
+     1.8,
+     16
+    ],
+    "PetWindow._load_img": [
+     8.26,
+     1.51,
+     6
+    ],
+    "PetWindow._build_sprites": [
+     5.74,
+     5.74,
+     1
+    ],
+    "PetWindow._compute_base_size": [
+     0.01,
+     0.01,
+     1
+    ],
+    "桌宠.resource_dir": [
+     0.3,
+     0.16,
+     2
+    ],
+    "load_frame_set[idle]": [
+     11.69,
+     11.69,
+     1
+    ],
+    "load_frame_set[TOTAL]": [
+     11.69,
+     11.69,
+     1
+    ],
+    "PetWindow._wire_anim_key": [
+     0.01,
+     0.0,
+     2
+    ],
+    "PetWindow._wire_anim_sets": [
+     0.02,
+     0.01,
+     2
+    ],
+    "PetWindow._build_state_pix": [
+     0.02,
+     0.02,
+     1
+    ],
+    "pet_audio._rebuild_effects": [
+     0.24,
+     0.24,
+     1
+    ],
+    "pet_audio.init": [
+     5.97,
+     5.97,
+     1
+    ],
+    "PetWindow._apply_sound_group": [
+     0.0,
+     0.0,
+     1
+    ],
+    "PetWindow._update_click_mask": [
+     0.0,
+     0.0,
+     2
+    ],
+    "PetWindow._apply_transform": [
+     0.04,
+     0.02,
+     2
+    ],
+    "PetWindow._show_state": [
+     2.61,
+     2.61,
+     1
+    ],
+    "PetWindow._pick_line": [
+     0.01,
+     0.01,
+     1
+    ],
+    "PetWindow._say_line": [
+     0.13,
+     0.13,
+     1
+    ],
+    "QSystemTrayIcon.show": [
+     0.0,
+     0.0,
+     1
+    ]
+   },
+   "timers_after": {
+    "QPixmap(路径)": [
+     87.59,
+     1.33,
+     128
+    ],
+    "load_frame_set[idle_full]": [
+     10.04,
+     10.04,
+     1
+    ],
+    "load_frame_set[TOTAL]": [
+     74.13,
+     50.41,
+     4
+    ],
+    "load_frame_set[eat]": [
+     8.27,
+     8.27,
+     1
+    ],
+    "load_frame_set[petpet]": [
+     5.4,
+     5.4,
+     1
+    ],
+    "PetWindow._wire_anim_key": [
+     0.0,
+     0.0,
+     1
+    ],
+    "PetWindow._wire_anim_sets": [
+     0.02,
+     0.02,
+     1
+    ],
+    "桌宠.resource_path": [
+     2.2,
+     0.2,
+     18
+    ],
+    "PetWindow._load_img": [
+     18.44,
+     1.51,
+     18
+    ],
+    "load_frame_set[money]": [
+     50.41,
+     50.41,
+     1
+    ],
+    "PetWindow._preload_money_fx": [
+     50.43,
+     50.43,
+     1
+    ]
+   },
+   "samples": 0,
+   "leaf": [],
+   "near": [],
+   "leaf_total": 0,
+   "events": {
+    "frames_loaded": [
+     [
+      21.9,
+      "idle=10"
+     ],
+     [
+      46.2,
+      "idle_full=10"
+     ],
+     [
+      90.8,
+      "eat=7"
+     ],
+     [
+      108.8,
+      "petpet=10"
+     ],
+     [
+      1379.7,
+      "money=86"
+     ]
+    ]
+   }
+  },
+  {
+   "run": 2,
+   "init_ms": 48.1,
+   "t_show_call_ms": 44.5,
+   "t_first_paint_ms": 97.3,
+   "first_paint_seen": true,
+   "first_pix_ok": true,
+   "first_pix": "256x256",
+   "decodes": 144,
+   "decode_names": [
+    "character.png",
+    "character_front.png",
+    "character_full.png",
+    "character_full_front.png",
+    "eat_f00.png",
+    "eat_f01.png",
+    "eat_f02.png",
+    "eat_f03.png",
+    "eat_f04.png",
+    "eat_f05.png",
+    "eat_f06.png",
+    "f_angry.png",
+    "f_blush.png",
+    "f_cry.png",
+    "f_laugh.png",
+    "f_puzzled.png",
+    "f_sleep.png",
+    "f_smug.png",
+    "idle_f00.png",
+    "idle_f01.png",
+    "idle_f02.png",
+    "idle_f03.png",
+    "idle_f04.png",
+    "idle_f05.png",
+    "idle_f06.png",
+    "idle_f07.png",
+    "idle_f08.png",
+    "idle_f09.png",
+    "idle_full_f00.png",
+    "idle_full_f01.png",
+    "idle_full_f02.png",
+    "idle_full_f03.png",
+    "idle_full_f04.png",
+    "idle_full_f05.png",
+    "idle_full_f06.png",
+    "idle_full_f07.png",
+    "idle_full_f08.png",
+    "idle_full_f09.png",
+    "money_f00.png",
+    "money_f01.png",
+    "money_f02.png",
+    "money_f03.png",
+    "money_f04.png",
+    "money_f05.png",
+    "money_f06.png",
+    "money_f07.png",
+    "money_f08.png",
+    "money_f09.png",
+    "money_f10.png",
+    "money_f11.png",
+    "money_f12.png",
+    "money_f13.png",
+    "money_f14.png",
+    "money_f15.png",
+    "money_f16.png",
+    "money_f17.png",
+    "money_f18.png",
+    "money_f19.png",
+    "money_f20.png",
+    "money_f21.png",
+    "money_f22.png",
+    "money_f23.png",
+    "money_f24.png",
+    "money_f25.png",
+    "money_f26.png",
+    "money_f27.png",
+    "money_f28.png",
+    "money_f29.png",
+    "money_f30.png",
+    "money_f31.png",
+    "money_f32.png",
+    "money_f33.png",
+    "money_f34.png",
+    "money_f35.png",
+    "money_f36.png",
+    "money_f37.png",
+    "money_f38.png",
+    "money_f39.png",
+    "money_f40.png",
+    "money_f41.png",
+    "money_f42.png",
+    "money_f43.png",
+    "money_f44.png",
+    "money_f45.png",
+    "money_f46.png",
+    "money_f47.png",
+    "money_f48.png",
+    "money_f49.png",
+    "money_f50.png",
+    "money_f51.png",
+    "money_f52.png",
+    "money_f53.png",
+    "money_f54.png",
+    "money_f55.png",
+    "money_f56.png",
+    "money_f57.png",
+    "money_f58.png",
+    "money_f59.png",
+    "money_f60.png",
+    "money_f61.png",
+    "money_f62.png",
+    "money_f63.png",
+    "money_f64.png",
+    "money_f65.png",
+    "money_f66.png",
+    "money_f67.png",
+    "money_f68.png",
+    "money_f69.png",
+    "money_f70.png",
+    "money_f71.png",
+    "money_f72.png",
+    "money_f73.png",
+    "money_f74.png",
+    "money_f75.png",
+    "money_f76.png",
+    "money_f77.png",
+    "money_f78.png",
+    "money_f79.png",
+    "money_f80.png",
+    "money_f81.png",
+    "money_f82.png",
+    "money_f83.png",
+    "money_f84.png",
+    "money_f85.png",
+    "n_angry.png",
+    "n_blush.png",
+    "n_cry.png",
+    "n_drool.png",
+    "n_hiss.png",
+    "n_laugh.png",
+    "n_puzzled.png",
+    "n_sleep.png",
+    "n_smug.png",
+    "n_surprised.png",
+    "petpet_f00.png",
+    "petpet_f01.png",
+    "petpet_f02.png",
+    "petpet_f03.png",
+    "petpet_f04.png",
+    "petpet_f05.png",
+    "petpet_f06.png",
+    "petpet_f07.png",
+    "petpet_f08.png",
+    "petpet_f09.png"
+   ],
+   "after_init": {
+    "has_frames": true,
+    "idle_frames": 10,
+    "idle_full_frames": 0,
+    "eat_frames": 0,
+    "fx_petpet": 0,
+    "anim_idle_set": 10,
+    "anim_eat_set": 0,
+    "state_states": 2,
+    "decodes_ctor": 16,
+    "decode_names_ctor": [
+     "character.png",
+     "character_front.png",
+     "character_full.png",
+     "character_full_front.png",
+     "f_laugh.png",
+     "idle_f00.png",
+     "idle_f01.png",
+     "idle_f02.png",
+     "idle_f03.png",
+     "idle_f04.png",
+     "idle_f05.png",
+     "idle_f06.png",
+     "idle_f07.png",
+     "idle_f08.png",
+     "idle_f09.png",
+     "n_laugh.png"
+    ]
+   },
+   "settled": {
+    "has_frames": true,
+    "idle_frames": 10,
+    "idle_full_frames": 10,
+    "eat_frames": 7,
+    "fx_petpet": 10,
+    "anim_idle_set": 10,
+    "state_states": 17,
+    "max_settle_gap_ms": 68.0,
+    "anim_running": false
+   },
+   "timers": {
+    "桌宠.load_config": [
+     0.5,
+     0.5,
+     1
+    ],
+    "桌宠.ensure_persona_files": [
+     3.01,
+     3.01,
+     1
+    ],
+    "RoleLibrary._load": [
+     0.18,
+     0.18,
+     1
+    ],
+    "RoleLibrary.__init__": [
+     0.19,
+     0.19,
+     1
+    ],
+    "AudioLibrary.__init__": [
+     0.08,
+     0.08,
+     1
+    ],
+    "Book.__init__": [
+     3.58,
+     3.58,
+     1
+    ],
+    "LineService.__init__": [
+     2.25,
+     2.25,
+     1
+    ],
+    "VoiceAssetLibrary.__init__": [
+     0.13,
+     0.13,
+     1
+    ],
+    "桌宠.save_config": [
+     1.56,
+     1.56,
+     1
+    ],
+    "PetWindow._migrate_lines_extra": [
+     2.9,
+     2.9,
+     1
+    ],
+    "PetWindow._refresh_lines": [
+     0.03,
+     0.03,
+     1
+    ],
+    "Bubble.__init__": [
+     0.14,
+     0.14,
+     1
+    ],
+    "Badge.__init__": [
+     0.02,
+     0.02,
+     1
+    ],
+    "FoodTray.__init__": [
+     0.03,
+     0.03,
+     1
+    ],
+    "FoodFlyer.__init__": [
+     0.02,
+     0.02,
+     1
+    ],
+    "QWidget.winId": [
+     0.07,
+     0.05,
+     4
+    ],
+    "PetWindow._role_pix": [
+     0.0,
+     0.0,
+     1
+    ],
+    "桌宠.resource_path": [
+     1.2,
+     0.15,
+     10
+    ],
+    "QPixmap(路径)": [
+     19.2,
+     1.44,
+     16
+    ],
+    "PetWindow._load_img": [
+     9.03,
+     1.73,
+     6
+    ],
+    "PetWindow._build_sprites": [
+     6.35,
+     6.35,
+     1
+    ],
+    "PetWindow._compute_base_size": [
+     0.01,
+     0.01,
+     1
+    ],
+    "桌宠.resource_dir": [
+     0.31,
+     0.17,
+     2
+    ],
+    "load_frame_set[idle]": [
+     12.32,
+     12.32,
+     1
+    ],
+    "load_frame_set[TOTAL]": [
+     12.32,
+     12.32,
+     1
+    ],
+    "PetWindow._wire_anim_key": [
+     0.01,
+     0.0,
+     2
+    ],
+    "PetWindow._wire_anim_sets": [
+     0.02,
+     0.01,
+     2
+    ],
+    "PetWindow._build_state_pix": [
+     0.01,
+     0.01,
+     1
+    ],
+    "pet_audio._rebuild_effects": [
+     0.23,
+     0.23,
+     1
+    ],
+    "pet_audio.init": [
+     6.91,
+     6.91,
+     1
+    ],
+    "PetWindow._apply_sound_group": [
+     0.0,
+     0.0,
+     1
+    ],
+    "PetWindow._update_click_mask": [
+     0.0,
+     0.0,
+     2
+    ],
+    "PetWindow._apply_transform": [
+     0.04,
+     0.02,
+     2
+    ],
+    "PetWindow._show_state": [
+     2.78,
+     2.78,
+     1
+    ],
+    "PetWindow._pick_line": [
+     0.01,
+     0.01,
+     1
+    ],
+    "PetWindow._say_line": [
+     0.16,
+     0.16,
+     1
+    ],
+    "QSystemTrayIcon.show": [
+     0.0,
+     0.0,
+     1
+    ]
+   },
+   "timers_after": {
+    "QPixmap(路径)": [
+     96.08,
+     1.84,
+     128
+    ],
+    "load_frame_set[idle_full]": [
+     11.41,
+     11.41,
+     1
+    ],
+    "load_frame_set[TOTAL]": [
+     80.02,
+     52.77,
+     4
+    ],
+    "load_frame_set[eat]": [
+     8.99,
+     8.99,
+     1
+    ],
+    "load_frame_set[petpet]": [
+     6.85,
+     6.85,
+     1
+    ],
+    "PetWindow._wire_anim_key": [
+     0.01,
+     0.01,
+     1
+    ],
+    "PetWindow._wire_anim_sets": [
+     0.02,
+     0.02,
+     1
+    ],
+    "桌宠.resource_path": [
+     2.74,
+     0.24,
+     18
+    ],
+    "PetWindow._load_img": [
+     22.11,
+     2.19,
+     18
+    ],
+    "PetWindow._scan_invalid_refs": [
+     0.41,
+     0.41,
+     1
+    ],
+    "load_frame_set[money]": [
+     52.76,
+     52.76,
+     1
+    ],
+    "PetWindow._preload_money_fx": [
+     52.79,
+     52.79,
+     1
+    ]
+   },
+   "samples": 0,
+   "leaf": [],
+   "near": [],
+   "leaf_total": 0,
+   "events": {
+    "frames_loaded": [
+     [
+      22.8,
+      "idle=10"
+     ],
+     [
+      62.3,
+      "idle_full=10"
+     ],
+     [
+      97.8,
+      "eat=7"
+     ],
+     [
+      123.9,
+      "petpet=10"
+     ],
+     [
+      1432.4,
+      "money=86"
+     ]
+    ]
+   }
+  },
+  {
+   "run": 1,
+   "init_ms": 43.4,
+   "t_show_call_ms": 40.2,
+   "t_first_paint_ms": 90.3,
+   "first_paint_seen": true,
+   "first_pix_ok": true,
+   "first_pix": "256x256",
+   "decodes": 144,
+   "decode_names": [
+    "character.png",
+    "character_front.png",
+    "character_full.png",
+    "character_full_front.png",
+    "eat_f00.png",
+    "eat_f01.png",
+    "eat_f02.png",
+    "eat_f03.png",
+    "eat_f04.png",
+    "eat_f05.png",
+    "eat_f06.png",
+    "f_angry.png",
+    "f_blush.png",
+    "f_cry.png",
+    "f_laugh.png",
+    "f_puzzled.png",
+    "f_sleep.png",
+    "f_smug.png",
+    "idle_f00.png",
+    "idle_f01.png",
+    "idle_f02.png",
+    "idle_f03.png",
+    "idle_f04.png",
+    "idle_f05.png",
+    "idle_f06.png",
+    "idle_f07.png",
+    "idle_f08.png",
+    "idle_f09.png",
+    "idle_full_f00.png",
+    "idle_full_f01.png",
+    "idle_full_f02.png",
+    "idle_full_f03.png",
+    "idle_full_f04.png",
+    "idle_full_f05.png",
+    "idle_full_f06.png",
+    "idle_full_f07.png",
+    "idle_full_f08.png",
+    "idle_full_f09.png",
+    "money_f00.png",
+    "money_f01.png",
+    "money_f02.png",
+    "money_f03.png",
+    "money_f04.png",
+    "money_f05.png",
+    "money_f06.png",
+    "money_f07.png",
+    "money_f08.png",
+    "money_f09.png",
+    "money_f10.png",
+    "money_f11.png",
+    "money_f12.png",
+    "money_f13.png",
+    "money_f14.png",
+    "money_f15.png",
+    "money_f16.png",
+    "money_f17.png",
+    "money_f18.png",
+    "money_f19.png",
+    "money_f20.png",
+    "money_f21.png",
+    "money_f22.png",
+    "money_f23.png",
+    "money_f24.png",
+    "money_f25.png",
+    "money_f26.png",
+    "money_f27.png",
+    "money_f28.png",
+    "money_f29.png",
+    "money_f30.png",
+    "money_f31.png",
+    "money_f32.png",
+    "money_f33.png",
+    "money_f34.png",
+    "money_f35.png",
+    "money_f36.png",
+    "money_f37.png",
+    "money_f38.png",
+    "money_f39.png",
+    "money_f40.png",
+    "money_f41.png",
+    "money_f42.png",
+    "money_f43.png",
+    "money_f44.png",
+    "money_f45.png",
+    "money_f46.png",
+    "money_f47.png",
+    "money_f48.png",
+    "money_f49.png",
+    "money_f50.png",
+    "money_f51.png",
+    "money_f52.png",
+    "money_f53.png",
+    "money_f54.png",
+    "money_f55.png",
+    "money_f56.png",
+    "money_f57.png",
+    "money_f58.png",
+    "money_f59.png",
+    "money_f60.png",
+    "money_f61.png",
+    "money_f62.png",
+    "money_f63.png",
+    "money_f64.png",
+    "money_f65.png",
+    "money_f66.png",
+    "money_f67.png",
+    "money_f68.png",
+    "money_f69.png",
+    "money_f70.png",
+    "money_f71.png",
+    "money_f72.png",
+    "money_f73.png",
+    "money_f74.png",
+    "money_f75.png",
+    "money_f76.png",
+    "money_f77.png",
+    "money_f78.png",
+    "money_f79.png",
+    "money_f80.png",
+    "money_f81.png",
+    "money_f82.png",
+    "money_f83.png",
+    "money_f84.png",
+    "money_f85.png",
+    "n_angry.png",
+    "n_blush.png",
+    "n_cry.png",
+    "n_drool.png",
+    "n_hiss.png",
+    "n_laugh.png",
+    "n_puzzled.png",
+    "n_sleep.png",
+    "n_smug.png",
+    "n_surprised.png",
+    "petpet_f00.png",
+    "petpet_f01.png",
+    "petpet_f02.png",
+    "petpet_f03.png",
+    "petpet_f04.png",
+    "petpet_f05.png",
+    "petpet_f06.png",
+    "petpet_f07.png",
+    "petpet_f08.png",
+    "petpet_f09.png"
+   ],
+   "after_init": {
+    "has_frames": true,
+    "idle_frames": 10,
+    "idle_full_frames": 0,
+    "eat_frames": 0,
+    "fx_petpet": 0,
+    "anim_idle_set": 10,
+    "anim_eat_set": 0,
+    "state_states": 2,
+    "decodes_ctor": 16,
+    "decode_names_ctor": [
+     "character.png",
+     "character_front.png",
+     "character_full.png",
+     "character_full_front.png",
+     "f_laugh.png",
+     "idle_f00.png",
+     "idle_f01.png",
+     "idle_f02.png",
+     "idle_f03.png",
+     "idle_f04.png",
+     "idle_f05.png",
+     "idle_f06.png",
+     "idle_f07.png",
+     "idle_f08.png",
+     "idle_f09.png",
+     "n_laugh.png"
+    ]
+   },
+   "settled": {
+    "has_frames": true,
+    "idle_frames": 10,
+    "idle_full_frames": 10,
+    "eat_frames": 7,
+    "fx_petpet": 10,
+    "anim_idle_set": 10,
+    "state_states": 17,
+    "max_settle_gap_ms": 61.7,
+    "anim_running": false
+   },
+   "timers": {
+    "桌宠.load_config": [
+     0.46,
+     0.46,
+     1
+    ],
+    "桌宠.ensure_persona_files": [
+     4.02,
+     4.02,
+     1
+    ],
+    "RoleLibrary._load": [
+     0.2,
+     0.2,
+     1
+    ],
+    "RoleLibrary.__init__": [
+     0.22,
+     0.22,
+     1
+    ],
+    "AudioLibrary.__init__": [
+     0.09,
+     0.09,
+     1
+    ],
+    "Book.__init__": [
+     3.21,
+     3.21,
+     1
+    ],
+    "LineService.__init__": [
+     2.04,
+     2.04,
+     1
+    ],
+    "VoiceAssetLibrary.__init__": [
+     0.09,
+     0.09,
+     1
+    ],
+    "桌宠.save_config": [
+     1.36,
+     1.36,
+     1
+    ],
+    "PetWindow._migrate_lines_extra": [
+     2.7,
+     2.7,
+     1
+    ],
+    "PetWindow._refresh_lines": [
+     0.02,
+     0.02,
+     1
+    ],
+    "Bubble.__init__": [
+     0.15,
+     0.15,
+     1
+    ],
+    "Badge.__init__": [
+     0.02,
+     0.02,
+     1
+    ],
+    "FoodTray.__init__": [
+     0.03,
+     0.03,
+     1
+    ],
+    "FoodFlyer.__init__": [
+     0.01,
+     0.01,
+     1
+    ],
+    "QWidget.winId": [
+     0.07,
+     0.04,
+     4
+    ],
+    "PetWindow._role_pix": [
+     0.0,
+     0.0,
+     1
+    ],
+    "桌宠.resource_path": [
+     1.13,
+     0.16,
+     10
+    ],
+    "QPixmap(路径)": [
+     16.2,
+     1.27,
+     16
+    ],
+    "PetWindow._load_img": [
+     8.31,
+     1.66,
+     6
+    ],
+    "PetWindow._build_sprites": [
+     5.92,
+     5.92,
+     1
+    ],
+    "PetWindow._compute_base_size": [
+     0.01,
+     0.01,
+     1
+    ],
+    "桌宠.resource_dir": [
+     0.3,
+     0.19,
+     2
+    ],
+    "load_frame_set[idle]": [
+     9.9,
+     9.9,
+     1
+    ],
+    "load_frame_set[TOTAL]": [
+     9.9,
+     9.9,
+     1
+    ],
+    "PetWindow._wire_anim_key": [
+     0.01,
+     0.0,
+     2
+    ],
+    "PetWindow._wire_anim_sets": [
+     0.02,
+     0.01,
+     2
+    ],
+    "PetWindow._build_state_pix": [
+     0.01,
+     0.01,
+     1
+    ],
+    "pet_audio._rebuild_effects": [
+     0.23,
+     0.23,
+     1
+    ],
+    "pet_audio.init": [
+     5.12,
+     5.12,
+     1
+    ],
+    "PetWindow._apply_sound_group": [
+     0.01,
+     0.01,
+     1
+    ],
+    "PetWindow._update_click_mask": [
+     0.0,
+     0.0,
+     2
+    ],
+    "PetWindow._apply_transform": [
+     0.04,
+     0.02,
+     2
+    ],
+    "PetWindow._show_state": [
+     2.48,
+     2.48,
+     1
+    ],
+    "PetWindow._pick_line": [
+     0.01,
+     0.01,
+     1
+    ],
+    "PetWindow._say_line": [
+     0.12,
+     0.12,
+     1
+    ],
+    "QSystemTrayIcon.show": [
+     0.0,
+     0.0,
+     1
+    ]
+   },
+   "timers_after": {
+    "QPixmap(路径)": [
+     84.96,
+     1.46,
+     128
+    ],
+    "load_frame_set[idle_full]": [
+     10.91,
+     10.91,
+     1
+    ],
+    "load_frame_set[TOTAL]": [
+     71.61,
+     45.73,
+     4
+    ],
+    "load_frame_set[eat]": [
+     8.95,
+     8.95,
+     1
+    ],
+    "load_frame_set[petpet]": [
+     6.02,
+     6.02,
+     1
+    ],
+    "PetWindow._wire_anim_key": [
+     0.01,
+     0.01,
+     1
+    ],
+    "PetWindow._wire_anim_sets": [
+     0.02,
+     0.02,
+     1
+    ],
+    "桌宠.resource_path": [
+     2.2,
+     0.21,
+     18
+    ],
+    "PetWindow._load_img": [
+     18.29,
+     1.44,
+     18
+    ],
+    "load_frame_set[money]": [
+     45.73,
+     45.73,
+     1
+    ],
+    "PetWindow._preload_money_fx": [
+     45.75,
+     45.75,
+     1
+    ]
+   },
+   "samples": 0,
+   "leaf": [],
+   "near": [],
+   "leaf_total": 0,
+   "events": {
+    "frames_loaded": [
+     [
+      22.4,
+      "idle=10"
+     ],
+     [
+      57.1,
+      "idle_full=10"
+     ],
+     [
+      90.8,
+      "eat=7"
+     ],
+     [
+      108.5,
+      "petpet=10"
+     ],
+     [
+      1394.0,
+      "money=86"
+     ]
+    ]
+   }
+  },
+  {
+   "run": 2,
+   "init_ms": 43.2,
+   "t_show_call_ms": 39.1,
+   "t_first_paint_ms": 88.4,
+   "first_paint_seen": true,
+   "first_pix_ok": true,
+   "first_pix": "256x256",
+   "decodes": 144,
+   "decode_names": [
+    "character.png",
+    "character_front.png",
+    "character_full.png",
+    "character_full_front.png",
+    "eat_f00.png",
+    "eat_f01.png",
+    "eat_f02.png",
+    "eat_f03.png",
+    "eat_f04.png",
+    "eat_f05.png",
+    "eat_f06.png",
+    "f_angry.png",
+    "f_blush.png",
+    "f_cry.png",
+    "f_laugh.png",
+    "f_puzzled.png",
+    "f_sleep.png",
+    "f_smug.png",
+    "idle_f00.png",
+    "idle_f01.png",
+    "idle_f02.png",
+    "idle_f03.png",
+    "idle_f04.png",
+    "idle_f05.png",
+    "idle_f06.png",
+    "idle_f07.png",
+    "idle_f08.png",
+    "idle_f09.png",
+    "idle_full_f00.png",
+    "idle_full_f01.png",
+    "idle_full_f02.png",
+    "idle_full_f03.png",
+    "idle_full_f04.png",
+    "idle_full_f05.png",
+    "idle_full_f06.png",
+    "idle_full_f07.png",
+    "idle_full_f08.png",
+    "idle_full_f09.png",
+    "money_f00.png",
+    "money_f01.png",
+    "money_f02.png",
+    "money_f03.png",
+    "money_f04.png",
+    "money_f05.png",
+    "money_f06.png",
+    "money_f07.png",
+    "money_f08.png",
+    "money_f09.png",
+    "money_f10.png",
+    "money_f11.png",
+    "money_f12.png",
+    "money_f13.png",
+    "money_f14.png",
+    "money_f15.png",
+    "money_f16.png",
+    "money_f17.png",
+    "money_f18.png",
+    "money_f19.png",
+    "money_f20.png",
+    "money_f21.png",
+    "money_f22.png",
+    "money_f23.png",
+    "money_f24.png",
+    "money_f25.png",
+    "money_f26.png",
+    "money_f27.png",
+    "money_f28.png",
+    "money_f29.png",
+    "money_f30.png",
+    "money_f31.png",
+    "money_f32.png",
+    "money_f33.png",
+    "money_f34.png",
+    "money_f35.png",
+    "money_f36.png",
+    "money_f37.png",
+    "money_f38.png",
+    "money_f39.png",
+    "money_f40.png",
+    "money_f41.png",
+    "money_f42.png",
+    "money_f43.png",
+    "money_f44.png",
+    "money_f45.png",
+    "money_f46.png",
+    "money_f47.png",
+    "money_f48.png",
+    "money_f49.png",
+    "money_f50.png",
+    "money_f51.png",
+    "money_f52.png",
+    "money_f53.png",
+    "money_f54.png",
+    "money_f55.png",
+    "money_f56.png",
+    "money_f57.png",
+    "money_f58.png",
+    "money_f59.png",
+    "money_f60.png",
+    "money_f61.png",
+    "money_f62.png",
+    "money_f63.png",
+    "money_f64.png",
+    "money_f65.png",
+    "money_f66.png",
+    "money_f67.png",
+    "money_f68.png",
+    "money_f69.png",
+    "money_f70.png",
+    "money_f71.png",
+    "money_f72.png",
+    "money_f73.png",
+    "money_f74.png",
+    "money_f75.png",
+    "money_f76.png",
+    "money_f77.png",
+    "money_f78.png",
+    "money_f79.png",
+    "money_f80.png",
+    "money_f81.png",
+    "money_f82.png",
+    "money_f83.png",
+    "money_f84.png",
+    "money_f85.png",
+    "n_angry.png",
+    "n_blush.png",
+    "n_cry.png",
+    "n_drool.png",
+    "n_hiss.png",
+    "n_laugh.png",
+    "n_puzzled.png",
+    "n_sleep.png",
+    "n_smug.png",
+    "n_surprised.png",
+    "petpet_f00.png",
+    "petpet_f01.png",
+    "petpet_f02.png",
+    "petpet_f03.png",
+    "petpet_f04.png",
+    "petpet_f05.png",
+    "petpet_f06.png",
+    "petpet_f07.png",
+    "petpet_f08.png",
+    "petpet_f09.png"
+   ],
+   "after_init": {
+    "has_frames": true,
+    "idle_frames": 10,
+    "idle_full_frames": 0,
+    "eat_frames": 0,
+    "fx_petpet": 0,
+    "anim_idle_set": 10,
+    "anim_eat_set": 0,
+    "state_states": 2,
+    "decodes_ctor": 16,
+    "decode_names_ctor": [
+     "character.png",
+     "character_front.png",
+     "character_full.png",
+     "character_full_front.png",
+     "f_laugh.png",
+     "idle_f00.png",
+     "idle_f01.png",
+     "idle_f02.png",
+     "idle_f03.png",
+     "idle_f04.png",
+     "idle_f05.png",
+     "idle_f06.png",
+     "idle_f07.png",
+     "idle_f08.png",
+     "idle_f09.png",
+     "n_laugh.png"
+    ]
+   },
+   "settled": {
+    "has_frames": true,
+    "idle_frames": 10,
+    "idle_full_frames": 10,
+    "eat_frames": 7,
+    "fx_petpet": 10,
+    "anim_idle_set": 10,
+    "state_states": 17,
+    "max_settle_gap_ms": 61.4,
+    "anim_running": false
+   },
+   "timers": {
+    "桌宠.load_config": [
+     0.39,
+     0.39,
+     1
+    ],
+    "桌宠.ensure_persona_files": [
+     3.0,
+     3.0,
+     1
+    ],
+    "RoleLibrary._load": [
+     0.15,
+     0.15,
+     1
+    ],
+    "RoleLibrary.__init__": [
+     0.16,
+     0.16,
+     1
+    ],
+    "AudioLibrary.__init__": [
+     0.07,
+     0.07,
+     1
+    ],
+    "Book.__init__": [
+     3.98,
+     3.98,
+     1
+    ],
+    "LineService.__init__": [
+     2.09,
+     2.09,
+     1
+    ],
+    "VoiceAssetLibrary.__init__": [
+     0.09,
+     0.09,
+     1
+    ],
+    "桌宠.save_config": [
+     1.42,
+     1.42,
+     1
+    ],
+    "PetWindow._migrate_lines_extra": [
+     2.7,
+     2.7,
+     1
+    ],
+    "PetWindow._refresh_lines": [
+     0.02,
+     0.02,
+     1
+    ],
+    "Bubble.__init__": [
+     0.14,
+     0.14,
+     1
+    ],
+    "Badge.__init__": [
+     0.02,
+     0.02,
+     1
+    ],
+    "FoodTray.__init__": [
+     0.02,
+     0.02,
+     1
+    ],
+    "FoodFlyer.__init__": [
+     0.01,
+     0.01,
+     1
+    ],
+    "QWidget.winId": [
+     0.06,
+     0.04,
+     4
+    ],
+    "PetWindow._role_pix": [
+     0.0,
+     0.0,
+     1
+    ],
+    "桌宠.resource_path": [
+     1.23,
+     0.2,
+     10
+    ],
+    "QPixmap(路径)": [
+     17.28,
+     1.63,
+     16
+    ],
+    "PetWindow._load_img": [
+     9.02,
+     1.95,
+     6
+    ],
+    "PetWindow._build_sprites": [
+     5.84,
+     5.84,
+     1
+    ],
+    "PetWindow._compute_base_size": [
+     0.01,
+     0.01,
+     1
+    ],
+    "桌宠.resource_dir": [
+     0.26,
+     0.14,
+     2
+    ],
+    "load_frame_set[idle]": [
+     10.62,
+     10.62,
+     1
+    ],
+    "load_frame_set[TOTAL]": [
+     10.62,
+     10.62,
+     1
+    ],
+    "PetWindow._wire_anim_key": [
+     0.01,
+     0.0,
+     2
+    ],
+    "PetWindow._wire_anim_sets": [
+     0.02,
+     0.01,
+     2
+    ],
+    "PetWindow._build_state_pix": [
+     0.01,
+     0.01,
+     1
+    ],
+    "pet_audio._rebuild_effects": [
+     0.22,
+     0.22,
+     1
+    ],
+    "pet_audio.init": [
+     5.01,
+     5.01,
+     1
+    ],
+    "PetWindow._apply_sound_group": [
+     0.0,
+     0.0,
+     1
+    ],
+    "PetWindow._update_click_mask": [
+     0.0,
+     0.0,
+     2
+    ],
+    "PetWindow._apply_transform": [
+     0.04,
+     0.02,
+     2
+    ],
+    "PetWindow._show_state": [
+     3.33,
+     3.33,
+     1
+    ],
+    "PetWindow._pick_line": [
+     0.01,
+     0.01,
+     1
+    ],
+    "PetWindow._say_line": [
+     0.16,
+     0.16,
+     1
+    ],
+    "QSystemTrayIcon.show": [
+     0.0,
+     0.0,
+     1
+    ]
+   },
+   "timers_after": {
+    "QPixmap(路径)": [
+     84.62,
+     1.7,
+     128
+    ],
+    "load_frame_set[idle_full]": [
+     11.43,
+     11.43,
+     1
+    ],
+    "load_frame_set[TOTAL]": [
+     71.43,
+     45.68,
+     4
+    ],
+    "load_frame_set[eat]": [
+     9.18,
+     9.18,
+     1
+    ],
+    "load_frame_set[petpet]": [
+     5.15,
+     5.15,
+     1
+    ],
+    "PetWindow._wire_anim_key": [
+     0.0,
+     0.0,
+     1
+    ],
+    "PetWindow._wire_anim_sets": [
+     0.01,
+     0.01,
+     1
+    ],
+    "桌宠.resource_path": [
+     2.4,
+     0.35,
+     18
+    ],
+    "PetWindow._load_img": [
+     18.35,
+     1.67,
+     18
+    ],
+    "PetWindow._scan_invalid_refs": [
+     0.43,
+     0.43,
+     1
+    ],
+    "load_frame_set[money]": [
+     45.68,
+     45.68,
+     1
+    ],
+    "PetWindow._preload_money_fx": [
+     45.7,
+     45.7,
+     1
+    ]
+   },
+   "samples": 0,
+   "leaf": [],
+   "near": [],
+   "leaf_total": 0,
+   "events": {
+    "frames_loaded": [
+     [
+      21.4,
+      "idle=10"
+     ],
+     [
+      56.3,
+      "idle_full=10"
+     ],
+     [
+      88.8,
+      "eat=7"
+     ],
+     [
+      109.4,
+      "petpet=10"
+     ],
+     [
+      1428.0,
+      "money=86"
+     ]
+    ]
+   }
+  },
+  {
+   "run": 1,
+   "init_ms": 43.4,
+   "t_show_call_ms": 40.2,
+   "t_first_paint_ms": 88.9,
+   "first_paint_seen": true,
+   "first_pix_ok": true,
+   "first_pix": "256x256",
+   "decodes": 144,
+   "decode_names": [
+    "character.png",
+    "character_front.png",
+    "character_full.png",
+    "character_full_front.png",
+    "eat_f00.png",
+    "eat_f01.png",
+    "eat_f02.png",
+    "eat_f03.png",
+    "eat_f04.png",
+    "eat_f05.png",
+    "eat_f06.png",
+    "f_angry.png",
+    "f_blush.png",
+    "f_cry.png",
+    "f_laugh.png",
+    "f_puzzled.png",
+    "f_sleep.png",
+    "f_smug.png",
+    "idle_f00.png",
+    "idle_f01.png",
+    "idle_f02.png",
+    "idle_f03.png",
+    "idle_f04.png",
+    "idle_f05.png",
+    "idle_f06.png",
+    "idle_f07.png",
+    "idle_f08.png",
+    "idle_f09.png",
+    "idle_full_f00.png",
+    "idle_full_f01.png",
+    "idle_full_f02.png",
+    "idle_full_f03.png",
+    "idle_full_f04.png",
+    "idle_full_f05.png",
+    "idle_full_f06.png",
+    "idle_full_f07.png",
+    "idle_full_f08.png",
+    "idle_full_f09.png",
+    "money_f00.png",
+    "money_f01.png",
+    "money_f02.png",
+    "money_f03.png",
+    "money_f04.png",
+    "money_f05.png",
+    "money_f06.png",
+    "money_f07.png",
+    "money_f08.png",
+    "money_f09.png",
+    "money_f10.png",
+    "money_f11.png",
+    "money_f12.png",
+    "money_f13.png",
+    "money_f14.png",
+    "money_f15.png",
+    "money_f16.png",
+    "money_f17.png",
+    "money_f18.png",
+    "money_f19.png",
+    "money_f20.png",
+    "money_f21.png",
+    "money_f22.png",
+    "money_f23.png",
+    "money_f24.png",
+    "money_f25.png",
+    "money_f26.png",
+    "money_f27.png",
+    "money_f28.png",
+    "money_f29.png",
+    "money_f30.png",
+    "money_f31.png",
+    "money_f32.png",
+    "money_f33.png",
+    "money_f34.png",
+    "money_f35.png",
+    "money_f36.png",
+    "money_f37.png",
+    "money_f38.png",
+    "money_f39.png",
+    "money_f40.png",
+    "money_f41.png",
+    "money_f42.png",
+    "money_f43.png",
+    "money_f44.png",
+    "money_f45.png",
+    "money_f46.png",
+    "money_f47.png",
+    "money_f48.png",
+    "money_f49.png",
+    "money_f50.png",
+    "money_f51.png",
+    "money_f52.png",
+    "money_f53.png",
+    "money_f54.png",
+    "money_f55.png",
+    "money_f56.png",
+    "money_f57.png",
+    "money_f58.png",
+    "money_f59.png",
+    "money_f60.png",
+    "money_f61.png",
+    "money_f62.png",
+    "money_f63.png",
+    "money_f64.png",
+    "money_f65.png",
+    "money_f66.png",
+    "money_f67.png",
+    "money_f68.png",
+    "money_f69.png",
+    "money_f70.png",
+    "money_f71.png",
+    "money_f72.png",
+    "money_f73.png",
+    "money_f74.png",
+    "money_f75.png",
+    "money_f76.png",
+    "money_f77.png",
+    "money_f78.png",
+    "money_f79.png",
+    "money_f80.png",
+    "money_f81.png",
+    "money_f82.png",
+    "money_f83.png",
+    "money_f84.png",
+    "money_f85.png",
+    "n_angry.png",
+    "n_blush.png",
+    "n_cry.png",
+    "n_drool.png",
+    "n_hiss.png",
+    "n_laugh.png",
+    "n_puzzled.png",
+    "n_sleep.png",
+    "n_smug.png",
+    "n_surprised.png",
+    "petpet_f00.png",
+    "petpet_f01.png",
+    "petpet_f02.png",
+    "petpet_f03.png",
+    "petpet_f04.png",
+    "petpet_f05.png",
+    "petpet_f06.png",
+    "petpet_f07.png",
+    "petpet_f08.png",
+    "petpet_f09.png"
+   ],
+   "after_init": {
+    "has_frames": true,
+    "idle_frames": 10,
+    "idle_full_frames": 0,
+    "eat_frames": 0,
+    "fx_petpet": 0,
+    "anim_idle_set": 10,
+    "anim_eat_set": 0,
+    "state_states": 2,
+    "decodes_ctor": 16,
+    "decode_names_ctor": [
+     "character.png",
+     "character_front.png",
+     "character_full.png",
+     "character_full_front.png",
+     "f_laugh.png",
+     "idle_f00.png",
+     "idle_f01.png",
+     "idle_f02.png",
+     "idle_f03.png",
+     "idle_f04.png",
+     "idle_f05.png",
+     "idle_f06.png",
+     "idle_f07.png",
+     "idle_f08.png",
+     "idle_f09.png",
+     "n_laugh.png"
+    ]
+   },
+   "settled": {
+    "has_frames": true,
+    "idle_frames": 10,
+    "idle_full_frames": 10,
+    "eat_frames": 7,
+    "fx_petpet": 10,
+    "anim_idle_set": 10,
+    "state_states": 17,
+    "max_settle_gap_ms": 60.6,
+    "anim_running": false
+   },
+   "timers": {
+    "桌宠.load_config": [
+     0.37,
+     0.37,
+     1
+    ],
+    "桌宠.ensure_persona_files": [
+     2.73,
+     2.73,
+     1
+    ],
+    "RoleLibrary._load": [
+     0.16,
+     0.16,
+     1
+    ],
+    "RoleLibrary.__init__": [
+     0.17,
+     0.17,
+     1
+    ],
+    "AudioLibrary.__init__": [
+     0.08,
+     0.08,
+     1
+    ],
+    "Book.__init__": [
+     4.12,
+     4.12,
+     1
+    ],
+    "LineService.__init__": [
+     2.14,
+     2.14,
+     1
+    ],
+    "VoiceAssetLibrary.__init__": [
+     0.1,
+     0.1,
+     1
+    ],
+    "桌宠.save_config": [
+     1.33,
+     1.33,
+     1
+    ],
+    "PetWindow._migrate_lines_extra": [
+     2.66,
+     2.66,
+     1
+    ],
+    "PetWindow._refresh_lines": [
+     0.03,
+     0.03,
+     1
+    ],
+    "Bubble.__init__": [
+     0.13,
+     0.13,
+     1
+    ],
+    "Badge.__init__": [
+     0.02,
+     0.02,
+     1
+    ],
+    "FoodTray.__init__": [
+     0.03,
+     0.03,
+     1
+    ],
+    "FoodFlyer.__init__": [
+     0.01,
+     0.01,
+     1
+    ],
+    "QWidget.winId": [
+     0.07,
+     0.04,
+     4
+    ],
+    "PetWindow._role_pix": [
+     0.0,
+     0.0,
+     1
+    ],
+    "桌宠.resource_path": [
+     1.17,
+     0.17,
+     10
+    ],
+    "QPixmap(路径)": [
+     16.34,
+     1.18,
+     16
+    ],
+    "PetWindow._load_img": [
+     8.05,
+     1.56,
+     6
+    ],
+    "PetWindow._build_sprites": [
+     5.67,
+     5.67,
+     1
+    ],
+    "PetWindow._compute_base_size": [
+     0.01,
+     0.01,
+     1
+    ],
+    "桌宠.resource_dir": [
+     0.33,
+     0.18,
+     2
+    ],
+    "load_frame_set[idle]": [
+     10.28,
+     10.28,
+     1
+    ],
+    "load_frame_set[TOTAL]": [
+     10.28,
+     10.28,
+     1
+    ],
+    "PetWindow._wire_anim_key": [
+     0.01,
+     0.01,
+     2
+    ],
+    "PetWindow._wire_anim_sets": [
+     0.03,
+     0.01,
+     2
+    ],
+    "PetWindow._build_state_pix": [
+     0.02,
+     0.02,
+     1
+    ],
+    "pet_audio._rebuild_effects": [
+     0.25,
+     0.25,
+     1
+    ],
+    "pet_audio.init": [
+     4.92,
+     4.92,
+     1
+    ],
+    "PetWindow._apply_sound_group": [
+     0.01,
+     0.01,
+     1
+    ],
+    "PetWindow._update_click_mask": [
+     0.01,
+     0.0,
+     2
+    ],
+    "PetWindow._apply_transform": [
+     0.06,
+     0.03,
+     2
+    ],
+    "PetWindow._show_state": [
+     2.48,
+     2.48,
+     1
+    ],
+    "PetWindow._pick_line": [
+     0.01,
+     0.01,
+     1
+    ],
+    "PetWindow._say_line": [
+     0.15,
+     0.15,
+     1
+    ],
+    "QSystemTrayIcon.show": [
+     0.0,
+     0.0,
+     1
+    ]
+   },
+   "timers_after": {
+    "QPixmap(路径)": [
+     84.61,
+     1.79,
+     128
+    ],
+    "load_frame_set[idle_full]": [
+     10.57,
+     10.57,
+     1
+    ],
+    "load_frame_set[TOTAL]": [
+     70.14,
+     45.52,
+     4
+    ],
+    "load_frame_set[eat]": [
+     8.89,
+     8.89,
+     1
+    ],
+    "load_frame_set[petpet]": [
+     5.16,
+     5.16,
+     1
+    ],
+    "PetWindow._wire_anim_key": [
+     0.0,
+     0.0,
+     1
+    ],
+    "PetWindow._wire_anim_sets": [
+     0.02,
+     0.02,
+     1
+    ],
+    "桌宠.resource_path": [
+     2.26,
+     0.21,
+     18
+    ],
+    "PetWindow._load_img": [
+     19.32,
+     2.01,
+     18
+    ],
+    "load_frame_set[money]": [
+     45.52,
+     45.52,
+     1
+    ],
+    "PetWindow._preload_money_fx": [
+     45.54,
+     45.54,
+     1
+    ]
+   },
+   "samples": 0,
+   "leaf": [],
+   "near": [],
+   "leaf_total": 0,
+   "events": {
+    "frames_loaded": [
+     [
+      21.8,
+      "idle=10"
+     ],
+     [
+      57.0,
+      "idle_full=10"
+     ],
+     [
+      89.5,
+      "eat=7"
+     ],
+     [
+      110.3,
+      "petpet=10"
+     ],
+     [
+      1379.9,
+      "money=86"
+     ]
+    ]
+   }
+  },
+  {
+   "run": 2,
+   "init_ms": 42.3,
+   "t_show_call_ms": 38.9,
+   "t_first_paint_ms": 87.8,
+   "first_paint_seen": true,
+   "first_pix_ok": true,
+   "first_pix": "256x256",
+   "decodes": 144,
+   "decode_names": [
+    "character.png",
+    "character_front.png",
+    "character_full.png",
+    "character_full_front.png",
+    "eat_f00.png",
+    "eat_f01.png",
+    "eat_f02.png",
+    "eat_f03.png",
+    "eat_f04.png",
+    "eat_f05.png",
+    "eat_f06.png",
+    "f_angry.png",
+    "f_blush.png",
+    "f_cry.png",
+    "f_laugh.png",
+    "f_puzzled.png",
+    "f_sleep.png",
+    "f_smug.png",
+    "idle_f00.png",
+    "idle_f01.png",
+    "idle_f02.png",
+    "idle_f03.png",
+    "idle_f04.png",
+    "idle_f05.png",
+    "idle_f06.png",
+    "idle_f07.png",
+    "idle_f08.png",
+    "idle_f09.png",
+    "idle_full_f00.png",
+    "idle_full_f01.png",
+    "idle_full_f02.png",
+    "idle_full_f03.png",
+    "idle_full_f04.png",
+    "idle_full_f05.png",
+    "idle_full_f06.png",
+    "idle_full_f07.png",
+    "idle_full_f08.png",
+    "idle_full_f09.png",
+    "money_f00.png",
+    "money_f01.png",
+    "money_f02.png",
+    "money_f03.png",
+    "money_f04.png",
+    "money_f05.png",
+    "money_f06.png",
+    "money_f07.png",
+    "money_f08.png",
+    "money_f09.png",
+    "money_f10.png",
+    "money_f11.png",
+    "money_f12.png",
+    "money_f13.png",
+    "money_f14.png",
+    "money_f15.png",
+    "money_f16.png",
+    "money_f17.png",
+    "money_f18.png",
+    "money_f19.png",
+    "money_f20.png",
+    "money_f21.png",
+    "money_f22.png",
+    "money_f23.png",
+    "money_f24.png",
+    "money_f25.png",
+    "money_f26.png",
+    "money_f27.png",
+    "money_f28.png",
+    "money_f29.png",
+    "money_f30.png",
+    "money_f31.png",
+    "money_f32.png",
+    "money_f33.png",
+    "money_f34.png",
+    "money_f35.png",
+    "money_f36.png",
+    "money_f37.png",
+    "money_f38.png",
+    "money_f39.png",
+    "money_f40.png",
+    "money_f41.png",
+    "money_f42.png",
+    "money_f43.png",
+    "money_f44.png",
+    "money_f45.png",
+    "money_f46.png",
+    "money_f47.png",
+    "money_f48.png",
+    "money_f49.png",
+    "money_f50.png",
+    "money_f51.png",
+    "money_f52.png",
+    "money_f53.png",
+    "money_f54.png",
+    "money_f55.png",
+    "money_f56.png",
+    "money_f57.png",
+    "money_f58.png",
+    "money_f59.png",
+    "money_f60.png",
+    "money_f61.png",
+    "money_f62.png",
+    "money_f63.png",
+    "money_f64.png",
+    "money_f65.png",
+    "money_f66.png",
+    "money_f67.png",
+    "money_f68.png",
+    "money_f69.png",
+    "money_f70.png",
+    "money_f71.png",
+    "money_f72.png",
+    "money_f73.png",
+    "money_f74.png",
+    "money_f75.png",
+    "money_f76.png",
+    "money_f77.png",
+    "money_f78.png",
+    "money_f79.png",
+    "money_f80.png",
+    "money_f81.png",
+    "money_f82.png",
+    "money_f83.png",
+    "money_f84.png",
+    "money_f85.png",
+    "n_angry.png",
+    "n_blush.png",
+    "n_cry.png",
+    "n_drool.png",
+    "n_hiss.png",
+    "n_laugh.png",
+    "n_puzzled.png",
+    "n_sleep.png",
+    "n_smug.png",
+    "n_surprised.png",
+    "petpet_f00.png",
+    "petpet_f01.png",
+    "petpet_f02.png",
+    "petpet_f03.png",
+    "petpet_f04.png",
+    "petpet_f05.png",
+    "petpet_f06.png",
+    "petpet_f07.png",
+    "petpet_f08.png",
+    "petpet_f09.png"
+   ],
+   "after_init": {
+    "has_frames": true,
+    "idle_frames": 10,
+    "idle_full_frames": 0,
+    "eat_frames": 0,
+    "fx_petpet": 0,
+    "anim_idle_set": 10,
+    "anim_eat_set": 0,
+    "state_states": 2,
+    "decodes_ctor": 16,
+    "decode_names_ctor": [
+     "character.png",
+     "character_front.png",
+     "character_full.png",
+     "character_full_front.png",
+     "f_laugh.png",
+     "idle_f00.png",
+     "idle_f01.png",
+     "idle_f02.png",
+     "idle_f03.png",
+     "idle_f04.png",
+     "idle_f05.png",
+     "idle_f06.png",
+     "idle_f07.png",
+     "idle_f08.png",
+     "idle_f09.png",
+     "n_laugh.png"
+    ]
+   },
+   "settled": {
+    "has_frames": true,
+    "idle_frames": 10,
+    "idle_full_frames": 10,
+    "eat_frames": 7,
+    "fx_petpet": 10,
+    "anim_idle_set": 10,
+    "state_states": 17,
+    "max_settle_gap_ms": 59.0,
+    "anim_running": false
+   },
+   "timers": {
+    "桌宠.load_config": [
+     0.42,
+     0.42,
+     1
+    ],
+    "桌宠.ensure_persona_files": [
+     2.83,
+     2.83,
+     1
+    ],
+    "RoleLibrary._load": [
+     0.16,
+     0.16,
+     1
+    ],
+    "RoleLibrary.__init__": [
+     0.17,
+     0.17,
+     1
+    ],
+    "AudioLibrary.__init__": [
+     0.08,
+     0.08,
+     1
+    ],
+    "Book.__init__": [
+     3.55,
+     3.55,
+     1
+    ],
+    "LineService.__init__": [
+     2.55,
+     2.55,
+     1
+    ],
+    "VoiceAssetLibrary.__init__": [
+     0.11,
+     0.11,
+     1
+    ],
+    "桌宠.save_config": [
+     1.49,
+     1.49,
+     1
+    ],
+    "PetWindow._migrate_lines_extra": [
+     2.8,
+     2.8,
+     1
+    ],
+    "PetWindow._refresh_lines": [
+     0.03,
+     0.03,
+     1
+    ],
+    "Bubble.__init__": [
+     0.14,
+     0.14,
+     1
+    ],
+    "Badge.__init__": [
+     0.02,
+     0.02,
+     1
+    ],
+    "FoodTray.__init__": [
+     0.02,
+     0.02,
+     1
+    ],
+    "FoodFlyer.__init__": [
+     0.02,
+     0.02,
+     1
+    ],
+    "QWidget.winId": [
+     0.06,
+     0.04,
+     4
+    ],
+    "PetWindow._role_pix": [
+     0.0,
+     0.0,
+     1
+    ],
+    "桌宠.resource_path": [
+     1.12,
+     0.15,
+     10
+    ],
+    "QPixmap(路径)": [
+     16.76,
+     1.29,
+     16
+    ],
+    "PetWindow._load_img": [
+     8.22,
+     1.63,
+     6
+    ],
+    "PetWindow._build_sprites": [
+     5.67,
+     5.67,
+     1
+    ],
+    "PetWindow._compute_base_size": [
+     0.01,
+     0.01,
+     1
+    ],
+    "桌宠.resource_dir": [
+     0.27,
+     0.15,
+     2
+    ],
+    "load_frame_set[idle]": [
+     10.46,
+     10.46,
+     1
+    ],
+    "load_frame_set[TOTAL]": [
+     10.46,
+     10.46,
+     1
+    ],
+    "PetWindow._wire_anim_key": [
+     0.01,
+     0.01,
+     2
+    ],
+    "PetWindow._wire_anim_sets": [
+     0.03,
+     0.02,
+     2
+    ],
+    "PetWindow._build_state_pix": [
+     0.02,
+     0.02,
+     1
+    ],
+    "pet_audio._rebuild_effects": [
+     0.23,
+     0.23,
+     1
+    ],
+    "pet_audio.init": [
+     5.22,
+     5.22,
+     1
+    ],
+    "PetWindow._apply_sound_group": [
+     0.0,
+     0.0,
+     1
+    ],
+    "PetWindow._update_click_mask": [
+     0.0,
+     0.0,
+     2
+    ],
+    "PetWindow._apply_transform": [
+     0.04,
+     0.02,
+     2
+    ],
+    "PetWindow._show_state": [
+     2.66,
+     2.66,
+     1
+    ],
+    "PetWindow._pick_line": [
+     0.01,
+     0.01,
+     1
+    ],
+    "PetWindow._say_line": [
+     0.15,
+     0.15,
+     1
+    ],
+    "QSystemTrayIcon.show": [
+     0.0,
+     0.0,
+     1
+    ]
+   },
+   "timers_after": {
+    "QPixmap(路径)": [
+     83.16,
+     1.36,
+     128
+    ],
+    "load_frame_set[idle_full]": [
+     10.81,
+     10.81,
+     1
+    ],
+    "load_frame_set[TOTAL]": [
+     69.03,
+     44.15,
+     4
+    ],
+    "load_frame_set[eat]": [
+     8.47,
+     8.47,
+     1
+    ],
+    "load_frame_set[petpet]": [
+     5.59,
+     5.59,
+     1
+    ],
+    "PetWindow._wire_anim_key": [
+     0.01,
+     0.01,
+     1
+    ],
+    "PetWindow._wire_anim_sets": [
+     0.02,
+     0.02,
+     1
+    ],
+    "桌宠.resource_path": [
+     2.25,
+     0.2,
+     18
+    ],
+    "PetWindow._load_img": [
+     19.23,
+     1.63,
+     18
+    ],
+    "PetWindow._scan_invalid_refs": [
+     0.43,
+     0.43,
+     1
+    ],
+    "load_frame_set[money]": [
+     44.15,
+     44.15,
+     1
+    ],
+    "PetWindow._preload_money_fx": [
+     44.17,
+     44.17,
+     1
+    ]
+   },
+   "samples": 0,
+   "leaf": [],
+   "near": [],
+   "leaf_total": 0,
+   "events": {
+    "frames_loaded": [
+     [
+      21.3,
+      "idle=10"
+     ],
+     [
+      55.1,
+      "idle_full=10"
+     ],
+     [
+      88.2,
+      "eat=7"
+     ],
+     [
+      109.8,
+      "petpet=10"
+     ],
+     [
+      1427.1,
+      "money=86"
+     ]
+    ]
+   }
+  },
+  {
+   "run": 1,
+   "init_ms": 47.8,
+   "t_show_call_ms": 44.6,
+   "t_first_paint_ms": 93.4,
+   "first_paint_seen": true,
+   "first_pix_ok": true,
+   "first_pix": "256x256",
+   "decodes": 144,
+   "decode_names": [
+    "character.png",
+    "character_front.png",
+    "character_full.png",
+    "character_full_front.png",
+    "eat_f00.png",
+    "eat_f01.png",
+    "eat_f02.png",
+    "eat_f03.png",
+    "eat_f04.png",
+    "eat_f05.png",
+    "eat_f06.png",
+    "f_angry.png",
+    "f_blush.png",
+    "f_cry.png",
+    "f_laugh.png",
+    "f_puzzled.png",
+    "f_sleep.png",
+    "f_smug.png",
+    "idle_f00.png",
+    "idle_f01.png",
+    "idle_f02.png",
+    "idle_f03.png",
+    "idle_f04.png",
+    "idle_f05.png",
+    "idle_f06.png",
+    "idle_f07.png",
+    "idle_f08.png",
+    "idle_f09.png",
+    "idle_full_f00.png",
+    "idle_full_f01.png",
+    "idle_full_f02.png",
+    "idle_full_f03.png",
+    "idle_full_f04.png",
+    "idle_full_f05.png",
+    "idle_full_f06.png",
+    "idle_full_f07.png",
+    "idle_full_f08.png",
+    "idle_full_f09.png",
+    "money_f00.png",
+    "money_f01.png",
+    "money_f02.png",
+    "money_f03.png",
+    "money_f04.png",
+    "money_f05.png",
+    "money_f06.png",
+    "money_f07.png",
+    "money_f08.png",
+    "money_f09.png",
+    "money_f10.png",
+    "money_f11.png",
+    "money_f12.png",
+    "money_f13.png",
+    "money_f14.png",
+    "money_f15.png",
+    "money_f16.png",
+    "money_f17.png",
+    "money_f18.png",
+    "money_f19.png",
+    "money_f20.png",
+    "money_f21.png",
+    "money_f22.png",
+    "money_f23.png",
+    "money_f24.png",
+    "money_f25.png",
+    "money_f26.png",
+    "money_f27.png",
+    "money_f28.png",
+    "money_f29.png",
+    "money_f30.png",
+    "money_f31.png",
+    "money_f32.png",
+    "money_f33.png",
+    "money_f34.png",
+    "money_f35.png",
+    "money_f36.png",
+    "money_f37.png",
+    "money_f38.png",
+    "money_f39.png",
+    "money_f40.png",
+    "money_f41.png",
+    "money_f42.png",
+    "money_f43.png",
+    "money_f44.png",
+    "money_f45.png",
+    "money_f46.png",
+    "money_f47.png",
+    "money_f48.png",
+    "money_f49.png",
+    "money_f50.png",
+    "money_f51.png",
+    "money_f52.png",
+    "money_f53.png",
+    "money_f54.png",
+    "money_f55.png",
+    "money_f56.png",
+    "money_f57.png",
+    "money_f58.png",
+    "money_f59.png",
+    "money_f60.png",
+    "money_f61.png",
+    "money_f62.png",
+    "money_f63.png",
+    "money_f64.png",
+    "money_f65.png",
+    "money_f66.png",
+    "money_f67.png",
+    "money_f68.png",
+    "money_f69.png",
+    "money_f70.png",
+    "money_f71.png",
+    "money_f72.png",
+    "money_f73.png",
+    "money_f74.png",
+    "money_f75.png",
+    "money_f76.png",
+    "money_f77.png",
+    "money_f78.png",
+    "money_f79.png",
+    "money_f80.png",
+    "money_f81.png",
+    "money_f82.png",
+    "money_f83.png",
+    "money_f84.png",
+    "money_f85.png",
+    "n_angry.png",
+    "n_blush.png",
+    "n_cry.png",
+    "n_drool.png",
+    "n_hiss.png",
+    "n_laugh.png",
+    "n_puzzled.png",
+    "n_sleep.png",
+    "n_smug.png",
+    "n_surprised.png",
+    "petpet_f00.png",
+    "petpet_f01.png",
+    "petpet_f02.png",
+    "petpet_f03.png",
+    "petpet_f04.png",
+    "petpet_f05.png",
+    "petpet_f06.png",
+    "petpet_f07.png",
+    "petpet_f08.png",
+    "petpet_f09.png"
+   ],
+   "after_init": {
+    "has_frames": true,
+    "idle_frames": 10,
+    "idle_full_frames": 0,
+    "eat_frames": 0,
+    "fx_petpet": 0,
+    "anim_idle_set": 10,
+    "anim_eat_set": 0,
+    "state_states": 2,
+    "decodes_ctor": 16,
+    "decode_names_ctor": [
+     "character.png",
+     "character_front.png",
+     "character_full.png",
+     "character_full_front.png",
+     "f_laugh.png",
+     "idle_f00.png",
+     "idle_f01.png",
+     "idle_f02.png",
+     "idle_f03.png",
+     "idle_f04.png",
+     "idle_f05.png",
+     "idle_f06.png",
+     "idle_f07.png",
+     "idle_f08.png",
+     "idle_f09.png",
+     "n_laugh.png"
+    ]
+   },
+   "settled": {
+    "has_frames": true,
+    "idle_frames": 10,
+    "idle_full_frames": 10,
+    "eat_frames": 7,
+    "fx_petpet": 10,
+    "anim_idle_set": 10,
+    "state_states": 17,
+    "max_settle_gap_ms": 72.1,
+    "anim_running": false
+   },
+   "timers": {
+    "桌宠.load_config": [
+     0.51,
+     0.51,
+     1
+    ],
+    "桌宠.ensure_persona_files": [
+     3.32,
+     3.32,
+     1
+    ],
+    "RoleLibrary._load": [
+     0.2,
+     0.2,
+     1
+    ],
+    "RoleLibrary.__init__": [
+     0.22,
+     0.22,
+     1
+    ],
+    "AudioLibrary.__init__": [
+     0.09,
+     0.09,
+     1
+    ],
+    "Book.__init__": [
+     3.64,
+     3.64,
+     1
+    ],
+    "LineService.__init__": [
+     2.35,
+     2.35,
+     1
+    ],
+    "VoiceAssetLibrary.__init__": [
+     0.11,
+     0.11,
+     1
+    ],
+    "桌宠.save_config": [
+     1.94,
+     1.94,
+     1
+    ],
+    "PetWindow._migrate_lines_extra": [
+     3.67,
+     3.67,
+     1
+    ],
+    "PetWindow._refresh_lines": [
+     0.03,
+     0.03,
+     1
+    ],
+    "Bubble.__init__": [
+     0.14,
+     0.14,
+     1
+    ],
+    "Badge.__init__": [
+     0.02,
+     0.02,
+     1
+    ],
+    "FoodTray.__init__": [
+     0.03,
+     0.03,
+     1
+    ],
+    "FoodFlyer.__init__": [
+     0.02,
+     0.02,
+     1
+    ],
+    "QWidget.winId": [
+     0.07,
+     0.04,
+     4
+    ],
+    "PetWindow._role_pix": [
+     0.0,
+     0.0,
+     1
+    ],
+    "桌宠.resource_path": [
+     1.2,
+     0.16,
+     10
+    ],
+    "QPixmap(路径)": [
+     19.25,
+     1.65,
+     16
+    ],
+    "PetWindow._load_img": [
+     8.4,
+     1.59,
+     6
+    ],
+    "PetWindow._build_sprites": [
+     5.98,
+     5.98,
+     1
+    ],
+    "PetWindow._compute_base_size": [
+     0.01,
+     0.01,
+     1
+    ],
+    "桌宠.resource_dir": [
+     0.28,
+     0.15,
+     2
+    ],
+    "load_frame_set[idle]": [
+     12.99,
+     12.99,
+     1
+    ],
+    "load_frame_set[TOTAL]": [
+     12.99,
+     12.99,
+     1
+    ],
+    "PetWindow._wire_anim_key": [
+     0.01,
+     0.01,
+     2
+    ],
+    "PetWindow._wire_anim_sets": [
+     0.02,
+     0.02,
+     2
+    ],
+    "PetWindow._build_state_pix": [
+     0.02,
+     0.02,
+     1
+    ],
+    "pet_audio._rebuild_effects": [
+     0.24,
+     0.24,
+     1
+    ],
+    "pet_audio.init": [
+     5.57,
+     5.57,
+     1
+    ],
+    "PetWindow._apply_sound_group": [
+     0.0,
+     0.0,
+     1
+    ],
+    "PetWindow._update_click_mask": [
+     0.0,
+     0.0,
+     2
+    ],
+    "PetWindow._apply_transform": [
+     0.04,
+     0.02,
+     2
+    ],
+    "PetWindow._show_state": [
+     2.51,
+     2.51,
+     1
+    ],
+    "PetWindow._pick_line": [
+     0.01,
+     0.01,
+     1
+    ],
+    "PetWindow._say_line": [
+     0.13,
+     0.13,
+     1
+    ],
+    "QSystemTrayIcon.show": [
+     0.0,
+     0.0,
+     1
+    ]
+   },
+   "timers_after": {
+    "QPixmap(路径)": [
+     94.62,
+     1.45,
+     128
+    ],
+    "load_frame_set[idle_full]": [
+     11.59,
+     11.59,
+     1
+    ],
+    "load_frame_set[TOTAL]": [
+     81.55,
+     56.54,
+     4
+    ],
+    "load_frame_set[eat]": [
+     8.23,
+     8.23,
+     1
+    ],
+    "load_frame_set[petpet]": [
+     5.19,
+     5.19,
+     1
+    ],
+    "PetWindow._wire_anim_key": [
+     0.0,
+     0.0,
+     1
+    ],
+    "PetWindow._wire_anim_sets": [
+     0.02,
+     0.02,
+     1
+    ],
+    "桌宠.resource_path": [
+     2.21,
+     0.24,
+     18
+    ],
+    "PetWindow._load_img": [
+     18.33,
+     1.77,
+     18
+    ],
+    "load_frame_set[money]": [
+     56.54,
+     56.54,
+     1
+    ],
+    "PetWindow._preload_money_fx": [
+     56.57,
+     56.57,
+     1
+    ]
+   },
+   "samples": 0,
+   "leaf": [],
+   "near": [],
+   "leaf_total": 0,
+   "events": {
+    "frames_loaded": [
+     [
+      23.6,
+      "idle=10"
+     ],
+     [
+      60.5,
+      "idle_full=10"
+     ],
+     [
+      93.8,
+      "eat=7"
+     ],
+     [
+      108.8,
+      "petpet=10"
+     ],
+     [
+      1414.5,
+      "money=86"
+     ]
+    ]
+   }
+  },
+  {
+   "run": 2,
+   "init_ms": 54.3,
+   "t_show_call_ms": 50.4,
+   "t_first_paint_ms": 114.2,
+   "first_paint_seen": true,
+   "first_pix_ok": true,
+   "first_pix": "256x256",
+   "decodes": 144,
+   "decode_names": [
+    "character.png",
+    "character_front.png",
+    "character_full.png",
+    "character_full_front.png",
+    "eat_f00.png",
+    "eat_f01.png",
+    "eat_f02.png",
+    "eat_f03.png",
+    "eat_f04.png",
+    "eat_f05.png",
+    "eat_f06.png",
+    "f_angry.png",
+    "f_blush.png",
+    "f_cry.png",
+    "f_laugh.png",
+    "f_puzzled.png",
+    "f_sleep.png",
+    "f_smug.png",
+    "idle_f00.png",
+    "idle_f01.png",
+    "idle_f02.png",
+    "idle_f03.png",
+    "idle_f04.png",
+    "idle_f05.png",
+    "idle_f06.png",
+    "idle_f07.png",
+    "idle_f08.png",
+    "idle_f09.png",
+    "idle_full_f00.png",
+    "idle_full_f01.png",
+    "idle_full_f02.png",
+    "idle_full_f03.png",
+    "idle_full_f04.png",
+    "idle_full_f05.png",
+    "idle_full_f06.png",
+    "idle_full_f07.png",
+    "idle_full_f08.png",
+    "idle_full_f09.png",
+    "money_f00.png",
+    "money_f01.png",
+    "money_f02.png",
+    "money_f03.png",
+    "money_f04.png",
+    "money_f05.png",
+    "money_f06.png",
+    "money_f07.png",
+    "money_f08.png",
+    "money_f09.png",
+    "money_f10.png",
+    "money_f11.png",
+    "money_f12.png",
+    "money_f13.png",
+    "money_f14.png",
+    "money_f15.png",
+    "money_f16.png",
+    "money_f17.png",
+    "money_f18.png",
+    "money_f19.png",
+    "money_f20.png",
+    "money_f21.png",
+    "money_f22.png",
+    "money_f23.png",
+    "money_f24.png",
+    "money_f25.png",
+    "money_f26.png",
+    "money_f27.png",
+    "money_f28.png",
+    "money_f29.png",
+    "money_f30.png",
+    "money_f31.png",
+    "money_f32.png",
+    "money_f33.png",
+    "money_f34.png",
+    "money_f35.png",
+    "money_f36.png",
+    "money_f37.png",
+    "money_f38.png",
+    "money_f39.png",
+    "money_f40.png",
+    "money_f41.png",
+    "money_f42.png",
+    "money_f43.png",
+    "money_f44.png",
+    "money_f45.png",
+    "money_f46.png",
+    "money_f47.png",
+    "money_f48.png",
+    "money_f49.png",
+    "money_f50.png",
+    "money_f51.png",
+    "money_f52.png",
+    "money_f53.png",
+    "money_f54.png",
+    "money_f55.png",
+    "money_f56.png",
+    "money_f57.png",
+    "money_f58.png",
+    "money_f59.png",
+    "money_f60.png",
+    "money_f61.png",
+    "money_f62.png",
+    "money_f63.png",
+    "money_f64.png",
+    "money_f65.png",
+    "money_f66.png",
+    "money_f67.png",
+    "money_f68.png",
+    "money_f69.png",
+    "money_f70.png",
+    "money_f71.png",
+    "money_f72.png",
+    "money_f73.png",
+    "money_f74.png",
+    "money_f75.png",
+    "money_f76.png",
+    "money_f77.png",
+    "money_f78.png",
+    "money_f79.png",
+    "money_f80.png",
+    "money_f81.png",
+    "money_f82.png",
+    "money_f83.png",
+    "money_f84.png",
+    "money_f85.png",
+    "n_angry.png",
+    "n_blush.png",
+    "n_cry.png",
+    "n_drool.png",
+    "n_hiss.png",
+    "n_laugh.png",
+    "n_puzzled.png",
+    "n_sleep.png",
+    "n_smug.png",
+    "n_surprised.png",
+    "petpet_f00.png",
+    "petpet_f01.png",
+    "petpet_f02.png",
+    "petpet_f03.png",
+    "petpet_f04.png",
+    "petpet_f05.png",
+    "petpet_f06.png",
+    "petpet_f07.png",
+    "petpet_f08.png",
+    "petpet_f09.png"
+   ],
+   "after_init": {
+    "has_frames": true,
+    "idle_frames": 10,
+    "idle_full_frames": 0,
+    "eat_frames": 0,
+    "fx_petpet": 0,
+    "anim_idle_set": 10,
+    "anim_eat_set": 0,
+    "state_states": 2,
+    "decodes_ctor": 16,
+    "decode_names_ctor": [
+     "character.png",
+     "character_front.png",
+     "character_full.png",
+     "character_full_front.png",
+     "f_laugh.png",
+     "idle_f00.png",
+     "idle_f01.png",
+     "idle_f02.png",
+     "idle_f03.png",
+     "idle_f04.png",
+     "idle_f05.png",
+     "idle_f06.png",
+     "idle_f07.png",
+     "idle_f08.png",
+     "idle_f09.png",
+     "n_laugh.png"
+    ]
+   },
+   "settled": {
+    "has_frames": true,
+    "idle_frames": 10,
+    "idle_full_frames": 10,
+    "eat_frames": 7,
+    "fx_petpet": 10,
+    "anim_idle_set": 10,
+    "state_states": 17,
+    "max_settle_gap_ms": 70.4,
+    "anim_running": false
+   },
+   "timers": {
+    "桌宠.load_config": [
+     0.68,
+     0.68,
+     1
+    ],
+    "桌宠.ensure_persona_files": [
+     3.25,
+     3.25,
+     1
+    ],
+    "RoleLibrary._load": [
+     0.17,
+     0.17,
+     1
+    ],
+    "RoleLibrary.__init__": [
+     0.18,
+     0.18,
+     1
+    ],
+    "AudioLibrary.__init__": [
+     0.07,
+     0.07,
+     1
+    ],
+    "Book.__init__": [
+     3.34,
+     3.34,
+     1
+    ],
+    "LineService.__init__": [
+     2.08,
+     2.08,
+     1
+    ],
+    "VoiceAssetLibrary.__init__": [
+     0.12,
+     0.12,
+     1
+    ],
+    "桌宠.save_config": [
+     2.95,
+     2.95,
+     1
+    ],
+    "PetWindow._migrate_lines_extra": [
+     4.54,
+     4.54,
+     1
+    ],
+    "PetWindow._refresh_lines": [
+     0.04,
+     0.04,
+     1
+    ],
+    "Bubble.__init__": [
+     0.17,
+     0.17,
+     1
+    ],
+    "Badge.__init__": [
+     0.03,
+     0.03,
+     1
+    ],
+    "FoodTray.__init__": [
+     0.03,
+     0.03,
+     1
+    ],
+    "FoodFlyer.__init__": [
+     0.02,
+     0.02,
+     1
+    ],
+    "QWidget.winId": [
+     0.09,
+     0.05,
+     4
+    ],
+    "PetWindow._role_pix": [
+     0.0,
+     0.0,
+     1
+    ],
+    "桌宠.resource_path": [
+     1.53,
+     0.2,
+     10
+    ],
+    "QPixmap(路径)": [
+     21.01,
+     1.81,
+     16
+    ],
+    "PetWindow._load_img": [
+     10.22,
+     2.25,
+     6
+    ],
+    "PetWindow._build_sprites": [
+     7.5,
+     7.5,
+     1
+    ],
+    "PetWindow._compute_base_size": [
+     0.01,
+     0.01,
+     1
+    ],
+    "桌宠.resource_dir": [
+     0.31,
+     0.17,
+     2
+    ],
+    "load_frame_set[idle]": [
+     13.46,
+     13.46,
+     1
+    ],
+    "load_frame_set[TOTAL]": [
+     13.46,
+     13.46,
+     1
+    ],
+    "PetWindow._wire_anim_key": [
+     0.01,
+     0.01,
+     2
+    ],
+    "PetWindow._wire_anim_sets": [
+     0.03,
+     0.02,
+     2
+    ],
+    "PetWindow._build_state_pix": [
+     0.02,
+     0.02,
+     1
+    ],
+    "pet_audio._rebuild_effects": [
+     0.5,
+     0.5,
+     1
+    ],
+    "pet_audio.init": [
+     6.62,
+     6.62,
+     1
+    ],
+    "PetWindow._apply_sound_group": [
+     0.01,
+     0.01,
+     1
+    ],
+    "PetWindow._update_click_mask": [
+     0.01,
+     0.0,
+     2
+    ],
+    "PetWindow._apply_transform": [
+     0.08,
+     0.05,
+     2
+    ],
+    "PetWindow._show_state": [
+     3.08,
+     3.08,
+     1
+    ],
+    "PetWindow._pick_line": [
+     0.01,
+     0.01,
+     1
+    ],
+    "PetWindow._say_line": [
+     0.17,
+     0.17,
+     1
+    ],
+    "QSystemTrayIcon.show": [
+     0.0,
+     0.0,
+     1
+    ]
+   },
+   "timers_after": {
+    "QPixmap(路径)": [
+     114.14,
+     2.82,
+     128
+    ],
+    "load_frame_set[idle_full]": [
+     17.5,
+     17.5,
+     1
+    ],
+    "load_frame_set[TOTAL]": [
+     96.06,
+     54.3,
+     4
+    ],
+    "load_frame_set[eat]": [
+     14.77,
+     14.77,
+     1
+    ],
+    "load_frame_set[petpet]": [
+     9.49,
+     9.49,
+     1
+    ],
+    "PetWindow._wire_anim_key": [
+     0.01,
+     0.01,
+     1
+    ],
+    "PetWindow._wire_anim_sets": [
+     0.03,
+     0.03,
+     1
+    ],
+    "桌宠.resource_path": [
+     2.94,
+     0.23,
+     18
+    ],
+    "PetWindow._load_img": [
+     24.85,
+     1.89,
+     18
+    ],
+    "PetWindow._scan_invalid_refs": [
+     0.42,
+     0.42,
+     1
+    ],
+    "load_frame_set[money]": [
+     54.3,
+     54.3,
+     1
+    ],
+    "PetWindow._preload_money_fx": [
+     54.32,
+     54.32,
+     1
+    ]
+   },
+   "samples": 0,
+   "leaf": [],
+   "near": [],
+   "leaf_total": 0,
+   "events": {
+    "frames_loaded": [
+     [
+      26.7,
+      "idle=10"
+     ],
+     [
+      84.9,
+      "idle_full=10"
+     ],
+     [
+      115.1,
+      "eat=7"
+     ],
+     [
+      139.1,
+      "petpet=10"
+     ],
+     [
+      1432.6,
+      "money=86"
+     ]
+    ]
+   }
+  },
+  {
+   "run": 1,
+   "init_ms": 58.5,
+   "t_show_call_ms": 54.2,
+   "t_first_paint_ms": 117.5,
+   "first_paint_seen": true,
+   "first_pix_ok": true,
+   "first_pix": "256x256",
+   "decodes": 144,
+   "decode_names": [
+    "character.png",
+    "character_front.png",
+    "character_full.png",
+    "character_full_front.png",
+    "eat_f00.png",
+    "eat_f01.png",
+    "eat_f02.png",
+    "eat_f03.png",
+    "eat_f04.png",
+    "eat_f05.png",
+    "eat_f06.png",
+    "f_angry.png",
+    "f_blush.png",
+    "f_cry.png",
+    "f_laugh.png",
+    "f_puzzled.png",
+    "f_sleep.png",
+    "f_smug.png",
+    "idle_f00.png",
+    "idle_f01.png",
+    "idle_f02.png",
+    "idle_f03.png",
+    "idle_f04.png",
+    "idle_f05.png",
+    "idle_f06.png",
+    "idle_f07.png",
+    "idle_f08.png",
+    "idle_f09.png",
+    "idle_full_f00.png",
+    "idle_full_f01.png",
+    "idle_full_f02.png",
+    "idle_full_f03.png",
+    "idle_full_f04.png",
+    "idle_full_f05.png",
+    "idle_full_f06.png",
+    "idle_full_f07.png",
+    "idle_full_f08.png",
+    "idle_full_f09.png",
+    "money_f00.png",
+    "money_f01.png",
+    "money_f02.png",
+    "money_f03.png",
+    "money_f04.png",
+    "money_f05.png",
+    "money_f06.png",
+    "money_f07.png",
+    "money_f08.png",
+    "money_f09.png",
+    "money_f10.png",
+    "money_f11.png",
+    "money_f12.png",
+    "money_f13.png",
+    "money_f14.png",
+    "money_f15.png",
+    "money_f16.png",
+    "money_f17.png",
+    "money_f18.png",
+    "money_f19.png",
+    "money_f20.png",
+    "money_f21.png",
+    "money_f22.png",
+    "money_f23.png",
+    "money_f24.png",
+    "money_f25.png",
+    "money_f26.png",
+    "money_f27.png",
+    "money_f28.png",
+    "money_f29.png",
+    "money_f30.png",
+    "money_f31.png",
+    "money_f32.png",
+    "money_f33.png",
+    "money_f34.png",
+    "money_f35.png",
+    "money_f36.png",
+    "money_f37.png",
+    "money_f38.png",
+    "money_f39.png",
+    "money_f40.png",
+    "money_f41.png",
+    "money_f42.png",
+    "money_f43.png",
+    "money_f44.png",
+    "money_f45.png",
+    "money_f46.png",
+    "money_f47.png",
+    "money_f48.png",
+    "money_f49.png",
+    "money_f50.png",
+    "money_f51.png",
+    "money_f52.png",
+    "money_f53.png",
+    "money_f54.png",
+    "money_f55.png",
+    "money_f56.png",
+    "money_f57.png",
+    "money_f58.png",
+    "money_f59.png",
+    "money_f60.png",
+    "money_f61.png",
+    "money_f62.png",
+    "money_f63.png",
+    "money_f64.png",
+    "money_f65.png",
+    "money_f66.png",
+    "money_f67.png",
+    "money_f68.png",
+    "money_f69.png",
+    "money_f70.png",
+    "money_f71.png",
+    "money_f72.png",
+    "money_f73.png",
+    "money_f74.png",
+    "money_f75.png",
+    "money_f76.png",
+    "money_f77.png",
+    "money_f78.png",
+    "money_f79.png",
+    "money_f80.png",
+    "money_f81.png",
+    "money_f82.png",
+    "money_f83.png",
+    "money_f84.png",
+    "money_f85.png",
+    "n_angry.png",
+    "n_blush.png",
+    "n_cry.png",
+    "n_drool.png",
+    "n_hiss.png",
+    "n_laugh.png",
+    "n_puzzled.png",
+    "n_sleep.png",
+    "n_smug.png",
+    "n_surprised.png",
+    "petpet_f00.png",
+    "petpet_f01.png",
+    "petpet_f02.png",
+    "petpet_f03.png",
+    "petpet_f04.png",
+    "petpet_f05.png",
+    "petpet_f06.png",
+    "petpet_f07.png",
+    "petpet_f08.png",
+    "petpet_f09.png"
+   ],
+   "after_init": {
+    "has_frames": true,
+    "idle_frames": 10,
+    "idle_full_frames": 0,
+    "eat_frames": 0,
+    "fx_petpet": 0,
+    "anim_idle_set": 10,
+    "anim_eat_set": 0,
+    "state_states": 2,
+    "decodes_ctor": 16,
+    "decode_names_ctor": [
+     "character.png",
+     "character_front.png",
+     "character_full.png",
+     "character_full_front.png",
+     "f_laugh.png",
+     "idle_f00.png",
+     "idle_f01.png",
+     "idle_f02.png",
+     "idle_f03.png",
+     "idle_f04.png",
+     "idle_f05.png",
+     "idle_f06.png",
+     "idle_f07.png",
+     "idle_f08.png",
+     "idle_f09.png",
+     "n_laugh.png"
+    ]
+   },
+   "settled": {
+    "has_frames": true,
+    "idle_frames": 10,
+    "idle_full_frames": 10,
+    "eat_frames": 7,
+    "fx_petpet": 10,
+    "anim_idle_set": 10,
+    "state_states": 17,
+    "max_settle_gap_ms": 74.1,
+    "anim_running": false
+   },
+   "timers": {
+    "桌宠.load_config": [
+     0.49,
+     0.49,
+     1
+    ],
+    "桌宠.ensure_persona_files": [
+     3.74,
+     3.74,
+     1
+    ],
+    "RoleLibrary._load": [
+     0.2,
+     0.2,
+     1
+    ],
+    "RoleLibrary.__init__": [
+     0.21,
+     0.21,
+     1
+    ],
+    "AudioLibrary.__init__": [
+     0.08,
+     0.08,
+     1
+    ],
+    "Book.__init__": [
+     4.54,
+     4.54,
+     1
+    ],
+    "LineService.__init__": [
+     2.33,
+     2.33,
+     1
+    ],
+    "VoiceAssetLibrary.__init__": [
+     0.12,
+     0.12,
+     1
+    ],
+    "桌宠.save_config": [
+     2.44,
+     2.44,
+     1
+    ],
+    "PetWindow._migrate_lines_extra": [
+     4.29,
+     4.29,
+     1
+    ],
+    "PetWindow._refresh_lines": [
+     0.04,
+     0.04,
+     1
+    ],
+    "Bubble.__init__": [
+     0.17,
+     0.17,
+     1
+    ],
+    "Badge.__init__": [
+     0.03,
+     0.03,
+     1
+    ],
+    "FoodTray.__init__": [
+     0.03,
+     0.03,
+     1
+    ],
+    "FoodFlyer.__init__": [
+     0.02,
+     0.02,
+     1
+    ],
+    "QWidget.winId": [
+     0.09,
+     0.05,
+     4
+    ],
+    "PetWindow._role_pix": [
+     0.0,
+     0.0,
+     1
+    ],
+    "桌宠.resource_path": [
+     1.69,
+     0.33,
+     10
+    ],
+    "QPixmap(路径)": [
+     21.7,
+     1.74,
+     16
+    ],
+    "PetWindow._load_img": [
+     11.05,
+     2.22,
+     6
+    ],
+    "PetWindow._build_sprites": [
+     7.75,
+     7.75,
+     1
+    ],
+    "PetWindow._compute_base_size": [
+     0.01,
+     0.01,
+     1
+    ],
+    "桌宠.resource_dir": [
+     0.37,
+     0.21,
+     2
+    ],
+    "load_frame_set[idle]": [
+     13.46,
+     13.46,
+     1
+    ],
+    "load_frame_set[TOTAL]": [
+     13.46,
+     13.46,
+     1
+    ],
+    "PetWindow._wire_anim_key": [
+     0.01,
+     0.01,
+     2
+    ],
+    "PetWindow._wire_anim_sets": [
+     0.02,
+     0.02,
+     2
+    ],
+    "PetWindow._build_state_pix": [
+     0.02,
+     0.02,
+     1
+    ],
+    "pet_audio._rebuild_effects": [
+     0.3,
+     0.3,
+     1
+    ],
+    "pet_audio.init": [
+     8.08,
+     8.08,
+     1
+    ],
+    "PetWindow._apply_sound_group": [
+     0.01,
+     0.01,
+     1
+    ],
+    "PetWindow._update_click_mask": [
+     0.01,
+     0.0,
+     2
+    ],
+    "PetWindow._apply_transform": [
+     0.05,
+     0.03,
+     2
+    ],
+    "PetWindow._show_state": [
+     3.44,
+     3.44,
+     1
+    ],
+    "PetWindow._pick_line": [
+     0.01,
+     0.01,
+     1
+    ],
+    "PetWindow._say_line": [
+     0.19,
+     0.19,
+     1
+    ],
+    "QSystemTrayIcon.show": [
+     0.0,
+     0.0,
+     1
+    ]
+   },
+   "timers_after": {
+    "QPixmap(路径)": [
+     106.79,
+     1.67,
+     128
+    ],
+    "load_frame_set[idle_full]": [
+     13.19,
+     13.19,
+     1
+    ],
+    "load_frame_set[TOTAL]": [
+     91.38,
+     58.94,
+     4
+    ],
+    "load_frame_set[eat]": [
+     11.28,
+     11.28,
+     1
+    ],
+    "load_frame_set[petpet]": [
+     7.96,
+     7.96,
+     1
+    ],
+    "PetWindow._wire_anim_key": [
+     0.01,
+     0.01,
+     1
+    ],
+    "PetWindow._wire_anim_sets": [
+     0.02,
+     0.02,
+     1
+    ],
+    "桌宠.resource_path": [
+     2.58,
+     0.24,
+     18
+    ],
+    "PetWindow._load_img": [
+     21.34,
+     1.68,
+     18
+    ],
+    "load_frame_set[money]": [
+     58.94,
+     58.94,
+     1
+    ],
+    "PetWindow._preload_money_fx": [
+     58.96,
+     58.96,
+     1
+    ]
+   },
+   "samples": 0,
+   "leaf": [],
+   "near": [],
+   "leaf_total": 0,
+   "events": {
+    "frames_loaded": [
+     [
+      27.9,
+      "idle=10"
+     ],
+     [
+      79.9,
+      "idle_full=10"
+     ],
+     [
+      118.0,
+      "eat=7"
+     ],
+     [
+      141.6,
+      "petpet=10"
+     ],
+     [
+      1416.0,
+      "money=86"
+     ]
+    ]
+   }
+  },
+  {
+   "run": 2,
+   "init_ms": 53.1,
+   "t_show_call_ms": 49.1,
+   "t_first_paint_ms": 135.9,
+   "first_paint_seen": true,
+   "first_pix_ok": true,
+   "first_pix": "256x256",
+   "decodes": 144,
+   "decode_names": [
+    "character.png",
+    "character_front.png",
+    "character_full.png",
+    "character_full_front.png",
+    "eat_f00.png",
+    "eat_f01.png",
+    "eat_f02.png",
+    "eat_f03.png",
+    "eat_f04.png",
+    "eat_f05.png",
+    "eat_f06.png",
+    "f_angry.png",
+    "f_blush.png",
+    "f_cry.png",
+    "f_laugh.png",
+    "f_puzzled.png",
+    "f_sleep.png",
+    "f_smug.png",
+    "idle_f00.png",
+    "idle_f01.png",
+    "idle_f02.png",
+    "idle_f03.png",
+    "idle_f04.png",
+    "idle_f05.png",
+    "idle_f06.png",
+    "idle_f07.png",
+    "idle_f08.png",
+    "idle_f09.png",
+    "idle_full_f00.png",
+    "idle_full_f01.png",
+    "idle_full_f02.png",
+    "idle_full_f03.png",
+    "idle_full_f04.png",
+    "idle_full_f05.png",
+    "idle_full_f06.png",
+    "idle_full_f07.png",
+    "idle_full_f08.png",
+    "idle_full_f09.png",
+    "money_f00.png",
+    "money_f01.png",
+    "money_f02.png",
+    "money_f03.png",
+    "money_f04.png",
+    "money_f05.png",
+    "money_f06.png",
+    "money_f07.png",
+    "money_f08.png",
+    "money_f09.png",
+    "money_f10.png",
+    "money_f11.png",
+    "money_f12.png",
+    "money_f13.png",
+    "money_f14.png",
+    "money_f15.png",
+    "money_f16.png",
+    "money_f17.png",
+    "money_f18.png",
+    "money_f19.png",
+    "money_f20.png",
+    "money_f21.png",
+    "money_f22.png",
+    "money_f23.png",
+    "money_f24.png",
+    "money_f25.png",
+    "money_f26.png",
+    "money_f27.png",
+    "money_f28.png",
+    "money_f29.png",
+    "money_f30.png",
+    "money_f31.png",
+    "money_f32.png",
+    "money_f33.png",
+    "money_f34.png",
+    "money_f35.png",
+    "money_f36.png",
+    "money_f37.png",
+    "money_f38.png",
+    "money_f39.png",
+    "money_f40.png",
+    "money_f41.png",
+    "money_f42.png",
+    "money_f43.png",
+    "money_f44.png",
+    "money_f45.png",
+    "money_f46.png",
+    "money_f47.png",
+    "money_f48.png",
+    "money_f49.png",
+    "money_f50.png",
+    "money_f51.png",
+    "money_f52.png",
+    "money_f53.png",
+    "money_f54.png",
+    "money_f55.png",
+    "money_f56.png",
+    "money_f57.png",
+    "money_f58.png",
+    "money_f59.png",
+    "money_f60.png",
+    "money_f61.png",
+    "money_f62.png",
+    "money_f63.png",
+    "money_f64.png",
+    "money_f65.png",
+    "money_f66.png",
+    "money_f67.png",
+    "money_f68.png",
+    "money_f69.png",
+    "money_f70.png",
+    "money_f71.png",
+    "money_f72.png",
+    "money_f73.png",
+    "money_f74.png",
+    "money_f75.png",
+    "money_f76.png",
+    "money_f77.png",
+    "money_f78.png",
+    "money_f79.png",
+    "money_f80.png",
+    "money_f81.png",
+    "money_f82.png",
+    "money_f83.png",
+    "money_f84.png",
+    "money_f85.png",
+    "n_angry.png",
+    "n_blush.png",
+    "n_cry.png",
+    "n_drool.png",
+    "n_hiss.png",
+    "n_laugh.png",
+    "n_puzzled.png",
+    "n_sleep.png",
+    "n_smug.png",
+    "n_surprised.png",
+    "petpet_f00.png",
+    "petpet_f01.png",
+    "petpet_f02.png",
+    "petpet_f03.png",
+    "petpet_f04.png",
+    "petpet_f05.png",
+    "petpet_f06.png",
+    "petpet_f07.png",
+    "petpet_f08.png",
+    "petpet_f09.png"
+   ],
+   "after_init": {
+    "has_frames": true,
+    "idle_frames": 10,
+    "idle_full_frames": 0,
+    "eat_frames": 0,
+    "fx_petpet": 0,
+    "anim_idle_set": 10,
+    "anim_eat_set": 0,
+    "state_states": 2,
+    "decodes_ctor": 16,
+    "decode_names_ctor": [
+     "character.png",
+     "character_front.png",
+     "character_full.png",
+     "character_full_front.png",
+     "f_laugh.png",
+     "idle_f00.png",
+     "idle_f01.png",
+     "idle_f02.png",
+     "idle_f03.png",
+     "idle_f04.png",
+     "idle_f05.png",
+     "idle_f06.png",
+     "idle_f07.png",
+     "idle_f08.png",
+     "idle_f09.png",
+     "n_laugh.png"
+    ]
+   },
+   "settled": {
+    "has_frames": true,
+    "idle_frames": 10,
+    "idle_full_frames": 10,
+    "eat_frames": 7,
+    "fx_petpet": 10,
+    "anim_idle_set": 10,
+    "state_states": 17,
+    "max_settle_gap_ms": 69.0,
+    "anim_running": false
+   },
+   "timers": {
+    "桌宠.load_config": [
+     0.5,
+     0.5,
+     1
+    ],
+    "桌宠.ensure_persona_files": [
+     3.81,
+     3.81,
+     1
+    ],
+    "RoleLibrary._load": [
+     0.17,
+     0.17,
+     1
+    ],
+    "RoleLibrary.__init__": [
+     0.19,
+     0.19,
+     1
+    ],
+    "AudioLibrary.__init__": [
+     0.07,
+     0.07,
+     1
+    ],
+    "Book.__init__": [
+     3.69,
+     3.69,
+     1
+    ],
+    "LineService.__init__": [
+     2.55,
+     2.55,
+     1
+    ],
+    "VoiceAssetLibrary.__init__": [
+     0.12,
+     0.12,
+     1
+    ],
+    "桌宠.save_config": [
+     1.48,
+     1.48,
+     1
+    ],
+    "PetWindow._migrate_lines_extra": [
+     2.9,
+     2.9,
+     1
+    ],
+    "PetWindow._refresh_lines": [
+     0.03,
+     0.03,
+     1
+    ],
+    "Bubble.__init__": [
+     0.15,
+     0.15,
+     1
+    ],
+    "Badge.__init__": [
+     0.02,
+     0.02,
+     1
+    ],
+    "FoodTray.__init__": [
+     0.03,
+     0.03,
+     1
+    ],
+    "FoodFlyer.__init__": [
+     0.02,
+     0.02,
+     1
+    ],
+    "QWidget.winId": [
+     0.07,
+     0.04,
+     4
+    ],
+    "PetWindow._role_pix": [
+     0.0,
+     0.0,
+     1
+    ],
+    "桌宠.resource_path": [
+     1.5,
+     0.2,
+     10
+    ],
+    "QPixmap(路径)": [
+     20.37,
+     1.46,
+     16
+    ],
+    "PetWindow._load_img": [
+     10.34,
+     1.91,
+     6
+    ],
+    "PetWindow._build_sprites": [
+     7.36,
+     7.36,
+     1
+    ],
+    "PetWindow._compute_base_size": [
+     0.01,
+     0.01,
+     1
+    ],
+    "桌宠.resource_dir": [
+     0.39,
+     0.21,
+     2
+    ],
+    "load_frame_set[idle]": [
+     12.6,
+     12.6,
+     1
+    ],
+    "load_frame_set[TOTAL]": [
+     12.6,
+     12.6,
+     1
+    ],
+    "PetWindow._wire_anim_key": [
+     0.01,
+     0.01,
+     2
+    ],
+    "PetWindow._wire_anim_sets": [
+     0.02,
+     0.02,
+     2
+    ],
+    "PetWindow._build_state_pix": [
+     0.02,
+     0.02,
+     1
+    ],
+    "pet_audio._rebuild_effects": [
+     0.28,
+     0.28,
+     1
+    ],
+    "pet_audio.init": [
+     8.65,
+     8.65,
+     1
+    ],
+    "PetWindow._apply_sound_group": [
+     0.0,
+     0.0,
+     1
+    ],
+    "PetWindow._update_click_mask": [
+     0.0,
+     0.0,
+     2
+    ],
+    "PetWindow._apply_transform": [
+     0.04,
+     0.03,
+     2
+    ],
+    "PetWindow._show_state": [
+     3.12,
+     3.12,
+     1
+    ],
+    "PetWindow._pick_line": [
+     0.01,
+     0.01,
+     1
+    ],
+    "PetWindow._say_line": [
+     0.22,
+     0.22,
+     1
+    ],
+    "QSystemTrayIcon.show": [
+     0.0,
+     0.0,
+     1
+    ]
+   },
+   "timers_after": {
+    "QPixmap(路径)": [
+     97.77,
+     1.79,
+     128
+    ],
+    "load_frame_set[idle_full]": [
+     10.95,
+     10.95,
+     1
+    ],
+    "load_frame_set[TOTAL]": [
+     82.18,
+     52.51,
+     4
+    ],
+    "load_frame_set[eat]": [
+     11.69,
+     11.69,
+     1
+    ],
+    "load_frame_set[petpet]": [
+     7.03,
+     7.03,
+     1
+    ],
+    "PetWindow._wire_anim_key": [
+     0.01,
+     0.01,
+     1
+    ],
+    "PetWindow._wire_anim_sets": [
+     0.02,
+     0.02,
+     1
+    ],
+    "桌宠.resource_path": [
+     2.79,
+     0.29,
+     18
+    ],
+    "PetWindow._load_img": [
+     21.94,
+     1.85,
+     18
+    ],
+    "PetWindow._scan_invalid_refs": [
+     0.52,
+     0.52,
+     1
+    ],
+    "load_frame_set[money]": [
+     52.51,
+     52.51,
+     1
+    ],
+    "PetWindow._preload_money_fx": [
+     52.53,
+     52.53,
+     1
+    ]
+   },
+   "samples": 0,
+   "leaf": [],
+   "near": [],
+   "leaf_total": 0,
+   "events": {
+    "frames_loaded": [
+     [
+      25.0,
+      "idle=10"
+     ],
+     [
+      53.3,
+      "idle_full=10"
+     ],
+     [
+      136.8,
+      "eat=7"
+     ],
+     [
+      155.3,
+      "petpet=10"
+     ],
+     [
+      1431.1,
+      "money=86"
+     ]
+    ]
+   }
+  }
+ ]
+}

@@ -62,6 +62,12 @@ class ActionService:
             pet._show_emote(arg or "note")
         elif name in (pet.anim._sets or {}):
             # v2.0.1：自定义命名帧动作——播放一次后回待机。
+            # v2.4.2（兼容 L5）：启动接力窗内默认素材帧集还没解完（anim._sets["eat"] 是空集，
+            # 帧集键在、帧不在）→ 帧动画"播"一次 0 帧，on_finish 立刻回调 _play_idle，用户
+            # 看到的是"点了没反应"。默认角色在起播前补一次（feed 早就这么做，play_action
+            # 漏了）；自定义角色的帧集来自 role 表，不走这条。
+            if not pet._custom_role and pet._ensure_default_frames():
+                pet._wire_anim_sets()
             # 先停合成动作（防振荡叠加/播到一半被 proc 收尾截断）
             _stop = getattr(pet, "_stop_tween", None)
             if _stop is not None:

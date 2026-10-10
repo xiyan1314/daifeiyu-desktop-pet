@@ -36,14 +36,12 @@ def test_normalize_whitelist_mode():
 
 
 # ---------------- 错误映射（明确提示、不静默） ----------------
-
-def test_explain_tts_error_mapping():
-    assert "密钥无效" in pet_voice.explain_tts_error(401)
-    assert "额度不足" in pet_voice.explain_tts_error(402)
-    assert "地区限制" in pet_voice.explain_tts_error(403)
-    assert "不支持语音合成" in pet_voice.explain_tts_error(404)
-    assert "频繁" in pet_voice.explain_tts_error(429)
-    assert "500" in pet_voice.explain_tts_error(500)  # 未知码带状态码
+# A11 去重（v2.4.2，代理 Q）：这里原本是 test_explain_tts_error_mapping（401/402/403/404/
+# 429/500 的关键词 in 断言）。同一张 TTS_API_ERRORS 表在
+# tests/test_voice_contracts_v24.py::test_error_code_mapping_is_stable 里被**逐码精确等值**
+# 钉住（401/402/403/429/500 是 ==，404 是 in），严格强于本条的 in 断言；而那个文件归
+# 另一路（本轮移交说明见任务书），不在本代理领地，故本文件不再重复维护这 6 行。
+# 覆盖没丢的证明见 _dev/mutations_q_item3.json 的 M-Q11（改坏 TTS_API_ERRORS → 幸存条变红）。
 
 
 # ---------------- 片段注册表 ----------------

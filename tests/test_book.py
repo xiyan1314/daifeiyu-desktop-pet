@@ -138,10 +138,11 @@ def test_csv_export_body_failure_returns_false_never_raises(tmpdir_book, tmp_pat
     assert open(p, "rb").read().startswith(b"\xef\xbb\xbf")
 
 
-def test_corrupt_rebuild(tmp_path):
-    (tmp_path / "ledger.json").write_text("{ not json", encoding="utf-8")
-    b = pet_book.Book(str(tmp_path))
-    assert b.today_usage() == 0.0  # 不崩、按空重建
+# A11 去重（v2.4.2，代理 Q）：这里原本是 test_corrupt_rebuild（坏 ledger.json →
+# today_usage() == 0.0）。同一行为已由
+# tests/test_persistence_consistency.py::test_book_corrupt_ledger_heals_with_bak 严格覆盖：
+# all_records() == [] + .bak 原文 + 愈合后盘上 records == [] + today_usage() == 0.0
+# （最后这条断言正是从本文件搬过去的，见那边的 "A10 去重" 说明），不再两处维护。
 
 
 def test_migrate_usage_json(tmp_path):

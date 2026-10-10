@@ -7,7 +7,15 @@ import pet_widgets
 
 
 def test_voice_events_match():
-    """语音事件白名单：pet_voice.VOICE_EVENTS 与 pet_behaviors.BEHAVIOR_VOICE_EVENTS 必须一致。"""
+    """语音事件白名单：pet_voice.VOICE_EVENTS 与 pet_behaviors.BEHAVIOR_VOICE_EVENTS 必须一致。
+
+    A11 去重（v2.4.2，代理 Q）：合并 tests/test_behaviors.py::test_voice_events_match_pet_voice。
+    被合并条写的是 tuple(a) == tuple(b)——把容器类型差异吃掉，**比等值更弱**（一边 list
+    一边 tuple 时它仍然绿）；本条的等值断言已经蕴含它。这里再把两侧容器类型也钉住，
+    合起来严格强于原两条之和。
+    """
+    assert isinstance(pet_voice.VOICE_EVENTS, tuple)
+    assert isinstance(pet_behaviors.BEHAVIOR_VOICE_EVENTS, tuple)
     assert pet_voice.VOICE_EVENTS == pet_behaviors.BEHAVIOR_VOICE_EVENTS
 
 

@@ -326,11 +326,12 @@ class W(QObject):
     real = C.sources()
     real_p, real_n = C.check_signal_arity(real)
     assert real_p == [] and real_n == [], (real_p, real_n)
+    # 覆盖面统计：把 _slot_arity 换成记账版（**用 *a/**k**，解析器以后加参数不会让这里失联）
     seen = []
     orig = C._slot_arity
 
-    def _spy(slot, fname, funcs, methods):
-        res = orig(slot, fname, funcs, methods)
+    def _spy(*a, **k):
+        res = orig(*a, **k)
         seen.append(res)
         return res
 
@@ -339,16 +340,175 @@ class W(QObject):
         C.check_signal_arity(real)
     finally:
         C._slot_arity = orig
-    # v2.4.1：阈值从 50 提到 116——实测本仓 .connect(...) 共 145 处、其中 116 处能解析成
-    # 具体槽（其余是 lambda / 局部函数 / Qt 自带信号，按设计跳过）。
-    # v2.4.1（找茬 M6）：**改成比例**。写死 116 == 当时实测值、余量 0，任何良性重构
-    # （拆一个槽函数、少一处 .connect）都会假红；比例留 5 个百分点余量，同时"解析器失明"
-    # （正则被改坏 / sources() 少扫文件 → 比例骤降到 0）照样拦得住。
-    # 重测：python -c "import _check_static as C; s=[]; o=C._slot_arity; C._slot_arity=lambda *a:(s.append(o(*a)) or s[-1]); C.check_signal_arity(C.sources()); print(sum(1 for r in s if r is not None), len(s))"
+    # v2.4.1：阈值从 50 提到 116——实测本仓 .connect(...) 共 145 处候选、其中 116 处能解析。
+    # v2.4.1（找茬 M6）：**改成比例**。写死 116 == 当时实测值、余量 0，任何良性重构都会假红。
+    # v2.4.2：M 检查补了 guard 包装与局部变量两类解析 → 可解析数 116 → 117（分母不变，
+    # 比例 0.800 → 0.807），阈值同步 0.75 → 0.76，仍然留约 5 个百分点余量。
+    # 重测：python -c "import _check_static as C; s=[]; o=C._slot_arity; C._slot_arity=lambda *a,**k:(s.append(o(*a,**k)) or s[-1]); C.check_signal_arity(C.sources()); print(sum(1 for r in s if r is not None), len(s))"
     _n_slots = sum(1 for r in seen if r is not None)
     # 分母本身也要有下限：sources() 万一扫成 0 个文件，"0 >= 0" 会让整条断言空转
     assert len(seen) >= 100, "扫描面太窄（%d 处 .connect）：sources() 可能没扫到文件" % len(seen)
-    assert _n_slots >= 0.75 * len(seen),         "可解析槽比例骤降（%d/%d = %.3f）：检查可能已经失明（重测方法见上面注释）"         % (_n_slots, len(seen), _n_slots / float(len(seen)))
+    assert _n_slots >= 0.76 * len(seen), \
+        "可解析槽比例骤降（%d/%d = %.3f）：检查可能已经失明（重测方法见上面注释）" \
+        % (_n_slots, len(seen), _n_slots / float(len(seen)))
+    # 反向 tripwire：比例**大涨**（＝解析器开始猜了，例如把内建方法也硬解出签名）同样要人复核，
+    # 别让"多解析了几处"悄悄变成误报源。改了扫描面/判据就按实测更新这里的上界并说明原因。
+    assert _n_slots / float(len(seen)) <= 0.90, \
+        "可解析比例异常偏高（%d/%d = %.3f）：是否开始猜测不可判定的槽？" \
+        % (_n_slots, len(seen), _n_slots / float(len(seen)))
+    # v2.4.2：新增的两类解析必须在**真仓**真的被用到，否则扩展就是死代码（解析器退化了也测不出来）。
+    #   guard 包装实测 25 处、其中 24 处解析得出（pet_widgets.py:235 的 self.hide 是 Qt 自带方法，
+    #   签名不在本仓 → 按设计判不了）；局部变量/嵌套 def 实测 1 处（pet_anim.py:152 的 on_frame，
+    #   模块级 if __name__ 块里的嵌套 def）。数字变了就按实测改这里，别把断言删掉。
+    _funcs, _methods = C._def_index(real)
+    _guard = [orig(slot, fname, _funcs, _methods, scopes, lineno)
+              for fname, lineno, _sig, slot, scopes in C.iter_slots(real)
+              if C._is_guard_wrapper(slot)]
+    _guard_ok = sum(1 for r in _guard if r is not None)
+    assert len(_guard) >= 5, "真仓几乎找不到 guard 包装槽（%d 处）：扫描面或判据不对" % len(_guard)
+    assert _guard_ok >= 0.8 * len(_guard), \
+        "guard 包装槽解析率骤降（%d/%d）：解开包装这条扩展可能已失效" % (_guard_ok, len(_guard))
+    assert sum(1 for r in seen if r is not None and "local" in r[3]) >= 1, \
+        "真仓没有一处走局部变量解析：这条扩展可能已失效（或 pet_anim 冒烟块被删，按实测数改这一行）"
+
+
+def test_b9_guard_wrapped_slot_is_parsed():
+    """B9：guard 包装（guard_slot / _gslot）要**解开**继续解析——里面的签名错必须报出来。
+
+    变异验证：把 _check_static._is_guard_wrapper 改成恒 False（＝回到 v2.4 的"包装一律不
+    解析"），本用例必须变红（problems 由 1 变 0）。
+    """
+    import _check_static as C
+
+    src = '''
+from PySide6.QtCore import Signal, QObject
+import pet_log
+
+
+class W(QObject):
+    zero = Signal()
+    pair = Signal(str, str)
+
+    def _needs_one(self, text):
+        pass
+
+    def _zero(self):
+        pass
+
+    def wire(self):
+        self.zero.connect(pet_log.guard_slot("w.needs_one", self._needs_one))   # 要 1 给 0 → 问题
+        self.pair.connect(pet_log.guard_slot("w.zero", self._zero))            # 只收 0 给 2 → 待确认
+        self.zero.connect(self._gslot("w.zero2", lambda: None))                # 合法
+        self.pair.connect(pet_log.guard_slot("w.two", lambda a, b: None))      # 合法
+        self.zero.connect(pet_log.guard_slot("w.hide", self.hide))             # 包内是 Qt 内建 → 跳过
+'''
+    problems, notes = C.check_signal_arity([("guard_bad.py", src)])
+    assert len(problems) == 1, "guard 包装里的签名错没被检出：%r" % (problems,)
+    assert "zero" in problems[0] and "_needs_one" in problems[0], problems[0]
+    assert "guard" in problems[0], "报告没点明是 guard 包装：%s" % problems[0]
+    assert len(notes) == 1 and "pair" in notes[0] and "_zero" in notes[0], notes
+    # 包装器收 *args 且转手给 fn（PySide6 6.11.2 实测不替它裁参数）→ 不能套用直接连接那句文案
+    assert "丢弃" not in notes[0], "包装槽不该套用「多余参数被丢弃」：%s" % notes[0]
+
+    # 负例对照：不套包装、直接连同一个方法——同样的签名错也必须报（证明上面不是靠包装才报的）
+    direct = '''
+from PySide6.QtCore import Signal, QObject
+
+
+class W(QObject):
+    zero = Signal()
+
+    def _needs_one(self, text):
+        pass
+
+    def wire(self):
+        self.zero.connect(self._needs_one)
+'''
+    dp, _dn = C.check_signal_arity([("direct_bad.py", direct)])
+    assert len(dp) == 1 and "_needs_one" in dp[0], "直接连接的对照组没报：%r" % (dp,)
+
+
+def test_b10_local_variable_slot_is_parsed():
+    """B10：局部变量指向的 lambda/方法、嵌套 def 要解析；**有歧义的绑定必须仍旧跳过**。
+
+    变异验证：去掉 _check_static._resolve 里 ast.Name 的局部绑定分支，本用例变红
+    （problems 由 2 变 0）。
+    """
+    import _check_static as C
+
+    src = '''
+from PySide6.QtCore import Signal, QObject
+
+
+class W(QObject):
+    zero = Signal()
+    pair = Signal(str, str)
+
+    def _needs_one(self, text):
+        pass
+
+    def _zero(self):
+        pass
+
+    def wire(self):
+        _cb = self._needs_one                 # 局部变量指向方法
+        self.zero.connect(_cb)                # 要 1 给 0 → 问题
+        cb2 = lambda a, b: None               # 局部变量指向 lambda（合法）
+        self.pair.connect(cb2)
+
+        def _nested(a):                       # 嵌套 def
+            pass
+
+        self.zero.connect(_nested)            # 要 1 给 0 → 问题
+        for _lbl, loop_cb in (("x", self._zero), ("y", self._needs_one)):
+            self.zero.connect(loop_cb)        # 循环变量：绑定不唯一 → 必须跳过
+
+    def wire2(self):
+        dupe = self._zero
+        dupe = self._needs_one                # 多次绑定 → 判不了 → 跳过
+        self.zero.connect(dupe)
+        self.pair.connect(later)              # 绑在使用之后 → 跳过
+        later = lambda a, b: None
+'''
+    problems, notes = C.check_signal_arity([("local_bad.py", src)])
+    assert len(problems) == 2, "局部变量/嵌套 def 的签名错没被检出：%r" % (problems,)
+    joined = " | ".join(problems)
+    assert "_needs_one" in joined and "_nested" in joined, problems
+    assert "loop_cb" not in joined and "dupe" not in joined and "later" not in joined, \
+        "歧义绑定被猜着解析了（必须跳过）：%r" % (problems,)
+    assert notes == [], notes
+
+
+def test_b11_v242_extensions_are_mutation_verified(monkeypatch):
+    """B11（变异验证）：把 v2.4.2 的两处扩展分别**拆掉**，B9/B10 必须真的变红。
+
+    "能失败的测试"不能只靠嘴说：这里在同一个进程里做定向变异再跑一遍同一条用例——
+    用例不红就说明它其实是恒绿的（护栏空转）。这也是 v2.4.2 那两处改动的变异证据。
+    """
+    import _check_static as C
+
+    def _must_fail(tag, name, value, case):
+        with monkeypatch.context() as m:
+            m.setattr(C, name, value)
+            try:
+                case()
+            except AssertionError:
+                return
+        raise AssertionError("%s：变异后 %s 仍然全绿（这条护栏是空转的）" % (tag, case.__name__))
+
+    # ① 拆掉 guard 解包（＝回到 v2.4"包装一律不解析"）→ B9 必须红
+    _must_fail("guard 解包被拆", "_is_guard_wrapper", lambda node: False,
+               test_b9_guard_wrapped_slot_is_parsed)
+    # ② 拆掉局部变量解析（作用域表恒空）→ B10 必须红
+    _must_fail("局部变量解析被拆", "_scope_table", lambda tree: [],
+               test_b10_local_variable_slot_is_parsed)
+    # ③ 拆掉 P 的跨模块一层（恒返回 []＝回到 v2.4"只追同文件"）→ B12 必须红
+    _must_fail("P 跨模块一层被拆", "_cross_module_bodies", lambda *a, **k: [],
+               test_b12_thread_write_follows_one_cross_module_hop)
+    # 正例对照：不施加任何变异时三条用例必须是绿的（否则上面的"变红"毫无意义）
+    test_b9_guard_wrapped_slot_is_parsed()
+    test_b10_local_variable_slot_is_parsed()
+    test_b12_thread_write_follows_one_cross_module_hop()
 
 
 def test_b8_static_thread_write_check():
@@ -390,3 +550,88 @@ def start():
     # 真实仓库：当前 0 待确认（真有裸写盘时这里会红 → 提醒改走 pet_io）
     real_p, real_n = C.check_thread_writes(C.sources())
     assert real_p == [] and real_n == [], real_n
+
+
+def test_b12_thread_write_follows_one_cross_module_hop():
+    """B12：P 检查要跨模块追**一层**——线程目标 →（同文件函数）→ 其它模块函数里的裸写盘。
+
+    变异验证：把 _check_static._cross_module_bodies 改成恒返回 []（＝回到 v2.4"只追同文件"），
+    本用例必须变红（跨模块那处写盘会漏检）。
+    """
+    import _check_static as C
+
+    # 被调用的"其它模块"：一个真写盘、一个只读、一个只做**第二层**转发
+    writelib = '''
+import os
+
+
+def flush(path, data):
+    with open(path, "w", encoding="utf-8") as f:
+        f.write(data)
+
+
+def read_only(path):
+    with open(path, "r", encoding="utf-8") as f:
+        return f.read()
+
+
+def nested_only(path):
+    deep(path)          # 第二层：一层深度设计上**不追**（避免爆炸）
+
+
+def deep(path):
+    os.replace(path + ".tmp", path)
+'''
+    # 约定的写盘出口：豁免模块（下钻只会把 pet_io 自己的 os.replace 报成"裸写盘"）
+    pet_io_like = '''
+import os
+
+
+def atomic_write_json(path, obj):
+    os.replace(path + ".tmp", path)
+'''
+    thr = '''
+import threading
+import pet_io
+import writelib
+
+
+def _save(path, data):
+    writelib.flush(path, data)
+
+
+def _worker(n):
+    _save("x.json", str(n))
+    writelib.read_only("y.json")
+
+
+def _worker_direct(n):
+    writelib.flush("d.json", str(n))       # 目标自己直接跨模块 → 同样算一层
+
+
+def _deep_worker(n):
+    writelib.nested_only("z.json")         # 只有第二层写盘 → 设计上不报
+
+
+def _io_worker(n):
+    pet_io.atomic_write_json("q.json", {"n": n})
+
+
+def start():
+    threading.Thread(target=_worker, daemon=True).start()
+    threading.Thread(target=_worker_direct, daemon=True).start()
+    threading.Thread(target=_deep_worker, daemon=True).start()
+    threading.Thread(target=_io_worker, daemon=True).start()
+'''
+    files = [("thr.py", thr), ("writelib.py", writelib), ("pet_io.py", pet_io_like)]
+    problems, notes = C.check_thread_writes(files)
+    assert problems == [], problems
+    joined = "\n".join(notes)
+    assert "_worker " in joined and "writelib.py:" in joined, \
+        "跨模块一层的裸写盘没被检出（只追同文件＝漏检）：%r" % (notes,)
+    assert "open(mode='w')" in joined, notes
+    assert "_worker_direct" in joined, "线程目标自己直接跨模块调用被漏检：%r" % (notes,)
+    assert "_deep_worker" not in joined, "追过头了（第二层不该追）：%r" % (notes,)
+    assert "_io_worker" not in joined, "豁免模块（pet_io）被下钻误报：%r" % (notes,)
+    # 反例对照：把"其它模块"改成**不同名**后仍要报 → 证明报的是真跨模块，不是同文件巧合
+    assert joined.count("P? 线程目标") == 2, "待确认条数不对：%r" % (notes,)

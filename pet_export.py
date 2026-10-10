@@ -19,11 +19,13 @@ MIT License
 （铃声文件不随包，导入侧换默认提示音并明确警告）；缺失/未知字段宽容处理。
 """
 
+import itertools
 import json
 import os
 import shutil
 import tempfile
 import threading
+import time
 import uuid
 import zipfile
 
@@ -31,10 +33,25 @@ BUNDLE_FORMAT = "dfypet-role"
 BUNDLE_VERSION = 1
 MANIFEST_NAME = "manifest.json"
 
+# v2.4.2（兼容 M1）：临时文件名的**进程内序号**。原先只有线程号：同一线程连续两次导出
+# （或调用方绕过重入守卫）两个 BundleWriter 的 tmp 名逐字相同，交错写同一个文件 → 先收尾
+# 的那个报 WinError 32、后收尾的靠自校验侥幸救回。加序号后每个写者的 tmp 都是私有的。
+_TMP_SEQ = itertools.count(1)
+
 # 包容量上限（导出/校验同口径单一来源）：放宽到合法大角色必然往返成功
 # （role_frame_max 可调至 60 帧 × 8 形态 × 多动作 + 各形态 side/front/states）
 EXPORT_MAX_ENTRIES = 2000
 EXPORT_MAX_BYTES = 512 * 1024 * 1024
+
+# v2.4.2（兼容 M2）：单个大条目（参考音可以几十 MB）必须能**跨片**写。
+# 旧实现是"写完一条才检查预算"——13 条里放一个 24MB 不可压缩成员，实测每片
+# [20.7, 23.3, 21.7, 822.9, 13.5, …] ms：那条大成员独占一片 822.9ms（12ms 预算的 68 倍），
+# 慢盘/网络盘还会等比放大，"导出不再卡"在这条路径上不成立。
+# 现在：≥ 门槛的条目走 zf.open(arc, "w") 分块续写（块与块之间回事件循环），低于门槛的
+# 一条就是一次 zf.write（最坏 ≈10ms 量级）。产出**逐位不变**：同一份 ZipInfo.from_file +
+# 同一个压缩级别，只是数据分几次喂给同一个 deflate 流（zlib 的输出与喂入块大小无关）。
+_BIG_ENTRY_MIN_BYTES = 256 * 1024       # 分块写的门槛
+_BIG_ENTRY_CHUNK_BYTES = 256 * 1024     # 单次 write 的块大小（不可压缩实测 ≈7~9ms/块）
 
 # 可分享配置键白名单（导出/导入共用；api_key 等敏感键永不在此列）
 EXPORT_CONFIG_KEYS = ("voice", "sound_group", "bubble_style", "lines_extra", "idle_behavior",
@@ -194,31 +211,34 @@ def build_manifest(role, behaviors, cfg, alarms=None, lines=None, dialogues=None
     return manifest, ""
 
 
-def export_bundle(role_lib, behaviors_svc, cfg, out_path, alarms_getter=None,
-                  lines_getter=None, dialogues_getter=None,
-                  voice_assets_getter=None, include_voice_ids=None, meta=None):
-    """导出角色包到 out_path（zip）。返回 (ok, err)。
+def plan_bundle(role_lib, behaviors_svc, cfg, alarms_getter=None,
+                lines_getter=None, dialogues_getter=None,
+                voice_assets_getter=None, include_voice_ids=None, meta=None):
+    """**收集阶段**（两段式导出 API 的第一段）：算出要写进包里的全部东西，不写盘。
 
-    收集 role_lib 当前角色的全部素材文件进 roles/ 子目录；缺文件明确报错。
-    alarms_getter（可选）：闹钟设置（不含铃声文件）。
-    lines_getter/dialogues_getter（可选）：台词与对白（v2.1，随包分享）。
-    voice_assets_getter（可选）+ include_voice_ids（勾选的素材 id）：
-        把参考音文件打进 voice_ref/（**默认不打包**，体积与隐私考虑，用户勾选才带）。
+    返回 (plan, err)。plan = {"manifest": dict, "entries": [(arcname, 绝对源路径), ...]}，
+    条目顺序与旧版 export_bundle 逐位相同：manifest.json（单独写）→ roles/<文件名>
+    （= _role_file_refs 的顺序）→ voice_ref/<id><ext>（= 勾选顺序）。
+
+    为什么拆开：导出一个 20~60 帧的角色要 125~205 ms，全压在主线程同步跑（zipfile 长
+    循环 + zlib 压缩），导出期间桌宠整个假死。收集阶段只做 stat/manifest（实测 ≈1 ms），
+    真正占时间的是逐条写盘——那一段交给 BundleWriter 分片（见其文档）。
+    错误文案与旧版 export_bundle 逐字相同（调用方与测试依赖这些字面量）。
     """
     rid = str((cfg or {}).get("role") or "")
     role = role_lib.get(rid) if rid else None
     if role is None:
-        return False, "请先在「角色」面板选择一个自定义角色再导出"
+        return None, "请先在「角色」面板选择一个自定义角色再导出"
     try:
         entries = []
         for ref in _role_file_refs(role):
             if ref != os.path.basename(ref):
                 # 引用含路径分隔符 = 角色数据异常（正常管线不产生），拒绝自产坏包
-                return False, "角色数据异常：引用含路径「%s」，请重新导入该角色" % ref
+                return None, "角色数据异常：引用含路径「%s」，请重新导入该角色" % ref
             p = role_lib.resolve(ref)
             if not os.path.isfile(p):
-                return False, "角色素材缺失，无法导出：%s" % ref
-            entries.append((ref, p))
+                return None, "角色素材缺失，无法导出：%s" % ref
+            entries.append(("roles/" + os.path.basename(ref), p))
         _behaviors = behaviors_svc.list() if behaviors_svc is not None else []
         _alarms = alarms_getter() if alarms_getter is not None else None
         _lines = lines_getter() if lines_getter is not None else None
@@ -232,7 +252,7 @@ def export_bundle(role_lib, behaviors_svc, cfg, out_path, alarms_getter=None,
                     continue
                 _p = a.get("path")
                 if not _p or not os.path.isfile(_p):
-                    return False, "声音素材文件缺失，无法导出：%s" % a.get("name", a.get("id"))
+                    return None, "声音素材文件缺失，无法导出：%s" % a.get("name", a.get("id"))
                 _ext = os.path.splitext(_p)[1].lower()
                 _vmeta = (_vmeta or [])
                 _vmeta.append({"id": str(a.get("id")), "name": str(a.get("name") or ""),
@@ -242,35 +262,227 @@ def export_bundle(role_lib, behaviors_svc, cfg, out_path, alarms_getter=None,
         manifest, err = build_manifest(role, _behaviors, cfg or {}, _alarms, _lines, _dlgs,
                                        _vmeta, meta)
         if manifest is None:
-            return False, err
+            return None, err
+        return {"manifest": manifest, "entries": entries + _vfiles}, ""
+    except Exception as e:
+        return None, "导出失败：%s" % e
+
+
+class BundleWriter(object):
+    """**逐条写阶段**（两段式导出 API 的第二段）：把 plan 写成分片可续的 zip。
+
+    为什么不减少工作总量也能救场：导出 125~205 ms 是**主线程上的连续阻塞**，窗口在这
+    期间一次事件循环都不转（用户看到假死）。分片把这段连续阻塞切成"若干次 ≤budget_ms
+    的小阻塞"，每次之间事件循环照常转（窗口能重绘、能响应），总 CPU 工作量不变。
+
+    产出与"一口气写完"**逐条目相同**：同一个 plan、同一套 zipfile 调用、同一个压缩
+    级别与条目顺序，差别只在"每次写几条"。用法::
+
+        plan, err = plan_bundle(...)
+        w = BundleWriter(plan, out_path)
+        while not w.done:
+            w.step(budget_ms=12.0)      # 一小片
+            QApplication.processEvents()  # 或 QTimer(0) 接力
+        ok, err = w.finish()            # 关包 + 原子替换 + 自校验
+
+    不分片（budget_ms=None）时行为与旧版 export_bundle 的写盘段逐位相同。
+    """
+
+    def __init__(self, plan, out_path, compresslevel=None):
+        self.plan = plan
+        self.out_path = out_path
+        self.compresslevel = compresslevel
+        self.entries = list((plan or {}).get("entries") or [])
         # v2.3.1（同类遗留）：线程唯一临时名，避免与其它写者抢同一个 .tmp
-        tmp = "%s.%d.tmp" % (out_path, threading.get_ident())
+        # v2.4.2（兼容 M1）：再加**进程内序号**——同一线程连续两次导出时，只有线程号会撞名，
+        # 两个写者交错写同一个 tmp，先收尾的 finish() 直接 WinError 32。
+        self.tmp = "%s.%d.%d.tmp" % (out_path, threading.get_ident(), next(_TMP_SEQ))
+        self.written = 0
+        self.total = len(self.entries)
+        self.done = False
+        self.error = None
+        self._zf = None
+        # v2.4.2（兼容 M2）：在途的大条目（跨片续写）。None = 当前没有半途的条目。
+        self._big = None          # zipfile 的写入句柄（_ZipWriteFile）
+        self._big_src = None      # 对应的源文件句柄
+
+    # ---- 内部 ----
+    def _open(self):
+        if self._zf is None:
+            self._zf = zipfile.ZipFile(self.tmp, "w", zipfile.ZIP_DEFLATED,
+                                       compresslevel=self.compresslevel)
+            self._zf.writestr(MANIFEST_NAME,
+                              json.dumps(self.plan["manifest"], ensure_ascii=False, indent=2))
+
+    def _cleanup_tmp(self):
         try:
-            with zipfile.ZipFile(tmp, "w", zipfile.ZIP_DEFLATED) as zf:
-                zf.writestr(MANIFEST_NAME, json.dumps(manifest, ensure_ascii=False, indent=2))
-                for ref, p in entries:
-                    zf.write(p, "roles/" + os.path.basename(ref))
-                for arc, p in _vfiles:
-                    zf.write(p, arc)
-            os.replace(tmp, out_path)  # 原子替换：半截包不会被当作有效文件
+            self._big_close()   # 先放在途条目句柄：_ZipWriteFile.close 要回填本地文件头，
+        except Exception:       # _zf 先关掉它就会抛 AttributeError（见 zipfile 的实现）
+            self._big, self._big_src = None, None   # 有意忽略：清理路径尽力而为
+        try:
+            if self._zf is not None:
+                self._zf.close()
+                self._zf = None
+        except Exception:
+            pass  # 有意忽略：关包失败也要继续清残留
+        try:
+            if os.path.isfile(self.tmp):
+                os.remove(self.tmp)
+        except Exception:
+            pass  # 有意忽略：残留临时文件清理尽力而为
+
+    # ---- 大条目（跨片续写）----
+    def _big_begin(self, arc, src):
+        """开一个在途的大条目：ZipInfo 与 zf.write(src, arc) 用的**逐位相同**。
+
+        zipfile.ZipFile.write 的实现就是 ZipInfo.from_file(...) + open(zinfo, "w") 再
+        shutil.copyfileobj；这里照抄前半段（含压缩级别与 strict_timestamps），只是把数据
+        改成自己分块喂——同一个 deflate 流、同一批字节，压缩输出与喂入块大小无关。
+        （_dev 实测：同一条目走这两条路写出的整包字节完全相同，sha256 相等。）
+        """
+        src_f = open(src, "rb")
+        try:
+            zinfo = zipfile.ZipInfo.from_file(src, arc)
+            zinfo.compress_type = self._zf.compression
+            zinfo._compresslevel = self._zf.compresslevel
+            self._big_src = src_f
+            self._big = self._zf.open(zinfo, "w")
+        except Exception:
+            src_f.close()
+            self._big, self._big_src = None, None
+            raise
+
+    def _big_write_some(self):
+        """给在途的大条目写一块；返回 True = 这条写完了（句柄已关）。
+
+        一次只写一块（_BIG_ENTRY_CHUNK_BYTES）：单片阻塞 ≈ 压缩一块的时间，与 budget_ms
+        同一个量级；写完一块就回到 step 的预算检查，超预算就留着句柄下一片接着写。
+        """
+        chunk = self._big_src.read(_BIG_ENTRY_CHUNK_BYTES)
+        if chunk:
+            self._big.write(chunk)
+            return False
+        self._big_close()
+        return True
+
+    def _big_close(self):
+        """收尾在途的大条目：关数据句柄（回填文件头里的 CRC/长度）+ 关源文件句柄。
+
+        先赋值再关：关闭过程中抛异常也不会留下"以为还开着"的脏状态。
+        """
+        handle, self._big = self._big, None
+        src_f, self._big_src = self._big_src, None
+        try:
+            if handle is not None:
+                handle.close()
+        finally:
+            if src_f is not None:
+                src_f.close()
+
+    # ---- 分片驱动 ----
+    def step(self, budget_ms=None):
+        """写一小片：最多花 budget_ms 毫秒（None = 一次把剩余条目全写完）。
+
+        返回已写条目数。写盘异常不抛出：记进 self.error 并把 done 置真，
+        由 finish() 统一转成旧版的"写入失败：…"文案。
+
+        v2.4.2（兼容 M2）：预算检查落在**块**粒度上——小条目一条 = 一块，大条目一条 =
+        若干块（见 _big_begin/_big_write_some）。所以单片阻塞 = max(一块的耗时, 小条目一条)，
+        而不是"一条大成员的全部耗时"（24MB 不可压缩成员实测 822.9ms）。
+        """
+        if self.done:
+            return self.written
+        try:
+            self._open()
+            t0 = time.perf_counter()
+            while self.written < self.total:
+                if self._big is not None:
+                    # 在途的大条目：续写一块（写完这一条才 +1，见 _big_write_some）
+                    if self._big_write_some():
+                        self.written += 1
+                else:
+                    arc, src = self.entries[self.written]
+                    if budget_ms is None or os.path.getsize(src) < _BIG_ENTRY_MIN_BYTES:
+                        # 小条目（或调用方要一口气写完）：与旧版逐位相同的写法
+                        self._zf.write(src, arc)
+                        self.written += 1
+                    else:
+                        self._big_begin(arc, src)   # 大条目：开句柄，下一轮起分块续写
+                        continue                    # 开句柄本身很便宜，不占预算检查
+                if budget_ms is not None and (time.perf_counter() - t0) * 1000.0 >= budget_ms:
+                    break
+            if self.written >= self.total:
+                self.done = True
         except Exception as e:
-            try:
-                if os.path.isfile(tmp):
-                    os.remove(tmp)
-            except Exception:
-                pass  # 有意忽略：残留临时文件清理尽力而为
+            self.error = e
+            self.done = True
+        return self.written
+
+    def abort(self):
+        """放弃本次写包：关包 + 删掉半截临时文件。
+
+        正式输出文件从没被碰过（原子替换还没发生），所以"中途放弃"不留下坏包；
+        典型触发场景是窗口正在退出（桌宠._export_step 见 _closing 即放弃）。
+        """
+        self._cleanup_tmp()
+        self.done = True
+
+    def finish(self):
+        """收尾：关包 → 原子替换 → 自校验。返回 (ok, err)，文案与旧版逐字相同。"""
+        if not self.done:
+            self.step(budget_ms=None)
+        if self.error is not None:
+            err = self.error
+            self._cleanup_tmp()
+            return False, "写入失败：%s" % err
+        if self._zf is None:
+            # v2.4.2（兼容 L6）：abort() 之后再 finish()（或压根没开过包）——此前这里吐的是
+            # 内部错误 "NoneType object has no attribute close"（用户看到的是解释器细节）；
+            # 语义上"这次导出已经作废、正式文件从没被碰过"，给一句体面文案。
+            return False, "导出已取消"
+        try:
+            self._zf.close()
+            self._zf = None
+            os.replace(self.tmp, self.out_path)  # 原子替换：半截包不会被当作有效文件
+        except Exception as e:
+            self._cleanup_tmp()
             return False, "写入失败：%s" % e
         # 导出侧自校验：容量上限同口径，导出时即报错而不是让接收方导入才踩坑
-        _m, _err = validate_bundle(out_path)
+        _m, _err = validate_bundle(self.out_path)
         if _m is None:
             try:
-                os.remove(out_path)
+                os.remove(self.out_path)
             except Exception:
                 pass  # 有意忽略：自校验失败包的清理尽力而为
             return False, "导出包自校验失败：%s" % _err
         return True, ""
-    except Exception as e:
-        return False, "导出失败：%s" % e
+
+
+def export_bundle(role_lib, behaviors_svc, cfg, out_path, alarms_getter=None,
+                  lines_getter=None, dialogues_getter=None,
+                  voice_assets_getter=None, include_voice_ids=None, meta=None):
+    """导出角色包到 out_path（zip）。返回 (ok, err)。**旧签名保留为薄壳**。
+
+    v2.4.2：本体拆成 plan_bundle（收集）+ BundleWriter（逐条写）。本薄壳不分片，
+    行为与拆分前逐位相同（同一批条目、同一顺序、同一压缩级别、同一批错误文案）；
+    要"不卡主线程"的调用方（桌宠._export_role）自己拿这两段分片驱动。
+
+    收集 role_lib 当前角色的全部素材文件进 roles/ 子目录；缺文件明确报错。
+    alarms_getter（可选）：闹钟设置（不含铃声文件）。
+    lines_getter/dialogues_getter（可选）：台词与对白（v2.1，随包分享）。
+    voice_assets_getter（可选）+ include_voice_ids（勾选的素材 id）：
+        把参考音文件打进 voice_ref/（**默认不打包**，体积与隐私考虑，用户勾选才带）。
+    """
+    plan, err = plan_bundle(role_lib, behaviors_svc, cfg,
+                            alarms_getter=alarms_getter, lines_getter=lines_getter,
+                            dialogues_getter=dialogues_getter,
+                            voice_assets_getter=voice_assets_getter,
+                            include_voice_ids=include_voice_ids, meta=meta)
+    if plan is None:
+        return False, err
+    w = BundleWriter(plan, out_path)
+    w.step()          # budget_ms=None：一口气写完 = 旧行为
+    return w.finish()
 
 
 def validate_bundle(zip_path):

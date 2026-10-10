@@ -1,0 +1,252 @@
+{
+  "mutations": [
+    {
+      "id": "M-C1",
+      "why": "M1 导出重入守卫（去掉守卫 → 第二次点击又起一个写包器）",
+      "file": "桌宠.py",
+      "old": "        if self._export_writer is not None:\n            self.show_bubble(\"还在导出上一个角色包，稍等一下~\")\n            return\n        if not self._custom_role:",
+      "new": "        if not self._custom_role:",
+      "tests": [
+        "tests/test_compat_v242_fixes.py::test_export_role_refuses_reentry_and_finishes_the_first_package"
+      ]
+    },
+    {
+      "id": "M-C2",
+      "why": "M1 导出 tmp 进程内序号（退回去只剩线程号 → 两个写者撞名）",
+      "file": "pet_export.py",
+      "old": "        self.tmp = \"%s.%d.%d.tmp\" % (out_path, threading.get_ident(), next(_TMP_SEQ))",
+      "new": "        self.tmp = \"%s.%d.tmp\" % (out_path, threading.get_ident())",
+      "tests": [
+        "tests/test_compat_v242_fixes.py::test_two_writers_never_share_a_tmp_name"
+      ]
+    },
+    {
+      "id": "M-C3",
+      "why": "M2 大条目跨片（退回一条一次 zf.write → 单片 400ms+）",
+      "file": "pet_export.py",
+      "old": "                    if budget_ms is None or os.path.getsize(src) < _BIG_ENTRY_MIN_BYTES:",
+      "new": "                    if True:",
+      "tests": [
+        "tests/test_compat_v242_fixes.py::test_big_entry_is_written_across_slices_and_bytes_stay_identical"
+      ]
+    },
+    {
+      "id": "M-C4",
+      "why": "M3 locale 页排到固定表之前（退回 gbk 抢先 → cp932 日文变乱码）",
+      "file": "pet_io.py",
+      "old": "    if usable and not single:\n        _add(\"gbk\" if pref_name == \"gbk\" else pref)",
+      "new": "    if False:\n        _add(\"gbk\" if pref_name == \"gbk\" else pref)",
+      "tests": [
+        "tests/test_compat_v242_fixes.py::test_cp932_locale_reads_shift_jis_lines_correctly"
+      ]
+    },
+    {
+      "id": "M-C5",
+      "why": "M3 单字节页护栏（拿掉 → 坏一字节的 UTF-8 被 cp1252 接住当读到了）",
+      "file": "pet_io.py",
+      "old": "            if is_single_byte_encoding(cand) and _almost_utf8(raw):\n                continue",
+      "new": "            if False:\n                continue",
+      "tests": [
+        "tests/test_compat_v242_fixes.py::test_broken_utf8_is_not_caught_by_cp1252"
+      ]
+    },
+    {
+      "id": "M-C6",
+      "why": "M1' 文案按实际编码（退回无条件 GBK_READ_NOTICE → 对 cp1252 用户说假话）",
+      "file": "桌宠.py",
+      "old": "            _fb_notice = (pet_lines.GBK_READ_NOTICE\n                          if (self.lines_lib.read_is_gbk and self.lines_lib.read_trusted)\n                          else self.lines_lib.read_notice)",
+      "new": "            _fb_notice = pet_lines.GBK_READ_NOTICE",
+      "tests": [
+        "tests/test_compat_v242_fixes.py::test_startup_bubble_is_wired_to_the_real_encoding"
+      ]
+    },
+    {
+      "id": "M-C7",
+      "why": "M4 alarms 回退读（拿掉 → GBK 索引读成空库，首次写整份覆盖）",
+      "file": "pet_alarm.py",
+      "old": "        if not _normalize_ran and not _corrupted and os.path.exists(self._index):",
+      "new": "        if False:",
+      "tests": [
+        "tests/test_compat_v242_fixes.py::test_alarms_gbk_index_survives_the_first_write",
+        "tests/test_compat_v242_fixes.py::test_undecodable_index_is_backed_up_before_first_write"
+      ]
+    },
+    {
+      "id": "M-C8",
+      "why": "M4 behaviors 回退读（同上，另一个模块）",
+      "file": "pet_behaviors.py",
+      "old": "        if not _normalize_ran and not _corrupted and os.path.exists(self._index):",
+      "new": "        if False:",
+      "tests": [
+        "tests/test_compat_v242_fixes.py::test_behaviors_gbk_index_survives_the_first_write"
+      ]
+    },
+    {
+      "id": "M-C9",
+      "why": "M4 首次写前留 .bak（拿掉 → 原文被覆盖且零备份）",
+      "file": "pet_behaviors.py",
+      "old": "        if _reencode and not self._backed_before_write:\n            if pet_io.backup_before_overwrite(self._index, self._log):\n                self._backed_before_write = True",
+      "new": "        if False:\n            if pet_io.backup_before_overwrite(self._index, self._log):\n                self._backed_before_write = True",
+      "tests": [
+        "tests/test_compat_v242_fixes.py::test_undecodable_index_is_backed_up_before_first_write"
+      ]
+    },
+    {
+      "id": "M-C10",
+      "why": "B pet_lines 顶层未知键带回（退回只写已知段 → 用户顶层段被删）",
+      "file": "pet_lines.py",
+      "old": "        data = dict(self._top_extra)\n        data.update({",
+      "new": "        data = {}\n        data.update({",
+      "tests": [
+        "tests/test_compat_v242_fixes.py::test_lines_keeps_top_level_unknown_keys_on_save"
+      ]
+    },
+    {
+      "id": "M-C11",
+      "why": "L2 _start_petting 补齐挪到早退之后（挪回去 → 一次拖动白解三组帧）",
+      "file": "桌宠.py",
+      "old": "        \"\"\"长按 1.5 秒：播放摸摸头帧动画 + 台词（借参考插件 petpet 动图概念）。\"\"\"\n        if self._petting:",
+      "new": "        \"\"\"长按 1.5 秒：播放摸摸头帧动画 + 台词（借参考插件 petpet 动图概念）。\"\"\"\n        self._ensure_default_frames()\n        if self._petting:",
+      "tests": [
+        "tests/test_compat_v242_fixes.py::test_start_petting_does_not_load_frames_on_early_return"
+      ]
+    },
+    {
+      "id": "M-C12",
+      "why": "L4' 自定义角色不补默认素材（拿掉包裹 → 每次待机白解 idle_full）",
+      "file": "桌宠.py",
+      "old": "        if not self._custom_role:\n            self._ensure_default_frames((\"idle\", \"idle_full\") if self.form != self.form_keys[0]\n                                        else (\"idle\",))",
+      "new": "        if True:\n            self._ensure_default_frames((\"idle\", \"idle_full\") if self.form != self.form_keys[0]\n                                        else (\"idle\",))",
+      "tests": [
+        "tests/test_compat_v242_fixes.py::test_play_idle_skips_default_frames_for_custom_role"
+      ]
+    },
+    {
+      "id": "M-C13",
+      "why": "L4 _quit 作废在途导出（拿掉 → 半截 tmp 留在用户选的目录）",
+      "file": "桌宠.py",
+      "old": "            if self._export_writer is not None:\n                self._export_writer.abort()\n                self._export_writer = None",
+      "new": "            if False:\n                self._export_writer.abort()\n                self._export_writer = None",
+      "tests": [
+        "tests/test_compat_v242_fixes.py::test_quit_aborts_inflight_export"
+      ]
+    },
+    {
+      "id": "M-C14",
+      "why": "L5 play_action 起播前补默认帧集（拿掉 → 接力窗内点了没反应）",
+      "file": "pet_actions.py",
+      "old": "            if not pet._custom_role and pet._ensure_default_frames():\n                pet._wire_anim_sets()",
+      "new": "            if False:\n                pet._wire_anim_sets()",
+      "tests": [
+        "tests/test_compat_v242_fixes.py::test_play_action_ensures_frames_before_frame_action"
+      ]
+    },
+    {
+      "id": "M-C15",
+      "why": "L6 abort 之后 finish 的体面文案（拿掉 → 吐 NoneType 内部错误）",
+      "file": "pet_export.py",
+      "old": "        if self._zf is None:\n            # v2.4.2（兼容 L6）：abort() 之后再 finish()",
+      "new": "        if False:\n            # v2.4.2（兼容 L6）：abort() 之后再 finish()",
+      "tests": [
+        "tests/test_compat_v242_fixes.py::test_finish_after_abort_reports_cancelled"
+      ]
+    }
+  ],
+  "results": {
+    "checked_at": "2026-10-10 21:57:05",
+    "total": 15,
+    "not_caught": 0,
+    "items": [
+      {
+        "id": "M-C1",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 1.29s"
+      },
+      {
+        "id": "M-C2",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 0.53s"
+      },
+      {
+        "id": "M-C3",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 2.52s"
+      },
+      {
+        "id": "M-C4",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 0.56s"
+      },
+      {
+        "id": "M-C5",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 0.52s"
+      },
+      {
+        "id": "M-C6",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 0.54s"
+      },
+      {
+        "id": "M-C7",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "2 failed, 1 passed in 0.74s"
+      },
+      {
+        "id": "M-C8",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 0.53s"
+      },
+      {
+        "id": "M-C9",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed, 1 passed in 0.70s"
+      },
+      {
+        "id": "M-C10",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 0.51s"
+      },
+      {
+        "id": "M-C11",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 0.96s"
+      },
+      {
+        "id": "M-C12",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 0.90s"
+      },
+      {
+        "id": "M-C13",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 0.93s"
+      },
+      {
+        "id": "M-C14",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 0.56s"
+      },
+      {
+        "id": "M-C15",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 0.50s"
+      }
+    ]
+  }
+}

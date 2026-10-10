@@ -299,6 +299,10 @@ def pet(tmp_path_factory):
     pet_log.set_data_dir(str(tmp))
     QApplication.instance() or QApplication([])
     win = main.PetWindow()
+    # v2.4.2（启动耗时 P2）：默认角色的 idle_full/eat/petpet 帧集改在首帧之后接力装载，
+    # 用例要断言"帧集已就位"就得先把这次接力驱动完（生产路径里它发生在窗口出画面之后）。
+    from helpers_roles import drain_startup_assets
+    assert drain_startup_assets(win), "启动接力装载没跑完（帧集/状态图没就位）"
     # 角色素材必须落在 DATA_DIR/roles 下（RoleLibrary 按自己的库目录解析相对路径），
     # 所以把这份临时数据目录挂到窗口上，供安装自定义角色的测试使用。
     win._fixture_data_dir = str(tmp)

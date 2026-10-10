@@ -25,7 +25,11 @@ v2.3.0 只给 pet_book/pet_config 修了"固定 .tmp + 无锁"这一处同款 bu
 - read_json_ex(...)        三元口径 + 可选**当场愈合**（读只一次、锁内完成；全仓读侧真源）
 - heal_json(...)           read_json_ex 的薄壳：回写合法结构（顶层坏 / 内层类型非法）
 - backup_before_heal(...)  愈合/重建前留 "<path>.bak"（自建恢复路径的模块共用）
+- backup_before_overwrite(...)  覆盖写**之前**留同一份 "<path>.bak"（读不到/非 UTF-8 的模块共用）
 - clean_tmp_files(...)     清扫 "<p>.tmp" / "<p>.<线程号>.tmp" / "<p>.<进程号>.<线程号>.tmp"
+- fallback_encodings()     编码回退候选顺序（本机 locale 页 → GBK → 单字节西文页最后）
+- read_json_fallback(...)  非 UTF-8 文件的**恢复读**（按字节重读 + 换编码 + 解析），绝不写盘
+- is_single_byte_encoding(...) / is_local_encoding(...)  回退判据（文案与排序共用）
 
 v2.3.1（读侧愈合口径一致性收口，本轮）：
 - 临时名加**进程号**（同机多实例/调试时不再撞名），clean_tmp_files 的白名单同步放宽；
@@ -52,7 +56,9 @@ v2.3.1（读侧愈合口径一致性收口，本轮）：
 日志口径：异常一律在 except 里交给调用方注入的 log 回调（默认 None=不记），
 本模块**绝不向上抛异常**——持久化失败降级成返回值/日志，绝不把调用方拖崩。
 """
+import codecs
 import json
+import locale
 import os
 import re
 import shutil
@@ -159,6 +165,234 @@ def backup_before_heal(path: str | os.PathLike,
     except Exception as e:
         _log(log, "pet_io 愈合备份失败（继续愈合）%s: %r" % (src, e))
         return False
+
+
+def backup_before_overwrite(path: str | os.PathLike,
+                            log: Callable[[str], Any] | None = None) -> bool:
+    """**覆盖写之前**把磁盘上的原文件另存 "<path>.bak"（原文快照，写坏了还能回去）。
+
+    v2.4.2（兼容 M4）：与 pet_lines/pet_book 的"脏读 → 首次写前留 .bak"同口径，抽成
+    共用 API 给 pet_alarm/pet_behaviors 用——这两个模块此前**没有任何**保护：alarms.json
+    是 GBK/读不到时内存里是空库，用户第一次加闹钟就把原文整份覆盖成 {"alarms": […] }，
+    旧条目与自定义顶层键一起消失、无 .bak、不可恢复。
+
+    与 backup_before_heal 的关系：落盘动作**完全相同**（同一份 .bak、同一套覆盖日志），
+    这里直接复用它的实现，不复制第二份。区别只在调用时机与触发条件：
+      · backup_before_heal：读侧判定"文件坏了，马上要愈合重建"；
+      · 本函数：读侧这次没读到（权限/共享占用）或编码不是 UTF-8，而用户接下来的一次
+        写会把原文改成另一种编码（或只剩内存里的种子库）→ 写前留证。
+    调用方负责"一次脏读只留一份"（用自己的标志位去重）：每写一次都调它等于把 .bak
+    反复覆盖成最新内容，最早那份原文反而没了。
+    """
+    return backup_before_heal(path, log)
+
+
+# ---------------- 编码回退读（v2.4.2 兼容 M3/M4：全仓单一实现） ----------------
+# 记事本「ANSI」另存在中文 Windows 上是 GBK/cp936、日文是 cp932、繁体是 cp950、韩文是 cp949：
+# 内容完全可读，而 _read_json_status 的 UTF-8 口径只能把它们归成 unreadable（不能证明损坏，
+# 所以一个字节都不写）。本段是"换编码再解一次"的**唯一实现**，pet_lines / pet_alarm /
+# pet_behaviors 共用（入口 read_json_fallback）；绝不写盘——救回来的内容交给各模块自己的
+# 归一化与"首次写前留 .bak"口径（见 backup_before_overwrite）。
+FALLBACK_ENCODINGS = ("gbk", "cp936")   # cp936 在 Python 里是 gbk 的别名，写上只为可读
+
+# "几乎就是 UTF-8"的两条容差（见 _almost_utf8）：损坏**段数**上限 = max(1, 总字节数 // 200)
+# （≈0.5%），且替换解码后至少还剩 1 个**完好**的非 ASCII 字符（文件里确实有完整的多字节
+# UTF-8 序列，而不是"每个高位字节都是坏字节"的单字节西文文件）。
+_UTF8_DAMAGE_DIVISOR = 200
+_UTF8_MIN_SURVIVORS = 1
+# U+FFFD（替换字符）：用 chr() 写，源码里不放不可见字符（判据见 _almost_utf8）
+_FFFD = chr(0xFFFD)
+
+
+def preferred_encoding() -> str:
+    """本机默认编码（locale.getpreferredencoding(False)）；取不到返回 ""（绝不抛）。"""
+    try:
+        return str(locale.getpreferredencoding(False) or "")
+    except Exception:
+        return ""   # 有意忽略：拿不到系统默认编码 ≠ 读不了文件，固定表已覆盖 GBK
+
+
+def _codec_name(enc: str) -> str:
+    """编码 → 规范名（"cp936"→"gbk"、"latin-1"→"iso8859-1"）；不认识的返回小写原样。
+
+    去重与"命中编码 == 本机编码"的比较**必须**走规范名：cp936 与 gbk 是同一个编解码器，
+    按字面比较会把"就是按本机 ANSI 读到的"误判成"猜的"（文案会跟着变成谨慎口径）。
+    """
+    e = str(enc or "").strip().lower()
+    if not e:
+        return ""
+    try:
+        return codecs.lookup(e).name
+    except Exception:
+        return e   # 有意忽略：查不到的别名按字面比较（宁可判成"不是本机编码"，也不抛）
+
+
+def is_single_byte_encoding(enc: str) -> bool:
+    """单字节代码页判据：0x80~0xFF 里**几乎每个字节单独**都能解出一个字符。
+
+    实测 cp1252/cp1251/latin-1/cp850 通过（cp1252 有 5 个未定义字节，容差 8），而
+    gbk/cp932/cp950/cp949/big5/utf-8 对孤立的高位字节一律抛 UnicodeDecodeError（首字节
+    缺尾字节）。判据的用途：这类编码能把**任意**字节序列解出来（永不抛），所以既不能排
+    在多字节 CJK 页前面（排序见 fallback_encodings），命中时也不能对用户承诺"内容没丢"
+    （见 pet_lines.read_notice）。
+    """
+    if not enc:
+        return False
+    bad = 0
+    for b in range(0x80, 0x100):
+        try:
+            bytes((b,)).decode(enc)
+        except UnicodeDecodeError:
+            bad += 1
+            if bad > 8:
+                return False
+        except (LookupError, ValueError):
+            return False
+        except Exception:
+            return False   # 有意忽略：编解码器自身异常按"不是单字节页"处理（宁可少判一次）
+    return True
+
+
+def is_gbk_encoding(enc: str) -> bool:
+    """命中编码是不是 GBK 家族（GBK / cp936；"gb2312"/"gb18030" 也是同族的超集）。
+
+    用途：文案分支（GBK 那份老文案逐字不变，见 pet_lines.notice_for_encoding）。按规范名
+    比较，所以 "cp936" 与 "gbk" 会走同一条分支。
+    """
+    return _codec_name(enc) in ("gbk", "gb2312", "gb18030")
+
+
+def is_local_encoding(enc: str) -> bool:
+    """命中编码是不是**本机默认编码**（规范名比较：cp936 == gbk）。
+
+    回退读有两种性质完全不同的结果：「按本机 ANSI 页读到的」（这台机器的记事本就写这个，
+    内容可信）与「按别的页猜的」（GBK 只是最可能的猜测）。只有前者才敢对用户说
+    "你的台词都还在"，后者必须用谨慎文案（见 pet_lines.read_notice）。
+    """
+    name = _codec_name(enc)
+    return bool(name) and name == _codec_name(preferred_encoding())
+
+
+def fallback_encodings() -> list[str]:
+    """编码回退候选顺序（单一来源）：**本机 locale 页 → GBK/cp936 → 单字节西文页最后**。
+
+    顺序由三条实测结论定（v2.4.2 兼容审查）：
+      · 本机 locale 是**多字节**页（cp932/cp950/cp949/cp936…）时**先试它**：那台机器上
+        记事本的「ANSI」就是它。固定表在前会把日文 cp932 台词库按 GBK 解成乱码
+        （「こんにちは」→「偙傫偵偪偼」），而乱码**照样能过 JSON 解析** → 被当成"读到了"、
+        气泡还说"台词都还在"，首次保存就把乱码转成 UTF-8。
+      · 其余情况 GBK/cp936 在前（"ANSI 另存"最可能就是这个；locale 不是它的机器上，
+        GBK 至少还是个**多字节**页，不会把任意字节都解出来）。
+      · **单字节西文页（cp1252/cp1251/latin-1…）一律排最后**：它们能把任意字节序列解出来，
+        放前面等于"任何文件都能被它接住"——实测 cp1252 会把"坏了一个字节的 UTF-8"
+        整份接住并给出 mojibake（ÿ½ å¥½ï¼Œä¸–ç•Œ）。
+      · 只列这几个候选是有意的：每多一个候选就多一份"解错了也能过 JSON 解析"的风险，
+        够用即可（真读到 UTF-16 这类应当走脏读/愈合路径，不该靠本函数猜）。
+    去重按规范名（cp936 与 gbk 只留一个），本机就是 cp936 时保留可读性更好的字面量 "gbk"
+    （日志与气泡都说 GBK）。本函数绝不抛。
+    """
+    out: list[str] = []
+    seen: set[str] = set()
+
+    def _add(enc: str) -> None:
+        name = _codec_name(enc)
+        if not name or name in seen:
+            return
+        seen.add(name)
+        out.append(enc)
+
+    pref = preferred_encoding()
+    pref_name = _codec_name(pref)
+    # UTF-8 系/ASCII 不是"另一种编码"，不能当候选（那正是刚才失败的那次解码）
+    usable = bool(pref_name) and not pref_name.startswith("utf") and pref_name != "ascii"
+    single = usable and is_single_byte_encoding(pref)
+    if usable and not single:
+        _add("gbk" if pref_name == "gbk" else pref)
+    for enc in FALLBACK_ENCODINGS:
+        _add(enc)
+    if single:
+        _add(pref)
+    return out
+
+
+def _almost_utf8(raw: bytes) -> bool:
+    """"几乎就是 UTF-8"：整份按 UTF-8 解只差**少量**字节（坏一个字节 / 被截断的尾巴）。
+
+    用途见 read_json_fallback：这种文件落到单字节西文页手里会变成 mojibake（实测"坏一个
+    字节的中文台词库"→ cp1252 → ÿ½ å¥½ï¼Œä¸–ç•Œ），所以先把它从单字节候选里排除。
+    两条判据都要满足（宁可漏判，也不要把正常的西文文件误判成"坏 UTF-8"）：
+      · 替换解码出的**损坏段数** ≥1 且 ≤ max(1, 总字节数 // 200)（≈0.5%）。按"段"而不是按
+        U+FFFD 字符数：一个坏掉的汉字会解出 2~3 个 U+FFFD（首字节/尾字节各自成段），按
+        字符数算会把"只坏了 1 个字"的小文件挡在门外（实测 92 字节坏 1 字 = 3 个 U+FFFD）。
+        真 ANSI 文件实测坏字节占比 9%~13%，远在这条线之上；
+      · 除去 U+FFFD 之后仍有 ≥1 个非 ASCII 字符——文件里确实存在**完整的**多字节 UTF-8
+        序列（"坏了一个字节的中文台词库"里其余汉字都还在）；纯西文文件一个都不会有
+        （"café" 的重音符全是坏字节，解出来只剩 U+FFFD），所以不会被误判。
+    """
+    try:
+        raw.decode("utf-8")
+        return False        # 本来就是 UTF-8：不该走回退
+    except UnicodeDecodeError:
+        pass
+    try:
+        text = raw.decode("utf-8", "replace")
+    except Exception:
+        return False        # 有意忽略：替换解码不该失败；真失败就按"不是"处理（不拦候选）
+    runs = len(re.findall(_FFFD + "+", text))
+    if runs < 1 or runs > max(1, len(raw) // _UTF8_DAMAGE_DIVISOR):
+        return False
+    return sum(1 for ch in text if ord(ch) > 127 and ch != _FFFD) >= _UTF8_MIN_SURVIVORS
+
+
+def read_json_fallback(path: str | os.PathLike, *, expect: type | None = dict,
+                       log: Callable[[str], Any] | None = None) -> tuple[Any, str]:
+    """UTF-8 读失败后的**恢复读**：按字节重读一次，先判编码再解析。绝不写盘、绝不抛。
+
+    返回 (data, 编码名)：
+      · (dict, "")      文件本来就是 UTF-8——刚才那次失败是瞬时 IO（共享冲突/权限），重读即可；
+      · (dict, "gbk")   确实不是 UTF-8，按该编码读出来了（调用方据此提示用户）；
+      · (None, "")      回退也读不出来（权限/占用/解不开/JSON 坏/顶层类型不对）。
+
+    为什么不是"换个 encoding 再 open 一次"：pet_io 把"解码失败"与"这次读不到"归成同一个
+    unreadable 口径，而这两者必须区别对待——解码失败才该换编码；读不到换什么编码都一样。
+    更要命的是，一份**正常的 UTF-8** 文件按 GBK 也能"解出来"，那样会把好文件读成乱码还
+    谎称"已按 GBK 读取"。所以先按字节读：读得到才谈编码。
+
+    只认「能解码**且**能解析成 expect 类型（默认顶层 dict）」的结果：解码成功但 JSON 仍坏、
+    或顶层不是对象，一律算失败——宁可少救一次，也不能把"其实读不懂"的文件当成读懂了再用
+    UTF-8 覆盖回去。候选顺序见 fallback_encodings；单字节候选还要先过 _almost_utf8。
+    """
+    try:
+        with open(str(path), "rb") as f:
+            raw = f.read()
+    except OSError as e:
+        _log(log, "pet_io 回退读失败（按默认值继续）%s: %r" % (path, e))
+        return None, ""     # 还是读不到（权限/占用）→ 交回调用方的"读不到"路径，一个字节都不写
+    enc = ""
+    try:
+        text = raw.decode("utf-8-sig")   # 与 _read_json_status 同口径：UTF-8 with BOM 也算 UTF-8
+    except UnicodeDecodeError:
+        text = ""
+        for cand in fallback_encodings():
+            if is_single_byte_encoding(cand) and _almost_utf8(raw):
+                continue    # 单字节页 + "几乎就是 UTF-8" → 这是被写坏的 UTF-8，不是西文文件
+            try:
+                text = raw.decode(cand)
+            except (UnicodeDecodeError, LookupError):
+                continue
+            enc = cand
+            break
+        if not text:
+            return None, ""
+    try:
+        data = json.loads(text)
+    except (ValueError, RecursionError) as e:
+        _log(log, "pet_io 回退读解码成功但 JSON 仍坏（按默认值继续）%s: %r" % (path, e))
+        return None, ""
+    if expect is not None and not isinstance(data, expect):
+        _log(log, "pet_io 回退读顶层结构非法（按默认值继续）%s: %s" % (path, type(data).__name__))
+        return None, ""
+    return data, enc
 
 
 def clean_tmp_files(targets: Iterable[str | os.PathLike],

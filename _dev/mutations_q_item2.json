@@ -1,0 +1,56 @@
+{
+  "mutations": [
+    {
+      "id": "M-Q5",
+      "why": "GBK 回退读取本身（去掉回退 → GBK 用户台词又看不见）",
+      "file": "pet_lines.py",
+      "old": "            fb, enc = self._read_fallback()\n            if fb is not None:",
+      "new": "            fb, enc = None, \"\"\n            if fb is not None:",
+      "tests": [
+        "tests/test_io_v231.py::test_lines_gbk_read_through_encoding_fallback_v242",
+        "tests/test_io_v231.py::test_lines_transient_read_failure_recovers_without_dirty_v242"
+      ]
+    },
+    {
+      "id": "M-Q6",
+      "why": "回退只接受「能解析成 JSON」的结果（坏 JSON 不得被当成读懂了）",
+      "file": "pet_lines.py",
+      "old": "        try:\n            data = json.loads(text)\n        except (ValueError, RecursionError):\n            return None, \"\"",
+      "new": "        try:\n            data = json.loads(text)\n        except (ValueError, RecursionError):\n            data = {}",
+      "tests": [
+        "tests/test_io_v231.py::test_lines_gbk_broken_json_still_takes_dirty_read_path_v242"
+      ]
+    },
+    {
+      "id": "M-Q7",
+      "why": "回退只接受「顶层是对象」的结果",
+      "file": "pet_lines.py",
+      "old": "        return (data, enc) if isinstance(data, dict) else (None, \"\")",
+      "new": "        return (data, enc)",
+      "tests": [
+        "tests/test_io_v231.py::test_lines_gbk_broken_json_still_takes_dirty_read_path_v242"
+      ]
+    },
+    {
+      "id": "M-Q8",
+      "why": "回退前必须先自证「不是 UTF-8」（否则好文件被解成乱码）",
+      "file": "pet_lines.py",
+      "old": "            text = raw.decode(\"utf-8-sig\")",
+      "new": "            text = raw.decode(\"gbk\")",
+      "tests": [
+        "tests/test_io_v231.py::test_lines_transient_read_failure_recovers_without_dirty_v242",
+        "tests/test_io_v231.py::test_lines_gbk_read_through_encoding_fallback_v242"
+      ]
+    },
+    {
+      "id": "M-Q9",
+      "why": "GBK 读到的文件第一次落盘前要留 .bak",
+      "file": "pet_lines.py",
+      "old": "        _reencode = self._dirty_read or self._gbk_read",
+      "new": "        _reencode = self._dirty_read",
+      "tests": [
+        "tests/test_io_v231.py::test_lines_gbk_read_through_encoding_fallback_v242"
+      ]
+    }
+  ]
+}

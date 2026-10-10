@@ -71,7 +71,7 @@ import pet_io  # v2.3.1：原子写/清扫临时文件（P2-B 导入恢复、L4 
 
 
 APP_NAME = "大肥鱼桌宠"
-VERSION = "2.4.1"
+VERSION = "2.4.2"
 PAD = 1.25  # 窗口相对角色的透明边距（为压扁/回弹预留空间）
 IDLE_FRAME_MS = 140      # 待机帧间隔
 IDLE_FORM_HOLD_SECS = 8  # v2.1.3：只有形态、没有动作可播时的展示期上限（到期回用户形态）
@@ -95,6 +95,20 @@ _FRAME_CACHE_MAX = 512   # 解码缓存条目上限（满了按插入顺序淘�
 # 封顶的话最坏常驻 512 MB；实测 24 帧 512px 角色跑完缓存 ≈25 MB。现在按解码后
 # w*h*4 计费（_frame_pix），超预算按插入顺序淘汰最旧的一条，条目上限退化成兜底。
 _FRAME_CACHE_MAX_BYTES = 64 * 1024 * 1024
+# v2.4.2（导出耗时 P2）：导出角色包的写盘长循环按同样思路分片——实测 10 个 61KB PNG
+# ≈130 ms、60 帧真实美术 ≈200 ms，全在一个事件循环轮次里，导出期间窗口假死。
+# 每片最多占主线程这么久（与帧解码同一个量级），片与片之间事件循环照常转。
+_EXPORT_SLICE_MS = 12.0
+# v2.4.2（启动耗时 P2）：默认角色的四组素材帧集（共 37 帧）。首屏画的是 side/front 贴图
+# 与开场表情 "laugh"，帧集最早也要等开场表情（3.2s）结束、_play_idle 起播时才被读到，
+# 所以除 idle 外的三组都推迟到**首帧显示之后**按组接力解（见 _startup_assets_step）。
+# 为什么 idle 不能一起推：_verify_green.py 的成品检测在 PetWindow() 之后**不转事件循环**
+# 就断言 has_frames 与 anim._sets["idle"] 非空（那份文件不归本轮改动），推迟会让它假失败。
+# 元组 = (组名, assets 下的子目录, 文件名前缀, 帧数, 承载帧的实例属性名)
+_DEFAULT_FRAME_SETS = (("idle", "", "idle", 10, "_idle_frames"),
+                       ("idle_full", "", "idle_full", 10, "_idle_full_frames"),
+                       ("eat", "", "eat", 7, "_eat_frames"),
+                       ("petpet", "fx", "petpet", 10, "_fx_petpet"))
 SLEEP_AFTER_SECONDS = 60 # 无交互多久入睡
 STATE_DURATION_MS = 2500 # 状态图默认展示时长
 # 跟随/散步行走参数（v1.4.2 降速档）实现迁至 pet_wander：此处保留模块级名字（tests/v13 依赖）
@@ -681,6 +695,27 @@ def _log_slot_error(name, err):
         _log_error("timer slot %s failed: %r" % (name, err))  # 有意忽略：取 traceback 失败就只记一行
 
 
+def _fill_state_pix(win, form, states, res, custom):
+    """把某形态的 states 逐张建出来填进 win.state_pix[form]（缺图不建键 = 旧口径）。
+
+    内置素材（默认角色）走 assets/<形态首字母>_<状态>.png；自定义角色走资源图优先、
+    程序化叠图兜底（win._custom_state_pix）。**单一构建点**：全量构建与按需补建都走这里，
+    两条路径因此逐位相同（v2.4.2 的延迟装载就是靠这一点保证"看不出差别"）。
+
+    放模块级而不是方法：_build_state_pix 在 tests/test_role_schema.py 里会被拿一个
+    只有状态图相关属性的 _Stub 调用（不构造真窗口），方法调用会因为 stub 上没有那个
+    方法名而崩——构建管线只碰 win 的这几个属性，放模块级就让 stub 照样能跑。
+    """
+    base = win.sprites[form]["side"] if custom else None
+    for s in states:
+        if custom:
+            win.state_pix[form][s] = win._custom_state_pix(res.get(s), base, s)
+        else:
+            pix = win._load_img(["assets/%s_%s.png" % (form[0], s)])
+            if pix is not None:
+                win.state_pix[form][s] = pix
+
+
 class PetWindow(QWidget):
     # v2.0.1：帧间隔默认值以类属性暴露（pet_actions 等服务不 import 桌宠，须经实例访问）
     IDLE_FRAME_MS = IDLE_FRAME_MS
@@ -899,13 +934,22 @@ class PetWindow(QWidget):
         # ---- 阶段1：帧动画 ----
         self.anim = pet_anim.FrameAnim(self)
         assets_dir = resource_dir("assets")
-        self._idle_frames = pet_anim.load_frame_set(assets_dir, "idle", 10)
+        self._assets_dir = assets_dir  # v2.4.2：接力装载按组查素材目录（见 _DEFAULT_FRAME_SETS）
+        # v2.4.2（启动耗时 P2）：四组默认素材帧集只**同步解 idle**，其余三组推迟到首帧之后。
+        # 构造期实测：idle 10.7ms / idle_full 11.6ms / eat 8.7ms / petpet 5.7ms，
+        # 后三组合计 ≈26ms（约占 PetWindow() 构造 26%），而首屏一个都用不到。
+        # 兜底在 _ensure_default_frames()：任何真实消费点（待机起播/喂食/摸头）提前要帧
+        # 就地同步补齐，_frames_loaded 记"解过没有"，所以补齐是幂等的、绝不重复解码。
+        self._idle_frames = []
         # v2.4：吃饱形态（默认角色**非首形态**）的专属 idle 帧集 assets/idle_full_f*。
         # 由 _dev/gen_full_idle_frames.py 从 character_full.png 程序化生成（极小幅呼吸，
         # 质心不变）。缺失（用户删图 / 旧版数据）时这里是空列表 → _play_idle 回退静态
         # 形态图，即 v2.2.5 的旧行为，安全兜底。
-        self._idle_full_frames = pet_anim.load_frame_set(assets_dir, "idle_full", 10)
-        self._eat_frames = pet_anim.load_frame_set(assets_dir, "eat", 7)
+        self._idle_full_frames = []
+        self._eat_frames = []
+        self._fx_petpet = []
+        self._frames_loaded = {}          # 组名 -> 已解（幂等判据；_ensure_default_frames）
+        self._load_default_frame_set("idle")
         # v2.4.1：帧集注册指纹（见 _wire_anim_key）——初始 None 让首次注册必然执行
         self._wire_key = None
         # v2.4.1（UI 卡顿 C1/C2）：单帧解码缓存 + 在途的分片解码（见 _frame_pix /
@@ -916,14 +960,18 @@ class PetWindow(QWidget):
         self._frame_cache_bytes = 0
         self._anim_pending = None      # 在途分片解码状态；None = 没有
         self._anim_pending_restart = False  # 分片装好后是否欠一次 _play_idle 起播
-        self._fx_petpet = pet_anim.load_frame_set(os.path.join(assets_dir, "fx"), "petpet", 10)
-        if len(self._fx_petpet) != 10:
-            _log_error("fx frames petpet incomplete: %d/10" % len(self._fx_petpet))
         self._fx_money = []  # 86 帧较大：首次撒钱时才加载（约 6.7MB）
         self._fx_money_dir = os.path.join(assets_dir, "fx")
         self._wire_anim_sets()
         self.anim.frame_changed.connect(self._on_frame_changed)
-        self._build_state_pix()
+        # v2.4.2（启动耗时 P2）：状态图同样只按需建——首屏只用得到开场表情那一张
+        # （_show_state("laugh") 会经 _state_pix → _ensure_state_pix 就地补建），其余
+        # 16 张 PNG（默认角色）或"每形态每状态一次程序化合成"（自定义角色）推迟到首帧之后。
+        self._state_pix_pending = {}
+        self._startup_assets_done = False  # v2.4.2：接力装载是否跑完（探针/测试的收口判据）
+        self._export_writer = None         # v2.4.2：在途的导出写包器（分片写，见 _export_step）
+        self._export_voice_n = 0           # 本次导出带的参考音个数（完成文案用）
+        self._build_state_pix(only={})
         self.anim_mode = "idle"
         self._sleeping = False
         self._last_activity = time.monotonic()
@@ -1082,6 +1130,10 @@ class PetWindow(QWidget):
         self.bubble.clicked.connect(self._cycle_line)
 
         self.show()
+        # v2.4.2（启动耗时 P2）：首帧之后接力装载"非首屏必需"素材（帧集 + 状态图）。
+        # 排在 show() 之后 + QTimer(0)：窗口先出画面，解码分片只占用随后的空闲轮次；
+        # 每轮只做一小片（解一组帧 / 建几张状态图）——见 _startup_assets_step。
+        QTimer.singleShot(0, self, self._gslot("startup_assets", self._startup_assets_step))
         if self.cfg.get("badge") and self.cfg.get("api_key"):
             self._update_badge()
             self.badge.show()
@@ -1095,6 +1147,15 @@ class PetWindow(QWidget):
         # 不顶掉开场台词。（备份发生在下一次保存前，见 pet_lines._save）
         if self.lines_lib.dirty_read:
             QTimer.singleShot(8000, self, lambda: self.show_bubble(pet_lines.DIRTY_READ_NOTICE))
+        elif self.lines_lib.gbk_read:
+            # v2.4.2（Q）：不是 UTF-8 但按编码回退读出来了——台词一条没丢，也要说清楚。
+            # v2.4.2（兼容 M1）：命中编码**不一定是 GBK**（cp932/cp950/cp1252…）——写死
+            # "已按 GBK 读取"在非中文 Windows 上是对用户说假话（日志说 CP1252、气泡说 GBK）。
+            # 只有"回退命中的就是本机 ANSI 页、且是 GBK"才用那条老文案，其余按实际编码说话。
+            _fb_notice = (pet_lines.GBK_READ_NOTICE
+                          if (self.lines_lib.read_is_gbk and self.lines_lib.read_trusted)
+                          else self.lines_lib.read_notice)
+            QTimer.singleShot(8000, self, lambda: self.show_bubble(_fb_notice))
 
         # ---- 托盘图标（窗口被遮挡/找不到时的兜底入口）----
         self.tray = QSystemTrayIcon(self)
@@ -1123,6 +1184,78 @@ class PetWindow(QWidget):
                 self._fx_money = pet_anim.load_frame_set(self._fx_money_dir, "money", 86)
         except Exception:
             pass  # 有意忽略：预加载失败不碍事，撒钱时 _fx_money 为空会走完整检查并记日志
+
+    # ---------- v2.4.2（启动耗时 P2）：首屏之后接力装载 ----------
+    def _load_default_frame_set(self, name):
+        """解**一组**默认素材帧集（幂等：解过的组直接返回），组定义见 _DEFAULT_FRAME_SETS。
+
+        与旧代码逐位相同的一步：pet_anim.load_frame_set(目录, 前缀, 帧数)，坏帧跳过、
+        结果直接挂到实例属性上。唯一的差别是**什么时候**调它——旧版四组全在构造期，
+        现在 idle 在构造期、其余三组由 _startup_assets_step / _ensure_default_frames 触发。
+        """
+        for key, sub, prefix, count, attr in _DEFAULT_FRAME_SETS:
+            if key != name:
+                continue
+            if self._frames_loaded.get(key):
+                return getattr(self, attr)
+            d = os.path.join(self._assets_dir, sub) if sub else self._assets_dir
+            frames = pet_anim.load_frame_set(d, prefix, count)
+            setattr(self, attr, frames)
+            self._frames_loaded[key] = True
+            if key == "petpet" and len(frames) != count:
+                _log_error("fx frames petpet incomplete: %d/%d" % (len(frames), count))
+            return frames
+        return []
+
+    def _ensure_default_frames(self, names=None):
+        """把还没解的默认素材帧集**就地**补齐（同步；全解好时只是一次字典查询）。
+
+        这是延迟装载的安全网，语义上等价于旧版"构造期全解好"：任何真实消费点
+        （_play_idle 起播 / feed 吃帧 / _start_petting 摸头 / _form_idle_frames 查表）
+        一旦提前要帧，都在这里按旧口径同步补齐，绝不让调用方看到"本该有却没有"的空帧集。
+
+        names=None 补齐全部；给了组名元组就只补这几组（_play_idle 用它只补"本形态起播
+        真正需要的"——构造期也会走 _play_idle，无差别补全部等于把延迟装载又拉回构造期）。
+        返回是否**本次真的解了新的一组**（调用方据此决定要不要重注册帧集）。
+        """
+        loaded = False
+        for key, _sub, _prefix, _count, _attr in _DEFAULT_FRAME_SETS:
+            if names is not None and key not in names:
+                continue
+            if not self._frames_loaded.get(key):
+                self._load_default_frame_set(key)
+                loaded = True
+        return loaded
+
+    def _startup_assets_step(self):
+        """启动接力装载的一步：每一轮事件循环只做**一小片**。
+
+        v2.4.2（启动耗时 P2）：这些素材首屏都用不到——帧集最早由开场表情结束后的
+        _play_idle 读取，状态图由 _state_pix 按需读取。旧版把它们全压在构造期同步解完
+        （实测 idle_full+eat+petpet 27 帧 ≈26ms、其余 16 张状态图 ≈20ms，合计 ≈45% 的
+        PetWindow() 构造时间），窗口要等这些解码做完才出现。现在改成：窗口先出画面，
+        随后每个事件循环轮次解**一组帧**或建**几张状态图**，单轮阻塞不超过一个切片量级。
+        全部装完后本任务自行结束（不再排下一轮）。
+        """
+        if self._closing:
+            return  # 窗口正在退出：别再往它身上解素材（单发定时器与窗口同生命周期）
+        if len(self._frames_loaded) < len(_DEFAULT_FRAME_SETS):
+            for key, _sub, _prefix, _count, _attr in _DEFAULT_FRAME_SETS:
+                if not self._frames_loaded.get(key):
+                    self._load_default_frame_set(key)   # 一组 ≈5~12ms：本身就是一"片"
+                    break
+            if len(self._frames_loaded) >= len(_DEFAULT_FRAME_SETS):
+                # 帧集补齐了（eat 从空集变 7 帧）→ 指纹随之失配，按新帧集重注册一次。
+                # 只 add_set、不起播：_anim_ready 的 restart 标志此刻仍是 False。
+                self._wire_anim_sets()
+            QTimer.singleShot(0, self, self._gslot("startup_assets", self._startup_assets_step))
+            return
+        if self._state_pix_pending:
+            self._build_state_pix_slice()
+            if self._state_pix_pending:
+                QTimer.singleShot(0, self, self._gslot("startup_assets", self._startup_assets_step))
+                return
+        self._startup_assets_done = True
 
     # ---------- 角色加载 ----------
     def _load_img(self, names):
@@ -1986,6 +2119,14 @@ class PetWindow(QWidget):
 
     def _export_role(self):
         """导出当前自定义角色（素材+行为+可分享配置）为 .dfypet.zip。"""
+        # v2.4.2（兼容 M1）：**重入守卫**。导出是分片接力写的（_export_step），期间
+        # self._export_writer 一直是活着的，但菜单项没有禁用——用户再点一次「导出」就会
+        # 起第二个写者：两个写者交替驱动时，第一个 done=False/written 停在半路、输出文件
+        # 根本不存在、半截 tmp 留盘（不同输出路径）；同一个输出路径下两者 tmp 名还可能相同，
+        # 交错写后先收尾的那个直接 WinError 32。这里明说"忙着呢"，一次只跑一个导出。
+        if self._export_writer is not None:
+            self.show_bubble("还在导出上一个角色包，稍等一下~")
+            return
         if not self._custom_role:
             self.show_bubble("默认角色不能导出，先在「角色」里选一个自定义角色吧~")
             return
@@ -2005,16 +2146,48 @@ class PetWindow(QWidget):
         _meta = pet_dialogs.pick_role_meta(self, _rrec.get("name") or "")
         if _meta is None:
             return  # 用户取消
-        _ok, _err = pet_export.export_bundle(
-            self.role_lib, self.behaviors, self.cfg, _path,
+        # v2.4.2（导出耗时 P2）：拆成"收集 + 分片逐条写"两段自己驱动——旧版一次同步写完
+        # 要 125~205 ms（zipfile 对 PNG 的 ZIP_DEFLATED 长循环），期间主线程一次都不回
+        # 事件循环（窗口假死）。两段式 API 见 pet_export.plan_bundle / BundleWriter，
+        # 产出与旧版逐条目相同（同一批条目、同一顺序、同一压缩级别）。
+        _plan, _perr = pet_export.plan_bundle(
+            self.role_lib, self.behaviors, self.cfg,
             alarms_getter=self.alarms.list,
             # v2.1：只带**用户写的**台词（内置台词对面也有，避免每包重复一份语料）
             lines_getter=lambda: [x for x in self.lines_lib.lines() if not x.get("builtin")],
             dialogues_getter=self.lines_lib.dialogues,  # v2.1：对白随包
             voice_assets_getter=self._voice_asset_files,
             include_voice_ids=_voice_ids, meta=_meta)
+        if _plan is None:
+            self.show_bubble("导出失败：%s" % _perr)
+            return
+        self._export_writer = pet_export.BundleWriter(_plan, _path)
+        self._export_voice_n = len(_voice_ids or ())
+        self._export_step()  # 起第一片（含首个进度气泡）
+
+    def _export_step(self):
+        """导出写包的一步：写一小片 → 更新进度气泡 → 没写完就排到下一轮事件循环。
+
+        v2.4.2（导出耗时 P2）：与帧解码分片同一个套路——总工作量不变，但任何一次
+        连续阻塞都不超过 _EXPORT_SLICE_MS，导出期间窗口照常重绘/响应。
+        完成/失败文案与旧版**逐字相同**（旧版同步跑完再弹，这里只是分了几轮）。
+        """
+        w = self._export_writer
+        if w is None:
+            return
+        if self._closing:
+            self._export_writer = None
+            w.abort()  # 退出中：作废半截临时文件（正式文件从没被碰过）
+            return
+        w.step(budget_ms=_EXPORT_SLICE_MS)
+        if not w.done:
+            self.show_bubble("正在导出角色包…（%d/%d）" % (w.written, w.total))
+            QTimer.singleShot(0, self, self._gslot("export_step", self._export_step))
+            return
+        self._export_writer = None
+        _ok, _err = w.finish()
         if _ok:
-            _extra = ("（含 %d 个参考音）" % len(_voice_ids)) if _voice_ids else ""
+            _extra = ("（含 %d 个参考音）" % self._export_voice_n) if self._export_voice_n else ""
             self.show_bubble("角色包已导出%s，可以分享给朋友啦~" % _extra)
         else:
             self.show_bubble("导出失败：%s" % _err)
@@ -2434,25 +2607,30 @@ class PetWindow(QWidget):
     # 主线程长阻塞的来源，现在由 _wire_anim_sets 的首片预算 + _anim_chunk_step 分片
     # 取代（逐帧走 _frame_pix），全仓同样已无引用。
 
-    def _form_idle_frames(self, form):
+    def _form_idle_frames(self, form, ensure=True):
         """默认角色某形态的**专属** idle 帧集；没有专属帧集返回 []。
 
         v2.4：吃饱形态有 assets/idle_full_f*（_dev/gen_full_idle_frames.py 生成）。
         返回 [] 是**有意义**的——调用方据此回退静态形态图（绝不拿常态帧盖住吃饱图）。
+        v2.4.2：ensure=True（默认）先补齐延迟装载的帧集；**只有指纹计算传 False**
+        ——_wire_anim_key 的契约是"一次 PNG 都不解码"，它必须看"当前已就位的是什么"。
         """
+        if ensure:
+            self._ensure_default_frames()
         if form == "full":
             return self._idle_full_frames or []
         return []
 
-    def _default_idle_frames(self):
+    def _default_idle_frames(self, ensure=True):
         """默认角色当前形态该播的 idle 帧集。
 
         首形态 = 常态帧集 assets/idle_f*（现行为）；非首形态 = 该形态专属帧集
         （吃饱 = assets/idle_full_f*）。非首形态且没有专属帧集 → 空集 ⇒ _play_idle
         走静态形态图分支（v2.2.5 语义：绝不拿常态帧盖住吃饱图）。
         自定义角色不走这里（帧集按「形态×动作」查表）。
+        v2.4.2：ensure 语义见 _form_idle_frames（指纹计算传 False，其余调用方传默认）。
         """
-        own = self._form_idle_frames(self.form)
+        own = self._form_idle_frames(self.form, ensure=ensure)
         if own:
             return own
         if self.form == self.form_keys[0]:
@@ -2485,7 +2663,10 @@ class PetWindow(QWidget):
                     str(cur.get("interval_ms") or ""),
                     tuple((act, tuple(self._path_sig(p) for p in (cur.get(act) or [])))
                           for act in self._anim_actions(cur)))
-        return ("default", self.form, tuple(self._default_idle_frames()),
+        # v2.4.2：ensure=False —— 指纹只描述"**当前已就位**的帧集"，绝不在这里补解码。
+        # 延迟装载补齐后指纹自然改变（eat 由空集变 7 帧 / idle_full 由空集变 10 帧），
+        # 下一次 _wire_anim_sets 因此重新注册；这正是我们要的收敛方式。
+        return ("default", self.form, tuple(self._default_idle_frames(ensure=False)),
                 tuple(self._eat_frames if self._idle_frames else []))
 
     def _wire_anim_sets(self):
@@ -2550,7 +2731,10 @@ class PetWindow(QWidget):
         # 常态帧集，就会重演 v2.2.5 修的"吃饱图被常态动画盖住"；所以这里注册
         # _default_idle_frames()——非首形态没有专属帧集时是空集，_play_idle 据此走静态。
         self.has_frames = bool(self._idle_frames) and not self._custom_role
-        self.anim.add_set("idle", self._default_idle_frames())
+        # v2.4.2：ensure=False —— 本函数同时是构造期的那次注册（那时 idle 之外的帧集
+        # 还没解），在这里补解码就等于把延迟装载又拉回构造期。真实消费点（_play_idle /
+        # feed）会先 _ensure_default_frames() 再调本函数，届时指纹已变、帧集已就位。
+        self.anim.add_set("idle", self._default_idle_frames(ensure=False))
         self.anim.add_set("eat", self._eat_frames if self.has_frames else [])
         self._wire_key = key
         # v2.4.1（找茬 M3）：自定义角色切回默认角色时，在途分片同样是陈旧批 —— 一起作废
@@ -2751,6 +2935,15 @@ class PetWindow(QWidget):
         # v2.1.4 修复（M1）：_sleeping 只由 _show_sleep/_wake 管理，这里不再悄悄清除——
         # 否则"睡眠中语音读完→_play_idle"会静默醒来且形态永久留在睡形态（无主人卡死）。
         self._cur_state = None  # 离开表情/睡眠展示
+        # v2.4.2（启动耗时 P2）：起播前补齐**本形态起播真正要用的**帧集（全就位时只是一次
+        # 字典查询）。只补 idle / idle_full 是有意的：本函数在构造期（__init__ 里那次
+        # set_scale 之后）也会被调用一次，无差别补全部 = 延迟装载白做；eat 由 feed 补、
+        # petpet 由 _start_petting 补，各自只在自己的消费点上付钱。
+        # v2.4.2（兼容 L4）：自定义角色走下面的 role 分支（forms[i].animations），根本不读
+        # 默认素材——给它补 idle_full 是白解 10 帧（≈12ms）。只有默认角色才需要这份。
+        if not self._custom_role:
+            self._ensure_default_frames(("idle", "idle_full") if self.form != self.form_keys[0]
+                                        else ("idle",))
         # P1-7：待机前按当前形态重查帧集。自定义角色 =「形态×动作」表；v2.4 起默认角色
         # 也走这里（首形态常态帧集 / 吃饱形态专属帧集），否则形态切换后 "idle" 槽会留着
         # 上一个形态的帧集。
@@ -2846,32 +3039,92 @@ class PetWindow(QWidget):
     # 吃饱形态缺图（用户素材只有 7 张吃饱版状态图）时用同形态近义图兜底，避免显示瘦图
     FULL_STATE_ALIAS = {"hiss": "angry", "drool": "laugh", "surprised": "puzzled"}
 
-    def _build_state_pix(self):
+    def _build_state_pix(self, only=None):
         """构建状态图：默认角色加载内置表情素材；自定义角色生成程序化表情图。
 
         P2-5 状态图优先级（P1-7 可选状态图，本方法与 _custom_state_pix 为合并点）：
         1) forms[i].states[state] 资源图（用户配置，优先）；
         2) 程序化叠图 _make_custom_state_pix 兜底（未配置/加载失败时，向后兼容）。
         吃饱版缺图回退常态版同名的 R2-5 语义仍在 _state_pix 的 alias 逻辑里保留。
+
+        only=None（默认 = 旧行为）：**全量构建**，建完 _state_pix_pending 为空。
+        only={形态: {状态, ...}}：只建给定条目，其余登记进 _state_pix_pending，交给
+        _ensure_state_pix 按需补建（启动路径传 only={} → 一张都不建，理由见 __init__）。
+        两条路径共用同一个 _fill_state_pix 与同一批素材路径，所以"按需补出来的"与
+        "一次性全建的"逐位相同，差别只在时序。
         """
         names = tuple(_STATE_MARK_MAP)  # 状态名单一来源，避免双处维护
-        if self._custom_role:
-            self.state_pix = {}
-            rid = self.cfg.get("role", "")
-            states_paths = self.role_lib.form_state_paths(rid) if self.role_lib else []
-            for i, k in enumerate(self.form_keys):
-                base = self.sprites[k]["side"]
-                res = states_paths[i] if i < len(states_paths) else {}
-                self.state_pix[k] = {
-                    s: self._custom_state_pix(res.get(s), base, s) for s in names
-                }
+        custom = bool(self._custom_role)
+        rid = self.cfg.get("role", "") if custom else ""
+        states_paths = (self.role_lib.form_state_paths(rid) if (custom and self.role_lib) else [])
+        form_list = list(self.form_keys) if custom else ["normal", "full"]
+        self.state_pix = {}
+        pending = {}
+        for i, form in enumerate(form_list):
+            want = names if only is None else tuple(s for s in names if s in (only.get(form) or ()))
+            res = states_paths[i] if i < len(states_paths) else {}
+            self.state_pix[form] = {}
+            _fill_state_pix(self, form, want, res, custom)
+            miss = set(names) - set(want)
+            if miss:
+                pending[form] = miss
+        self._state_pix_pending = pending
+
+    def _ensure_state_pix(self, state):
+        """按需补建 state（含吃饱形态别名）在全部形态上的状态图（幂等）。
+
+        v2.4.2（启动耗时 P2）：启动期不再一次性建全部状态图（默认角色 17 张 PNG ≈23ms；
+        自定义角色还要每形态每状态一次程序化合成）。补建与全量构建共用 _fill_state_pix、
+        同一素材路径与同一状态序，所以结果逐位相同；pending 清空后本函数只剩一次判空。
+        """
+        pend = self._state_pix_pending
+        if not pend:
             return
-        self.state_pix = {"normal": {}, "full": {}}
-        for form in ("normal", "full"):
-            for s in names:
-                pix = self._load_img(["assets/%s_%s.png" % (form[0], s)])
-                if pix is not None:
-                    self.state_pix[form][s] = pix
+        want = {state}
+        alias = self.FULL_STATE_ALIAS.get(state)
+        if alias:
+            want.add(alias)   # 吃饱形态缺图要走别名回退，别名本身也得建出来
+        todo = {f: (miss & want) for f, miss in pend.items() if (miss & want)}
+        if not todo:
+            return
+        custom = bool(self._custom_role)
+        rid = self.cfg.get("role", "") if custom else ""
+        states_paths = (self.role_lib.form_state_paths(rid) if (custom and self.role_lib) else [])
+        form_list = list(self.form_keys) if custom else ["normal", "full"]
+        for form, states in todo.items():
+            i = form_list.index(form) if form in form_list else 0
+            res = states_paths[i] if i < len(states_paths) else {}
+            _fill_state_pix(self, form, [s for s in tuple(_STATE_MARK_MAP) if s in states],
+                            res, custom)
+            pend[form] -= states
+        if not any(pend.values()):
+            self._state_pix_pending = {}
+
+    def _state_pending(self, state):
+        """state（或其吃饱别名）是否还有形态没建——接力装载的推进判据。"""
+        pend = self._state_pix_pending
+        if not pend:
+            return False
+        alias = self.FULL_STATE_ALIAS.get(state)
+        for miss in pend.values():
+            if state in miss or (alias and alias in miss):
+                return True
+        return False
+
+    def _build_state_pix_slice(self, budget_ms=_FRAME_SLICE_MS):
+        """接力装载的一步：按状态名单序补建，最多占主线程 budget_ms。
+
+        以**状态**为推进单位（而不是形态）：一个状态在多个形态上各建一张，逐状态推进
+        才能让每步的粒度稳定在一个切片量级（默认角色单张 ≈1.3ms，自定义角色单张数 ms）。
+        """
+        t0 = time.perf_counter()
+        for s in tuple(_STATE_MARK_MAP):
+            if not self._state_pix_pending:
+                return
+            if self._state_pending(s):
+                self._ensure_state_pix(s)
+            if (time.perf_counter() - t0) * 1000.0 >= budget_ms:
+                return
 
     def _custom_state_pix(self, res_path, base, state):
         """P2-5 状态图合并点：资源图（forms[i].states[state]）优先；
@@ -2886,6 +3139,7 @@ class PetWindow(QWidget):
         return _make_custom_state_pix(base, state)
 
     def _state_pix(self, state):
+        self._ensure_state_pix(state)  # v2.4.2：启动期没建的在这里按需补（建好后是空操作）
         pix = self.state_pix.get(self.form, {}).get(state)
         if pix is None and self.form == "full":
             alias = self.FULL_STATE_ALIAS.get(state)
@@ -3026,6 +3280,11 @@ class PetWindow(QWidget):
             # busy（吃帧/跳跃）中暂不触发：继续按住则 400ms 后补判（M1 修复）
             self._hold_timer.start(400)
             return
+        # v2.4.2（启动耗时 P2）：petpet 帧集同样延迟装载，开播前先补齐（已就位则无开销）。
+        # v2.4.2（兼容 L2）：补齐必须放在**三个早退之后**——此前它在最前面，一次普通拖动
+        # （press_dist>32）/按住未松/busy 重排都会同步解三组默认帧集（≈26ms），把"延迟装载"
+        # 又拉回了交互路径上；真起播才付这份钱。
+        self._ensure_default_frames()
         if not self._fx_petpet:
             return
         self._petting = True
@@ -3563,6 +3822,11 @@ class PetWindow(QWidget):
             self.show_bubble(random.choice(["消化完啦，又饿了~", "瘦回来啦！", "还能再吃一点……"]))
 
     def feed(self, food):
+        # v2.4.2（启动耗时 P2）：吃帧是延迟装载的三组之一，喂食前必须先补齐——否则
+        # 下面读到的 anim._sets["eat"] 会是构造期注册的空集，喂食会错走"大笑表达"分支。
+        # 补齐后指纹变了，_set_form 里的 _wire_anim_sets 会把真实吃帧注册进去。
+        if self._ensure_default_frames():
+            self._wire_anim_sets()
         # v2.1.4 修复（S1-c）：睡眠中投喂先正常唤醒（此前会在"睡着"状态下起吃帧，
         # 用户点一下就把 _eat_done 顶掉 → busy 永久卡死）
         if self._sleeping:
@@ -4672,6 +4936,12 @@ class PetWindow(QWidget):
                     self._preview_player.stop()
             except Exception:
                 pass  # 有意忽略：退出时停预览播放器尽力而为
+            # v2.4.2（兼容 L4）：在途的导出写包器必须先作废——它的临时文件是
+            # "<用户选的输出名>.<tid>.<序号>.tmp"，不在下面这份数据文件白名单里，退出时不
+            # abort 就会把半截 tmp 留在用户选的位置（正式文件从没被碰过，所以只是垃圾）。
+            if self._export_writer is not None:
+                self._export_writer.abort()
+                self._export_writer = None
             # L4：临时名现在带线程号（"<p>.<tid>.tmp"），只删固定名扫描不到真正会残留的
             # 文件（崩溃留下的是 "lines.json.12345.tmp"）→ 按目标名白名单清扫。
             # pet_io.clean_tmp_files 对每个目标取同一把路径锁：在途写者持锁期间它的 tmp
