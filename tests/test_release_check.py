@@ -381,10 +381,15 @@ def test_fingerprint_file_list_matches_the_mutation_lib():
         "两处清单漂移：%r vs %r" % (files, chk.MUTATION_FINGERPRINT_FILES)
     # v2.4.4（任务 1）：pet_balance.py 必须在清单里。A-1（请求代次）改了它、3 条锚点随之失效，
     # 而发布门此前一条"证据过期"都不提示。少了它，这条用例红（防的是"又漏一个关键文件"）。
-    assert "pet_balance.py" in chk.MUTATION_FINGERPRINT_FILES, \
-        "pet_balance.py 不在发布门的指纹清单里（改了它不会有任何提示）：%r" % (
-            chk.MUTATION_FINGERPRINT_FILES,)
-    assert "pet_balance.py" in files,         "pet_balance.py 不在变异库的指纹清单里：%r" % (files,)
+    # v2.5.1（找茬审查 P3-1）：同一个盲区本轮又犯了一次——pet_plugin.py / pet_plugin_host.py /
+    # pet_dialogs.py / pet_menu.py 都不在清单里，12 条 M-P*/M-L1 的锚就在前两个文件上。所以这里
+    # 改成**逐项点名**（别再写成"只钉 pet_balance.py 那种"：下一个新模块照样漏）。
+    for rel in ("pet_balance.py", "pet_plugin.py", "pet_plugin_host.py", "pet_dialogs.py",
+                "pet_menu.py"):
+        assert rel in chk.MUTATION_FINGERPRINT_FILES, \
+            "%s 不在发布门的指纹清单里（改了它不会有任何提示）：%r" % (
+                rel, chk.MUTATION_FINGERPRINT_FILES)
+        assert rel in files, "%s 不在变异库的指纹清单里：%r" % (rel, files)
     missing = [rel for rel in chk.MUTATION_FINGERPRINT_FILES
                if not os.path.isfile(os.path.join(chk.ROOT, rel))]
     assert missing == [], "指纹清单点名了不存在的文件（这份清单本身就是过期证据）：%r" % (missing,)
@@ -423,3 +428,227 @@ def test_mutation_verdict_notes_flags_unverified_entries(tmp_path):
     (dev / "broken.json").write_text("{ not json", encoding="utf-8")
     (dev / "other.json").write_text(json.dumps({"mutations": []}), encoding="utf-8")
     assert len(chk.mutation_verdict_notes(str(tmp_path))) == 2
+
+# ---------------- v2.5.1（A2）：发货清单的**反向**校验 ----------------
+# 盲区（本轮任务书 A2）：check_shipped_files() 只查"清单里的文件还在磁盘上"，check_zip 的
+# need 也只含清单 + assets → 新增模块忘了加进清单时**任何门都不响**，用户双击即 ImportError
+# （v2.5.0 的 pet_services.py 就差点这样）。下面这几条把"漏了必须报"钉死。
+
+def test_反向校验_从清单删掉真模块必须报(monkeypatch):
+    """能真失败：从 SYNC_FILES 里删掉一个**真被 import** 的模块 → 立刻点名。"""
+    assert "pet_services" in chk.runtime_imports(), "前提不成立：没人 import pet_services"
+    kept = [n for n in chk.SYNC_FILES if n != "pet_services.py"]
+    monkeypatch.setattr(chk, "SYNC_FILES", kept)
+    fails = chk.check_imported_modules_shipped()
+    assert fails, "清单里删掉了 pet_services.py，反向校验却没出声"
+    assert "pet_services" in fails[0] and "桌宠.py" in fails[0], fails
+
+
+def test_反向校验_合成仓库能认出漏件(tmp_path, monkeypatch):
+    """合成仓库：pet_alpha.py import pet_beta → pet_beta.py 不在清单里就必须报。"""
+    root = tmp_path / "repo"
+    root.mkdir()
+    (root / "pet_alpha.py").write_text("import pet_beta\n", encoding="utf-8")
+    (root / "pet_beta.py").write_text("X = 1\n", encoding="utf-8")
+    monkeypatch.setattr(chk, "SYNC_FILES", ["pet_alpha.py"])
+    fails = chk.check_imported_modules_shipped(str(root))
+    assert len(fails) == 1 and "pet_beta" in fails[0] and "pet_alpha.py" in fails[0], fails
+    monkeypatch.setattr(chk, "SYNC_FILES", ["pet_alpha.py", "pet_beta.py"])
+    assert chk.check_imported_modules_shipped(str(root)) == []
+
+
+def test_反向校验_认_from_import_与包路径(tmp_path, monkeypatch):
+    """from pet_x import y / import pet_x.sub 都算；点号只取顶层模块名。"""
+    root = tmp_path / "repo"
+    root.mkdir()
+    (root / "pet_alpha.py").write_text(
+        "from pet_beta import thing\nimport pet_gamma.sub\n", encoding="utf-8")
+    monkeypatch.setattr(chk, "SYNC_FILES", ["pet_alpha.py"])
+    found = chk.imported_runtime_modules(str(root))
+    assert set(found) == {"pet_beta", "pet_gamma"}, found
+    fails = chk.check_imported_modules_shipped(str(root))
+    assert len(fails) == 1 and "pet_beta" in fails[0] and "pet_gamma" in fails[0], fails
+
+
+def test_反向校验_注释与文档里的模块名不算(tmp_path, monkeypatch):
+    """扫描必须走 AST：纯文本正则会把这三种形状误判成"被 import"（本轮铁律第 3 条）。
+
+    能真失败：把 imported_runtime_modules 换成 re.finditer 正则实现 → 这条立刻红。
+    """
+    root = tmp_path / "repo"
+    root.mkdir()
+    (root / "pet_alpha.py").write_text(
+        '"""这里提到 pet_ghost 只是文档。"""\n'
+        "# import pet_ghost2\n"
+        "NAME = 'pet_ghost3'\n", encoding="utf-8")
+    monkeypatch.setattr(chk, "SYNC_FILES", ["pet_alpha.py"])
+    assert chk.imported_runtime_modules(str(root)) == {}
+    assert chk.check_imported_modules_shipped(str(root)) == []
+
+
+def test_本仓被导入的运行时模块都在发货清单里():
+    """真仓正例 + 控制组：扫描器真的读到了东西，且清单一个不缺。"""
+    every = chk.runtime_imports()
+    assert len(every) >= 20, "扫描面太小（判据会空转）：%d 个" % len(every)
+    assert "pet_services" in every and "json" in every, sorted(every)[:8]
+    # 判据那一层：白名单（标准库 / 随包发货的本仓模块 / 运行时第三方）之外不许有漏件
+    assert chk.imported_runtime_modules() == {}, chk.imported_runtime_modules()
+    assert chk.check_imported_modules_shipped() == [], chk.check_imported_modules_shipped()
+    for mod in ("pet_plugin", "pet_services"):
+        assert mod + ".py" in chk.SYNC_FILES, "%s 没进 SYNC_FILES" % mod
+
+
+# ---------------- v2.5.1（A3）：plugins/ 的分包口径 ----------------
+# 用户装了插件再打包 → 发布包里带上别人的东西。判据是白名单：plugins/ 下不在"官方集合"
+# 里的一律算用户数据（plugins/<id>/、plugins/_download/…），而官方索引/说明/官方内容包
+# 必须能发出去（否则用户侧下载链是断的）——所以**不能**把 plugins 整个塞进 USER_DATA_DIRS。
+
+def test_发布包里的用户插件必须点名(tmp_path, monkeypatch):
+    """能真失败：拿掉 plugin_user_data_hits 这条判据 → 两个用户条目都不会被点名。"""
+    monkeypatch.setattr(chk, "plugin_official_names",
+                        lambda root=None: {"plugins/index.json", "plugins/packs/official-x.zip"})
+    p = str(tmp_path / "withplugins.zip")
+    _make_zip(p, ["桌宠.py", "main.py", "python.exe", "assets/",
+                  "plugins/index.json", "plugins/packs/official-x.zip",
+                  "plugins/user-thing/manifest.json", "plugins/_download/tmp.part"])
+    fails = chk.check_zip(p, chk.repo_version())
+    joined = " ".join(fails)
+    assert "plugins/user-thing/manifest.json" in joined, joined
+    assert "plugins/_download/tmp.part" in joined, joined
+    assert "plugins/index.json" not in joined, "官方索引被误判成用户数据：%s" % joined
+    assert "plugins/packs/official-x.zip" not in joined, joined
+
+
+def test_用户数据清单与发货清单不矛盾():
+    """SYNC_FILES 里的文件不能被任何"用户数据"判据拦下（否则两处口径打架、必有一处假红）。"""
+    assert "plugins" not in chk.USER_DATA_DIRS, (
+        "plugins 整个进 USER_DATA_DIRS 会把官方索引与官方包一起挡在包外（v2.5.1 A3 的裁决）")
+    for n in chk.SYNC_FILES:
+        assert not any(n.startswith(d + "/") for d in chk.USER_DATA_DIRS), n
+        if n.startswith(chk.PLUGIN_DIR):
+            assert not chk.user_data_hit(os.path.basename(n)), n
+
+
+def test_官方插件资产不会被当成用户数据():
+    """真仓：官方集合里的东西一律不许被点名；集合为空则判据空转 → 也要报。"""
+    official = chk.plugin_official_names()
+    assert official, "官方插件资产集合是空的（A3 判据会空转）"
+    assert chk.plugin_user_data_hits(sorted(official)) == []
+    assert chk.plugin_user_data_hits(["plugins/someone-else/manifest.json"])
+    # 目录条目（以 / 结尾）不是文件，不该被点名
+    assert chk.plugin_user_data_hits(["plugins/user-thing/"]) == []
+
+
+def test_官方插件资产缺件只提示不挡发布(tmp_path):
+    """官方索引/说明还没生成时：main() 给提示（不静默），但不进 fails。"""
+    notes = chk.plugin_asset_notes(str(tmp_path))
+    assert len(notes) == 1 and "plugins" in notes[0], notes
+    # 两种形态的文案必须能区分（v2.5.1 找错审查）：一种是"资产还没生成"，
+    # 另一种是"目录在但缺件"——只说"plugins"的话复核的人分不清是哪种。
+    assert "缺件" not in notes[0], notes
+    (tmp_path / "plugins").mkdir()
+    notes2 = chk.plugin_asset_notes(str(tmp_path))
+    assert len(notes2) == 1 and "缺件" in notes2[0], notes2
+    for n in chk.PLUGIN_OFFICIAL_NAMES:
+        f = tmp_path / n.replace("/", os.sep)
+        f.parent.mkdir(parents=True, exist_ok=True)
+        f.write_text("x", encoding="utf-8")
+    assert chk.plugin_asset_notes(str(tmp_path)) == []
+
+# ---------------- v2.5.1 找茬审查：发布门三处（①②③） ----------------
+
+def test_官方集合以index_json为准_packs里的用户文件不算官方(tmp_path, monkeypatch):
+    """② 官方资产必须以 **plugins/index.json 的 url** 为准。旧判据是"packs/ 目录里磁盘上有
+    什么就算什么"——用户往 packs/ 里丢一个自己的包，发布门会把它当官方内容随包发出去。
+
+    能真失败：把 plugin_official_names 改回 os.walk(packs) → 第一条断言红。
+    """
+    root = tmp_path / "repo"
+    (root / "plugins" / "packs").mkdir(parents=True)
+    (root / "plugins" / "index.json").write_text(json.dumps({
+        "index_version": 1, "host_min": "2.5.0",
+        "plugins": [{"id": "official-a", "releases": [
+            {"version": "1.0.0", "url": "packs/official-a-1.0.0.dfypet-plugin.zip"},
+            {"version": "2.0.0", "url": "https://example.invalid/remote.zip"}]}]},
+        ensure_ascii=False), encoding="utf-8")
+    (root / "plugins" / "packs" / "official-a-1.0.0.dfypet-plugin.zip").write_bytes(b"PK")
+    (root / "plugins" / "packs" / "someone-elses.zip").write_bytes(b"PK")
+    monkeypatch.setattr(chk, "SYNC_FILES", ["plugins/index.json", "plugins/README.md"])
+    official = chk.plugin_official_names(str(root))
+    assert "plugins/packs/official-a-1.0.0.dfypet-plugin.zip" in official, official
+    assert "plugins/packs/someone-elses.zip" not in official, "用户塞进 packs/ 的文件被当官方了"
+    hits = chk.plugin_user_data_hits(
+        ["plugins/packs/someone-elses.zip", "plugins/packs/official-a-1.0.0.dfypet-plugin.zip"],
+        str(root))
+    assert hits == ["plugins/packs/someone-elses.zip"], hits
+
+
+def test_官方集合_索引坏掉时宁可不认(tmp_path, monkeypatch):
+    """控制组：索引坏了 → 官方包集合退化成空（只保留清单里的 index.json / README.md），
+    绝不"因为读不出来就把 packs/ 里的一切都当官方"。
+
+    能真失败：把 plugin_official_packs 的坏 JSON 分支改成 os.walk 兜底 → 第一条断言红。
+    """
+    root = tmp_path / "repo"
+    (root / "plugins" / "packs").mkdir(parents=True)
+    (root / "plugins" / "index.json").write_text("{ 不是 json", encoding="utf-8")
+    (root / "plugins" / "packs" / "who-knows.zip").write_bytes(b"PK")
+    monkeypatch.setattr(chk, "SYNC_FILES", ["plugins/index.json"])
+    official = chk.plugin_official_names(str(root))
+    assert "plugins/packs/who-knows.zip" not in official, official
+    assert official == {"plugins/index.json"}, official
+
+
+def test_用户插件条目带顶层目录前缀也要点名(tmp_path, monkeypatch):
+    """① 发布包条目可能带一层顶层目录（desktop-pet/plugins/<id>/…）。check_zip 的
+    _normalize_names 只在"所有条目共用一个顶层段"时才剥——包里混一个根目录文件就不剥了，
+    只认 n.startswith("plugins/") 的判据会整片漏判。
+
+    能真失败：去掉 plugin_entry_rel 的"逐条剥一层" → 用户条目不再被点名，红。
+    """
+    monkeypatch.setattr(chk, "plugin_official_names",
+                        lambda root=None: {"plugins/index.json"})
+    hits = chk.plugin_user_data_hits([
+        "desktop-pet/plugins/user-thing/manifest.json",
+        "desktop-pet/plugins/index.json",
+        "desktop-pet/README.md",
+        "plugins/other-user/manifest.json"], str(tmp_path))
+    assert hits == ["desktop-pet/plugins/user-thing/manifest.json",
+                    "plugins/other-user/manifest.json"], hits
+    # 目录条目（以 / 结尾）不是文件
+    assert chk.plugin_user_data_hits(["desktop-pet/plugins/user-thing/"]) == []
+
+
+def test_反向校验_白名单外的模块名也要报(tmp_path, monkeypatch):
+    """③ 判据此前**只认 pet_ 前缀**：import plugin_util 这种漏件（打包时缺文件 → 用户双击
+    ImportError）一条都报不出来。白名单 = 标准库 + 随包发货的本仓模块 + 运行时第三方。
+
+    能真失败：把 imported_runtime_modules 的过滤改回 top.startswith("pet_") → 第一条断言红。
+    """
+    root = tmp_path / "repo"
+    root.mkdir()
+    (root / "pet_alpha.py").write_text(
+        "import json\nimport os.path\nimport plugin_util\nimport pet_beta\n", encoding="utf-8")
+    (root / "pet_beta.py").write_text("X = 1\n", encoding="utf-8")
+    monkeypatch.setattr(chk, "SYNC_FILES", ["pet_alpha.py", "pet_beta.py"])
+    found = chk.imported_runtime_modules(str(root))
+    assert set(found) == {"plugin_util"}, found
+    fails = chk.check_imported_modules_shipped(str(root))
+    assert len(fails) == 1 and "plugin_util" in fails[0] and "pet_alpha.py" in fails[0], fails
+
+
+def test_第三方依赖白名单与requirements一致():
+    """白名单不是拍脑袋：IMPORT_EXTERNAL_ALLOW 必须覆盖 requirements.txt 声明的运行时依赖
+    （漏一个 → 反向校验对真仓假红；所以这条把两处口径钉在一起）。
+
+    能真失败：把 "requests" 从 IMPORT_EXTERNAL_ALLOW 里删掉 → 这条红（真仓扫描也会红）。
+    """
+    req = io.open(os.path.join(chk.ROOT, "requirements.txt"), encoding="utf-8").read()
+    for pkg in ("PySide6", "requests", "psutil"):
+        assert pkg in req, "前提不成立：%s 不在 requirements.txt 里" % pkg
+        assert pkg in chk.IMPORT_EXTERNAL_ALLOW, "%s 不在反向校验白名单里" % pkg
+    for top in sorted(chk.runtime_imports()):
+        assert (top in chk._stdlib_module_names() or top in chk.IMPORT_EXTERNAL_ALLOW
+                or top in chk.shipped_module_names()), \
+            "真仓 import 了一个不在白名单里的顶层模块：%s" % top
+

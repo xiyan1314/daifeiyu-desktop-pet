@@ -35,7 +35,11 @@
 - class VoiceAssetPanel(QWidget)：声音素材（参考音）管理，嵌在资源管理第三页签。
 - class IdleDialog(QDialog)：待机设置（两触发 / 待机形态 / 待机动作列表 / 播放模式）。
 - class _VoicePickDialog(QDialog) + pick_voice_assets(pet)：导出时勾选要随包带的参考音。
-- 入口函数：open_voice / open_lines / open_resource_manager / open_idle / open_physics
+- class PluginManagerDialog(QDialog) + open_plugins(pet)：v2.5.1 PetHub 插件管理——**只读**
+  列表（id / 名称 / 版本 / 类型 / 状态 / 来源）+ 安装（选本地 zip）/ 卸载 / 启用禁用 / 刷新。
+  校验与落地都不在本文件：包校验在 pet_plugin（Phase 0），安装/卸载/启用禁用在
+  pet_plugin_host（Phase 1）；本文件只做界面与确认文案。
+- 入口函数：open_voice / open_lines / open_resource_manager / open_idle / open_physics / open_plugins
   （open_lines 与 open_resource_manager 是 v2.1 补的历史缺陷：菜单一直在调用但从未定义）。
 - v2.5.0（B）尺寸与可滚动性三件套（**新增对话框必须照用**，否则 tests/test_dialog_fit_v250.py 红）：
   clamp_dialog(dlg, W, H) —— 取代写死的 self.resize(W, H)：尺寸钳进屏幕可用区域
@@ -57,6 +61,8 @@
   v2.1 起数据落在台词库 lines.json，对话框直接用 pet.lines_lib）
 - pet.lines_lib / pet.voice / pet.voice_assets / pet.behaviors：v2.1 服务对象
 - pet.apply_voice / pet.apply_idle_settings —— v2.1 设置回调（入参 data，均返回 True/False）
+- pet.plugin_host（v2.5.1 插件宿主）：插件管理对话框用；缺省时对话框自建一个，都拿不到
+  就只给一句人话（不抛）——**本文件不 import 桌宠.py**，兜底只能取已加载的主模块
 - pet.on_ledger_changed —— 刷新挂件今日已用（主线实现）
 - pet.show_bubble —— 气泡（入参 text）
 
@@ -82,6 +88,7 @@ Copyright (c) 大肥鱼桌宠项目
 import copy
 import os
 import shutil
+import sys
 import tempfile
 import time
 
@@ -129,6 +136,7 @@ import pet_chat  # v2.0.4：服务商预设/错误归类/连通性测试（pet_c
 import pet_alarm  # v2.0.5：闹钟服务（AlarmDialog 共用时间校验/铃声导入口径）
 import pet_lines  # v2.1：台词库（类别/标签单一来源；LinesDialog 直接用服务接口）
 import pet_voice  # v2.1：可插拔配音后端清单（VoiceDialog 用）
+import pet_plugin_host  # v2.5.1：PetHub 插件宿主（安装/卸载/启用禁用/清单；Qt-free）
 from pet_widgets import BUBBLE_STYLE as _BUBBLE_STYLE  # v2.1.2：气泡默认样式单一来源
 # v2.4.3（兼容审查 M1）：对话框 QSS 的 font-family 也取同一条回退链——此前这里是单族
 # "Microsoft YaHei"，而它被 24 处 setStyleSheet 用在**中文文本量最大**的对话框上。
@@ -1612,7 +1620,7 @@ class RoleEditDialog(_FitDialog):
 
         self.setWindowTitle("编辑角色「%s」" % self._role.get("name", ""))
         self.setStyleSheet(DIALOG_QSS)
-        clamp_dialog(self, 600, 540)   # v2.5.0 B
+        clamp_dialog(self, 620, 540)   # v2.5.1 A（L5）：设计宽 600→620，消除 20px 横向滚动条
 
         root = scroll_content(self)   # v2.5.0 B：内容区可滚动
         name_row = QHBoxLayout()
@@ -5843,3 +5851,210 @@ def set_frame_max(pet, save_cfg):
     except Exception:
         pass  # 有意忽略：重建失败下次启动自愈，不影响上限已落盘
     pet.show_bubble("帧上限改为 %d 帧啦~" % val)
+
+
+# ---------------- 插件管理（v2.5.1 · PetHub Phase 1） ----------------
+_PLUGIN_COLUMNS = ("插件", "名称", "版本", "类型", "状态", "来源")
+
+
+def _fallback_host(pet):
+    """宿主窗口没接线时的兜底：从**已加载的**主模块取数据目录与版本，现造一个宿主。
+
+    本模块不能 import 桌宠.py（反向 import 会成环），所以只能取 sys.modules 里那个已经
+    加载的实例。取不到（模块没加载 / 没有 DATA_DIR）返回 None——调用方给一句人话，
+    绝不在这里抛（构造期抛异常 = 这个对话框打不开）。
+    """
+    main = sys.modules.get("桌宠")
+    data_dir = str(getattr(main, "DATA_DIR", "") or "") if main is not None else ""
+    if not data_dir:
+        return None
+    version = str(getattr(main, "VERSION", "") or "") if main is not None else ""
+    return pet_plugin_host.PluginHost(data_dir, version, pet)
+
+
+def _plugin_kind_text(rec):
+    """类型列：kind + data_kind（"data / role"）；缺一个就只显示有的那个。"""
+    kind = str(rec.get("kind") or "")
+    data_kind = str(rec.get("data_kind") or "")
+    if kind and data_kind:
+        return "%s / %s" % (kind, data_kind)
+    return kind or data_kind or "-"
+
+
+def _plugin_source_text(rec):
+    """来源列：来源地址优先，其次"本地安装"（有安装时间才算真装过）。"""
+    url = str(rec.get("source_url") or "")
+    if url:
+        return url
+    return "本地安装" if rec.get("installed_at") else "-"
+
+
+class PluginManagerDialog(_FitDialog):
+    """插件管理：**只读**列表（插件 / 名称 / 版本 / 类型 / 状态 / 来源）+ 四个动作按钮。
+
+    "只读"的边界（写清楚，免得下一轮误读）：列表不可编辑，也没有"在线更新 / 编辑插件内容"；
+    安装（选本地 zip）、卸载、启用/禁用、刷新这四个动作全部委托宿主服务 pet_plugin_host。
+    内容并进宿主库（角色 / 台词）发生在**安装**那一步；卸载只删插件目录，已导入的内容保留
+    （属用户数据，与「导入角色包」同口径）——确认框里明写这一点。
+
+    尺寸走 v2.5.0 那一套（clamp + 可滚动 + 按钮吸附）；设计尺寸 760x520 就写在
+    clamp_dialog(...) 那一行（tests/test_dialog_fit_v250.py 从**源码字面量**读它，
+    所以这里不留第二份常量——两处真源迟早对不上）。
+    """
+
+    def __init__(self, pet=None):
+        super().__init__(_qt_parent(pet))
+        self.pet = pet
+        self._host_obj = _get(pet, "plugin_host")
+        self._rows = []
+        self.setWindowTitle("🧩 插件管理")
+        self.setStyleSheet(DIALOG_QSS)
+        clamp_dialog(self, 760, 520)   # v2.5.0 B：设计尺寸（口径表按源码字面量核对）
+        root = scroll_content(self)    # v2.5.0 B：内容区可滚动
+        tip = QLabel("插件装在数据目录的 plugins/ 下。卸载只删插件目录——"
+                     "插件已经导入的角色 / 台词会保留（属用户数据）。")
+        tip.setWordWrap(True)
+        root.addWidget(tip)
+        self._table = _detail_table(_PLUGIN_COLUMNS)
+        root.addWidget(self._table, 1)
+        self._hint = QLabel("")
+        self._hint.setWordWrap(True)
+        root.addWidget(self._hint)
+        row = QHBoxLayout()
+        self._btn_install = QPushButton("安装…")
+        self._btn_uninstall = QPushButton("卸载")
+        self._btn_toggle = QPushButton("启用 / 禁用")
+        self._btn_refresh = QPushButton("刷新")
+        close_btn = QPushButton("关闭")
+        close_btn.setDefault(True)
+        self._btn_install.clicked.connect(lambda checked=False: self._install())
+        self._btn_uninstall.clicked.connect(lambda checked=False: self._uninstall())
+        self._btn_toggle.clicked.connect(lambda checked=False: self._toggle())
+        self._btn_refresh.clicked.connect(lambda checked=False: self.refresh())
+        close_btn.clicked.connect(self.reject)
+        row.addWidget(self._btn_install)
+        row.addWidget(self._btn_uninstall)
+        row.addWidget(self._btn_toggle)
+        row.addWidget(self._btn_refresh)
+        row.addStretch(1)
+        row.addWidget(close_btn)
+        stick_buttons(self, row)       # v2.5.0 B：按钮行在滚动区之外
+        self.refresh()
+
+    # ---------- 读 ----------
+    def _host_ref(self):
+        """插件宿主：宿主窗口接线优先；没接线就现造一个；都拿不到返回 None。"""
+        if self._host_obj is None:
+            self._host_obj = _fallback_host(self.pet)
+        return self._host_obj
+
+    def refresh(self):
+        """重读已装清单（只读）。坏目录 / 坏 JSON 只显示成一句提示，绝不抛。"""
+        host = self._host_ref()
+        if host is None:
+            self._rows = []
+            self._table.setRowCount(0)
+            self._hint.setText("插件宿主未接线：重启一次桌宠即可（详情见数据目录的 error.log）。")
+            return
+        rows, problems = host.list_installed()
+        self._rows = [r for r in rows if isinstance(r, dict)]
+        self._table.setRowCount(len(self._rows))
+        for i, rec in enumerate(self._rows):
+            cells = (str(rec.get("id") or ""), str(rec.get("name") or ""),
+                     str(rec.get("version") or ""), _plugin_kind_text(rec),
+                     "已启用" if rec.get("enabled", True) else "已禁用",
+                     _plugin_source_text(rec))
+            for j, text in enumerate(cells):
+                self._table.setItem(i, j, QTableWidgetItem(text))
+        if problems:
+            self._hint.setText("共 %d 个插件；有 %d 处读不出来：%s"
+                               % (len(self._rows), len(problems), "；".join(problems[:3])))
+        else:
+            self._hint.setText("共 %d 个插件。" % len(self._rows))
+
+    def _selected(self):
+        """选中行 → 记录 dict；没选中（或列表空）返回 None。"""
+        row = self._table.currentRow()
+        if row < 0 or row >= len(self._rows):
+            return None
+        return self._rows[row]
+
+    # ---------- 动作（界面只做确认与提示，落地全在 pet_plugin_host） ----------
+    def _install(self):
+        """安装：选一个本地 zip（下载安装留给 Phase 2 的索引）。"""
+        path, _filter = QFileDialog.getOpenFileName(
+            self, "选择插件包", "", "插件包 (*.zip);;所有文件 (*)")
+        if path:
+            self.install_path(path)
+
+    def install_path(self, path):
+        """安装指定 zip → 是否装上。公开给测试与将来的"下载后安装"用（绕开文件选择框）。"""
+        host = self._host_ref()
+        if host is None:
+            _warn(self, "安装插件", "插件宿主未接线，装不了（重启一次桌宠即可）。")
+            return False
+        ok, msg = host.install_zip(path)
+        if ok:
+            _info(self, "安装插件", msg)
+        else:
+            _warn(self, "安装插件失败", msg)
+        self.refresh()
+        return ok
+
+    def _uninstall(self):
+        rec = self._selected()
+        if rec is None:
+            _warn(self, "卸载插件", "请先在列表里选中一个插件。")
+            return False
+        pid = str(rec.get("id") or "")
+        if not _confirm(self, "卸载插件",
+                        "确定卸载插件「%s」？\n\n"
+                        "· 只删除插件目录 plugins/%s/；\n"
+                        "· 插件已经导入的角色 / 台词会**保留**——那是你的数据，"
+                        "与「导入角色包」同口径，不随插件一起删。" % (pid, pid)):
+            return False
+        return self.uninstall_id(pid)
+
+    def uninstall_id(self, pid):
+        """卸载指定插件 → 是否成功（文案里点明保留了什么）。"""
+        host = self._host_ref()
+        if host is None:
+            _warn(self, "卸载插件", "插件宿主未接线，卸不了（重启一次桌宠即可）。")
+            return False
+        ok, msg = host.uninstall(pid)
+        if ok:
+            _info(self, "卸载插件", msg)
+        else:
+            _warn(self, "卸载插件失败", msg)
+        self.refresh()
+        return ok
+
+    def _toggle(self):
+        rec = self._selected()
+        if rec is None:
+            _warn(self, "启用 / 禁用", "请先在列表里选中一个插件。")
+            return False
+        return self.set_enabled_id(str(rec.get("id") or ""), not bool(rec.get("enabled", True)))
+
+    def set_enabled_id(self, pid, on):
+        """启用 / 禁用指定插件（只改登记，文件保留，可逆）。"""
+        host = self._host_ref()
+        if host is None:
+            _warn(self, "启用 / 禁用", "插件宿主未接线，改不了（重启一次桌宠即可）。")
+            return False
+        ok, msg = host.set_enabled(pid, on)
+        if ok:
+            _info(self, "启用 / 禁用", msg)
+        else:
+            _warn(self, "启用 / 禁用失败", msg)
+        self.refresh()
+        return ok
+
+
+def open_plugins(pet):
+    """v2.5.1：插件管理入口（菜单「⚙️ 设置… → 🧩 插件管理…」）。"""
+    try:
+        dlg = PluginManagerDialog(pet)
+        modal(dlg)
+    except Exception as e:
+        _dialog_failed(pet, "插件管理", e)

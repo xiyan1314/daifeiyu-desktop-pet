@@ -149,8 +149,30 @@ $env:QT_SCALE_FACTOR="1.5";  python -B tests\_probe_dialog_sizes.py     # 逻辑
   （判据按 `minimumSizeHint` 比视口，不是按 `sizeHint`——见第 5 节踩坑）。
 
 100% 缩放下对照（同一次运行）：VoiceDialog 从 **700x903** 回到 **680x640**（设计尺寸，
-装得下了），RoleImportDialog 600x430、RoleEditDialog 600x540、LinesDialog 680x620……
-**设计尺寸一个都没改**，改的只是"装不下时不许超屏"。
+装得下了），RoleImportDialog 600x430、RoleEditDialog 620x540（v2.5.1 代理A 从 600 改的，
+    见下面 3.1）、LinesDialog 780x620……
+**设计尺寸一个都没改**，改的只是"装不下时不许超屏"。（v2.5.0 的事实；v2.5.1 改了**一个**，
+见下面 3.1。）
+
+### 3.1 设计尺寸表（14 个对话框；v2.5.1 代理A：RoleEditDialog 600 → 620）
+
+| 对话框 | 设计尺寸 | 对话框 | 设计尺寸 |
+|---|---|---|---|
+| RoleImportDialog | 600x430 | LinesDialog | 780x620 |
+| **RoleEditDialog** | **620x540**（v2.5.0 是 600x540） | PhysicsDialog | 430x330 |
+| BehaviorDialog | 640x500 | VoiceDialog | 700x640 |
+| AlarmDialog | 540x470 | IdleDialog | 660x560 |
+| AISettingsDialog | 560x560 | _VoicePickDialog | 460x380 |
+| ResourceManagerDialog | 700x560 | AmountNoteDialog | 286x113（内容天然尺寸） |
+| LedgerDialog | 680x540 | BubbleStyleDialog | 282x302（内容天然尺寸） |
+
+**为什么改**（v2.5.0 遗留 L5，实测）：RoleEditDialog 的设计宽 600 比"内容最小宽"小一档——
+2000x1200 屏上打开时内容区最小宽 **588** > 滚动视口 **568** → 横向滚动条 hmax = **20**
+（正好差 20px，用户得左右拖着看）。改成 620 后视口 588 ≥ 588、hmax = **0**（同一次运行实测，
+脚本 [`_dev/probe_l5_v251.py`](probe_l5_v251.py) 可复跑）。
+
+**三处必须同步**（少改一处，设计尺寸契约用例就红）：① `pet_dialogs.py` 里那一行 clamp 字面量
+② `tests/test_dialog_fit_v250.py` 的 `_DESIGN_SIZES["RoleEditDialog"]` ③ 上面这张表。
 
 ## 4. 修法（一套模式，19 个窗口共用）
 

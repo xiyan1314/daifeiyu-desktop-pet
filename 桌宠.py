@@ -61,6 +61,7 @@ import pet_alarm
 import pet_tools  # v2.3.0（1.2）：工具注册表/执行器（Qt-free，无环）
 import pet_io  # v2.3.1：原子写/清扫临时文件（P2-B 导入恢复、L4 退出清 tmp）
 import pet_services  # v2.5.0（A1）：子系统构造注册表（服务构造的单一产地，含 pet_ 前缀自动进护栏）
+from pet_plugin_host import PluginHost as _PluginHost  # v2.5.1：PetHub 插件宿主（接线在 __init__ 一行）
 # v2.5.0（A1）：上面少了 8 个 import pet_xxx——pet_book / pet_wander / pet_weather /
 # pet_balance / pet_menu / pet_ai / pet_actions / pet_mood 的服务构造整段搬进了 pet_services，本文件
 # 再无一处引用它们（tests/test_deadcode_types_v241 的“零引用导入”检查会点名）。模块本身仍由
@@ -822,6 +823,7 @@ class PetWindow(QWidget):
         # signals、日志、配置读写…）由 _service_deps() 在**调用时**取，见那个函数的注释。
         # 两段原始位置：L785~L803（库与账本）+ L807~L844（P0-1 服务接线）。
         self.services = pet_services.ServiceRegistry(self, **_service_deps())
+        self.plugin_host = _PluginHost(DATA_DIR, VERSION, self)  # v2.5.1：PetHub 插件宿主（唯一一行接线；构造期不读盘，库在落地时惰性取）
 
         self.bubble = Bubble()
         self.badge = Badge()

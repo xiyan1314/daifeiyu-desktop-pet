@@ -109,13 +109,16 @@ def silence_modals():
 def dialog_factories():
     """(名字, 造窗口的可调用) —— 顺序 = 源码里出现的顺序，**必须与验收用例的清单等长**。
 
-    pet_dialogs.py 里**全部** QDialog 子类 14 个 + 会被嵌进 ResourceManagerDialog 的
+    pet_dialogs.py 里**全部** QDialog 子类 15 个 + 会被嵌进 ResourceManagerDialog 的
     3 个面板（它们自己也是独立窗口，用户双击/单开时同样受限）+ 1 个内联框
     （build_role_meta_dialog，原来裸 QDialog、没有屏幕钳制）。
 
     v2.5.0 第 3 轮 L1：此前这里只有 18 个，而验收用例的清单是 19 个、只断言 >= 18 ——
     "19 个窗口在 150% 下全部可见"那句证据实际只覆盖 18 个。第 19 个补进来后，
     tests/test_dialog_fit_v250.py 的断言同步收紧成 >= 19。
+    v2.5.1：B 的插件管理对话框（PluginManagerDialog）补进来 → 20 个，断言收紧成 >= 20。
+    **这份清单漏一个不会红**（1.5 倍那条只数行数），所以新对话框必须同时登记三处：
+    _factories() / _DESIGN_SIZES / 这里。
     """
     import pet_dialogs as d
     return (
@@ -138,6 +141,8 @@ def dialog_factories():
         ("IdleDialog", lambda p: d.IdleDialog(p)),
         ("_VoicePickDialog", lambda p: d._VoicePickDialog(p, p)),
         ("build_role_meta_dialog", lambda p: d.build_role_meta_dialog(p)[0]),
+        # v2.5.1 代理B：插件管理（设计尺寸 760x520，登记口径见 _DESIGN_SIZES）
+        ("PluginManagerDialog", lambda p: d.PluginManagerDialog(p)),
     )
 
 

@@ -8,6 +8,8 @@
   check_clean_tree()     工作树必须已提交；**删除（D）条目单独点名**（v2.4.3）
   check_asset_manifest() 工作区 assets 清单完整：git 索引 vs 磁盘（v2.4.3）
   check_shipped_files()  SYNC_FILES（代码/文档）在磁盘上都还在（v2.4.3）
+  check_imported_modules_shipped() 反向：被 import 的运行时模块（白名单之外）必须都在 SYNC_FILES 里（v2.5.1 A2/S3③）
+  plugin_user_data_hits() 发布包里的用户插件数据（plugins/<id>/、plugins/_download/）必须点名（v2.5.1 A3）
   mutation_lock_problems() 变异验证进行中 → 结果不可信，拒绝判定（v2.4.3）
   mutation_evidence_notes() 变异结果 JSON 的源码指纹过期 → 提示"该证据需复跑"（v2.4.3）
   mutation_verdict_notes() 变异结果 JSON 里有没通过的判定（SPEC-BAD/WRONG TEST…）→ 提示（v2.4.4）
@@ -15,8 +17,10 @@
 
 用法：python _check_release.py [zip路径]；退出码 0=通过，1=有问题（逐条打印）
 """
+import ast
 import hashlib
 import io
+import json
 import os
 import re
 import sys
@@ -35,6 +39,12 @@ SYNC_FILES = ["桌宠.py", "main.py", "pet_actions.py", "pet_ai.py", "pet_alarm.
               "pet_config.py", "pet_dialogs.py", "pet_export.py", "pet_fx.py", "pet_lines.py",
               "pet_io.py",   # v2.3.1：全仓共用原子 IO（被 8 个模块 import，漏了包必崩）
               "pet_log.py", "pet_main.py", "pet_menu.py", "pet_mood.py", "pet_physics.py",
+              "pet_plugin.py",   # v2.5.1（A）：插件包校验器（宿主安装管线调它，漏了必 ImportError）
+              "pet_plugin_host.py",   # v2.5.1（B）：插件安装/卸载（菜单入口调它，漏了必 ImportError）
+              # v2.5.1（A3）：官方插件资产（索引/说明/官方内容包）随绿色版与发布包出货——
+              # 用户侧"下载官方内容"这条链靠它们。用户装的 plugins/<id>/ 与 plugins/_download/
+              # 是**用户数据**，由 plugin_user_data_hits() 在发布包里点名（不在本清单里）。
+              "plugins/index.json", "plugins/README.md",
               "pet_resources.py", "pet_screen.py",
               "pet_services.py",   # v2.5.0（A1）：子系统构造注册表（桌宠.py import 它，漏了必 ImportError）
               "pet_tools.py", "pet_voice.py", "pet_wander.py",
@@ -47,6 +57,21 @@ USER_DATA_NAMES = {"config.json", "roles.json", "audio.json", "voice.json", "voi
                    "lines.json", "ledger.json", "ledger_archive.json", "error.log",
                    "memory.log", "usage.json", "memory.json"}
 USER_DATA_DIRS = ("roles", "voice", "voice_ref", "audio", "alarms", "__pycache__")
+
+# ---------------- v2.5.1（A3）：plugins/ 的分包口径 ----------------
+# plugins/ 目录**要出货**（官方索引/说明/官方内容包），但**用户装的插件目录**与**临时下载目录**
+# 绝不能出货——用户装了插件再打包，发布包里就带上了别人的东西（甚至是别人的付费内容）。
+# 判据写成白名单：plugins/ 下不在"官方集合"里的一律当用户数据（覆盖 plugins/<id>/ 与
+# plugins/_download/ 之类临时目录），官方集合 = SYNC_FILES 里的 plugins/ 条目 +
+# PLUGIN_OFFICIAL_NAMES（磁盘上真有的）+ **plugins/index.json 里上架的那些包本体**。
+# v2.5.1（找茬审查 ②）：最后一个来源此前是"plugins/packs/ 下磁盘上有什么就算什么"——
+# 用户往 packs/ 里丢一个自己的包，发布门会把它当官方内容一起发出去。现在以**索引**为准：
+# index.json 的 releases[].url 指向哪个本地文件，哪个才算官方资产（索引读不出来 → 空集，
+# 只保留 SYNC_FILES / PLUGIN_OFFICIAL_NAMES 那两条来源，宁可少认也不误发）。
+PLUGIN_DIR = "plugins/"
+PLUGIN_INDEX = "plugins/index.json"
+PLUGIN_OFFICIAL_NAMES = ("plugins/index.json", "plugins/README.md")
+PLUGIN_PACKS_DIR = "plugins/packs"
 
 # v2.3.1（一致性收口）：精确名匹配挡不住**残留形态**——它们一样是用户数据（甚至是坏数据），
 # 绝不能随绿色版目录或发布包出货，此前却能悄悄混进去：
@@ -424,6 +449,192 @@ def check_shipped_files(root=None):
             % (len(gone), _full_list(gone))]
 
 
+# ---------------- v2.5.1（A2）：发货清单的**反向校验** ----------------
+# 此前 check_shipped_files() 只查"清单里的文件还在磁盘上"，check_zip 的 need 也只含清单 +
+# assets → **新增模块若忘了加进清单，绿色版/发布包缺件时任何门都不响**，用户双击直接
+# ImportError（v2.5.0 的 pet_services.py 就差点这样）。这里反过来扫：运行时源码里
+# import 的每个 pet_* 模块都必须在 SYNC_FILES 里。
+# 扫描面 = SYNC_FILES 里的 .py（= 会被发出去的那批）：tests/**、_dev/**、_check_*.py /
+# _verify_*.py 本来就不在清单里 → 天然排除，不用另写黑名单。
+#
+# v2.5.1（找茬审查 ③）：判据此前**只认 pet_ 前缀**——import plugin_util 这种漏件
+# （打包时缺文件 → 用户双击 ImportError）一条都报不出来。现在反过来：白名单之外的一切
+# 顶层 import 都点名。白名单三类：
+#   ① 标准库（sys.stdlib_module_names；老 Python 回退到内置模块名单）
+#   ② 随包发货的本仓模块（SYNC_FILES 里的 .py，模块名 = 文件名去后缀，含中文入口 桌宠）
+#   ③ 运行时第三方依赖（下面逐一点名；与 requirements.txt 的「运行时依赖」一致）
+IMPORT_EXTERNAL_ALLOW = ("PySide6", "shiboken6", "requests", "psutil")
+
+
+def _stdlib_module_names():
+    """标准库顶层模块名集合（3.10+ 有 sys.stdlib_module_names；老版本回退到内置模块）。"""
+    names = getattr(sys, "stdlib_module_names", None)
+    if names:
+        return set(names)
+    return set(sys.builtin_module_names)
+
+
+def shipped_module_names(root=None):
+    """随包发货的本仓模块名（SYNC_FILES 里 .py 的文件名去后缀）→ set。"""
+    return set(os.path.splitext(n)[0] for n in SYNC_FILES if n.endswith(".py"))
+
+
+def shipped_py_files(root=None):
+    """SYNC_FILES 里**磁盘上真的存在**的 .py（= 会被发出去的运行时代码）。"""
+    base = os.path.abspath(root or ROOT)
+    return [n for n in SYNC_FILES if n.endswith(".py")
+            and os.path.isfile(os.path.join(base, n.replace("/", os.sep)))]
+
+
+def runtime_imports(root=None):
+    """运行时源码 import 到的**全部**顶层模块 → {模块名: 第一个导入它的文件}（不筛白名单）。
+
+    用 AST 而不是正则：纯文本扫描会把注释/docstring 里的"模块名"字样也算进来
+    （本轮任务书第 3 条铁律就是踩这个坑踩出来的）。源文件语法错就跳过——那是静态体检
+    与测试的判据，这里不重复报，也不假装扫过（该模块不进当前成果，缺件仍由正向清单兜）。
+    """
+    base = os.path.abspath(root or ROOT)
+    found = {}
+    for name in shipped_py_files(base):
+        src = io.open(os.path.join(base, name.replace("/", os.sep)), encoding="utf-8").read()
+        try:
+            tree = ast.parse(src)
+        except SyntaxError:
+            continue
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import):
+                mods = [a.name for a in node.names]
+            elif isinstance(node, ast.ImportFrom):
+                mods = [node.module or ""]
+            else:
+                continue
+            for m in mods:
+                top = m.split(".")[0]
+                if top:
+                    found.setdefault(top, name)
+    return found
+
+
+def imported_runtime_modules(root=None):
+    """白名单之外的运行时 import → {模块名: 第一个导入它的文件}（判据用的那一层）。
+
+    v2.5.1（找茬审查 ③）：以前是"只留 pet_ 前缀"，漏件换个名字就看不见了；现在是
+    "标准库 + 随包发货的本仓模块 + IMPORT_EXTERNAL_ALLOW 之外的一切"。
+    """
+    allowed = (_stdlib_module_names() | shipped_module_names(root)
+               | set(IMPORT_EXTERNAL_ALLOW))
+    return {m: f for m, f in runtime_imports(root).items() if m not in allowed}
+
+
+def check_imported_modules_shipped(root=None):
+    """反向校验：被 import 的运行时模块必须都在 SYNC_FILES 里。返回失败说明列表。
+
+    能真失败：从清单里删掉任何**真被 import** 的模块（如 pet_services.py）→ 立刻点名；
+    新写一个既不是标准库、也不随包发货的 import（如 plugin_util）→ 同样点名。
+    """
+    found = imported_runtime_modules(root)
+    declared = set(os.path.splitext(n)[0] for n in SYNC_FILES if n.endswith(".py"))
+    missing = sorted(m for m in found if m not in declared)
+    if not missing:
+        return []
+    return ["运行时模块被 import 却没进 SYNC_FILES（绿色版/发布包会缺件、用户双击即 ImportError）：%s"
+            % "；".join("%s（被 %s 导入）" % (m, found[m]) for m in missing)]
+
+
+def plugin_official_packs(root=None):
+    """plugins/index.json 里**上架**的官方包本体（url 相对 index.json 解析）→ 仓库相对路径集。
+
+    v2.5.1（找茬审查 ②）：官方资产以**索引**为准，不是"packs/ 目录里有什么"。url 是绝对地址
+    （https://…）或越界路径（../）一律跳过——那些不是随包出货的本地文件。索引缺失/坏 JSON
+    → 空集（宁可不认，也不把用户塞进 packs/ 的东西当官方发出去）。
+    """
+    base = os.path.abspath(root or ROOT)
+    path = os.path.join(base, PLUGIN_INDEX.replace("/", os.sep))
+    try:
+        with io.open(path, encoding="utf-8-sig") as f:
+            data = json.load(f)
+    except Exception:
+        return set()        # 索引不在 / 读不动：官方包集合退化成"只有清单与说明"
+    out = set()
+    for item in (data.get("plugins") if isinstance(data, dict) else None) or []:
+        if not isinstance(item, dict):
+            continue
+        for rel in item.get("releases") or []:
+            if not isinstance(rel, dict):
+                continue
+            url = str(rel.get("url") or "").strip().replace("\\", "/")
+            if not url or "://" in url or url.startswith("/") or ".." in url.split("/"):
+                continue
+            local = os.path.normpath(os.path.join(PLUGIN_DIR.rstrip("/"), url))
+            local = local.replace(os.sep, "/")
+            if local.startswith(PLUGIN_DIR) and os.path.isfile(
+                    os.path.join(base, *local.split("/"))):
+                out.add(local)
+    return out
+
+
+def plugin_official_names(root=None):
+    """plugins/ 下**官方**（要随包出货）的文件 → set；用户装的插件目录不在此列。"""
+    base = os.path.abspath(root or ROOT)
+    out = set(n for n in SYNC_FILES if n.startswith(PLUGIN_DIR))
+    for n in PLUGIN_OFFICIAL_NAMES:
+        if os.path.isfile(os.path.join(base, n.replace("/", os.sep))):
+            out.add(n)
+    out |= plugin_official_packs(base)
+    return out
+
+
+def plugin_entry_rel(name):
+    """发布包条目名 → 仓库相对路径：**逐条**剥掉一层顶层目录（v2.5.1 找茬审查 ①）。
+
+    为什么不能只靠 check_zip 的 _normalize_names：那是**整包**判定（所有条目共用一个顶层段
+    才算套了一层）；只要包里混着一个根目录文件（README.md / main.py），整包判定就不剥了，
+    于是 desktop-pet/plugins/<id>/… 这种条目会从"用户插件数据"判据底下整片漏过去。
+    只剥一层（打包工具的标准做法），剥完还不以 plugins/ 开头就原样返回。
+    """
+    n = str(name or "").replace("\\", "/").lstrip("/")
+    if not n.startswith(PLUGIN_DIR) and "/" in n:
+        rest = n.split("/", 1)[1]
+        if rest.startswith(PLUGIN_DIR):
+            return rest
+    return n
+
+
+def plugin_user_data_hits(names, root=None):
+    """发布包条目里属于**用户插件数据**的（plugins/<id>/、plugins/_download/…）→ 排序列表。
+
+    判据是白名单（见 PLUGIN_OFFICIAL_NAMES 那段注释）：plugins/ 下不在官方集合里的一律算
+    用户数据。目录条目（以 / 结尾）不算。条目名带一层顶层目录（desktop-pet/plugins/…）时
+    **先剥那层再判**（点名时仍用原始条目名，用户得在包里找得到它）。
+    """
+    official = plugin_official_names(root)
+    hits = []
+    for raw in names:
+        n = str(raw or "")
+        if not n or n.endswith("/"):
+            continue
+        rel = plugin_entry_rel(n)
+        if not rel.startswith(PLUGIN_DIR):
+            continue
+        if rel in official or n in official:
+            continue
+        hits.append(n)
+    return sorted(hits)
+
+
+def plugin_asset_notes(root=None):
+    """官方插件资产还没生成时的提示（不挡发布，但绝不静默——用户侧下载链靠它们）。"""
+    base = os.path.abspath(root or ROOT)
+    if not os.path.isdir(os.path.join(base, PLUGIN_DIR.rstrip("/"))):
+        return ["官方插件资产还不存在（%s）：官方索引/官方内容包没随包出货，用户侧下载链是断的"
+                % PLUGIN_DIR.rstrip("/")]
+    lack = [n for n in PLUGIN_OFFICIAL_NAMES
+            if not os.path.isfile(os.path.join(base, n.replace("/", os.sep)))]
+    if lack:
+        return ["官方插件资产缺件（%s）：用户侧下载链是断的" % _full_list(lack)]
+    return []
+
+
 MUTATION_LOCK = os.path.join(ROOT, "_dev", ".mutation.lock")
 MUTATION_LOCK_STALE_H = 2.0   # 超过这么久的锁按"陈旧"处理（进程崩了别把发布门永久卡死）
 
@@ -502,8 +713,13 @@ def mutation_lock_problems(root=None, now=None):
 # 一条用例钉住"两处清单不许漂移"。
 # v2.4.4：补进 pet_balance.py —— A-1（请求代次）改了它、3 条锚点随之失效，而在此之前这份
 # 清单里没有它，发布门一条"证据过期"都不会提示（真盲区：证据对着旧实现，门禁全程静默）。
+# v2.5.1（找茬审查 P3-1）：补进本轮新模块——12 条 M-P*/M-L1 变异锚在 pet_plugin.py 与
+# pet_dialogs.py 上，pet_plugin_host.py 是插件安装/卸载的全部实现，pet_menu.py 是入口；
+# 少了它们，改这些文件不会有**任何**"证据过期"提示（v2.4.4 给 pet_balance.py 补过的同一个盲区）。
 MUTATION_FINGERPRINT_FILES = ("桌宠.py", "pet_export.py", "pet_lines.py", "pet_alarm.py",
-                              "pet_behaviors.py", "_check_release.py", "pet_balance.py")
+                              "pet_behaviors.py", "_check_release.py", "pet_balance.py",
+                              "pet_plugin.py", "pet_plugin_host.py", "pet_dialogs.py",
+                              "pet_menu.py")
 
 
 def file_fingerprint(path):
@@ -682,8 +898,14 @@ def check_green_dir():
 
 
 def _sync_pairs():
-    """要对比的（相对路径）清单：显式文件 + assets/ 下全部文件（M3：素材漂移也要能发现）。"""
+    """要对比的（相对路径）清单：显式文件 + assets/ + 官方插件资产（M3：素材漂移也要能发现）。"""
     out = list(SYNC_FILES)
+    # v2.5.1（A3）：官方插件资产（索引/说明/官方内容包）也随绿色版与发布包出货。C1 的产物由
+    # 打包工具生成——**没生成就不要求**（免得开发期假红），但一旦在磁盘上就必须同步/进包，
+    # 否则用户侧"下载官方内容"这条链是断的。
+    for n in sorted(plugin_official_names()):
+        if n not in out:
+            out.append(n)
     a_dir = os.path.join(ROOT, "assets")
     if os.path.isdir(a_dir):
         for root, _dirs, files in os.walk(a_dir):
@@ -734,6 +956,12 @@ def check_zip(zip_path, version=None):
                or any(n.startswith(d + "/") for d in USER_DATA_DIRS)]
         if bad:
             fails.append("发布包含运行时数据/残留/开发文件：%s" % _full_list(sorted(bad)))
+        # v2.5.1（A3）：用户装的插件目录与临时下载目录同样是"用户数据"——打包时最容易
+        # 整目录复制带出去（plugins/<id>/、plugins/_download/…），必须单独点名。
+        plug = plugin_user_data_hits(names)
+        if plug:
+            fails.append("发布包含用户安装的插件数据（plugins/ 下只有官方索引/说明/官方内容包"
+                         "可以出货）：%s" % _full_list(plug))
         # v2.3.0（兼容审查 S1）：need 必须覆盖**所有运行时 .py**——此前漏了 pet_tools.py，
         # 出包时白名单漏拷该文件会静默放行一个"双击即 ModuleNotFoundError"的包。
         # v2.4（M2/M3）：need 改成**全量正向校验**——直接用 _sync_pairs()（SYNC_FILES +
@@ -833,11 +1061,12 @@ def main():
     _lock_fails, _lock_notes = mutation_lock_problems()
     fails += _lock_fails
     for _note in (_lock_notes + mutation_evidence_notes() + mutation_verdict_notes()
-                  + asset_manifest_notes()):
+                  + asset_manifest_notes() + plugin_asset_notes()):
         print("  [提示] %s" % _note)
     print("[1b] 工作区清单：assets 索引 %d 个 / 磁盘 %d 个，SYNC_FILES %d 个"
           % (len(tracked_assets()), len(disk_assets()), len(SYNC_FILES)))
     fails += check_shipped_files()
+    fails += check_imported_modules_shipped()   # v2.5.1 A2：清单的**反向**校验
     fails += check_asset_manifest()
     fails += check_static()  # v2.1.4：静态体检（入口解析/配置键/空池/类型转换/定时器/线程…）
     # v2.2.2：用户数据是用户实时数据，永不要求清除（只查目录存在 + 残留点名）

@@ -547,6 +547,30 @@ def validate_bundle(zip_path):
         return None, "打开失败：%s" % e
 
 
+def land_role(role_lib, role):
+    """把角色条目落进角色库（v2.5.1：从 import_bundle 抽出的**可复用落地函数**）。
+
+    为什么要抽出来：PetHub 数据插件的安装管线（pet_plugin_host）也要"把角色并进库"这一步，
+    而它必须与「导入角色包」**同一套口径**——id 冲突换新（不覆盖现有角色）、added 归一、
+    写索引失败要回滚内存索引。复制一份实现就是两份口径，早晚漂移。
+
+    返回 (new_id | None, err)。err 非空时：内存索引已回滚，**调用方负责**清理自己刚复制
+    进 roles/ 的素材文件（本函数不认识那些文件）。
+
+    错误文案与旧版 import_bundle 内联那段**逐字相同**（调用方与测试依赖那些字面量，
+    见 plan_bundle 的注释口径）。
+    """
+    if role_lib.get(str(role.get("id") or "")) is not None:
+        role["id"] = uuid.uuid4().hex[:8]
+    role["added"] = ""
+    role_lib._data.setdefault("roles", []).append(role)
+    err = role_lib._save()
+    if err:
+        role_lib._data["roles"] = [x for x in role_lib._data.get("roles", []) if x is not role]
+        return None, "保存角色失败：%s" % err
+    return str(role.get("id") or ""), ""
+
+
 def import_bundle(role_lib, behaviors_svc, cfg, zip_path, alarms_apply=None,
                   voice_apply=None, lines_apply=None):
     """导入角色包：解包素材（换新文件名防覆盖）、注册角色与行为（新 id）、
@@ -709,24 +733,19 @@ def import_bundle(role_lib, behaviors_svc, cfg, zip_path, alarms_apply=None,
                     with open(os.path.join(extract_dir, os.path.basename(arc)), "wb") as f:
                         f.write(data)
             # 角色最后入库：id 冲突换新（不覆盖现有角色）；写索引失败必须回滚
-            if role_lib.get(str(role.get("id") or "")) is not None:
-                role["id"] = uuid.uuid4().hex[:8]
-            role_map[_old_rid] = role["id"]
-            role["added"] = ""
-            role_lib._data.setdefault("roles", []).append(role)
-            role_appended = True
-            _serr = role_lib._save()
-            if _serr:
-                role_lib._data["roles"] = [x for x in role_lib._data.get("roles", [])
-                                           if x is not role]
-                role_appended = False
+            # v2.5.1：入库动作抽成 land_role（PetHub 插件安装管线复用同一套口径，
+            # 见该函数的 docstring）；行为与错误文案逐字不变。
+            _new_rid, _serr = land_role(role_lib, role)
+            if _new_rid is None:
                 for p in written:
                     try:
                         if os.path.isfile(p):
                             os.remove(p)
                     except Exception:
                         pass  # 有意忽略：回滚清理尽力而为
-                return None, "保存角色失败：%s" % _serr
+                return None, _serr
+            role_map[_old_rid] = _new_rid
+            role_appended = True
             # v2.1：先落声音素材（拿到「旧槽位→新槽位」映射），再落台词/对白
             # （台词的声音引用与角色绑定都要按映射改写）；最后才应用闹钟。
             _voice_map = {}

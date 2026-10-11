@@ -109,7 +109,27 @@ python main.py        # 规范入口（桌宠.py 为兼容壳）；或双击 启
     吃饱形态展示期间（消化窗口）不会被打断（形态保护）、待机形态（留空=不切形态）、
   待机动作列表（可加多条行为，启停/权重/上下移）与播放模式（顺序轮流/随机/按权重/只播一条）；
   待机永远是最低优先级——说话、读台词、拖拽、喂食、手动切形态随时打断，待机绝不覆盖你选定的形态
-- 所有自定义数据保存在程序目录（config.json、ledger.json / ledger_archive.json、roles/ + roles.json、audio/ + audio.json、lines.json、voice_assets.json + voice_ref/），换机器/升级时拷贝这些文件即可迁移
+- 所有自定义数据保存在程序目录（config.json、ledger.json / ledger_archive.json、roles/ + roles.json、audio/ + audio.json、lines.json、voice_assets.json + voice_ref/、**plugins/**），换机器/升级时拷贝这些文件即可迁移
+  - **plugins/ 也要整目录拷**（含里面的 `_installed.json`）：那是"装过哪些插件、哪些内容已经落地"的账本。只拷了 `plugins/<插件 id>/` 而漏掉它，重装同一个插件包会被当成第一次安装，台词 / 角色**再进一份**
+
+## 🧩 官方内容插件（PetHub · v2.5.1）
+
+程序目录里的 `plugins/` 就是**官方内容仓库**：`plugins/index.json` 是索引、`plugins/packs/` 是包本体，
+随绿色版与发布包一起发——**不用联网也能装**。入口在右键菜单：**「⚙️ 设置…」→「🧩 插件管理…」**
+（列表 / 安装 / 卸载 / 启用禁用 / 刷新；卸载只删插件目录，已导入的内容保留）。
+
+| 包 | 类型 | 大小 | 装上会看到什么 |
+|---|---|---|---|
+| 官方·基础音效（6 段） | 音效 | 165 KB | 「资源管理 → 音频片段」多 6 条（点击/松开/被戳/喂食/AI 回复完成/金币到账），可在「音效组」里自己指派 |
+| 官方·摸鱼台词（12 条 + 1 组对白） | 台词 | 2.0 KB | 台词库多 12 条（撒娇/贪吃/开心/闲逛）+ 一组「摸鱼三连」对白；你原有的台词一条不动 |
+| 官方·大肥鱼角色包（双形态 + 17 张表情） | 角色 | 1.2 MB | 角色列表多一只「官方·大肥鱼」（可改名/删除），戳戳/喂食/睡觉的表情走这套美术图 |
+| 官方·待机行为（4 条） | 行为 | 2.5 KB | 行为库多 4 条（得意炫耀/害羞扭扭/蜷着睡/闻到零食），可排进「待机设置」的顺序与权重 |
+| 官方·人设「摸鱼搭子」 | 人设 | 1.3 KB | AI 设置的人设下拉多一项「我的：摸鱼搭子」，选中即换性格说话 |
+
+- **插件包里没有代码**：`kind=data`、`code=false`、`capabilities=[]`（零权限），payload 只允许图片 / 音频 / 文本 / JSON；出现 `.py .dll .exe .zip` 之类**整包拒绝并点名那个文件**。
+- **两道版本门**：每个包声明 `min_host_version` 与 `api_version`，宿主版本不够就硬拒，并告诉你「要求 X，当前 Y」。
+- **装 / 卸都不毁数据**：装插件只**新增**条目，不动你现有的角色、台词、音频、音效组、行为与配置；卸载只删插件目录，已经并进库的内容仍然保留（那是你的数据，与「导入角色包」同口径）。
+- 每个包的完整说明（包含什么 / 多大 / 包内结构 / 落地方式）与自制包格式：[plugins/README.md](plugins/README.md)。
 
 ## 🧠 AI 会记事、也能动手（v2.3.0 新增）
 
@@ -226,7 +246,7 @@ v2.4.1 的发布说明里有一句「**pet_tools + pet_lines 82 个函数补全�
 | `pet_io.py` | ✅ 25/28 | 公开 API 与纯函数全覆盖；未标的 3 个是 `_MergeGuard` 的 `__init__/__enter__/__exit__` |
 | `pet_book.py` | ⚠️ 25/34 | 未标的是 8 个私有辅助（`_load`/`_save_all`/`_archive_day`…）与模块级 `esc` |
 | `pet_chat.py` / `pet_balance.py` / `pet_widgets.py` / `pet_export.py` / `pet_config.py` / `pet_alarm.py` / `pet_behaviors.py` | ❌ 0 | 本轮只澄清口径，未新增注解 |
-| `桌宠.py`（254 函数）/ `pet_dialogs.py`（258）/ `pet_voice.py`（87）/ `pet_resources.py`（80）/ `pet_anim.py`（9）/ `pet_actions.py`（7） | ❌ 0 | **单独立项**，不在 v2.4.1 那句「82/82」的口径内 |
+| `桌宠.py`（254 函数）/ `pet_dialogs.py`（272）/ `pet_voice.py`（87）/ `pet_resources.py`（80）/ `pet_anim.py`（9）/ `pet_actions.py`（7） | ❌ 0 | **单独立项**，不在 v2.4.1 那句「82/82」的口径内 |
 
 也就是说：**已经补注解的是 `pet_tools` / `pet_lines` / `pet_io` / `pet_book` 这几个
 Qt-free 模块（其中前两个是全量），三大核心文件与其余 GUI 模块仍是零注解**。评估注解覆盖率

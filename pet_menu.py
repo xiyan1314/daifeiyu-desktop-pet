@@ -201,6 +201,10 @@ class MenuBuilder:
         mem_act.triggered.connect(pet.ai.set_chat_rounds)
         clear_logs_act = set_menu.addAction("🧹 清理日志…")  # P2-1：日志/记忆卫生
         clear_logs_act.triggered.connect(pet._clear_logs)
+        set_menu.addSeparator()
+        # v2.5.1：PetHub 插件管理（**必须留在设置子菜单里**：顶层菜单有 ≤18 项的硬断言）
+        plugin_act = set_menu.addAction("🧩 插件管理…")
+        plugin_act.triggered.connect(lambda checked=False: pet_dialogs.open_plugins(pet))
         menu.addSeparator()
 
         # P3-2：右键点播任意动画（与闲逛加权目录共用 play_action）

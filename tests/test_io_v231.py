@@ -1362,16 +1362,30 @@ def test_close_event_accepts_during_real_quit():
 # 其余文件里出现不带 %s/%d 格式化的 ".tmp" 字符串常量 = 固定名临时文件（回归）。
 _TMP_SCAN_ALLOW = {"pet_io.py"}
 _TMP_SCAN_SKIP = {"_check_static.py", "_check_release.py", "_verify_v13.py", "_verify_green.py"}
+# v2.5.1：tempfile.mkdtemp/mkstemp/TemporaryDirectory 的 prefix/suffix 是**唯一名的一部分**
+# （tempfile 自己补随机字符并重试），不是固定名落盘点——把它们当命中会把每个 mkdtemp 前缀
+# 都误报成回归。
+_TMP_UNIQUE_CALLS = ("mkdtemp", "mkstemp", "TemporaryDirectory")
 
 
-def test_no_fixed_tmp_literals_in_source():
-    """L6：全仓（除本测试与被跳过的开发脚本）不得再出现**固定名** .tmp 落盘点。
+def _unique_name_literals(tree):
+    """mkdtemp/mkstemp/TemporaryDirectory 调用里的字符串常量 → {id(常量)}（不算固定名）。"""
+    out = set()
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call):
+            continue
+        fn = node.func
+        name = fn.attr if isinstance(fn, ast.Attribute) else getattr(fn, "id", "")
+        if name not in _TMP_UNIQUE_CALLS:
+            continue
+        for arg in list(node.args) + [k.value for k in node.keywords]:
+            if isinstance(arg, ast.Constant) and isinstance(arg.value, str):
+                out.add(id(arg))
+    return out
 
-    判据（AST，注释天然不参与）：非 docstring 的字符串常量含 ".tmp" 时，
-    必须带 %s/%d 格式化（即 <path>.<线程号>.tmp 这类线程唯一名）。
-    旧写法 [路径变量] + ".tmp" 与 "lines.json.tmp" 都会被抓出来。
-    """
-    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+def _scan_fixed_tmp_sources(root):
+    """扫一个仓库根 → (可疑点, 线程唯一临时名)。抽成函数是为了给判据本身配控制组。"""
     bad = []
     ok = []
     for name in sorted(os.listdir(root)):
@@ -1379,23 +1393,55 @@ def test_no_fixed_tmp_literals_in_source():
             continue
         with open(os.path.join(root, name), encoding="utf-8") as f:
             src = f.read()
-        tree = ast.parse(src)
+        try:
+            tree = ast.parse(src)
+        except SyntaxError:
+            continue                       # 语法错由静态体检报，这里不重复也不假装扫过
         docstrings = set()
         for node in ast.walk(tree):
             if (isinstance(node, ast.Expr) and isinstance(node.value, ast.Constant)
                     and isinstance(node.value.value, str)):
                 docstrings.add(id(node.value))       # 裸字符串说明（docstring）：不是代码
+        unique = _unique_name_literals(tree)
         for node in ast.walk(tree):
             if not isinstance(node, ast.Constant) or not isinstance(node.value, str):
                 continue
-            if ".tmp" not in node.value or id(node) in docstrings:
+            if ".tmp" not in node.value or id(node) in docstrings or id(node) in unique:
                 continue
             if re.search(r"%[sd]", node.value):
                 ok.append("%s:%d" % (name, node.lineno))
                 continue
             bad.append("%s:%d %r" % (name, node.lineno, node.value))
+    return bad, ok
+
+
+def test_no_fixed_tmp_literals_in_source(tmp_path):
+    """L6：全仓（除本测试与被跳过的开发脚本）不得再出现**固定名** .tmp 落盘点。
+
+    判据（AST，注释天然不参与）：非 docstring 的字符串常量含 ".tmp" 时，
+    必须带 %s/%d 格式化（即 <path>.<线程号>.tmp 这类线程唯一名），
+    或者是 tempfile.mkdtemp/mkstemp/TemporaryDirectory 的 prefix/suffix（自带随机性）。
+    旧写法 [路径变量] + ".tmp" 与 "lines.json.tmp" 都会被抓出来。
+
+    能真失败：把 mkdtemp 的跳过去掉 → pet_plugin_host.py 的 ".tmp-" 前缀立刻被点名；
+    或把 bad 的收集去掉 → 下面那条控制组红（固定名 .tmp 必须仍被抓）。
+    """
+    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    bad, ok = _scan_fixed_tmp_sources(root)
     assert ok, "扫描没找到任何线程唯一临时名（判据失效，这条绿不可信）"
     assert not bad, "仍有固定名 .tmp 字面量：%s" % "; ".join(bad)
+    # 控制组（v2.5.1）：判据不能变成「什么都放过」——mkdtemp 的 prefix 放行，
+    # 而固定名 .tmp 仍然必须被抓（两个方向各一条）。
+    (tmp_path / "synthetic.py").write_text(
+        "import tempfile\n"
+        "def a():\n"
+        "    return tempfile.mkdtemp(prefix=\".tmp-\", dir=\"/x\")\n"
+        "def b():\n"
+        "    return open(\"/x/lines.json.tmp\", \"w\")\n",
+        encoding="utf-8")
+    bad2, ok2 = _scan_fixed_tmp_sources(str(tmp_path))
+    assert len(bad2) == 1 and "synthetic.py" in bad2[0], bad2
+    assert not ok2, "合成样本里不该有线程唯一名：%r" % (ok2,)
 
 
 

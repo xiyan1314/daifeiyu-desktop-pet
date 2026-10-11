@@ -226,8 +226,14 @@ def repo_fingerprint(root=None):
     # v2.4.4（任务 1）：清单里原本没有 pet_balance.py —— A-1 改了它、3 条锚点失效，而发布门
     # 一条"证据过期"都不会提示（真盲区）。与 _check_release.MUTATION_FINGERPRINT_FILES 同口径，
     # 由 tests/test_release_check.py 的 test_fingerprint_file_list_matches_the_mutation_lib 钉住。
+    # v2.5.1（找茬审查 P3-1）：补进本轮新模块——pet_plugin.py / pet_plugin_host.py /
+    # pet_dialogs.py / pet_menu.py。少了它们，改这些文件不会有任何"证据过期"提示
+    # （v2.4.4 给 pet_balance.py 补过同一个盲区）。与
+    # _check_release.MUTATION_FINGERPRINT_FILES **逐项一致**（顺序也一致），
+    # tests/test_release_check.py 有一条用例钉住两处不许漂。
     for rel in ("桌宠.py", "pet_export.py", "pet_lines.py", "pet_alarm.py", "pet_behaviors.py",
-                "_check_release.py", "pet_balance.py"):
+                "_check_release.py", "pet_balance.py", "pet_plugin.py", "pet_plugin_host.py",
+                "pet_dialogs.py", "pet_menu.py"):
         p = os.path.join(base, rel)
         if os.path.isfile(p):
             with open(p, "rb") as f:

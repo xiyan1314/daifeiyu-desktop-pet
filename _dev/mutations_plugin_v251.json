@@ -1,0 +1,441 @@
+{
+  "mutations": [
+    {
+      "id": "M-P1",
+      "why": "kind=data 必须 code=false（判据 7）",
+      "file": "pet_plugin.py",
+      "old": "        if kind == \"data\" and code is not False:",
+      "new": "        if False and kind == \"data\" and code is not False:",
+      "tests": [
+        "tests/test_plugin_v251.py::test_kind_data_却_code_true拒"
+      ],
+      "expect_fail": [
+        "tests/test_plugin_v251.py::test_kind_data_却_code_true拒"
+      ]
+    },
+    {
+      "id": "M-P2",
+      "why": "条目名含 .. 必须拒（判据 4 路径穿越）",
+      "file": "pet_plugin.py",
+      "old": "        if seg == \"..\":",
+      "new": "        if False and seg == \"..\":",
+      "tests": [
+        "tests/test_plugin_v251.py::test_条目名含双点拒",
+        "tests/test_plugin_v251.py::test_不安全条目名都拒"
+      ],
+      "expect_fail": [
+        "tests/test_plugin_v251.py::test_条目名含双点拒"
+      ]
+    },
+    {
+      "id": "M-P3",
+      "why": "min_host_version 双版本门（判据 9）",
+      "file": "pet_plugin.py",
+      "old": "        if version_key(min_host) > version_key(host_version):",
+      "new": "        if False and version_key(min_host) > version_key(host_version):",
+      "tests": [
+        "tests/test_plugin_v251.py::test_min_host_version_99_拒且_err_含要求与当前"
+      ],
+      "expect_fail": [
+        "tests/test_plugin_v251.py::test_min_host_version_99_拒且_err_含要求与当前"
+      ]
+    },
+    {
+      "id": "M-P4",
+      "why": "禁止项清单（可执行/脚本）点名拒",
+      "file": "pet_plugin.py",
+      "old": "            if ext in FORBIDDEN_EXEC_EXTS:",
+      "new": "            if False and ext in FORBIDDEN_EXEC_EXTS:",
+      "tests": [
+        "tests/test_plugin_v251.py::test_payload_里有_evil_py_点名拒绝"
+      ],
+      "expect_fail": [
+        "tests/test_plugin_v251.py::test_payload_里有_evil_py_点名拒绝"
+      ]
+    },
+    {
+      "id": "M-P5",
+      "why": "payload 里每个文件都要在 files 清单里（判据 10 少一个也拒）",
+      "file": "pet_plugin.py",
+      "old": "    lack = sorted(set(payload_files) - set(listed))",
+      "new": "    lack = []",
+      "tests": [
+        "tests/test_plugin_v251.py::test_某_payload_文件不在_files_里拒"
+      ],
+      "expect_fail": [
+        "tests/test_plugin_v251.py::test_某_payload_文件不在_files_里拒"
+      ]
+    },
+    {
+      "id": "M-P6",
+      "why": "解压总量上限复用 pet_export.EXPORT_MAX_BYTES",
+      "file": "pet_plugin.py",
+      "old": "                or sum(i.file_size for i in info) > pet_export.EXPORT_MAX_BYTES):",
+      "new": "                or False):",
+      "tests": [
+        "tests/test_plugin_v251.py::test_条目数与解压总量上限走_pet_export_同一来源"
+      ],
+      "expect_fail": [
+        "tests/test_plugin_v251.py::test_条目数与解压总量上限走_pet_export_同一来源"
+      ]
+    },
+    {
+      "id": "M-P7",
+      "why": "文件条目的执行位必须拒（判据 5）",
+      "file": "pet_plugin.py",
+      "old": "    if not info.is_dir() and mode & 0o111:",
+      "new": "    if False and not info.is_dir() and mode & 0o111:",
+      "tests": [
+        "tests/test_plugin_v251.py::test_外部属性执行位与符号链接拒"
+      ],
+      "expect_fail": [
+        "tests/test_plugin_v251.py::test_外部属性执行位与符号链接拒"
+      ]
+    },
+    {
+      "id": "M-P8",
+      "why": "read_installed 目录不存在要返回空、绝不抛",
+      "file": "pet_plugin.py",
+      "old": "    if not base or not os.path.isdir(base):\n        return [], []",
+      "new": "    if not base or not os.path.isdir(base):\n        raise OSError('no dir')",
+      "tests": [
+        "tests/test_plugin_v251.py::test_plugins_目录不存在返回空不抛"
+      ],
+      "expect_fail": [
+        "tests/test_plugin_v251.py::test_plugins_目录不存在返回空不抛"
+      ]
+    },
+    {
+      "id": "M-R1",
+      "why": "A2 反向校验：被 import 的模块必须在 SYNC_FILES 里",
+      "file": "_check_release.py",
+      "old": "    missing = sorted(m for m in found if m not in declared)",
+      "new": "    missing = []",
+      "tests": [
+        "tests/test_release_check.py::test_反向校验_从清单删掉真模块必须报",
+        "tests/test_release_check.py::test_反向校验_合成仓库能认出漏件"
+      ],
+      "expect_fail": [
+        "tests/test_release_check.py::test_反向校验_从清单删掉真模块必须报",
+        "tests/test_release_check.py::test_反向校验_合成仓库能认出漏件"
+      ]
+    },
+    {
+      "id": "M-R2",
+      "why": "A2 扫描器必须真的解析源码（AST）而不是空转",
+      "file": "_check_release.py",
+      "old": "            tree = ast.parse(src)",
+      "new": "            tree = ast.parse(\"\")",
+      "tests": [
+        "tests/test_release_check.py::test_本仓被导入的运行时模块都在发货清单里",
+        "tests/test_release_check.py::test_反向校验_合成仓库能认出漏件"
+      ],
+      "expect_fail": [
+        "tests/test_release_check.py::test_本仓被导入的运行时模块都在发货清单里"
+      ]
+    },
+    {
+      "id": "M-R3",
+      "why": "A3 用户插件数据必须点名（v2.5.1 找茬审查后重锚：注入恒真条件让过滤整条失效）",
+      "file": "_check_release.py",
+      "old": "        if rel in official or n in official:\n            continue",
+      "new": "        if rel in official or n in official or True:\n            continue",
+      "tests": [
+        "tests/test_release_check.py::test_发布包里的用户插件必须点名",
+        "tests/test_release_check.py::test_官方插件资产不会被当成用户数据"
+      ],
+      "expect_fail": [
+        "tests/test_release_check.py::test_发布包里的用户插件必须点名"
+      ]
+    },
+    {
+      "id": "M-L1",
+      "why": "L5：RoleEditDialog 设计宽 620（消除 20px 横向滚动条）",
+      "file": "pet_dialogs.py",
+      "old": "        clamp_dialog(self, 620, 540)   # v2.5.1 A（L5）：设计宽 600→620，消除 20px 横向滚动条",
+      "new": "        clamp_dialog(self, 600, 540)   # v2.5.1 A（L5）",
+      "tests": [
+        "tests/test_dialog_fit_v250.py::test_每个对话框的设计尺寸就是它自己的契约",
+        "tests/test_dialog_fit_v250.py::test_每个对话框的设计尺寸都写在源码里"
+      ],
+      "expect_fail": [
+        "tests/test_dialog_fit_v250.py::test_每个对话框的设计尺寸就是它自己的契约",
+        "tests/test_dialog_fit_v250.py::test_每个对话框的设计尺寸都写在源码里"
+      ]
+    },
+    {
+      "id": "M-P9",
+      "why": "S2-a：min_host_version 必须是数字版本串（version_key 对 abc/latest 恒返回 0 段 → 旧实现恒放行）",
+      "file": "pet_plugin.py",
+      "old": "        if not _is_version_like(min_host):",
+      "new": "        if False and not _is_version_like(min_host):",
+      "tests": [
+        "tests/test_plugin_v251.py::test_min_host_version不是版本号一律拒"
+      ],
+      "expect_fail": [
+        "tests/test_plugin_v251.py::test_min_host_version不是版本号一律拒"
+      ]
+    },
+    {
+      "id": "M-H1",
+      "why": "P1-1：安装器的保留名自保（packs 不许当 id；校验器被绕过时这是唯一的一道）",
+      "file": "pet_plugin_host.py",
+      "old": "        reserved = _reserved_problem(meta.get(\"id\"))\n        if reserved:\n            return False, reserved",
+      "new": "        reserved = \"\"\n        if reserved:\n            return False, reserved",
+      "tests": [
+        "tests/test_plugin_host_v251.py::test_P1_1_写入方自保_绕过校验器也拦得住_packs"
+      ],
+      "expect_fail": [
+        "tests/test_plugin_host_v251.py::test_P1_1_写入方自保_绕过校验器也拦得住_packs"
+      ]
+    },
+    {
+      "id": "M-H2",
+      "why": "P2-4/S1-c：already 必须以登记表的 landed 为准（空表 = 内容没落地，必须照常落地）",
+      "file": "pet_plugin_host.py",
+      "old": "        already = (known is not None and known_kind == data_kind\n                   and _has_landed(known.get(\"landed\")))",
+      "new": "        already = known is not None",
+      "tests": [
+        "tests/test_plugin_host_v251.py::test_S1_c_手工拷进来的插件目录_装同id的真包必须真的落地"
+      ],
+      "expect_fail": [
+        "tests/test_plugin_host_v251.py::test_S1_c_手工拷进来的插件目录_装同id的真包必须真的落地"
+      ]
+    },
+    {
+      "id": "M-H3",
+      "why": "S1-a：登记写失败必须把已经并进宿主库的条目回滚（否则库里永久留一份看不见的插件内容）",
+      "file": "pet_plugin_host.py",
+      "old": "                shutil.rmtree(target, ignore_errors=True)\n                if not already:\n                    self._unland(data_kind, landed)\n                return False, (\"写入安装登记失败：%s（已撤掉插件目录%s）\"",
+      "new": "                shutil.rmtree(target, ignore_errors=True)\n                return False, (\"写入安装登记失败：%s（已撤掉插件目录%s）\"",
+      "tests": [
+        "tests/test_plugin_host_v251.py::test_S1_a_登记写失败必须回滚已落地内容"
+      ],
+      "expect_fail": [
+        "tests/test_plugin_host_v251.py::test_S1_a_登记写失败必须回滚已落地内容"
+      ]
+    },
+    {
+      "id": "M-H4",
+      "why": "P2-1：没落地的内容必须出现在成功文案里（此前只躺在 _installed.json 里，界面永远看不到）",
+      "file": "pet_plugin_host.py",
+      "old": "            warns = _warn_tail(_landed_warnings(landed))",
+      "new": "            warns = \"\"",
+      "tests": [
+        "tests/test_plugin_host_v251.py::test_P2_1_role包里没落地的东西必须让用户看见"
+      ],
+      "expect_fail": [
+        "tests/test_plugin_host_v251.py::test_P2_1_role包里没落地的东西必须让用户看见"
+      ]
+    }
+  ],
+  "results": {
+    "title": "变异验证 spec：mutations_plugin_v251.json",
+    "checked_at": "2026-10-11 16:48:04",
+    "total": 17,
+    "caught": 17,
+    "not_caught": 0,
+    "blocked": 0,
+    "items": [
+      {
+        "id": "M-P1",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 0.75s",
+        "failed": [
+          "test_kind_data_却_code_true拒"
+        ]
+      },
+      {
+        "id": "M-P2",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed, 6 passed in 0.66s",
+        "failed": [
+          "test_条目名含双点拒"
+        ]
+      },
+      {
+        "id": "M-P3",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 0.59s",
+        "failed": [
+          "test_min_host_version_99_拒且_err_含要求与当前"
+        ]
+      },
+      {
+        "id": "M-P4",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 0.53s",
+        "failed": [
+          "test_payload_里有_evil_py_点名拒绝"
+        ]
+      },
+      {
+        "id": "M-P5",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 0.54s",
+        "failed": [
+          "test_某_payload_文件不在_files_里拒"
+        ]
+      },
+      {
+        "id": "M-P6",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 0.53s",
+        "failed": [
+          "test_条目数与解压总量上限走_pet_export_同一来源"
+        ]
+      },
+      {
+        "id": "M-P7",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 0.53s",
+        "failed": [
+          "test_外部属性执行位与符号链接拒"
+        ]
+      },
+      {
+        "id": "M-P8",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 0.55s",
+        "failed": [
+          "test_plugins_目录不存在返回空不抛"
+        ]
+      },
+      {
+        "id": "M-R1",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "2 failed in 1.19s",
+        "failed": [
+          "test_反向校验_从清单删掉真模块必须报",
+          "test_反向校验_合成仓库能认出漏件"
+        ]
+      },
+      {
+        "id": "M-R2",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "2 failed in 0.58s",
+        "failed": [
+          "test_本仓被导入的运行时模块都在发货清单里",
+          "test_反向校验_合成仓库能认出漏件"
+        ]
+      },
+      {
+        "id": "M-R3",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "2 failed in 0.56s",
+        "failed": [
+          "test_发布包里的用户插件必须点名",
+          "test_官方插件资产不会被当成用户数据"
+        ]
+      },
+      {
+        "id": "M-L1",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "2 failed, 14 passed in 1.77s",
+        "failed": [
+          "test_每个对话框的设计尺寸就是它自己的契约[RoleEditDialog]",
+          "test_每个对话框的设计尺寸都写在源码里"
+        ]
+      },
+      {
+        "id": "M-P9",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "5 failed in 0.67s",
+        "failed": [
+          "test_min_host_version不是版本号一律拒[abc]",
+          "test_min_host_version不是版本号一律拒[latest]",
+          "test_min_host_version不是版本号一律拒[v2.5.0]",
+          "test_min_host_version不是版本号一律拒[LTS]",
+          "test_min_host_version不是版本号一律拒[\\u4e8c\\u70b9\\u4e94]"
+        ]
+      },
+      {
+        "id": "M-H1",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 0.73s",
+        "failed": [
+          "test_P1_1_写入方自保_绕过校验器也拦得住_packs"
+        ]
+      },
+      {
+        "id": "M-H2",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 0.71s",
+        "failed": [
+          "test_S1_c_手工拷进来的插件目录_装同id的真包必须真的落地"
+        ]
+      },
+      {
+        "id": "M-H3",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 0.84s",
+        "failed": [
+          "test_S1_a_登记写失败必须回滚已落地内容"
+        ]
+      },
+      {
+        "id": "M-H4",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 0.66s",
+        "failed": [
+          "test_P2_1_role包里没落地的东西必须让用户看见"
+        ]
+      }
+    ],
+    "spec": "mutations_plugin_v251.json",
+    "tests": [
+      "tests/test_dialog_fit_v250.py::test_每个对话框的设计尺寸就是它自己的契约",
+      "tests/test_dialog_fit_v250.py::test_每个对话框的设计尺寸都写在源码里",
+      "tests/test_plugin_host_v251.py::test_P1_1_写入方自保_绕过校验器也拦得住_packs",
+      "tests/test_plugin_host_v251.py::test_P2_1_role包里没落地的东西必须让用户看见",
+      "tests/test_plugin_host_v251.py::test_S1_a_登记写失败必须回滚已落地内容",
+      "tests/test_plugin_host_v251.py::test_S1_c_手工拷进来的插件目录_装同id的真包必须真的落地",
+      "tests/test_plugin_v251.py::test_kind_data_却_code_true拒",
+      "tests/test_plugin_v251.py::test_min_host_version_99_拒且_err_含要求与当前",
+      "tests/test_plugin_v251.py::test_min_host_version不是版本号一律拒",
+      "tests/test_plugin_v251.py::test_payload_里有_evil_py_点名拒绝",
+      "tests/test_plugin_v251.py::test_plugins_目录不存在返回空不抛",
+      "tests/test_plugin_v251.py::test_不安全条目名都拒",
+      "tests/test_plugin_v251.py::test_外部属性执行位与符号链接拒",
+      "tests/test_plugin_v251.py::test_条目名含双点拒",
+      "tests/test_plugin_v251.py::test_条目数与解压总量上限走_pet_export_同一来源",
+      "tests/test_plugin_v251.py::test_某_payload_文件不在_files_里拒",
+      "tests/test_release_check.py::test_反向校验_从清单删掉真模块必须报",
+      "tests/test_release_check.py::test_反向校验_合成仓库能认出漏件",
+      "tests/test_release_check.py::test_发布包里的用户插件必须点名",
+      "tests/test_release_check.py::test_官方插件资产不会被当成用户数据",
+      "tests/test_release_check.py::test_本仓被导入的运行时模块都在发货清单里"
+    ],
+    "note": "变异只在 %TEMP% 影子副本里做，真实仓库只读（只写 _dev/.mutation.lock）",
+    "repo_fingerprint": {
+      "桌宠.py": "d41f658e5d23",
+      "pet_export.py": "c01e1593efd2",
+      "pet_lines.py": "5332f60b5f26",
+      "pet_alarm.py": "1149e94deee3",
+      "pet_behaviors.py": "8f57255144f6",
+      "_check_release.py": "b0447bfc5c44",
+      "pet_balance.py": "2828b2ebc0c9",
+      "pet_plugin.py": "3f1003898a10",
+      "pet_plugin_host.py": "6501e8858242",
+      "pet_dialogs.py": "e5a3d6a1949a",
+      "pet_menu.py": "920daac1b835"
+    }
+  }
+}

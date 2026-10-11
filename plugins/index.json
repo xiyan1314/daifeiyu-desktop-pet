@@ -1,0 +1,107 @@
+{
+  "index_version": 1,
+  "updated_at": "2026-10-11",
+  "host_min": "2.5.0",
+  "plugins": [
+    {
+      "id": "official-audio-core",
+      "name": "官方·基础音效（6 段）",
+      "kind": "data",
+      "data_kind": "audio",
+      "code": false,
+      "summary": "6 段系统音效：点击 / 松开 / 被戳 / 喂食 / AI 回复完成 / 金币到账",
+      "author": "大肥鱼桌宠（官方）",
+      "releases": [
+        {
+          "version": "1.0.0",
+          "min_host_version": "2.5.0",
+          "api_version": 1,
+          "url": "packs/official-audio-core-1.0.0.dfypet-plugin.zip",
+          "sha256": "34598eb94818786b80ecedd5102ff306af1fa2feeac61b64f2602a37d31ca18e",
+          "bytes": 168925,
+          "published_at": "2026-10-11"
+        }
+      ]
+    },
+    {
+      "id": "official-lines-moyu",
+      "name": "官方·摸鱼台词（12 条 + 1 组对白）",
+      "kind": "data",
+      "data_kind": "lines",
+      "code": false,
+      "summary": "12 条新增台词（撒娇/贪吃/开心/闲逛）+ 一组「摸鱼三连」对白",
+      "author": "大肥鱼桌宠（官方）",
+      "releases": [
+        {
+          "version": "1.0.0",
+          "min_host_version": "2.5.0",
+          "api_version": 1,
+          "url": "packs/official-lines-moyu-1.0.0.dfypet-plugin.zip",
+          "sha256": "e46d1ca67554bcb6fcb4fd80c922491088cc48bcae6a7e9efc17521fc4b978bd",
+          "bytes": 1970,
+          "published_at": "2026-10-11"
+        }
+      ]
+    },
+    {
+      "id": "official-role-daifeiyu",
+      "name": "官方·大肥鱼角色包（双形态 + 17 张表情）",
+      "kind": "data",
+      "data_kind": "role",
+      "code": false,
+      "summary": "把自带的大肥鱼做成角色包：双形态（常态/吃饱）+ 17 张表情状态图",
+      "author": "大肥鱼桌宠（官方）",
+      "releases": [
+        {
+          "version": "1.0.0",
+          "min_host_version": "2.5.0",
+          "api_version": 1,
+          "url": "packs/official-role-daifeiyu-1.0.0.dfypet-plugin.zip",
+          "sha256": "d222070f5a4ecddf424f7202a071d310eb0f793dab2d490eaadeb5e066a7d58c",
+          "bytes": 1213323,
+          "published_at": "2026-10-11"
+        }
+      ]
+    },
+    {
+      "id": "official-behaviors-idle",
+      "name": "官方·待机行为（4 条）",
+      "kind": "data",
+      "data_kind": "behaviors",
+      "code": false,
+      "summary": "4 条现成行为：得意炫耀 / 害羞扭扭 / 蜷着睡 / 闻到零食",
+      "author": "大肥鱼桌宠（官方）",
+      "releases": [
+        {
+          "version": "1.0.0",
+          "min_host_version": "2.5.0",
+          "api_version": 1,
+          "url": "packs/official-behaviors-idle-1.0.0.dfypet-plugin.zip",
+          "sha256": "1806fe25ba97d8c0259809a097c915a9091b059288025663608aec244e9528b0",
+          "bytes": 2591,
+          "published_at": "2026-10-11"
+        }
+      ]
+    },
+    {
+      "id": "official-persona-moyu",
+      "name": "官方·人设「摸鱼搭子」",
+      "kind": "data",
+      "data_kind": "prompt",
+      "code": false,
+      "summary": "一份新的人设文本：轻松口语化的摸鱼搭子（AI 设置里可切换）",
+      "author": "大肥鱼桌宠（官方）",
+      "releases": [
+        {
+          "version": "1.0.0",
+          "min_host_version": "2.5.0",
+          "api_version": 1,
+          "url": "packs/official-persona-moyu-1.0.0.dfypet-plugin.zip",
+          "sha256": "e7ca0a6f02cdd3892fbf062bb5cffbff53ec95c467749c3e7dfdc16aca450d9f",
+          "bytes": 1314,
+          "published_at": "2026-10-11"
+        }
+      ]
+    }
+  ]
+}

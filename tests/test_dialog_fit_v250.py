@@ -143,6 +143,8 @@ def _factories():
         ("VoiceDialog", lambda p: pet_dialogs.VoiceDialog(p)),
         ("IdleDialog", lambda p: pet_dialogs.IdleDialog(p)),
         ("_VoicePickDialog", lambda p: pet_dialogs._VoicePickDialog(p, p)),
+        # v2.5.1 A（代 B 登记）：插件管理对话框（B 新建；漏登记 → 它没有任何"不超屏/可滚/按钮可见"覆盖）
+        ("PluginManagerDialog", lambda p: pet_dialogs.PluginManagerDialog(p)),
         ("build_role_meta_dialog", lambda p: pet_dialogs.build_role_meta_dialog(p)[0]),
     )
 
@@ -315,7 +317,7 @@ def test_本来就小的框不被撑大(pet, no_modal):
 # 「设计尺寸」就是内容的 sizeHint（下限保护不许把本来就小的框撑大，另有用例钉着）。
 _DESIGN_SIZES = {
     "RoleImportDialog": (600, 430),
-    "RoleEditDialog": (600, 540),
+    "RoleEditDialog": (620, 540),   # v2.5.1 A（L5）：600 → 620，消除 20px 横向滚动条
     "BehaviorDialog": (640, 500),
     "AlarmDialog": (540, 470),
     "AISettingsDialog": (560, 560),
@@ -328,6 +330,8 @@ _DESIGN_SIZES = {
     "VoiceDialog": (700, 640),
     "IdleDialog": (660, 560),
     "_VoicePickDialog": (460, 380),
+    # v2.5.1 A（代 B 登记）：B 的插件管理对话框，设计尺寸 = 源码里那行 clamp_dialog(self, 760, 520)
+    "PluginManagerDialog": (760, 520),
 }
 
 # 没有写死 clamp 的两个类：设计尺寸 = 内容天然尺寸（有 clamp 反而是过度约束）。
@@ -479,6 +483,55 @@ def test_所有对话框都继承同一个可钳制基类():
     assert "clamp_dialog" in inspect.getsource(pet_dialogs._FitDialog.showEvent)
 
 
+def _fitdialog_subclasses():
+    """源码口径：pet_dialogs.py 里**直接继承 _FitDialog** 的类名（排序）。"""
+    import ast
+    import io
+    src = io.open(os.path.join(ROOT, "pet_dialogs.py"), encoding="utf-8").read()
+    out = []
+    for node in ast.walk(ast.parse(src)):
+        if not isinstance(node, ast.ClassDef):
+            continue
+        for base in node.bases:
+            name = base.id if isinstance(base, ast.Name) else getattr(base, "attr", "")
+            if name == "_FitDialog":
+                out.append(node.name)
+    return sorted(out)
+
+
+def test_每个可钳制对话框都必须登记在口径表里():
+    """常驻契约（v2.5.1 代理A）：新加一个 _FitDialog 子类却忘了登记 → 必须红。
+
+    为什么比"控制组数 12"更根本：控制组只保证"源码里的 clamp 数 == 口径表行数"，
+    口径表自己漏登记时两边会一起漏（实测：B 新加的 PluginManagerDialog 让源码里变成
+    13 处 clamp，而口径表还是 14 行 —— 控制组数不上，"没登记"这件事本身没人说）。
+    这条按**源码**枚举 _FitDialog 子类，逐个核对口径表与窗口清单。
+
+    能真失败：删掉 _DESIGN_SIZES["PluginManagerDialog"] → 立刻点名它。
+    """
+    classes = _fitdialog_subclasses()
+    assert len(classes) >= 14, "源码解析器没读到 _FitDialog 子类（判据会空转）：%r" % (classes,)
+    missing = [c for c in classes if c not in _DESIGN_SIZES]
+    assert missing == [], (
+        "这些 _FitDialog 子类没在设计尺寸口径表 _DESIGN_SIZES 里登记：%r" % (missing,))
+    missing_f = [c for c in classes if c not in set(ALL_NAMES)]
+    assert missing_f == [], (
+        "这些 _FitDialog 子类没有窗口清单条目（不超屏/可滚/按钮可见会静默不覆盖）：%r"
+        % (missing_f,))
+    # v2.5.1（质量审查 L03）：登记在口径表里**不算数**——那个类必须真的是 _FitDialog 子类。
+    # 把 PluginManagerDialog(_FitDialog) 换成 (QDialog) 之后，_DESIGN_SIZES 里还留着它、
+    # 源码里那行显式 clamp 也还在，行为用例照样全绿（NOT-CAUGHT）——这一条把它钉死。
+    # 能真失败：任一把 _FitDialog 换成 QDialog → 立刻点名它。
+    not_fit = []
+    for name in sorted(_DESIGN_SIZES):
+        cls = getattr(pet_dialogs, name, None)
+        if not (isinstance(cls, type) and issubclass(cls, pet_dialogs._FitDialog)):
+            not_fit.append(name)
+    assert not_fit == [], (
+        "这些登记在口径表里的对话框不是 _FitDialog 子类（不超屏/可滚/按钮吸附不会生效）："
+        % (not_fit,))
+
+
 def test_取不到屏幕时不崩也不设上限(monkeypatch):
     """防御性判据：屏幕信息拿不到时不能抛（构造期抛异常 = 这个对话框打不开）。"""
     monkeypatch.setattr(pet_dialogs, "dialog_available_geometry", lambda widget=None: None)
@@ -520,7 +573,7 @@ def test_高DPI1_5下所有窗口仍不超屏():
         except OSError:
             pass
     rows = data["rows"]
-    assert len(rows) >= 19, "体检脚本没跑全（只拿到 %d 行）" % len(rows)
+    assert len(rows) >= 20, "体检脚本没跑全（只拿到 %d 行）" % len(rows)
     # 上限同样是**写死**的绝对值（1.5 缩放 → 453x453），不拿 DIALOG_MAX_RATIO 现算
     # （自指判据：比例放宽、判据跟着放宽）。前提变了就明确红在这里，而不是静默放宽。
     assert (rows[0]["avail_w"], rows[0]["avail_h"]) == (533, 533), (

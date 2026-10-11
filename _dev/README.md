@@ -127,6 +127,7 @@ spec 清单（**状态列的 CAUGHT 数 = 该文件 `results` 段当前的实测
 | `mutations_compat_v243.json` | 兼容审查 M1/M3/M4 + 质量审查 M1/M4/L2/L3 + 找茬复审 M1/M3/M5/L①（M-C1..C13） | **13/13 CAUGHT**（M-C10 此前 SPEC-BAD：锚点钉的是旧 `args=(key,)`；A-1 改代次后按 `args=(key, gen)` 重锚 → CAUGHT） |
 | `mutations_services_v250.json` | **v2.5.0 第 3 轮新增**：服务注册表（A1）构造顺序 + **实参级** golden + 摸头守卫（A3）——M-S1 wander/weather 顺序对调 · M-S2 WeatherService 的 signals↔lambda 对调 · M-S3 MenuBuilder 后两实参对调 · M-S4 mood 拆回字面 new · M-S5 A3 口径退回（不传组名） · M-S6 从 SYNC_FILES 删掉新模块 | **6/6 CAUGHT** |
 | `mutations_dialog_fit_v250.json` | **v2.5.0 第 3 轮新增**：对话框尺寸与滚动（B）——M-D01..D12 **逐个**删掉 12 个类的设计尺寸 clamp · M-D13 自指比例 0.85→1.5 · M-D14 重钳兜底 · M-D15 下限保护 · M-D16 滚动容器 · M-D17 按钮行进滚动区 | **17/17 CAUGHT** |
+| `mutations_plugin_v251.json` | **v2.5.1 代理A新增**：插件包校验器（M-P1 code 一致性 · M-P2 路径穿越 · M-P3 双版本门 · M-P4 禁止项清单 · M-P5 files 覆盖 · M-P6 容量上限复用 · M-P7 执行位 · M-P8 read_installed 不抛）· 发布门反向校验（M-R1 漏件必须报 · M-R2 AST 扫描不许空转 · M-R3 用户插件必须点名）· L5 设计宽 620（M-L1） | **12/12 CAUGHT**（2026-10-11 实测；M-P4/M-P8 首轮 NOT CAUGHT——M-P4 的"点名"被扩展名白名单分支同样满足、M-P8 的锚点钉在了走不到的分支上，都已重锚 + 收紧断言后复跑） |
 
 **2026-10-11 v2.4.4 证据对齐复跑**（真仓只读、逐个在 %TEMP% 影子里跑；本次总耗时约 255s）：上表
 **9 个 spec 全部 rc=0、共 94 条变异 100% CAUGHT**；三条**不是** `mutate_check.py` 形态的结果文件
@@ -269,6 +270,7 @@ diff 未知键带回 / pet_fx 重新写死帧集 / README 口径说明被删）�
 | `money_preload_summary.json` | 撒钱预载缺口摘要（4 轮交替、每轮新进程：eager 中位 70.9ms / sliced **单片** 12.3~12.6ms、**事件循环间隔**中位 25.5ms、入口 0.0ms、5~6 片、86/86 逐张 toImage 全等）。注意单片与循环间隔不是一回事，口径见该文件 `interpretation` |
 | `pytest_v242_full.txt` | v2.4.2 定版那次全量的原始输出尾巴（632 passed）——提交信息引用它，别删 |
 | `pytest_v243_full.txt` | v2.4.3 全量输出（`python -m pytest tests -o addopts="" -q` → **691 passed / 0 failed**，65.4s；连跑两次同结果）。定版提交信息引用它 |
+| `plugin_packs_report.md` | **官方内容插件与索引**（v2.5.1 代理 C）：5 个包逐类"能不能落地"的实测证据 + 26 条反向变异清单 + 踩坑与发货注意。配 `build_official_plugins.py`（打包，幂等）· `plugin_pack_rules.py`（12 条判据参照实现）· `verify_plugin_packs_v251.py`（验收：正向 + 反向 + 索引 + 上架门槛 + 幂等，62 条）· `probe_plugin_landing_v251.py`（五类宿主接口落地，29 条）· `probe_plugin_install_v251.py`（索引→包→真安装器→宿主库端到端，20 条） |
 
 **v2.4.4 三项硬性门实测（2026-10-11 A-4 复跑，未提交树）**：`python -m pytest tests -o addopts="" -q` →
 **716 passed / 0 failed**（104.89s）· `python _verify_v13.py` → **273 项 / 0 FAILS**（27.9s）·
