@@ -48,17 +48,23 @@
 
 与主程序的耦合方式（全部防御性 getattr，缺省不崩）：
 - pet.cfg（配置 dict）、pet.role_lib、pet.audio_lib、pet.book（可能 None）
-- pet.apply_role(role_id)：立即切换角色（主线实现）
-- pet.preview_audio(path|fid)：试听（主线实现：pet_audio.preview_file，
+- pet.apply_role —— 立即切换角色（主线实现；入参 role_id）
+- pet.preview_audio —— 试听（主线实现：pet_audio.preview_file；入参 path|fid，
   wav 用 winsound；mp3 用 QMediaPlayer；失败弹提示）
-- pet.apply_sound_group(group)：保存音效组后同步进 pet_audio（主线实现）
-- pet.apply_bubble_style(style)：应用气泡样式（主线实现）
-- pet.save_lines(pool, lines)：**兼容入口**（v2.0 语义：整体替换某类别文本；
+- pet.apply_sound_group —— 保存音效组后同步进 pet_audio（主线实现；入参 group）
+- pet.apply_bubble_style —— 应用气泡样式（主线实现；入参 style）
+- pet.save_lines —— **兼容入口**（v2.0 语义：整体替换某类别文本；入参 pool, lines；
   v2.1 起数据落在台词库 lines.json，对话框直接用 pet.lines_lib）
 - pet.lines_lib / pet.voice / pet.voice_assets / pet.behaviors：v2.1 服务对象
-- pet.apply_voice(data) / pet.apply_idle_settings(data)：v2.1 设置回调（均返回 True/False）
-- pet.on_ledger_changed()：刷新挂件今日已用（主线实现）
-- pet.show_bubble(text)
+- pet.apply_voice / pet.apply_idle_settings —— v2.1 设置回调（入参 data，均返回 True/False）
+- pet.on_ledger_changed —— 刷新挂件今日已用（主线实现）
+- pet.show_bubble —— 气泡（入参 text）
+
+⚠️ 上面这些回调名**故意不带左括号**（v2.5.0 第 3 轮 L4）：两条护栏（_verify_v13 的
+"ui entry points resolve" 与 _check_static 的 A 入口检查）都是**纯文本正则**扫
+"pet 点名字 左括号"的形状，且只剥 # 注释、**不剥 docstring** —— 在文档里写完整调用形状，
+等于让「文档里提到的名字」也被当调用解析：方法一改名，护栏就假红（名字其实还在）。
+真调用（本文件下面 set_frame_max 里那两处）当然照写，它们本来就该被扫。
 
 实现要点：
 - 不 import 桌宠.py（避免循环依赖）；顶层 import PySide6 没问题。

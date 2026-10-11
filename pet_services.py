@@ -51,7 +51,8 @@ v13 直接红）。注意那两个扫描器是**纯文本正则**、不看注释
      setZValue(1) 要压在 petpet 之上，且都要紧跟 scene.addItem 之后。搬进注册表就得把
      scene / view / item / emote_item 一起提前，那是改构造顺序（硬约束禁止）。它们也不
      构造"服务"，是挂 pixmap 的视图层对象，本轮按原样留在 __init__。
-3.   `pet_audio.init(...)` + `pet._apply_sound_group()`（原 __init__ L1043~L1044）——
+3.   `pet_audio.init` + `pet._apply_sound_group`（原 __init__ L1043~L1044；本文档里
+     这类回调名**故意不带左括号**，理由见上面"模块名为什么带 pet_ 前缀"那段的护栏说明）——
      一次性初始化加一次配置应用，不产出服务对象，也没有构造注入面；保持原位置。
 """
 

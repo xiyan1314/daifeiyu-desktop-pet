@@ -1,0 +1,174 @@
+{
+  "title": "v2.5.0 服务构造注册表（A1）+ 摸头守卫（A3）变异验证",
+  "note": "变异只在 %TEMP% 影子副本里做，真实仓库只读（只写 _dev/.mutation.lock）；驱动 _dev/mutate_check.py。M-S2/M-S3 是审查复核时**亲手对调过实参**的那两条（当时 rc=0 全绿 → 本轮补上实参级 golden 后必须红）；M-S4/M-S6 对应 CHANGELOG 里那批 变异验证（此前仓里没有可复跑产物）。",
+  "mutations": [
+    {
+      "id": "M-S1",
+      "why": "构造顺序：wander/weather 两行对调（golden 序列要能抓）",
+      "file": "pet_services.py",
+      "old": "        pet.wander = pet_wander.WanderController(pet, lambda: pet.cfg, pet._screen_geo, save_cfg)\n        pet.weather = pet_weather.WeatherService(pet, signals, lambda: pet.cfg, log)\n",
+      "new": "        pet.weather = pet_weather.WeatherService(pet, signals, lambda: pet.cfg, log)\n        pet.wander = pet_wander.WanderController(pet, lambda: pet.cfg, pet._screen_geo, save_cfg)\n",
+      "tests": [
+        "tests/test_services_registry_v250.py::test_service_construction_order_and_types_match_the_old_init",
+        "tests/test_services_registry_v250.py::test_init_keeps_only_the_three_documented_constructions"
+      ],
+      "expect_fail": [
+        "tests/test_services_registry_v250.py::test_service_construction_order_and_types_match_the_old_init"
+      ]
+    },
+    {
+      "id": "M-S2",
+      "why": "实参对调（审查亲手做过）：WeatherService 的 signals 与 lambda 对调",
+      "file": "pet_services.py",
+      "old": "        pet.weather = pet_weather.WeatherService(pet, signals, lambda: pet.cfg, log)\n",
+      "new": "        pet.weather = pet_weather.WeatherService(pet, lambda: pet.cfg, signals, log)\n",
+      "tests": [
+        "tests/test_services_registry_v250.py::test_service_construction_order_and_types_match_the_old_init"
+      ],
+      "expect_fail": [
+        "tests/test_services_registry_v250.py::test_service_construction_order_and_types_match_the_old_init"
+      ]
+    },
+    {
+      "id": "M-S3",
+      "why": "实参对调（审查亲手做过）：MenuBuilder 后两个实参对调",
+      "file": "pet_services.py",
+      "old": "        pet.menu_builder = pet_menu.MenuBuilder(pet, save_cfg, self._autostart_enabled)\n",
+      "new": "        pet.menu_builder = pet_menu.MenuBuilder(pet, self._autostart_enabled, save_cfg)\n",
+      "tests": [
+        "tests/test_services_registry_v250.py::test_service_construction_order_and_types_match_the_old_init"
+      ],
+      "expect_fail": [
+        "tests/test_services_registry_v250.py::test_service_construction_order_and_types_match_the_old_init"
+      ]
+    },
+    {
+      "id": "M-S4",
+      "why": "拆回字面 new：把 mood 构造从注册表搬回 __init__",
+      "file": "桌宠.py",
+      "old": "        self.services.build_mood()\n",
+      "new": "        self.mood = pet_mood.Mood(self, line_picker=self._mood_line)\n",
+      "tests": [
+        "tests/test_services_registry_v250.py::test_init_keeps_only_the_three_documented_constructions",
+        "tests/test_services_registry_v250.py::test_service_construction_order_and_types_match_the_old_init"
+      ],
+      "expect_fail": [
+        "tests/test_services_registry_v250.py::test_init_keeps_only_the_three_documented_constructions"
+      ]
+    },
+    {
+      "id": "M-S5",
+      "why": "A3 口径退回：摸头补齐不传组名（自定义角色又会在交互路径上解三组）",
+      "file": "桌宠.py",
+      "old": "        self._ensure_default_frames(self._startup_frame_sets())\n",
+      "new": "        self._ensure_default_frames()\n",
+      "tests": [
+        "tests/test_petting_guard_v250.py::test_custom_role_petting_does_not_decode_default_frame_sets",
+        "tests/test_petting_guard_v250.py::test_default_role_petting_still_ensures_all_four_sets",
+        "tests/test_petting_guard_v250.py::test_petting_ensure_uses_the_role_scope"
+      ],
+      "expect_fail": [
+        "tests/test_petting_guard_v250.py::test_custom_role_petting_does_not_decode_default_frame_sets",
+        "tests/test_petting_guard_v250.py::test_petting_ensure_uses_the_role_scope"
+      ]
+    },
+    {
+      "id": "M-S6",
+      "why": "新模块从发布清单里删掉（缺件时任何门都不响）",
+      "file": "_check_release.py",
+      "old": "              \"pet_services.py\",   # v2.5.0（A1）：子系统构造注册表（桌宠.py import 它，漏了必 ImportError）\n",
+      "new": "",
+      "tests": [
+        "tests/test_services_registry_v250.py::test_pet_services_is_in_the_release_sync_list"
+      ],
+      "expect_fail": [
+        "tests/test_services_registry_v250.py::test_pet_services_is_in_the_release_sync_list"
+      ]
+    }
+  ],
+  "results": {
+    "title": "变异验证 spec：mutations_services_v250.json",
+    "checked_at": "2026-10-11 14:58:28",
+    "total": 6,
+    "caught": 6,
+    "not_caught": 0,
+    "blocked": 0,
+    "items": [
+      {
+        "id": "M-S1",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed, 1 passed in 1.54s",
+        "failed": [
+          "test_service_construction_order_and_types_match_the_old_init"
+        ]
+      },
+      {
+        "id": "M-S2",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 1.02s",
+        "failed": [
+          "test_service_construction_order_and_types_match_the_old_init"
+        ]
+      },
+      {
+        "id": "M-S3",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 1.01s",
+        "failed": [
+          "test_service_construction_order_and_types_match_the_old_init"
+        ]
+      },
+      {
+        "id": "M-S4",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "2 failed in 1.14s",
+        "failed": [
+          "test_init_keeps_only_the_three_documented_constructions",
+          "test_service_construction_order_and_types_match_the_old_init"
+        ]
+      },
+      {
+        "id": "M-S5",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "2 failed, 1 passed in 1.11s",
+        "failed": [
+          "test_custom_role_petting_does_not_decode_default_frame_sets",
+          "test_petting_ensure_uses_the_role_scope"
+        ]
+      },
+      {
+        "id": "M-S6",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 0.92s",
+        "failed": [
+          "test_pet_services_is_in_the_release_sync_list"
+        ]
+      }
+    ],
+    "spec": "mutations_services_v250.json",
+    "tests": [
+      "tests/test_petting_guard_v250.py::test_custom_role_petting_does_not_decode_default_frame_sets",
+      "tests/test_petting_guard_v250.py::test_default_role_petting_still_ensures_all_four_sets",
+      "tests/test_petting_guard_v250.py::test_petting_ensure_uses_the_role_scope",
+      "tests/test_services_registry_v250.py::test_init_keeps_only_the_three_documented_constructions",
+      "tests/test_services_registry_v250.py::test_pet_services_is_in_the_release_sync_list",
+      "tests/test_services_registry_v250.py::test_service_construction_order_and_types_match_the_old_init"
+    ],
+    "note": "变异只在 %TEMP% 影子副本里做，真实仓库只读（只写 _dev/.mutation.lock）",
+    "repo_fingerprint": {
+      "桌宠.py": "e1df5d7bcff1",
+      "pet_export.py": "2fe39233056b",
+      "pet_lines.py": "5332f60b5f26",
+      "pet_alarm.py": "1149e94deee3",
+      "pet_behaviors.py": "8f57255144f6",
+      "_check_release.py": "737ea59c1cae",
+      "pet_balance.py": "2828b2ebc0c9"
+    }
+  }
+}

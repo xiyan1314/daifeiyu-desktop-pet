@@ -1,6 +1,6 @@
 {
   "title": "导出两段式（pet_export.BundleWriter + UI 分片）变异验证",
-  "checked_at": "2026-10-11 14:43:55",
+  "checked_at": "2026-10-11 15:03:49",
   "total": 5,
   "caught": 5,
   "not_caught": 0,
@@ -10,31 +10,31 @@
       "id": "E1 export_bundle 不再走两段式（自己内联写盘）",
       "verdict": "CAUGHT",
       "rc": 1,
-      "tail": "1 failed, 5 passed in 3.75s"
+      "tail": "1 failed, 5 passed in 2.42s"
     },
     {
       "id": "E2 step 忽略 budget_ms（一次写光）",
       "verdict": "CAUGHT",
       "rc": 1,
-      "tail": "3 failed, 3 passed in 3.65s"
+      "tail": "3 failed, 3 passed in 2.04s"
     },
     {
       "id": "E3 不写 manifest.json",
       "verdict": "CAUGHT",
       "rc": 1,
-      "tail": "4 failed, 2 passed in 2.48s"
+      "tail": "4 failed, 2 passed in 2.23s"
     },
     {
       "id": "E4 abort 不清理临时文件",
       "verdict": "CAUGHT",
       "rc": 1,
-      "tail": "1 failed, 5 passed in 3.19s"
+      "tail": "1 failed, 5 passed in 2.05s"
     },
     {
       "id": "E5 UI 侧不分片（budget_ms=None）",
       "verdict": "CAUGHT",
       "rc": 1,
-      "tail": "1 failed, 5 passed in 2.52s"
+      "tail": "1 failed, 5 passed in 1.81s"
     }
   ],
   "tests": "tests/test_export_slice_v242.py",

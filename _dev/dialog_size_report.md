@@ -214,7 +214,7 @@ class _FitDialog(QDialog):          # 14 个对话框的公共基类
 
 ## 6. 验收与变异证据
 
-验收用例：[`tests/test_dialog_fit_v250.py`](../desktop-pet/tests/test_dialog_fit_v250.py)（**26 条，4.7 秒**）：
+验收用例：[`tests/test_dialog_fit_v250.py`](../desktop-pet/tests/test_dialog_fit_v250.py)（v2.5.0 第 3 轮补齐后 **41 条，约 3.3 秒**）：
 
 | 用例 | 断言 | 拿掉修复会怎样（**实测**） |
 |---|---|---|
@@ -224,10 +224,31 @@ class _FitDialog(QDialog):          # 14 个对话框的公共基类
 | `test_本来就小的框不被撑大` | AmountNote 仍 286x113、BubbleStyle 仍 282x302 | M3 下限改成无条件 320x240 → **failed** |
 | `test_pet_dialogs里没有裸顶层布局也没有写死resize` | AST：不许 `QVBoxLayout(self)` 当顶层布局、不许 `self.resize(字面量,字面量)` | M4/M5 → **failed** |
 | `test_所有对话框都继承同一个可钳制基类` | 14 个都继承 `_FitDialog` 且 `showEvent` 里调 `clamp_dialog` | M7 去掉重钳 → **failed** |
+| `test_每个对话框的设计尺寸就是它自己的契约[14]` | 2000x1200 大屏上 14 个对话框的实际尺寸 == 各自设计尺寸 | 删掉任一行 `clamp_dialog(self, W, H)` → **2 failed**（行为 + 源级；本轮 12 条逐条实测） |
+| `test_每个对话框的设计尺寸都写在源码里` | AST：12 处 clamp 字面量 == 口径表；两个"内容天然尺寸"的类不许有 clamp | 同上（源级那一半，专治"sizeHint 恰好等于设计尺寸"时行为判据抓不到） |
 | `test_取不到屏幕时不崩也不设上限` | 屏幕信息拿不到时返回"只留下限、不设上限" | — |
-| `test_高DPI1_5下所有窗口仍不超屏` | **子进程**跑 `QT_SCALE_FACTOR=1.5`（逻辑屏 533x533），19 行逐个断言不超 453 / 有滚动容器 / 按钮行在窗口内 | 改动前必红（Voice 700x903） |
+| `test_高DPI1_5下所有窗口仍不超屏` | **子进程**跑 `QT_SCALE_FACTOR=1.5`（逻辑屏 533x533），**19 行**逐个断言不超写死的 453 / 有滚动容器 / 按钮行在窗口内 | 改动前必红（Voice 700x903） |
 
-**7 个变异全部被检出**（`DETECTED`），且全量 pytest 后已把源码还原（见变异驱动的 `finally`）。
+**v2.5.0 第 3 轮补的两处（评审 M3 / L1）**：
+
+* **设计尺寸原来只有 3 个窗口被钉住**（Voice/AmountNote/BubbleStyle）。`_FitDialog.showEvent` 的兜底用
+  `dlg.width()`，而"没 resize 过"时它是 Qt 默认的 100x30 —— 设计尺寸**只由每个类自己那行 clamp 提供**：
+  删掉 VoiceDialog 的 `clamp_dialog(self, 700, 640)`，窗口悄悄从 700x640 掉到 454x340，而当时**全绿**。
+  现在 14 个各钉一条（`_DESIGN_SIZES`）+ 一条 AST 源级钉（`_class_clamp_literals`）。
+* **19 个窗口这句此前名不副实**：报告与验收清单是 19，而体检脚本 `helpers_dialog_fit_v250.py` 的
+  `dialog_factories()` 只有 **18**（少的正是第 19 个 `build_role_meta_dialog`），断言只写 `>= 18`。
+  本轮把第 19 个补进体检清单、断言收紧成 `>= 19` —— 上面那张 150% 表以后是**真的 19 行**。
+
+**变异证据已入库**：[`_dev/mutations_dialog_fit_v250.json`](mutations_dialog_fit_v250.json)（17 条，走
+`_dev/mutate_check.py` 同一套机制、带 `repo_fingerprint`）—— **17/17 CAUGHT**（2026-10-11 第 3 轮实测）。
+此前这里只写了一句"DETECTED"、仓里**没有可复跑产物**（当时 10 个 `mutations_*.json` 里没有任何一条
+锚点落在 `pet_dialogs.py`），下一轮没人能复核。17 条 = 12 个类的设计尺寸 clamp 逐条删除 + 自指判据
+（`DIALOG_MAX_RATIO` 0.85→1.5）+ 重钳兜底 / 下限保护 / 滚动容器 / 按钮行四处修法各拿掉一处。
+
+**自指判据的坑（本轮修掉）**：主判据原先写成 `assert (max_w, max_h) == (int(SMALL.w * DIALOG_MAX_RATIO), ...)`
+—— 上限由**被测常量自己算出来**，把 0.85 放宽到 1.5 时判据跟着放宽、19 条窗口用例全绿（审查实测）。
+现在主判据写死绝对值 `HARD_MAX_SMALL = (870, 510)` / `HARD_MAX_150 = (453, 453)`，另外单钉
+`DIALOG_MAX_RATIO == 0.85`（常量与绝对值两道机器判据，改哪个都红）。
 
 为什么高 DPI 必须走子进程：`QT_SCALE_FACTOR` 是**建 QApplication 之前**读的环境变量，
 测试进程里再设对它无效（`QT_SCALE_FACTOR` 改了但 dpr 还是 1.0）——那样这条用例会**假绿**。

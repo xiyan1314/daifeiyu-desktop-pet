@@ -1534,6 +1534,13 @@ def main_flow():
                 continue
             # L-9 修复：先剥掉注释行，避免"注释里提到的旧名字"被误判为缺失入口
             _src = "\n".join(_ln.split("#", 1)[0] for _ln in _src.split("\n"))
+            # v2.5.0 第 3 轮 L4（口径写明，免得下一个人再踩）：上面这步**只剥 # 注释**，
+            # docstring 与字符串**不剥** —— 所以源码文档里不要写完整的"pet 点名字 左括号"
+            # 形状：下面两条正则会把文档里的提及也当调用解析，名字一改名那条就假红
+            # （名字其实还在，只是文档没跟上）。文档里写成不带左括号的"pet.方法名"即可
+            # （见 pet_dialogs 模块 docstring 的耦合清单、pet_services 的"没有搬的三处"）。
+            # 有意**不**把剥离扩到 docstring：纯文本层分不开"文档提及"与"真调用"，
+            # 扩宽剥离会把真调用一起藏掉——那才是真的掩盖漏改。
             for _m in re.finditer(r"pet_dialogs\.([A-Za-z_][A-Za-z0-9_]*)", _src):
                 if not hasattr(pet_dialogs, _m.group(1)):
                     _missing.append("%s -> pet_dialogs.%s" % (_mod, _m.group(1)))

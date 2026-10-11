@@ -323,25 +323,46 @@ def _wav_duration(path):
     return None
 
 
-# v2.5.0（D7-A）：keep_source（保留原图）失败的上报限流表 {标签: 上次记录时间}。
+# v2.5.0（D7-A）：keep_source（保留原图）失败的上报限流表 {**角色 id**: 上次记录时间}。
 # 口径照抄 pet_log.guard_slot：同一个名字 60s 只记一条——勾了"保留原图"的用户连续导入
 # 一批角色而每次都失败时，error.log 里既有线索、又不会被同一句话刷满。
+#
+# v2.5.0 第 3 轮（L1）修正：键此前写死成常量 "keep_source"，于是**全进程 60s 只出得来一条**
+# ——连着导入一批角色、第 2 个起失败时，那些角色的 id 与异常原文**一个字都不进 error.log**
+# （docstring 写的是"同名 60s 一条"，代码却永远是同一个名字：读起来像按角色、实际不是）。
+# 现在按角色 id 限流：不同角色各记各的（谁失败、为什么，都留在日志里）。
+# 注意 rid 由 _new_id() 每次导入新生成 → 用户视角就是"每次失败的导入留一条"；导入是用户
+# 主动的一次性动作（import_processed 在生产代码里只有 RolePanel 一处调用点），不存在自转
+# 刷屏。表另有上限，防无界增长。
 _SOURCE_FAIL_SEEN = {}
 _SOURCE_FAIL_GAP_S = 60.0
+_SOURCE_FAIL_MAX_KEYS = 64      # 表上限：超出就整表重来（极端情况，只影响限流精度）
 
 
 def _log_source_fail(rid, err):
-    """保留原图失败上报（限流：同名 60s 一条；不影响导入本身的结果）。
+    """保留原图失败上报（限流：**同一个角色 id** 60s 一条；不影响导入本身的结果）。
 
     v2.5.0（D7-A）新增：此前这里是一个纯 pass 的静默 except——用户勾了"保留原图"，
     界面上看不出失败，error.log 里也没有任何线索（_dev/audit_silent_except.py
     的 A 档判据据此把 pet_resources 记成 A=1）。补日志不放宽 A 档判据：失败仍旧
     只是"少了一份原图"，导入结果与返回值逐位不变。
+
+    v2.5.0 第 3 轮（L1）：限流键由常量改成角色 id —— 原实现下第 2 个起失败的角色
+    完全不可见（详见上面 _SOURCE_FAIL_SEEN 的注释）。
+
+    限流口径（写清楚，免得"60s 一条"被读成全局一句）：
+      · 粒度 = **角色 id**：不同角色各记一条（各自的 id 与异常原文都在日志里）；
+      · 同一个角色在 60s 窗口内只记第一条，窗口过后恢复记录；
+      · 限流表最多 _SOURCE_FAIL_MAX_KEYS（64）个键，超出**整表重来**——只影响限流精度，
+        **不丢日志**（下一条失败照样写）。
     """
     now = time.monotonic()
-    if now - _SOURCE_FAIL_SEEN.get("keep_source", 0.0) < _SOURCE_FAIL_GAP_S:
-        return  # 限流窗口内：同一句不再重复记（口径同 pet_log.guard_slot）
-    _SOURCE_FAIL_SEEN["keep_source"] = now
+    key = str(rid)
+    if now - _SOURCE_FAIL_SEEN.get(key, 0.0) < _SOURCE_FAIL_GAP_S:
+        return  # 限流窗口内：同一个角色不再重复记（口径同 pet_log.guard_slot）
+    if key not in _SOURCE_FAIL_SEEN and len(_SOURCE_FAIL_SEEN) >= _SOURCE_FAIL_MAX_KEYS:
+        _SOURCE_FAIL_SEEN.clear()  # 60s 内 64+ 个角色都失败：整表重来，别让它无界长
+    _SOURCE_FAIL_SEEN[key] = now
     pet_log.log_error("keep_source failed（原图保留失败，导入本身仍成功）: role %s, %r"
                       % (rid, err))
 

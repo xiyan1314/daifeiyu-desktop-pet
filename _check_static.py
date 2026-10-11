@@ -602,6 +602,11 @@ def main():
         for m in re.finditer(r"pet_dialogs\.([A-Za-z_][A-Za-z0-9_]*)", src):
             if not hasattr(pet_dialogs, m.group(1)):
                 problems.append("A pet_dialogs.%s 未定义 @ %s" % (m.group(1), name))
+        # v2.5.0 第 3 轮 L4：strip_comments 只剥 # 注释，**不剥 docstring/字符串** ——
+        # 源码文档里写完整的"pet 点名字 左括号"形状会被这里当成调用解析（改名即假红）。
+        # 口径与 _verify_v13 的 "ui entry points resolve" 一致：文档里写成不带左括号的
+        # "pet.方法名"。有意不扩到字符串剥离：纯文本层分不开文档与真调用，扩宽会把
+        # 真调用一起藏掉（掩盖漏改）。
         for m in re.finditer(r"\bpet\.(_?[a-z][A-Za-z0-9_]*)\s*\(", src):
             n = m.group(1)
             if n not in pet_attrs:

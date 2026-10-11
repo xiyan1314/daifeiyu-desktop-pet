@@ -57,41 +57,76 @@ def test_keep_source_failure_is_logged_and_import_still_succeeds(tmp_path, monke
     assert "keep_source failed" in log, "保留原图失败仍然静默（error.log 无留痕）：%r" % log
     assert role["id"] in log, "日志没带角色 id，排查时对不上是哪次导入：%r" % log
     assert "synthetic" in log, "日志没带异常内容（看不出失败原因）：%r" % log
-    assert not (tmp_path / "roles" / role["id"] / "source").exists() or True  # 失败即无原图
+    # 失败即无原图：源目录可能被 makedirs 建出来（空的），但**原图文件一个都不能有**
+    # （质量审查 L2：这里此前写的是 `... or True`，恒真、永远不会红 = 这条检查等于没做）
+    assert not (tmp_path / "roles" / role["id"] / "source" / "orig.png").exists(), \
+        "保留失败却留下了原图文件"
 
 
-def test_keep_source_failure_log_is_rate_limited(tmp_path, monkeypatch):
-    """限流口径（同 pet_log.guard_slot）：60s 窗口内同一句只记一条，窗口过后再记。
+def test_keep_source_failure_log_is_rate_limited_per_role(tmp_path, monkeypatch):
+    """限流口径（同 pet_log.guard_slot）：**同一个角色 id** 60s 一条，窗口过后再记。
 
-    能真失败：把 _log_source_fail 里的限流判断去掉（每失败一条）→ 第二条断言红。
+    能真失败：把 _log_source_fail 里的限流判断去掉（每失败一条）→ 第一条断言红
+    （同一角色记了两条）。
+    """
+    seen = []
+    monkeypatch.setattr(pet_resources.pet_log, "log_error",
+                        lambda msg, *a, **k: seen.append(msg))
+    monkeypatch.setattr(pet_resources, "_SOURCE_FAIL_SEEN", {})
+    pet_resources._log_source_fail("role-a", OSError("synthetic: 原图目录不可写"))
+    pet_resources._log_source_fail("role-a", OSError("synthetic: 再一次"))
+    assert len(seen) == 1, "同角色限流没生效（记了 %d 条）：%r" % (len(seen), seen)
+    assert "role-a" in seen[0] and "synthetic" in seen[0], seen[0]
+    # 正例对照：窗口过后（把上次时间往前挪 61s）必须再记一条——不是"只记一次"
+    pet_resources._SOURCE_FAIL_SEEN["role-a"] -= 61.0
+    pet_resources._log_source_fail("role-a", OSError("窗口外"))
+    assert len(seen) == 2, "限流窗口过去后没有恢复记录：%r" % (seen,)
+
+
+def test_each_failing_role_gets_its_own_line(tmp_path, monkeypatch):
+    """v2.5.0 第 3 轮 L1：**不同角色**各自留痕（自己的 id + 自己的异常原文）。
+
+    能真失败（旧实现就是这样）：把限流键写回常量 "keep_source" → 第 2、3 个角色
+    一个字都不进日志 → 前两条断言红。这是"连着导入一批角色、只有第一个能排查"的盲区。
     """
     _only_source_copy_fails(monkeypatch)
     seen = []
     monkeypatch.setattr(pet_resources.pet_log, "log_error",
                         lambda msg, *a, **k: seen.append(msg))
     lib = pet_resources.RoleLibrary(str(tmp_path))
-    for i in range(3):  # 连续三次导入都失败（同一个 60s 窗口）
-        role, err = _import_with_keep_source(tmp_path, name="第%d次" % i, lib=lib)
+    ids = []
+    for i in range(3):  # 同一个 60s 窗口里，三个不同角色各失败一次
+        role, err = _import_with_keep_source(tmp_path, name="第%d个" % i, lib=lib)
         assert err is None and role is not None, err
-    assert len(seen) == 1, "限流没生效（同窗口记了 %d 条）：%r" % (len(seen), seen)
-    assert "keep_source failed" in seen[0]
-    # 正例对照：窗口过后（把上次时间往前挪 61s）必须再记一条——不是"只记一次"
-    pet_resources._SOURCE_FAIL_SEEN["keep_source"] -= 61.0
-    role4, err4 = _import_with_keep_source(tmp_path, name="窗口外", lib=lib)
-    assert err4 is None and role4 is not None, err4
-    assert len(seen) == 2, "限流窗口过去后没有恢复记录：%r" % (seen,)
-    # 控制组：正常路径（保留成功）一条都不许记
-    seen.clear()
-    monkeypatch.undo()
-    lib2 = pet_resources.RoleLibrary(str(tmp_path))
+        ids.append(role["id"])
+    assert len(seen) == 3, ("3 个不同角色失败只留下 %d 条日志（第 2 个起被吞了？）：%r"
+                            % (len(seen), seen))
+    for rid in ids:
+        assert any(rid in msg for msg in seen), \
+            "角色 %s 的失败没有任何日志（排查时对不上是哪次导入）：%r" % (rid, seen)
+    assert all("synthetic" in msg for msg in seen), "日志没带异常原文：%r" % (seen,)
+
+
+def test_keep_source_success_logs_nothing(tmp_path, monkeypatch):
+    """控制组：保留成功时一条日志都不许写（补日志不能变成噪音）。"""
+    seen = []
+    monkeypatch.setattr(pet_resources.pet_log, "log_error",
+                        lambda msg, *a, **k: seen.append(msg))
+    monkeypatch.setattr(pet_resources, "_SOURCE_FAIL_SEEN", {})
+    lib = pet_resources.RoleLibrary(str(tmp_path))
     p = tmp_path / "ok.png"
     p.write_bytes(b"fakepng")
     src = tmp_path / "ok_src.png"
     src.write_bytes(b"fakeorig")
-    role5, err5 = lib2.import_processed(str(p), None, "正常", keep_source=True,
-                                        source_files=[str(src)])
-    assert err5 is None and role5 is not None, err5
+    role, err = lib.import_processed(str(p), None, "正常", keep_source=True,
+                                     source_files=[str(src)])
+    assert err is None and role is not None, err
     assert seen == [], "正常路径写了日志（噪音）：%r" % (seen,)
+    # 正例对照（配合上面那条"失败即无原图"）：同一条路径在**不注入失败**时，
+    # 原图必须真的落到 roles/<id>/source/ 下 —— 两条一起才说明"没有原图"是失败所致，
+    # 而不是"这个功能根本没实现"（L2 修的就是这种恒真断言）
+    kept = tmp_path / "roles" / role["id"] / "source"
+    assert kept.is_dir() and any(kept.iterdir()), "正常路径没保留原图：%r" % (list(kept.iterdir()) if kept.is_dir() else None,)
 
 
 # ---------------- D7-A ②：M 检查的形参遮蔽不再误报 ----------------

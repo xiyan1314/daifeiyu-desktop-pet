@@ -55,6 +55,13 @@
 全部走 `_mutate_lib.py`：整仓复制到 `%TEMP%` **影子副本**，变异与 pytest 都在影子里做——
 真实仓库只读，只在仓库里放一个运行锁**目录** `_dev/.mutation.lock/`（一个持有者一个 `<pid>.json`，
 已 gitignore；发布门 `_check_release.mutation_lock_problems` 看到它会明确拒绝判定）。
+
+**影子副本必须与真仓等价（v2.5.0 第 3 轮 · 质量审查 M1）**：`SKIP_DIRS` 此前连 `.git` 与
+`_verify_assets` 一起排除，于是 **3 条用例在影子里永久必红**（`tests/test_release_chain_v24.py`
+的两条 L9 需要 `.git`；`tests/test_voice.py` 需要 `_verify_assets/sample.mp4`）——
+①以全量套件为判据的 spec 在影子里基线只能记 `BASELINE-RED`；②这 3 条结构上永远进不了变异覆盖；
+③影子里的 3 红容易被读成"测试污染"。两者合计只有 **8.9 MB / 381 文件**，现在照抄；跳过表里
+只剩缓存 / 打包产物 / 绿色版目录（`__pycache__` / `build` / `dist` / `大肥鱼桌宠_绿色版` …）。
 **这解决的真实事故**：旧脚本原地覆写产品源码，变异窗口里别的进程跑全量门会看到来源不明的红
 （本轮浪费了两位审查员的时间），且被强杀时会留下半变异源码。
 
@@ -65,6 +72,8 @@
 | `mutate_export_slice.py` | 导出两段式 E1-E5（**旧形态**：一脚本一套变异 + 结果 JSON 顶层指纹，不是 spec 形态） | `python _dev/mutate_export_slice.py [关键字]` | `mutations_export_slice_v242.json` |
 | `mutate_startup_defer.py` | 启动延迟装载 M1-M8（同上，旧形态） | `python _dev/mutate_startup_defer.py [关键字]` | `mutations_startup_defer_v242.json` |
 | `verify_guardrails_can_fail.py` | 护栏 A1-A6 / B7-B8 定向变异（9 条，同上，旧形态） | `python _dev/verify_guardrails_can_fail.py` | `results_guardrails_can_fail.json` |
+| `verify_d7a_v250_agent_c.py` | v2.5.0 D7-A 三条改动的定向变异（6 条，旧形态，**不产出结果 JSON**） | `python _dev/verify_d7a_v250_agent_c.py` | —（报告里贴输出） |
+| `verify_services_ast_v250.py` | **AST 实参对照**（不是变异）：旧 `__init__`（git `2a6563c`）vs 新 `pet_services.py` 的每一处构造实参；`--selftest` 现场验"对调两个实参一定报差异" | `python -B _dev/verify_services_ast_v250.py [--selftest]` | —（stdout 的 `compared=` / `mismatches=`） |
 
 这三条**旧形态**驱动的 2026-10-11 v2.4.4 复跑结果：导出 **5/5**（`E3` 已重锚到"固定时间戳
 `ZipInfo`"写法：`self._zf.writestr(_zi, json.dumps(...))`）、启动延迟装载 **8/8**（`M6` 锚点补回
@@ -116,6 +125,8 @@ spec 清单（**状态列的 CAUGHT 数 = 该文件 `results` 段当前的实测
 | `mutations_relay_v243.json` | **v2.4.4 收口主 spec**：启动接力 / 撒钱预载分片 / SND_PURGE（M-R1..M-R15）＋ A-1 余额请求代次 / A-2 状态图死名单 / C-2 分片判据去墙钟（M-V1/V2/V3/V4/V5/V6/V7/V8）；钉 `tests/test_relay_v243.py` + `tests/test_round3_a_fixes.py` | **23/23 CAUGHT**（v2.4.4 补三条：M-V4 自动轮询不许有手动反馈 / M-V7 `_retire` 的代次守卫 / M-V8 切片预算放宽 8 倍必须红；M-V1/V2/V3 随 A-1、L2 重锚） |
 | `mutations_asset_absence_v244.json` | 素材缺失降级：占位鱼 / 摸头缺帧 / 接力收口 / 撒钱空帧集与目录预检 / 自定义角色口径 / 合成回退音 / 状态图守卫 / 坏配置回落（M-A1..A9，钉 `tests/test_asset_absence_v244.py`） | 9/9 CAUGHT |
 | `mutations_compat_v243.json` | 兼容审查 M1/M3/M4 + 质量审查 M1/M4/L2/L3 + 找茬复审 M1/M3/M5/L①（M-C1..C13） | **13/13 CAUGHT**（M-C10 此前 SPEC-BAD：锚点钉的是旧 `args=(key,)`；A-1 改代次后按 `args=(key, gen)` 重锚 → CAUGHT） |
+| `mutations_services_v250.json` | **v2.5.0 第 3 轮新增**：服务注册表（A1）构造顺序 + **实参级** golden + 摸头守卫（A3）——M-S1 wander/weather 顺序对调 · M-S2 WeatherService 的 signals↔lambda 对调 · M-S3 MenuBuilder 后两实参对调 · M-S4 mood 拆回字面 new · M-S5 A3 口径退回（不传组名） · M-S6 从 SYNC_FILES 删掉新模块 | **6/6 CAUGHT** |
+| `mutations_dialog_fit_v250.json` | **v2.5.0 第 3 轮新增**：对话框尺寸与滚动（B）——M-D01..D12 **逐个**删掉 12 个类的设计尺寸 clamp · M-D13 自指比例 0.85→1.5 · M-D14 重钳兜底 · M-D15 下限保护 · M-D16 滚动容器 · M-D17 按钮行进滚动区 | **17/17 CAUGHT** |
 
 **2026-10-11 v2.4.4 证据对齐复跑**（真仓只读、逐个在 %TEMP% 影子里跑；本次总耗时约 255s）：上表
 **9 个 spec 全部 rc=0、共 94 条变异 100% CAUGHT**；三条**不是** `mutate_check.py` 形态的结果文件
@@ -132,6 +143,28 @@ spec 清单（**状态列的 CAUGHT 数 = 该文件 `results` 段当前的实测
 47.7s / 10.1s），第二条跑的**过程中** `桌宠.py` 又变了两次（`ed9e8f6df365` → `ce950ac96e11`）——
 结论：**12 条等三路都落地后统一复跑一遍**（9 个 spec 各 15–45s + 3 条单脚本驱动，整批约 4–5 分钟），
 否则发布门会一直挂 12 条"指纹过期"提示。
+
+**v2.5.0 第 3 轮（找茬审查 → 修复）证据变更**（2026-10-11，三条"证据骗自己"）：
+
+1. **`startup_defer` M7 重锚**：A3 把那行改成 `self._ensure_default_frames(self._startup_frame_sets())`
+   并在上方插了 5 行说明注释，旧锚点（连注释一起钉）匹配 **0 次** → 按设计记 `ANCHOR-LOST`，
+   而这条变异守的**正是 A3 改的那一行**（等于 A3 一直没有变异证明）。重锚成"只钉调用行本身"
+   （唯一、且不随注释 churn 失效）后复跑：**8/8 CAUGHT、0 ANCHOR-LOST**，
+   `mutation_verdict_notes()` 与 `mutation_evidence_notes()` 双双归零（14:54 实测）。
+   A3 的**口径**（传不传组名）另由 `mutations_services_v250.json` 的 M-S5 专钉。
+2. **两批"没有可复跑产物"的证据落库**：此前 10 个 `mutations_*.json` 里**没有任何一条锚点**
+   落在 `pet_dialogs.py` / `pet_services.py`（grep `clamp_dialog` / `ServiceRegistry` = 0 命中），
+   而发布说明写着"对话框 7/7、注册表 4/4" —— 唯一出处是 `dialog_size_report.md` 里一句
+   "DETECTED"。现在两批 spec 都入库（各带 `repo_fingerprint`，走 `mutate_check.py` 同一套判定）。
+3. **AST 实参对照脚本入库**：`verify_services_ast_v250.py` —— 发布说明里那句
+   `compared=16 / mismatches=0` 此前**全仓没有对应脚本**（grep `compared=` = 0）。它比旧
+   `__init__`（git `2a6563c`）与新 `pet_services.py` 的每一处构造实参（位置实参保序、关键字按名），
+   `--selftest` 现场验"对调两个实参一定报差异"；当前实测 `compared=18 mismatches=0`
+   （18 = 注册表首段 16 条 + build_anim/build_mood 各 1 条；另外三处没搬的仍在 `__init__`）。
+
+至此 `_dev/*.json` 共 **14 个结果文件 / 139 条变异**：全部 CAUGHT，指纹全部对齐当前树，
+发布门的 `mutation_evidence_notes()` 与 `mutation_verdict_notes()` **双双为 0**
+（15:10 复核；"发布门 0 问题"这句话现在成立——此前 `startup_defer` 挂着一条 ANCHOR-LOST）。
 
 **D7-A（代理 C · v2.5.0）的定向变异验证**：`_dev/verify_d7a_v250_agent_c.py` —— 把三条改动逐个拿掉，
 `tests/test_d7a_v250_agent_c.py` 必须变红。**实测 6/6 检出**（keep_source 补的日志 / 限流窗口 / 形参进 bad /

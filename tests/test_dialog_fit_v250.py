@@ -159,6 +159,12 @@ NO_BUTTON_ROW = ("RolePanel", "SoundPanel", "VoiceAssetPanel")
 # "768 高的屏 @100%"和"1080p 的高 DPI 缩放"——两种情形下这些窗口都装不下。
 SMALL = QRect(0, 0, 1024, 600)
 
+# 上限的**写死副本**（逻辑像素）：1024x600 × 0.85 → (870, 510)；800x800 的 offscreen 屏在
+# QT_SCALE_FACTOR=1.5 下是 533x533 → 453x453。判据用绝对值而不是拿被测常量现算，
+# 否则"比例被放宽"会连判据一起放宽（自指假绿；审查实测 0.85→1.5 时 19 条全绿）。
+HARD_MAX_SMALL = (870, 510)
+HARD_MAX_150 = (453, 453)
+
 
 def _show(pet, name):
     dlg = _FACTORY_MAP[name](pet)
@@ -180,9 +186,14 @@ def small_screen(monkeypatch):
 
 @pytest.mark.parametrize("name", ALL_NAMES)
 def test_每个窗口都不超屏_能滚到底_按钮可见(pet, no_modal, small_screen, name):
+    # 上限**写死绝对值**（1024x600 × 0.85 = 870x510），不许用 DIALOG_MAX_RATIO 现算：
+    # 那是"自指判据"——把比例从 0.85 放宽到 1.5，判据跟着放宽，19 条窗口用例全绿
+    # （审查实测；只有 2000x1200 那条写死 1700x1020 的用例红了）。
+    # 比例本身由 test_上限就是85百分比而不是写死像素 的常量钉子 + 大屏绝对值守住。
     min_w, min_h, max_w, max_h = pet_dialogs.dialog_size_limits(None)
-    assert (max_w, max_h) == (int(SMALL.width() * pet_dialogs.DIALOG_MAX_RATIO),
-                              int(SMALL.height() * pet_dialogs.DIALOG_MAX_RATIO))
+    assert (max_w, max_h) == HARD_MAX_SMALL, (
+        "小屏 %dx%d 的上限应当是写死的 %r，实为 (%d, %d)"
+        % (SMALL.width(), SMALL.height(), HARD_MAX_SMALL, max_w, max_h))
     dlg = _show(pet, name)
     try:
         # ---- 1) 尺寸钳进屏幕可用区域（「看不到底」的直接判据）----
@@ -241,8 +252,15 @@ def test_每个窗口都不超屏_能滚到底_按钮可见(pet, no_modal, small
 def test_上限就是85百分比而不是写死像素(pet, no_modal, monkeypatch):
     """换一块更大的屏，上限必须跟着变大——钉住"按可用区域的百分比算逻辑像素"。
 
-    变异：把上限写成常量（比如 510 = 600 x 0.85）就红。
+    变异：把上限写成常量（比如 510 = 600 x 0.85）就红；把比例 DIALOG_MAX_RATIO 从 0.85
+    改成 1.5 也红（常量钉子 + 下面写死的 1700x1020）。
+
+    这里**额外**钉住比例常量本身：主判据（每个窗口不超屏）用的是写死的绝对值，如果没人
+    钉这个常量，"比例被放宽"就只能靠这条 2000x1200 用例兜着——多一道机器判据不亏。
     """
+    assert pet_dialogs.DIALOG_MAX_RATIO == 0.85, (
+        "上限比例被改了：%r（改它就等于放宽\"不超屏\"的口径，必须同步复核全部尺寸判据）"
+        % (pet_dialogs.DIALOG_MAX_RATIO,))
     monkeypatch.setattr(pet_dialogs, "dialog_available_geometry",
                         lambda widget=None: QRect(0, 0, 2000, 1200))
     assert pet_dialogs.dialog_size_limits(None)[2:] == (1700, 1020)
@@ -286,6 +304,104 @@ def test_本来就小的框不被撑大(pet, no_modal):
         finally:
             dlg.close()
 
+
+# ---------------- B3-6：每个对话框的**设计尺寸**就是它自己的契约 ----------------
+# 根因（找茬审查 M3 实测）：_FitDialog.showEvent 的兜底用 dlg.width()，而「没 resize 过」时
+# 它是 Qt 默认的 100x30 —— 所以**设计尺寸只由每个类自己那次 clamp_dialog 提供**。把
+# pet_dialogs.py 里 VoiceDialog 那一行 clamp_dialog(self, 700, 640) 删掉，窗口会悄悄从
+# 700x640 掉到 454x340（滚动区 sizeHint 一档），而当时的用例**全绿**。
+# 这里给 14 个对话框各钉一条：在 2000x1200 的大屏上（上限 1700x1020）不被钳制，实际尺寸
+# 必须**恰好**等于设计尺寸。AmountNoteDialog / BubbleStyleDialog 没写死 clamp —— 它们的
+# 「设计尺寸」就是内容的 sizeHint（下限保护不许把本来就小的框撑大，另有用例钉着）。
+_DESIGN_SIZES = {
+    "RoleImportDialog": (600, 430),
+    "RoleEditDialog": (600, 540),
+    "BehaviorDialog": (640, 500),
+    "AlarmDialog": (540, 470),
+    "AISettingsDialog": (560, 560),
+    "ResourceManagerDialog": (700, 560),
+    "AmountNoteDialog": (286, 113),
+    "LedgerDialog": (680, 540),
+    "BubbleStyleDialog": (282, 302),
+    "LinesDialog": (780, 620),
+    "PhysicsDialog": (430, 330),
+    "VoiceDialog": (700, 640),
+    "IdleDialog": (660, 560),
+    "_VoicePickDialog": (460, 380),
+}
+
+# 没有写死 clamp 的两个类：设计尺寸 = 内容天然尺寸（有 clamp 反而是过度约束）。
+_NO_EXPLICIT_CLAMP = ("AmountNoteDialog", "BubbleStyleDialog")
+
+
+@pytest.fixture()
+def big_screen(monkeypatch):
+    """2000x1200 逻辑屏：上限 1700x1020，14 个设计尺寸都不该被削。"""
+    monkeypatch.setattr(pet_dialogs, "dialog_available_geometry",
+                        lambda widget=None: QRect(0, 0, 2000, 1200))
+    return QRect(0, 0, 2000, 1200)
+
+
+@pytest.mark.parametrize("name", tuple(sorted(_DESIGN_SIZES)))
+def test_每个对话框的设计尺寸就是它自己的契约(pet, no_modal, big_screen, name):
+    """大屏上每个对话框的实际尺寸必须**恰好**等于它的设计尺寸。
+
+    能真失败：删掉任意一个类 __init__ 里的 clamp_dialog(self, W, H) → 该类掉到滚动区
+    sizeHint 一档（VoiceDialog 实测 700x640 → 454x340）→ 这条红；把设计尺寸的数字改掉
+    也红。源级那一半由下面 test_每个对话框的设计尺寸都写在源码里 兜着（万一某个类的
+    sizeHint 恰好等于设计尺寸，行为判据就抓不到「那行被删了」）。
+    """
+    dlg = _show(pet, name)
+    try:
+        want_w, want_h = _DESIGN_SIZES[name]
+        assert (dlg.width(), dlg.height()) == (want_w, want_h), (
+            "%s 的设计尺寸应为 %dx%d，实为 %dx%d（clamp_dialog 被删或被改？）"
+            % (name, want_w, want_h, dlg.width(), dlg.height()))
+    finally:
+        dlg.close()
+
+
+def _class_clamp_literals():
+    """源码口径：类名 -> (W, H) —— 该类 __init__ 里第一处 clamp_dialog(self, 字面量, 字面量)。"""
+    import ast
+    import io
+    src = io.open(os.path.join(ROOT, "pet_dialogs.py"), encoding="utf-8").read()
+    tree = ast.parse(src)
+    out = {}
+    for cls in [n for n in tree.body if isinstance(n, ast.ClassDef)]:
+        for fn in cls.body:
+            if not (isinstance(fn, ast.FunctionDef) and fn.name == "__init__"):
+                continue
+            for node in ast.walk(fn):
+                if (isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
+                        and node.func.id == "clamp_dialog" and len(node.args) == 3
+                        and isinstance(node.args[0], ast.Name) and node.args[0].id == "self"
+                        and all(isinstance(a, ast.Constant) and isinstance(a.value, int)
+                                for a in node.args[1:])):
+                    out.setdefault(cls.name, (node.args[1].value, node.args[2].value))
+    return out
+
+
+def test_每个对话框的设计尺寸都写在源码里():
+    """12 处显式 clamp 的 (W, H) 字面量必须与 _DESIGN_SIZES 一致；两个天然尺寸的类不许有。
+
+    能真失败：删掉任意一行 clamp_dialog(self, W, H)（该类的行为判据可能因 sizeHint 恰好
+    等于设计尺寸而抓不到）→ 这条一定红；把 700, 640 改成别的数字 → 两条都红。
+    """
+    got = _class_clamp_literals()
+    bad = []
+    for name, want in sorted(_DESIGN_SIZES.items()):
+        if name in _NO_EXPLICIT_CLAMP:
+            if name in got:
+                bad.append("%s 是「内容天然尺寸」契约，不该写死 clamp_dialog%r" % (name, got[name]))
+            continue
+        if got.get(name) != want:
+            bad.append("%s：源码里是 %r，口径是 %r" % (name, got.get(name), want))
+    assert bad == [], ("设计尺寸与源码里的 clamp_dialog 字面量不一致：\n  " + "\n  ".join(bad))
+    # 控制组：解析器必须真的认得样本（否则上面那条是空转）
+    assert len(got) == len(_DESIGN_SIZES) - len(_NO_EXPLICIT_CLAMP), (
+        "源码解析器读到的 clamp 类数不对（应 %d 个，实为 %d）：%r"
+        % (len(_DESIGN_SIZES) - len(_NO_EXPLICIT_CLAMP), len(got), sorted(got)))
 
 # ---------------- B3-4：模式层面钉住（拿掉任何一处就红） ----------------
 
@@ -404,7 +520,12 @@ def test_高DPI1_5下所有窗口仍不超屏():
         except OSError:
             pass
     rows = data["rows"]
-    assert len(rows) >= 18, "体检脚本没跑全（只拿到 %d 行）" % len(rows)
+    assert len(rows) >= 19, "体检脚本没跑全（只拿到 %d 行）" % len(rows)
+    # 上限同样是**写死**的绝对值（1.5 缩放 → 453x453），不拿 DIALOG_MAX_RATIO 现算
+    # （自指判据：比例放宽、判据跟着放宽）。前提变了就明确红在这里，而不是静默放宽。
+    assert (rows[0]["avail_w"], rows[0]["avail_h"]) == (533, 533), (
+        "1.5 缩放下 offscreen 屏的逻辑可用区域应当是 533x533，实为 %dx%d——"
+        "这条判据的前提变了，请复核 HARD_MAX_150" % (rows[0]["avail_w"], rows[0]["avail_h"]))
     bad = []
     for r in rows:
         if not r["ok"]:
@@ -412,10 +533,9 @@ def test_高DPI1_5下所有窗口仍不超屏():
             continue
         if float(r["dpr"]) != 1.5:
             bad.append("%s 没跑在 1.5 缩放下（dpr=%s）" % (r["name"], r["dpr"]))
-        max_w = int(r["avail_w"] * pet_dialogs.DIALOG_MAX_RATIO)
-        max_h = int(r["avail_h"] * pet_dialogs.DIALOG_MAX_RATIO)
-        if r["w"] > max_w or r["h"] > max_h:
-            bad.append("%s = %dx%d 超过 %dx%d" % (r["name"], r["w"], r["h"], max_w, max_h))
+        if r["w"] > HARD_MAX_150[0] or r["h"] > HARD_MAX_150[1]:
+            bad.append("%s = %dx%d 超过写死的上限 %dx%d" % (
+                r["name"], r["w"], r["h"], HARD_MAX_150[0], HARD_MAX_150[1]))
         if r["scrolls"] < 1:
             bad.append("%s 没有滚动容器" % r["name"])
         br = r.get("btn_row")

@@ -46,8 +46,13 @@ MUTATIONS = [
     ("M6 feed 不再补吃帧", SRC,
      '        if not self._custom_role and self._ensure_default_frames():\n            self._wire_anim_sets()\n',
      ''),
-        ('M7 _start_petting 不再补 petpet 帧集', SRC,
-     '        # v2.4.2（兼容 L2）：补齐必须放在**三个早退之后**——此前它在最前面，一次普通拖动\n        # （press_dist>32）/按住未松/busy 重排都会同步解三组默认帧集（≈26ms），把"延迟装载"\n        # 又拉回了交互路径上；真起播才付这份钱。\n        self._ensure_default_frames()\n',
+    # v2.5.0（M1 重锚）：A3 把这行改成传组名 _ensure_default_frames(self._startup_frame_sets())，
+    # 并在上方插了 5 行说明注释 —— 旧锚点（连注释一起钉）于是匹配 0 次、按设计记 ANCHOR-LOST，
+    # 而这条变异守的**正是 A3 改的那一行**（等于 A3 一直没有变异证明）。
+    # 重锚口径：只钉**调用行本身**（唯一、且不随注释churn 失效）。A3 的**口径**（传不传组名）
+    # 由 _dev/mutations_services_v250.json 的 M-S5 专钉 —— 这条只钉"这行还在"。
+    ('M7 _start_petting 不再补 petpet 帧集', SRC,
+     '        self._ensure_default_frames(self._startup_frame_sets())\n',
      ''),
     ("M8 接力收尾不再重注册帧集（eat 槽停在空集）", SRC,
      '                self._wire_anim_sets()\n',

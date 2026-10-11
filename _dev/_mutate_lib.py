@@ -34,10 +34,19 @@ LOCK_NAME = ".mutation.lock"
 # 跨进程不受影响（各写各的 pid 文件）；这里用引用计数，最外层退出才真删。）
 _LOCK_DEPTH = {}
 
-# 不进影子副本的东西：git 元数据（测试不需要，且会让影子里的 status 语义混乱）、
-# 缓存、打包产物、绿色版目录（几十上百 MB）。
-SKIP_DIRS = {".git", "__pycache__", ".pytest_cache", ".mypy_cache", ".idea", ".vscode",
-             "build", "dist", "大肥鱼桌宠_绿色版", "_verify_assets"}
+# 不进影子副本的东西：缓存、打包产物、绿色版目录（几十上百 MB）。
+#
+# v2.5.0 第 3 轮（质量审查 M1）：此前还把 **.git 与 _verify_assets** 也排除了 —— 影子副本
+# 于是与真仓**不等价**，3 条用例在影子里**永久必红**：
+#   · tests/test_release_chain_v24.py 的两条 L9（git check-ignore / git ls-files prompts）
+#     需要 .git；· tests/test_voice.py 需要 _verify_assets/sample.mp4。
+# 后果三条：①任何"以全量套件为判据"的 spec 在影子里基线只能记 BASELINE-RED；②这 3 条
+# 结构上永远进不了变异覆盖；③别人会把影子里的 3 红读成"测试污染"（为此排查过两次）。
+# 实测两者合计只有 **8.9 MB / 381 文件**（.git 8.8MB/379 + _verify_assets 0.1MB/2），
+# 复制成本可忽略，所以直接带上。注意：影子里变异的文件会让影子内的 git status 变脏 ——
+# 上面那两条用例只用 check-ignore / ls-files（与工作树状态无关），实测影子全量 = 真仓全量。
+SKIP_DIRS = {"__pycache__", ".pytest_cache", ".mypy_cache", ".idea", ".vscode",
+             "build", "dist", "大肥鱼桌宠_绿色版"}
 SKIP_FILES = {LOCK_NAME}
 
 

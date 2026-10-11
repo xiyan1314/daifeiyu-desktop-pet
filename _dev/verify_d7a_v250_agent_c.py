@@ -24,9 +24,11 @@ MUTATIONS = [
     ("M1 keep_source 补的那条日志被拿掉（回到纯静默）", "pet_resources.py",
      "                    _log_source_fail(rid, e)\n",
      "                    pass  # MUTATION：D7-A 补的日志被拿掉\n"),
+    # v2.5.0 第 3 轮 L1 重锚：限流键由常量 "keep_source" 改成角色 id，锚点跟着换；
+    # 判定口径不变（同一角色连记两次 → 新用例的"同角色限流"断言红）。
     ("M2 限流判断被拿掉（每失败都记一条）", "pet_resources.py",
-     'now - _SOURCE_FAIL_SEEN.get("keep_source", 0.0) < _SOURCE_FAIL_GAP_S:',
-     "False:  # MUTATION：限流窗口被拿掉"),
+     "    if now - _SOURCE_FAIL_SEEN.get(key, 0.0) < _SOURCE_FAIL_GAP_S:",
+     "    if False:  # MUTATION：限流窗口被拿掉"),
     ("M3 形参不进 bad（＝回到旧的遮蔽误报口径）", "_check_static.py",
      "            vals, defs, bad = _scope_bindings(node.body, _param_names(node.args))",
      "            vals, defs, bad = _scope_bindings(node.body)"),

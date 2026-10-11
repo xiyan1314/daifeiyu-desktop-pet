@@ -1,58 +1,58 @@
 {
   "title": "启动延迟装载（帧集/状态图分片）变异验证",
-  "checked_at": "2026-10-11 14:44:46",
+  "checked_at": "2026-10-11 14:54:12",
   "total": 8,
-  "caught": 7,
-  "not_caught": 1,
+  "caught": 8,
+  "not_caught": 0,
   "blocked": 0,
   "items": [
     {
       "id": "M1 帧集不再推迟（构造期把四组都解完）",
       "verdict": "CAUGHT",
       "rc": 1,
-      "tail": "1 failed, 8 passed in 4.05s"
+      "tail": "1 failed, 8 passed in 3.37s"
     },
     {
       "id": "M2 状态图不再推迟（构造期全量构建）",
       "verdict": "CAUGHT",
       "rc": 1,
-      "tail": "4 failed, 5 passed in 3.22s"
+      "tail": "4 failed, 5 passed in 2.74s"
     },
     {
       "id": "M3 接力装载改成一轮做完（不再分片）",
       "verdict": "CAUGHT",
       "rc": 1,
-      "tail": "2 failed, 7 passed in 2.97s"
+      "tail": "2 failed, 7 passed in 2.11s"
     },
     {
       "id": "M4 _state_pix 不再按需补建",
       "verdict": "CAUGHT",
       "rc": 1,
-      "tail": "4 failed, 5 passed in 3.24s"
+      "tail": "4 failed, 5 passed in 2.45s"
     },
     {
       "id": "M5 _play_idle 不再补本形态帧集",
       "verdict": "CAUGHT",
       "rc": 1,
-      "tail": "1 failed, 8 passed in 3.78s"
+      "tail": "1 failed, 8 passed in 2.78s"
     },
     {
       "id": "M6 feed 不再补吃帧",
       "verdict": "CAUGHT",
       "rc": 1,
-      "tail": "1 failed, 8 passed in 2.43s"
+      "tail": "1 failed, 8 passed in 2.46s"
     },
     {
       "id": "M7 _start_petting 不再补 petpet 帧集",
-      "verdict": "ANCHOR-LOST",
-      "rc": 0,
-      "tail": "锚点匹配 0 次"
+      "verdict": "CAUGHT",
+      "rc": 1,
+      "tail": "1 failed, 8 passed in 2.81s"
     },
     {
       "id": "M8 接力收尾不再重注册帧集（eat 槽停在空集）",
       "verdict": "CAUGHT",
       "rc": 1,
-      "tail": "1 failed, 8 passed in 2.67s"
+      "tail": "1 failed, 8 passed in 2.64s"
     }
   ],
   "tests": "tests/test_startup_defer_v242.py",
