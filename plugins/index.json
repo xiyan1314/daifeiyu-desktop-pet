@@ -1,7 +1,7 @@
 {
   "index_version": 1,
   "updated_at": "2026-10-11",
-  "host_min": "2.5.0",
+  "host_min": "2.5.1",
   "plugins": [
     {
       "id": "official-audio-core",
@@ -14,11 +14,11 @@
       "releases": [
         {
           "version": "1.0.0",
-          "min_host_version": "2.5.0",
+          "min_host_version": "2.5.1",
           "api_version": 1,
           "url": "packs/official-audio-core-1.0.0.dfypet-plugin.zip",
-          "sha256": "34598eb94818786b80ecedd5102ff306af1fa2feeac61b64f2602a37d31ca18e",
-          "bytes": 168925,
+          "sha256": "cd390b13d89d551d3b4e27f09945cf2ccaa55dc041961e4cebc03edcc8d999cc",
+          "bytes": 168926,
           "published_at": "2026-10-11"
         }
       ]
@@ -34,11 +34,11 @@
       "releases": [
         {
           "version": "1.0.0",
-          "min_host_version": "2.5.0",
+          "min_host_version": "2.5.1",
           "api_version": 1,
           "url": "packs/official-lines-moyu-1.0.0.dfypet-plugin.zip",
-          "sha256": "e46d1ca67554bcb6fcb4fd80c922491088cc48bcae6a7e9efc17521fc4b978bd",
-          "bytes": 1970,
+          "sha256": "ab3fe6ce79262813654f0916cc2c598c3d0ad805892f43ace2dd79c6a6b4d4b3",
+          "bytes": 1971,
           "published_at": "2026-10-11"
         }
       ]
@@ -54,11 +54,11 @@
       "releases": [
         {
           "version": "1.0.0",
-          "min_host_version": "2.5.0",
+          "min_host_version": "2.5.1",
           "api_version": 1,
           "url": "packs/official-role-daifeiyu-1.0.0.dfypet-plugin.zip",
-          "sha256": "d222070f5a4ecddf424f7202a071d310eb0f793dab2d490eaadeb5e066a7d58c",
-          "bytes": 1213323,
+          "sha256": "e240c22878229ef470cf6ad2160462b4165b01cf627b4a5675e9eb586c273785",
+          "bytes": 1213325,
           "published_at": "2026-10-11"
         }
       ]
@@ -74,11 +74,11 @@
       "releases": [
         {
           "version": "1.0.0",
-          "min_host_version": "2.5.0",
+          "min_host_version": "2.5.1",
           "api_version": 1,
           "url": "packs/official-behaviors-idle-1.0.0.dfypet-plugin.zip",
-          "sha256": "1806fe25ba97d8c0259809a097c915a9091b059288025663608aec244e9528b0",
-          "bytes": 2591,
+          "sha256": "dee524cd627737aa3e63f20c190b829ca7023dfe218fd90434a5ac5733171591",
+          "bytes": 2590,
           "published_at": "2026-10-11"
         }
       ]
@@ -94,11 +94,11 @@
       "releases": [
         {
           "version": "1.0.0",
-          "min_host_version": "2.5.0",
+          "min_host_version": "2.5.1",
           "api_version": 1,
           "url": "packs/official-persona-moyu-1.0.0.dfypet-plugin.zip",
-          "sha256": "e7ca0a6f02cdd3892fbf062bb5cffbff53ec95c467749c3e7dfdc16aca450d9f",
-          "bytes": 1314,
+          "sha256": "879cdaf32b99a744441e75ca26049a8fdc57781f0ad4b1dbf13a2953ac678d02",
+          "bytes": 1315,
           "published_at": "2026-10-11"
         }
       ]
