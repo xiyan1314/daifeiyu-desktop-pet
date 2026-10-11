@@ -196,10 +196,14 @@ _BIG_BYTES = 16 * 1024 * 1024      # 16MB 不可压缩成员：旧实现一条�
 
 
 def test_big_entry_is_written_across_slices_and_bytes_stay_identical(tmp_path):
-    """13 条里放一个 16MB 不可压缩成员：**任何一片**都不许超过预算的量级，且产出逐位相同。
+    """13 条里放一个 16MB 不可压缩成员：大条目必须**跨片**写（每片最多一块），产出逐位相同。
 
-    能真失败：把大条目改回"一条一次 zf.write"（就是 v2.4.2 修之前的样子）→
-    单片 ≈400ms（审查实测 24MB 那条是 822.9ms），且片数掉到 13 → 两条断言都红。
+    v2.4.4（C-2）：判据从"单片 < 150ms"（墙钟，并发负载下会把环境记成回归）换成
+    **每片真的喂了几块**——_big_write_some 一次只喂 _BIG_ENTRY_CHUNK_BYTES，喂完一块就
+    回事件循环，所以"每片 ≤1 块 + 总块数 ≈ 16MB÷256KB"是确定性、负载无关的量。
+
+    能真失败：把大条目改回"一条一次 zf.write"（就是 v2.4.2 修之前的样子）→ 分块次数 0、
+    片数掉到 13 → 前两条断言都红（审查实测那种写法单片 ≈400ms，24MB 那条 822.9ms）。
     """
     plan = _plan(tmp_path, n_small=12, big_bytes=_BIG_BYTES)
     one_shot = str(tmp_path / "one.dfypet.zip")
@@ -210,20 +214,53 @@ def test_big_entry_is_written_across_slices_and_bytes_stay_identical(tmp_path):
     ok, err = w1.finish()
     assert ok and not err, err
 
-    w2 = pet_export.BundleWriter(plan, sliced)
-    slices, steps = [], 0
+    class _ChunkSpy(pet_export.BundleWriter):
+        """记下每一步真的喂了几块大条目数据（= 这一片干了多少活）。"""
+
+        def __init__(self, *a, **k):
+            super().__init__(*a, **k)
+            self.chunks_per_step = []
+            self._cur = 0
+
+        def _big_write_some(self):
+            self._cur += 1
+            return super()._big_write_some()
+
+        def step(self, budget_ms=None):
+            self._cur = 0
+            try:
+                return super().step(budget_ms=budget_ms)
+            finally:
+                self.chunks_per_step.append(self._cur)
+
+    w2 = _ChunkSpy(plan, sliced)
+    steps = 0
     while not w2.done and steps < 200000:
         steps += 1
-        t0 = time.perf_counter()
         w2.step(budget_ms=12.0)                # 与 _EXPORT_SLICE_MS 同值
-        slices.append((time.perf_counter() - t0) * 1000.0)
+    per_step = list(w2.chunks_per_step)        # 先快照：finish() 可能再补一步
     ok, err = w2.finish()
     assert ok and not err, err
 
-    worst = max(slices)
-    assert worst < 150.0, \
-        "单片阻塞 %.1fms（16MB 不可压缩成员一条独占一片；预算 12ms）" % worst
-    assert len(slices) > 20, "大条目没有跨片：只切了 %d 片" % len(slices)
+    written = [n for n in per_step if n]
+    assert written, "大条目一块都没走分块写（退回一条一次 zf.write 了）：%r" % (per_step,)
+    # 每片最多几块：预算是 12ms、一块 256KB（不可压缩实测 3~9ms），这里取一个宽松上界
+    # （负载只会让每片**更少**，不会更多；真把预算判断拿掉时所有块会挤进同一片 → 红）。
+    assert max(written) <= 16, \
+        "某一片喂了 %d 块（远超 12ms 预算能写完的量）：大条目没在片边界上回事件循环：%r" % (
+            max(written), per_step)
+    chunk = pet_export._BIG_ENTRY_CHUNK_BYTES
+    want_chunks = _BIG_BYTES // chunk
+    assert sum(written) >= want_chunks, \
+        "大条目只喂了 %d 块（%dMB ÷ %d = %d 块）：没有跨片写" % (
+            sum(written), _BIG_BYTES // (1024 * 1024), chunk, want_chunks)
+    # v2.4.4（找茬审查 M1）：这里原本还有一条 `assert len(per_step) > 20`（"片数要够多"）。
+    # **片数 = 总活量 ÷ 每片活量 → 机器越快片数越少**，方向是反的：审查实测同一条用例在
+    # 更快的机器上会算出 28 / 21 / 20 片 —— 在**完全正确的代码**上会红（CI 是 windows-latest
+    # 全量跑）。旧版恒 13 片是确定性的，本轮改成跨片续写后才变成速度相关。
+    # 意图已被上面两条**结构性**判据完全覆盖：sum(written) >= want_chunks 且
+    # max(written) <= 16 ⇒ 写块的片数 >= ceil(want_chunks/16) >= 4，删掉不丢检出能力
+    # （mutations_export_slice_v242.json 的 E2"忽略 budget_ms"仍由 max(written) 那条抓住）。
     with open(one_shot, "rb") as f1, open(sliced, "rb") as f2:
         assert f1.read() == f2.read(), \
             "分块写与一次性写的整包字节不同（对外产出格式被改了）"

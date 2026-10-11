@@ -5,8 +5,11 @@
 本文件的用例必须变红）：
 
   P1-1  BalanceService._worker 的 emit 裸露在 try 之外 → test_worker_* 一组：emit 打在
-        已销毁对象上 / _request_balance 抛 / 退出中，守卫标志都必须复位、异常都不许外抛；
+        已销毁对象上 / _request_balance 抛 / 退出中，守卫状态都必须收尾、异常都不许外抛；
         test_control_naked_worker_really_leaks 是控制组（修复前的写法必须真的泄漏）；
+  A-1   v2.4.4：守卫从布尔换成**请求代次**（本文件同一组用例已按新口径改写）——worker 只
+        emit（带代次），槽消费后才放行；同一时刻只允许一个在途请求（第二次点击排队），
+        旧代的迟到结果丢弃且**零副作用**（不弹气泡/不放音/不撒钱）+ 一条日志；
   P2-2  pet_widgets 8 处 QFont 硬编码字体名 → 字体族列表断言 + AST"不许再出现硬编码族名"；
   P2-3  requirements.txt 的 requests/PyInstaller 缺上界 → 上界断言 + 越界必须被拒；
   P3-1  pet_chat.last_updated 无时区 → 必须带 ±HHMM 且能被 strptime("%z") 解析；
@@ -48,19 +51,40 @@ def _read(name):
         return f.read()
 
 
-# ===================== P1-1：balance worker =====================
+# ===================== P1-1 / A-1：balance worker 与请求代次 =====================
+# v2.4.4（A-1）把"在途守卫"从一个**布尔**换成**请求代次**：worker 只负责把结果（带代次）
+# emit 出去，自己那一代**留着**；由**槽**消费后才放行。只有结果没交出去（退出中 / emit 抛）
+# 时才由 worker 自己收尾。所以下面这一组的收口判据是"槽跑完"，不是"worker 返回"——
+# 信号替身因此模拟 Qt 的队列连接：emit 只入队，deliver() = 事件循环轮到槽。
 
 class _Signal(object):
-    """最小信号替身：记录 emit 实参；boom 非 None 时模拟"打到已删除的 C++ 对象"。"""
+    """最小信号替身：记录 emit 实参，并把它**排队**交给槽（模拟跨线程队列连接）。
+
+    boom 非 None 时模拟"打到已删除的 C++ 对象"：emit 抛异常且**不投递**（接收者没了就
+    收不到，与 Qt 一致）。
+    """
 
     def __init__(self, boom=None):
         self.calls = []
         self.boom = boom
+        self.slot = None
+        self.queue = []
+
+    def connect(self, slot):
+        self.slot = slot
 
     def emit(self, *args):
         self.calls.append(args)
         if self.boom is not None:
             raise self.boom
+        self.queue.append(args)
+
+    def deliver(self):
+        """把排队的 emit 逐条交给槽（= 主线程事件循环轮到它们）。"""
+        while self.queue:
+            args = self.queue.pop(0)
+            if self.slot is not None:
+                self.slot(*args)
 
 
 class _Signals(object):
@@ -68,50 +92,127 @@ class _Signals(object):
         self.balance_updated = _Signal(updated_boom)
         self.balance_err = _Signal(err_boom)
 
+    def wire(self, svc):
+        """按生产口径接槽（桌宠.py：signals.balance_updated.connect(self.balance.on_updated)）。"""
+        self.balance_updated.connect(svc.on_updated)
+        self.balance_err.connect(svc.on_err)
+        return self
+
+    def deliver(self):
+        self.balance_updated.deliver()
+        self.balance_err.deliver()
+
+
+class _TimerSpy(object):
+    """QTimer 替身：记录 singleShot(ms, ctx, fn)；fire() = 让"补发排队的手动查询"到点。
+
+    真 QTimer 既需要 QApplication，又要求 receiver 是 QObject，而本文件的 pet 是替身对象。
+    """
+
+    def __init__(self):
+        self.shots = []
+
+    def singleShot(self, ms, ctx, fn):
+        self.shots.append((ms, ctx, fn))
+
+    def fire(self):
+        shots, self.shots = list(self.shots), []
+        for _ms, _ctx, fn in shots:
+            fn()
+        return len(shots)
+
 
 class _Pet(object):
-    """BalanceService 只用到这几个守卫状态（语义与 PetWindow 一致）。"""
+    """BalanceService 用到的全部状态（语义与 PetWindow 一致）。
 
-    def __init__(self, closing=False, fetching=True):
-        self._closing = closing
-        self._fetching_balance = fetching
-        self._manual_pending = False
+    v2.4.4（A-1）：在途守卫 = **请求代次**（_balance_active_gen，None = 空闲）；
+    _manual_pending 只对"当前那一代"有效。has_closing=False 用来模拟 _closing 被改名。
+    """
+
+    def __init__(self, closing=False, active_gen=None, manual=False, has_closing=True):
+        if has_closing:
+            self._closing = closing
+        self._balance_gen = int(active_gen or 0)
+        self._balance_active_gen = active_gen
+        self._manual_pending = manual
+        self._pending_manual = False
+        self._currency = "CNY"
+        self._usage = 0.0
+        self._shown_balance = None
+        self._balance_anim = None
+        self.bubbles = []
+        self.money = 0
+        self.badges = 0
+
+    def show_bubble(self, text):
+        self.bubbles.append(text)
+
+    def _fx_celebrate(self):
+        self.money += 1
+
+    def _update_badge(self):
+        self.badges += 1
 
 
-def _service(pet, signals, logs):
-    return pet_balance.BalanceService(
+def _service(pet, signals, logs, sounds=None):
+    """BalanceService + 按生产口径接好的两个槽；sounds 记录 play_sound 调用。"""
+    sounds = [] if sounds is None else sounds
+    svc = pet_balance.BalanceService(
         pet, signals, lambda: {"api_key": "k"}, lambda: None,
-        lambda *a: None, lambda *a: None, logs.append, lambda: None)
+        sounds.append, lambda *a: None, logs.append, lambda: None)
+    signals.wire(svc)
+    return svc
 
 
 def _deleted_cpp():
     return RuntimeError("wrapped C/C++ object of type PetWindow has been deleted")
 
 
-def test_worker_emits_result_and_resets_guard_on_success():
+def _inflight(pet, gen=1, manual=False):
+    """把 pet 摆成"第 gen 代已由 refresh() 发出去"的样子（worker 由用例直接驱动）。"""
+    pet._balance_gen = pet._balance_active_gen = gen
+    pet._manual_pending = manual
+    return gen
+
+
+def test_worker_hands_the_result_to_the_slot_which_releases_the_generation():
+    """成功路径：worker 只把 (代次, 余额) 交给槽；**槽跑完**守卫才放行（A-1 的核心时序）。
+
+    能真失败：把 worker 改回"emit 后无条件复位守卫"（= v2.4.3 的口径）→ 第三条断言红；
+    漏掉 emit 里的代次 → 第一条断言红。
+    """
     pet, logs = _Pet(), []
     signals = _Signals()
     svc = _service(pet, signals, logs)
     svc._request_balance = lambda key: (True, (1.5, "CNY", 0.25))
-    svc._worker("k")
-    assert signals.balance_updated.calls == [(1.5, "CNY", 0.25)]
+    _inflight(pet)
+    svc._worker("k", 1)
+    assert signals.balance_updated.calls == [(1, 1.5, "CNY", 0.25)], signals.balance_updated.calls
     assert signals.balance_err.calls == []
-    assert pet._fetching_balance is False, "成功路径也必须复位在途守卫"
+    assert pet._balance_active_gen == 1,         "结果还没被槽消费就放行了守卫（旧口径的提前复位 → 窗口里再点一次会起第二个并发线程）"
+    signals.deliver()
+    assert pet._balance_active_gen is None, "槽消费后必须放行守卫"
+    assert pet._shown_balance == 1.5 and pet.badges == 1
 
 
-def test_worker_emits_err_and_resets_guard_on_http_failure():
+def test_worker_emits_err_and_the_slot_releases_the_generation():
+    """HTTP 失败：错误同样带代次交给槽；手动查询弹一次提示，守卫由槽放行。"""
     pet, logs = _Pet(), []
     signals = _Signals()
     svc = _service(pet, signals, logs)
     svc._request_balance = lambda key: (False, "timeout")
-    svc._worker("k")
-    assert signals.balance_err.calls == [()]
+    _inflight(pet, manual=True)
+    svc._worker("k", 1)
+    assert signals.balance_err.calls == [(1,)], signals.balance_err.calls
     assert signals.balance_updated.calls == []
-    assert pet._fetching_balance is False
     assert any("timeout" in m for m in logs)
+    assert pet._balance_active_gen == 1, "错误结果没交给槽就放行了守卫"
+    signals.deliver()
+    assert pet._balance_active_gen is None
+    assert pet.bubbles == ["余额查不到……API Key 对吗？"]
 
 
-def test_worker_survives_request_exception_and_resets_guard():
+def test_worker_survives_request_exception_and_the_slot_still_releases():
     """_request_balance 之后的某行在 try 外抛时，守卫此前会永真卡死。"""
     pet, logs = _Pet(), []
     signals = _Signals()
@@ -121,32 +222,39 @@ def test_worker_survives_request_exception_and_resets_guard():
         raise ValueError("worker 内部的意外异常")
 
     svc._request_balance = boom
-    svc._worker("k")                     # 修复前：异常直接冲出 daemon 线程
-    assert pet._fetching_balance is False, "异常路径泄漏了 _fetching_balance（查询会被永久挡住）"
-    assert signals.balance_err.calls == [()], "异常路径必须补发 balance_err"
+    _inflight(pet)
+    svc._worker("k", 1)                  # 修复前：异常直接冲出 daemon 线程
+    assert signals.balance_err.calls == [(1,)], "异常路径必须补发 balance_err"
     assert any("crashed" in m for m in logs)
+    signals.deliver()
+    assert pet._balance_active_gen is None, "异常路径泄漏了在途守卫（查询会被永久挡住）"
 
 
-def test_worker_survives_emit_on_deleted_object():
-    """PetWindow 已销毁时 emit 会抛 RuntimeError——不许冲出 worker，且守卫要复位。"""
+def test_worker_retires_its_generation_when_emit_hits_a_deleted_object():
+    """PetWindow 已销毁时 emit 会抛 RuntimeError——不许冲出 worker，且这一代要自己收尾。
+
+    没交出去 = 永远没有槽来消费它，不收尾就是 P1-1 那条守卫泄漏。
+    """
     pet, logs = _Pet(), []
     signals = _Signals(updated_boom=_deleted_cpp())
     svc = _service(pet, signals, logs)
     svc._request_balance = lambda key: (True, (2.0, "CNY", 0.0))
-    svc._worker("k")                     # 修复前：RuntimeError 从 daemon 线程冒出
-    assert pet._fetching_balance is False
+    _inflight(pet)
+    svc._worker("k", 1)                  # 修复前：RuntimeError 从 daemon 线程冒出
+    assert pet._balance_active_gen is None, "结果没交出去还不收尾：守卫会永久挂着"
     assert any("balance emit balance_updated failed" in m for m in logs)
 
 
 def test_worker_survives_both_signals_raising():
-    """两个信号都打在已销毁对象上（退出时序竞态）：worker 仍不许抛，守卫仍复位。"""
+    """两个信号都打在已销毁对象上（退出时序竞态）：worker 仍不许抛，守卫仍收尾。"""
     pet, logs = _Pet(), []
     signals = _Signals(updated_boom=_deleted_cpp(), err_boom=_deleted_cpp())
     svc = _service(pet, signals, logs)
     svc._request_balance = lambda key: (False, "boom")
-    svc._worker("k")
-    svc._worker("k")                     # 幂等：再来一次也不许抛
-    assert pet._fetching_balance is False
+    _inflight(pet)
+    svc._worker("k", 1)
+    svc._worker("k", 1)                  # 幂等：再来一次也不许抛
+    assert pet._balance_active_gen is None
 
 
 def test_worker_does_not_emit_while_closing():
@@ -155,29 +263,32 @@ def test_worker_does_not_emit_while_closing():
     signals = _Signals()
     svc = _service(pet, signals, logs)
     svc._request_balance = lambda key: (True, (3.0, "CNY", 0.0))
-    svc._worker("k")
+    _inflight(pet)
+    svc._worker("k", 1)
     assert signals.balance_updated.calls == [], "退出中不该再 emit 余额结果"
-    assert pet._fetching_balance is False
+    assert pet._balance_active_gen is None, "退出中不收尾：窗口没退干净就永久卡住"
 
     pet2, signals2 = _Pet(closing=True), _Signals()
     svc2 = _service(pet2, signals2, [])
     svc2._request_balance = lambda key: (False, "boom")
-    svc2._worker("k")
+    _inflight(pet2)
+    svc2._worker("k", 1)
     assert signals2.balance_err.calls == [], "退出中不该再 emit 错误"
 
 
 def test_refresh_resets_guard_when_thread_start_fails(monkeypatch):
-    """refresh() 自己也要兜住 start() 的异常（复审 M1）。
+    """refresh() 自己也要兜住 start() 的异常（复审 M1，A-1 口径）。
 
     Windows 线程/句柄耗尽、解释器关闭期，threading.Thread.start() 真会抛
     RuntimeError("can't start new thread")。此前那两行（置标志 + start）不在 try 里：
     标志恒真 → 此后 refresh 一个线程都起不来、只置 _pending_manual=True → 症状与 P1-1
-    的守卫泄漏**一模一样**（点"查询余额"毫无反应），而泄漏点在 worker 之外，finally 兜不住。
+    的守卫泄漏**一模一样**（点"查询余额"毫无反应），而泄漏点在 worker 之外，worker 兜不住。
+    现在异常路径把这一代交回 balance_err（槽消费它即放行；真交不出去才自己收尾）。
 
     能真失败：把 refresh() 里的 try/except 拿掉 → 异常冲出 refresh（调用方是 Qt 槽，
-    只会被吞掉），三条断言全红。
+    只会被吞掉），前四条断言全红。
     """
-    pet, logs = _Pet(fetching=False), []
+    pet, logs = _Pet(), []
     signals = _Signals()
     svc = _service(pet, signals, logs)
 
@@ -190,9 +301,11 @@ def test_refresh_resets_guard_when_thread_start_fails(monkeypatch):
 
     monkeypatch.setattr(pet_balance.threading, "Thread", _DeadThread)
     svc.refresh(manual=True)                    # 不许抛
-    assert pet._fetching_balance is False, "start() 抛了却没复位在途守卫（此后一次都起不来）"
-    assert signals.balance_err.calls == [()], "启动失败要补发 balance_err"
+    assert pet._balance_active_gen == 1, "启动失败的那一代没登记（后面无从收尾）"
+    assert [c[0] for c in signals.balance_err.calls] == [1],         "启动失败要补发 balance_err（带代次）：%r" % (signals.balance_err.calls,)
     assert any("thread start failed" in m for m in logs), logs
+    signals.deliver()
+    assert pet._balance_active_gen is None, "start() 抛了却没放行（此后一次都起不来）"
     # 反例对照：start() 正常时照旧走原路径（别把守卫改成永远复位）
     monkeypatch.undo()
     started = []
@@ -206,7 +319,7 @@ def test_refresh_resets_guard_when_thread_start_fails(monkeypatch):
 
     monkeypatch.setattr(pet_balance.threading, "Thread", _GoodThread)
     svc.refresh(manual=False)
-    assert pet._fetching_balance is True and started[-1] == "start", started
+    assert pet._balance_active_gen == pet._balance_gen == 2 and started[-1] == "start", started
 
 
 def test_closing_flag_renamed_does_not_silently_drop_results():
@@ -215,28 +328,24 @@ def test_closing_flag_renamed_does_not_silently_drop_results():
     能真失败：把 _closing() 退回 `bool(self.pet._closing)`（属性不存在 → AttributeError →
     兜底 True）→ 第一条断言红（emit 被丢掉且一行日志都没有）。
     """
-    class _Renamed(object):
-        def __init__(self):
-            self._fetching_balance = True
-            self._manual_pending = False
-            # 故意没有 _closing（模拟哪天被改名/搬家）
-
-    pet, logs = _Renamed(), []
+    pet, logs = _Pet(active_gen=1, has_closing=False), []
     signals = _Signals()
     svc = _service(pet, signals, logs)
     svc._request_balance = lambda key: (True, (1.0, "CNY", 0.0))
-    svc._worker("k")
-    assert signals.balance_updated.calls == [(1.0, "CNY", 0.0)],         "属性改名后余额结果被静默丢弃了（_closing 兜底方向反了）"
-    assert pet._fetching_balance is False
+    svc._worker("k", 1)
+    assert signals.balance_updated.calls == [(1, 1.0, "CNY", 0.0)],         "属性改名后余额结果被静默丢弃了（_closing 兜底方向反了）"
+    assert signals.balance_updated.queue == [(1, 1.0, "CNY", 0.0)],         "结果没被交给槽（emit 端把它当成了'在退出'）"
+    assert pet._balance_active_gen == 1, "结果已交给槽：这一代该留着等槽消费"
 
 
 def test_worker_treats_unreadable_closing_flag_as_closing():
-    """pet 已被销毁（取属性就抛）时按"在退出"处理：不发、不抛、守卫照样复位。"""
+    """pet 已被销毁（取属性就抛）时按"在退出"处理：不发、不抛、守卫照样收尾。"""
     class _Gone(object):
         """pet 已被销毁的替身：连 _closing 都读不出来（属性访问直接抛）。"""
 
         def __init__(self):
-            self._fetching_balance = True
+            self._balance_gen = 1
+            self._balance_active_gen = 1
             self._manual_pending = False
 
         @property
@@ -247,16 +356,17 @@ def test_worker_treats_unreadable_closing_flag_as_closing():
     signals = _Signals()
     svc = _service(pet, signals, logs)
     svc._request_balance = lambda key: (True, (1.0, "CNY", 0.0))
-    svc._worker("k")
+    svc._worker("k", 1)
     assert signals.balance_updated.calls == []
-    assert pet._fetching_balance is False
+    assert pet._balance_active_gen is None
 
 
 def test_refresh_is_not_wedged_after_an_emit_failure(monkeypatch):
     """端到端：emit 炸过之后，守卫必须已放行——下一次 refresh 还得能真发请求。
 
-    修复前 _fetching_balance 只在槽里复位，emit 一炸槽永远不跑 → 之后所有轮询/手动
-    查询都被"在途"挡住（用户点"查询余额"毫无反应）。
+    v2.4.3 的口径里守卫只在槽里复位，emit 一炸槽永远不跑 → 之后所有轮询/手动查询都被
+    "在途"挡住（用户点"查询余额"毫无反应）。v2.4.4（A-1）：没交给槽的结果由 worker 自己
+    收尾，交给槽的才等槽消费。
     """
     class _InlineThread(object):
         """把 BalanceService 起的线程改成同步执行（本用例只关心状态机）。"""
@@ -269,20 +379,16 @@ def test_refresh_is_not_wedged_after_an_emit_failure(monkeypatch):
 
     monkeypatch.setattr(pet_balance, "threading", types.SimpleNamespace(Thread=_InlineThread))
     calls = []
-
-    class _PetWithKey(_Pet):
-        pass
-
-    pet = _PetWithKey(fetching=False)
+    pet = _Pet()
     signals = _Signals(updated_boom=_deleted_cpp())
     svc = _service(pet, signals, [])
     svc._request_balance = lambda key: (calls.append(key) or (True, (1.0, "CNY", 0.0)))
 
     svc.refresh(manual=True)
     assert len(calls) == 1
-    assert pet._fetching_balance is False, "emit 失败后守卫没放行：后续查询全被挡住"
+    assert pet._balance_active_gen is None, "emit 失败后守卫没放行：后续查询全被挡住"
     svc.refresh(manual=True)
-    assert len(calls) == 2, "第二次 refresh 被永真的 _fetching_balance 挡住了"
+    assert len(calls) == 2, "第二次 refresh 被永真的在途守卫挡住了"
 
 
 def test_control_naked_worker_really_leaks():
@@ -290,7 +396,7 @@ def test_control_naked_worker_really_leaks():
 
     这条保证上面几条断言不是空转——真把 try/finally 拿掉，行为就是这个样子。
     """
-    pet = _Pet(fetching=True)
+    pet = _Pet(active_gen=1)
     signals = _Signals(updated_boom=_deleted_cpp())
 
     def naked_worker(key):               # v2.4.2 的写法
@@ -300,7 +406,260 @@ def test_control_naked_worker_really_leaks():
 
     with pytest.raises(RuntimeError):
         naked_worker("k")
-    assert pet._fetching_balance is True, "控制组失效：这就不是修复前那条路径了"
+    assert pet._balance_active_gen == 1, "控制组失效：这就不是修复前那条路径了"
+
+
+# ===================== A-1（v2.4.4）：同一时刻只有一个在途请求 / 旧代无副作用 =====================
+
+def _mk_service(monkeypatch, pet=None, sounds=None, **sig_kw):
+    """接好槽的 BalanceService + 记录副作用的 pet/sounds（QTimer 换成可手动到点的替身）。"""
+    timer = _TimerSpy()
+    monkeypatch.setattr(pet_balance, "QTimer", timer)
+    pet = _Pet() if pet is None else pet
+    logs = []
+    sounds = [] if sounds is None else sounds
+    signals = _Signals(**sig_kw)
+    svc = _service(pet, signals, logs, sounds)
+    return pet, signals, svc, timer, logs, sounds
+
+
+def test_second_click_queues_instead_of_starting_a_second_thread(monkeypatch):
+    """核心判据：结果已 emit、槽还没轮到跑时再点一次「查询余额」→ **排队**，不许起第二个线程。
+
+    能真失败：把在途判据退回布尔 + worker 的 finally 提前复位（= v2.4.3 的口径）→
+    started 变成 2（审查探针实测的两个并发线程）→ 第二条断言红。
+    """
+    started = []
+
+    class _RecorderThread(object):
+        """同步执行 + 登记：用例自己控制"谁在什么时候跑"。"""
+
+        def __init__(self, target=None, args=(), daemon=None, **kw):
+            self._target, self._args = target, args
+
+        def start(self):
+            started.append(self._args)
+            self._target(*self._args)
+
+    monkeypatch.setattr(pet_balance, "threading",
+                        types.SimpleNamespace(Thread=_RecorderThread))
+    pet, signals, svc, timer, logs, _sounds = _mk_service(monkeypatch)
+    svc._request_balance = lambda key: (True, (5.0, "CNY", 0.0))
+
+    svc.refresh(manual=False)                       # ① 自动轮询：第 1 代
+    assert len(started) == 1 and pet._balance_active_gen == 1
+    assert signals.balance_updated.queue, "第 1 代的结果应当已排队等槽"
+
+    svc.refresh(manual=True)                        # ② 结果还在队列里时用户点了「查询余额」
+    assert len(started) == 1, ("在途/待消费窗口里起了第二个并发线程：%r"
+                               "（v2.4.3 口径会真的并发两个）" % (started,))
+    assert pet._pending_manual is True, "手动查询没排队：落地后没人补发它"
+
+    signals.deliver()                               # ③ 第 1 代落地 → 补发排队的手动查询
+    assert timer.shots, "排队的手动查询没有被补发（应当排一个 QTimer.singleShot）"
+    assert timer.fire() == 1
+    assert len(started) == 2, "补发没起第 2 代：%r" % (started,)
+    assert pet._balance_active_gen == 2 and pet._manual_pending is True
+
+    signals.deliver()                               # ④ 第 2 代（手动）落地
+    assert pet._balance_active_gen is None
+    assert len(started) == 2, "手动查询落地后又起了第 3 个线程：%r" % (started,)
+
+
+def test_manual_landing_gives_exactly_one_set_of_side_effects(monkeypatch):
+    """手动查询落地：恰好一次气泡 + 一次金币音 + 一次撒钱（A-1：不是两份）。"""
+    pet, signals, svc, _timer, _logs, sounds = _mk_service(monkeypatch)
+    svc._request_balance = lambda key: (True, (8.0, "CNY", 1.0))
+    _inflight(pet, gen=1, manual=True)
+    svc._worker("k", 1)
+    signals.deliver()
+    assert len(pet.bubbles) == 1 and "余额 ¥8.00" in pet.bubbles[0], pet.bubbles
+    assert sounds == ["coin"], "金币音不是一次：%r" % (sounds,)
+    assert pet.money == 1, "撒钱不是一次：%d" % pet.money
+
+
+def test_stale_generation_result_is_dropped_without_side_effects(monkeypatch):
+    """旧代迟到结果：丢弃 + 记一条日志；**不许**弹气泡/放金币音/撒钱，也不许碰新一代的标记。
+
+    能真失败：把 _consume 的代次判断拿掉（槽照收旧代）→ 副作用立刻出现（气泡/音效/撒钱
+    各一份）且日志里没有"丢弃旧代结果" → 两条断言同时红。
+    """
+    pet, signals, svc, _timer, logs, sounds = _mk_service(monkeypatch)
+    _inflight(pet, gen=2, manual=True)          # 当前在途：第 2 代（用户刚点的手动查询）
+    svc.on_updated(1, 8.0, "CNY", 1.0)          # 第 1 代的迟到结果
+    assert pet.bubbles == [] and sounds == [] and pet.money == 0,         "旧代结果产生了副作用：气泡 %r / 音效 %r / 撒钱 %d" % (pet.bubbles, sounds, pet.money)
+    assert pet._balance_active_gen == 2, "旧代把新一代的在途状态抹掉了"
+    assert pet._manual_pending is True, "旧代把新一代的手动标记消费掉了"
+    assert any("丢弃旧代结果" in m for m in logs), "旧代结果被静默丢弃（不许静默）：%r" % (logs,)
+    # 对照组：正确的那一代照常落地（证明上面的"没有副作用"不是全局静音）
+    svc.on_updated(2, 8.0, "CNY", 1.0)
+    assert len(pet.bubbles) == 1 and sounds == ["coin"] and pet.money == 1
+
+
+def test_stale_generation_error_is_dropped_too(monkeypatch):
+    """旧代的错误同样丢弃 + 记日志：新一代的手动查询不该被旧错误顶上气泡。"""
+    pet, signals, svc, _timer, logs, _sounds = _mk_service(monkeypatch)
+    _inflight(pet, gen=2, manual=True)
+    svc.on_err(1)
+    assert pet.bubbles == [], "旧代错误弹了气泡：%r" % (pet.bubbles,)
+    assert pet._balance_active_gen == 2 and pet._manual_pending is True
+    assert any("丢弃旧代结果" in m for m in logs), logs
+    svc.on_err(2)
+    assert pet.bubbles == ["余额查不到……API Key 对吗？"]
+
+
+# ------------- v2.4.4 复审（兼容审查 L1/L2）：槽端退出收尾 · _retire 顺序 · refresh 防御读 -------------
+
+def test_retire_clears_the_manual_flag_before_releasing_the_generation(monkeypatch):
+    """L1（兼容审查）：_retire 里"清手动标记"必须排在"放行代次"**之前**。
+
+    反过来的话主线程只要在这两条语句之间抢到 GIL 并跑 refresh(manual=True)，新开的那一代
+    就会拿到 manual=False：结果照常落地，却**不再弹气泡/放金币音/撒钱**（与 _retire 自己
+    "旧代不许动新代状态"的注释矛盾）。这里用 property 探针在赋值那一刻重入 refresh，把那个
+    窗口**确定性**地摆出来（不用真并发）。
+
+    能真失败：两条语句调换回去 → 第一条断言红（新代的手动标记被上一代抹掉）。
+    """
+    started = []
+
+    class _RecorderThread(object):
+        def __init__(self, target=None, args=(), **kw):
+            started.append(args)
+
+        def start(self):
+            started.append("start")
+
+    monkeypatch.setattr(pet_balance, "threading", types.SimpleNamespace(Thread=_RecorderThread))
+    box = {}
+
+    class _ReentrantPet(_Pet):
+        """放行代次（置 None）的那一刻重入 refresh = 主线程在这两条语句之间抢到 GIL。"""
+
+        @property
+        def _balance_active_gen(self):
+            return self._active_gen
+
+        @_balance_active_gen.setter
+        def _balance_active_gen(self, value):
+            self._active_gen = value
+            if value is None and box.get("svc") is not None and not box.get("done"):
+                box["done"] = True
+                box["svc"].refresh(manual=True)
+
+    pet = _ReentrantPet(active_gen=1, manual=True)
+    svc = _service(pet, _Signals(), [])
+    box["svc"] = svc
+    svc._retire(1, "测试：worker 交不出去")
+    assert pet._manual_pending is True, \
+        "上一代收尾把新代的手动标记抹掉了（结果落地不再弹气泡/放金币音/撒钱）"
+    assert pet._balance_active_gen == 2, \
+        "窗口里那次 refresh 没起第 2 代：%r" % (pet._balance_active_gen,)
+    assert started and started[-1] == "start", started
+
+
+def test_slot_closing_early_return_retires_the_generation(monkeypatch):
+    """L1（兼容审查）：槽端"退出中"早退也必须收尾。
+
+    emit 已经交出去（worker 那边守卫留着等槽消费），槽跑到时窗口已在退出 → 早退 return，
+    那一代就永久挂在非 None 上。生产上进程正在退出、无感；但探针/夹具会把 `_closing` 改回
+    False 继续用同一个窗口（_dev/probe_ui_freeze.py / tests/test_full_form_frames_v24.py），
+    之后就撞上"点查询余额毫无反应"。_retire 自带 `== gen` 守卫，旧代不会误伤新代。
+
+    能真失败：早退分支不收尾 → 两条断言红。
+    """
+    pet, logs = _Pet(closing=True, active_gen=1), []
+    signals = _Signals()
+    svc = _service(pet, signals, logs)
+    svc.on_updated(1, 1.0, "CNY", 0.0)          # 已 emit 的那一代，槽跑到时窗口在退出
+    assert signals.balance_updated.calls == [], "退出中不该响应在途结果"
+    assert pet._balance_active_gen is None, \
+        "退出中早退没收尾：这一代永远挂着（窗口被复用后查询全被挡住）"
+    pet2, logs2 = _Pet(closing=True, active_gen=3), []
+    svc2 = _service(pet2, _Signals(), logs2)
+    svc2.on_err(3)
+    assert pet2._balance_active_gen is None, "退出中早退没收尾（错误路径）：这一代永远挂着"
+    # 反例对照：窗口被复用（_closing 改回 False）后，下一次查询必须还能真发出去
+    started = []
+
+    class _RecorderThread(object):
+        def __init__(self, target=None, args=(), **kw):
+            started.append(args)
+
+        def start(self):
+            started.append("start")
+
+    monkeypatch.setattr(pet_balance, "threading", types.SimpleNamespace(Thread=_RecorderThread))
+    pet._closing = False
+    svc.refresh(manual=True)
+    assert started and started[-1] == "start" and pet._balance_active_gen == 2, \
+        "收尾漏了：窗口复用后查询被永真的在途守卫挡住：%r" % (started,)
+
+
+def test_refresh_reads_the_guard_flags_defensively(monkeypatch):
+    """L2（兼容审查）：refresh() 对新守卫属性也要走 getattr（与 _consume/_retire 同口径）。
+
+    refresh 由 Qt 槽调用（菜单 / 补发定时器），裸取属性时"替身 pet / 属性改名"会抛
+    AttributeError —— 槽里抛出去就是"点查询余额毫无反应"。
+
+    能真失败：把两处 getattr 退回裸取 → 抛 AttributeError，第一条断言前就红。
+    """
+    class _Bare(object):
+        """最小 pet：**没有**代次属性（模拟替身 / 属性改名）。"""
+
+    pet = _Bare()
+    svc = _service(pet, _Signals(), [])
+    started = []
+
+    class _RecorderThread(object):
+        def __init__(self, target=None, args=(), **kw):
+            started.append(args)
+
+        def start(self):
+            started.append("start")
+
+    monkeypatch.setattr(pet_balance, "threading", types.SimpleNamespace(Thread=_RecorderThread))
+    svc.refresh(manual=True)                    # 修复前：AttributeError（Qt 槽里就是"点了没反应"）
+    assert started and started[-1] == "start", started
+    assert pet._balance_gen == 1, "没有 _balance_gen 时应当从 0 起算：%r" % (pet._balance_gen,)
+    assert pet._balance_active_gen == 1 and pet._manual_pending is True, \
+        "守卫没登记：%r/%r" % (pet._balance_active_gen, pet._manual_pending)
+
+
+def test_auto_poll_landing_has_no_manual_side_effects(monkeypatch):
+    """自动轮询落地**不许**有手动反馈（气泡 / 金币音 / 撒钱）。
+
+    v2.4.4（质量审查 M3）：这条行为面此前**一条用例都没有**——把 on_updated 里的
+    `if manual:` 改成恒真（等价于每 5 分钟自动轮询都弹气泡 + 放金币音 + 撒钱）时，
+    定向用例集 65 例全绿（NOT CAUGHT）。
+
+    能真失败：同上的 `if True:` 变异 → 前三条断言同时红（见 M-V4）。
+    """
+    pet, signals, svc, _timer, _logs, sounds = _mk_service(monkeypatch)
+    svc._request_balance = lambda key: (True, (8.0, "CNY", 1.0))
+    _inflight(pet, gen=1, manual=False)
+    svc._worker("k", 1)
+    signals.deliver()
+    assert pet.bubbles == [], "自动轮询弹了气泡：%r" % (pet.bubbles,)
+    assert sounds == [], "自动轮询放了金币音：%r" % (sounds,)
+    assert pet.money == 0, "自动轮询撒了钱：%d" % pet.money
+    # 反例对照：余额本身必须照常落地（别把"没有手动反馈"做成"什么都不做"）
+    assert pet._shown_balance == 8.0 and pet.badges == 1,         "自动轮询的余额没落地：shown=%r badges=%d" % (pet._shown_balance, pet.badges)
+    assert pet._balance_active_gen is None, "槽消费后没有放行守卫"
+
+
+def test_retire_only_touches_its_own_generation():
+    """L3（质量审查）：_retire 只许动**自己那一代**——旧代收尾不许抹掉新一代的在途/手动标记。
+
+    能真失败：把 _retire 的 `if getattr(pet, "_balance_active_gen", None) == gen:` 改成
+    `if True:` → 第一条断言红（第 2 代被第 1 代的收尾误伤，见 M-V7）。
+    """
+    pet, logs = _Pet(active_gen=2, manual=True), []
+    svc = _service(pet, _Signals(), logs)
+    svc._retire(1, "旧代收尾")                       # 第 1 代早已不是当前那一代
+    assert pet._balance_active_gen == 2, "旧代的收尾把新一代的在途状态抹掉了"
+    assert pet._manual_pending is True, "旧代的收尾把新一代的手动标记抹掉了"
+    svc._retire(2, "自己那一代")                     # 反例对照：自己那一代照常收尾
+    assert pet._balance_active_gen is None and pet._manual_pending is False,         "自己那一代没收尾：%r/%r" % (pet._balance_active_gen, pet._manual_pending)
 
 
 # ===================== P2-2：QFont 回退链 =====================

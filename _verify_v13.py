@@ -716,16 +716,38 @@ def main_flow():
     # 播放：程序化合成动作 → 变换生效，播完复位并回待机
     pet.actions.play_action("sway")
     check("proc action starts", pet.anim_mode == "state")
-    _t0 = time.time()
+    # v2.4.4（C-3）：固定 1.2 秒预算 → **轮询直到条件成立 + 超时上限**。sway 是
+    # period_ms=200 × 2 周期 ≈400ms 的合成动作，1.2 秒只剩 3 倍余量——负载下第一次基线
+    # 就红过一次（之后 8 次全绿），那是计时抖动而不是回归。现在条件一成立就通过，
+    # 只有超时才判失败，并把"实际等了多久 / 轮询了几次"写进失败信息。
+    # v2.4.4（复审 L3）：这个循环每 20ms 读一次 pet._proc_offset_y —— 裸取属性的话，属性一旦
+    # 改名就会在**循环里**抛 AttributeError（护栏从"最后那条 check 红"变成"脚本炸了"，
+    # 拿不到可读结论）；计时也改用单调钟，系统时钟回拨不会把等待拖长。
+    def _proc_oy():
+        return getattr(pet, "_proc_offset_y", 0)
+
+    _t0 = time.monotonic()
     _moved = False
-    while time.time() - _t0 < 1.2:
+    _polls = 0
+    _proc_timeout = 5.0
+    while True:
         app.processEvents()
-        time.sleep(0.02)
+        _polls += 1
         if abs(pet.squash_x - 1.0) > 1e-4:
             _moved = True
+        if pet.anim_mode == "idle" and abs(pet.squash_x - 1.0) < 1e-6 \
+                and abs(pet.squash_y - 1.0) < 1e-6 and _proc_oy() == 0:
+            break                      # 条件成立：立刻通过（不再白等剩下的预算）
+        if time.monotonic() - _t0 >= _proc_timeout:
+            break                      # 超时：下面那条 check 会带上实耗与轮询次数
+        time.sleep(0.02)
     check("proc transform applied", _moved)
-    check("proc resets to idle", pet.anim_mode == "idle" and abs(pet.squash_x - 1.0) < 1e-6
-          and abs(pet.squash_y - 1.0) < 1e-6 and pet._proc_offset_y == 0)
+    _proc_reset = (pet.anim_mode == "idle" and abs(pet.squash_x - 1.0) < 1e-6
+                   and abs(pet.squash_y - 1.0) < 1e-6 and _proc_oy() == 0)
+    check("proc resets to idle", _proc_reset, "" if _proc_reset else
+          "等了 %.2fs / 轮询 %d 次仍未复位（超时上限 %.1fs）：anim=%r sx=%.4f sy=%.4f oy=%r"
+          % (time.monotonic() - _t0, _polls, _proc_timeout, pet.anim_mode, pet.squash_x,
+             pet.squash_y, _proc_oy()))
     # 审查修复回归：合成动作播放中喂食 → 吃帧收尾不被顶掉，busy 必须释放
     pet.actions.play_action("sway")
     pet.feed("小鱼干")

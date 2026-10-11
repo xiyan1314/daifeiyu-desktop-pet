@@ -110,6 +110,16 @@ def shadow(root=None, what="mutation"):
             shutil.rmtree(os.path.dirname(tree), ignore_errors=True)
 
 
+def failed_nodeids(out):
+    """pytest 输出里的失败用例名：`tests/x.py::test_y[id] - 说明` → `test_y[id]`。
+
+    v2.4.4：参数化后缀**保留**（判定那边按基名比对，见 mutate_check._short）——这里剥掉就
+    再也看不出红的是哪个参数实例了。
+    """
+    return [ln.split("::")[-1].split(" ")[0]
+            for ln in (out or "").splitlines() if ln.startswith("FAILED ")]
+
+
 def run_pytest(tree, tests, timeout=1800):
     """在影子里跑指定用例 → (rc, 失败用例名列表, 完整输出)。"""
     cmd = [sys.executable, "-m", "pytest"] + list(tests) + [
@@ -121,9 +131,7 @@ def run_pytest(tree, tests, timeout=1800):
     p = subprocess.run(cmd, cwd=tree, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                        timeout=timeout, env=env)
     out = p.stdout.decode("utf-8", "replace")
-    failed = [ln.split("::")[-1].split(" ")[0]
-              for ln in out.splitlines() if ln.startswith("FAILED ")]
-    return p.returncode, failed, out
+    return p.returncode, failed_nodeids(out), out
 
 
 def test_error_lines(out):
@@ -179,8 +187,11 @@ def results_payload(title, results, extra=None):
         "checked_at": time.strftime("%Y-%m-%d %H:%M:%S"),
         "total": len(items),
         "caught": len([x for x in items if x["verdict"] == "CAUGHT"]),
+        # v2.4.4（兼容审查 L4）：这里此前漏了 "WRONG TEST" → caught + not_caught != total
+        # （实测 mutations_compat_v242.json：total 15 / caught 14 / not_caught 0）。
+        # 口径与 mutate_check.judge 的 "verdict != CAUGHT" 对齐。
         "not_caught": len([x for x in items if x["verdict"] in
-                           ("NOT CAUGHT", "SPEC-BAD", "ANCHOR-LOST", "INVALID")]),
+                           ("NOT CAUGHT", "WRONG TEST", "SPEC-BAD", "ANCHOR-LOST", "INVALID")]),
         "blocked": len([x for x in items if x["verdict"] == "BASELINE-RED"]),
         "items": items,
     }
@@ -203,8 +214,11 @@ def repo_fingerprint(root=None):
     """真实仓库当前指纹（结果对应哪份源码）：关键文件 sha256 前 12 位。"""
     base = os.path.abspath(root or ROOT)
     out = {}
+    # v2.4.4（任务 1）：清单里原本没有 pet_balance.py —— A-1 改了它、3 条锚点失效，而发布门
+    # 一条"证据过期"都不会提示（真盲区）。与 _check_release.MUTATION_FINGERPRINT_FILES 同口径，
+    # 由 tests/test_release_check.py 的 test_fingerprint_file_list_matches_the_mutation_lib 钉住。
     for rel in ("桌宠.py", "pet_export.py", "pet_lines.py", "pet_alarm.py", "pet_behaviors.py",
-                "_check_release.py"):
+                "_check_release.py", "pet_balance.py"):
         p = os.path.join(base, rel)
         if os.path.isfile(p):
             with open(p, "rb") as f:

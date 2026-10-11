@@ -267,6 +267,10 @@ def _resolve(expr, fname, lineno, scopes, funcs, methods, depth, via):
                 return req, cap, "guard_slot(%s)" % desc, ("guard",) + tags
         return None
     if isinstance(expr, ast.Attribute):
+        # v2.4.4（复审 L5）：这里按**方法名**在全仓方法池里解析槽——前提是同一个方法名只有
+        # 一种参数个数。真仓当前满足（on_updated/on_err 各只有一处），但若哪天出现同名不同
+        # 参数个数，_pool_arity 会因歧义返回 None、本检查**静默跳过**（不再报，但也不再守）。
+        # 要收紧的话得让方法池带类/模块限定名，而不是靠名字。
         ar = _pool_arity([c[1] for c in _pool_for(methods, expr.attr, fname)])
         return None if ar is None else (ar[0], ar[1], expr.attr, ())
     if isinstance(expr, ast.Name):

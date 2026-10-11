@@ -71,7 +71,7 @@ import pet_io  # v2.3.1：原子写/清扫临时文件（P2-B 导入恢复、L4 
 
 
 APP_NAME = "大肥鱼桌宠"
-VERSION = "2.4.3"
+VERSION = "2.4.4"
 PAD = 1.25  # 窗口相对角色的透明边距（为压扁/回弹预留空间）
 IDLE_FRAME_MS = 140      # 待机帧间隔
 IDLE_FORM_HOLD_SECS = 8  # v2.1.3：只有形态、没有动作可播时的展示期上限（到期回用户形态）
@@ -644,8 +644,10 @@ class Signals(QObject):
     weather = Signal(str)
     weather_done = Signal()
     ai_done = Signal()
-    balance_updated = Signal(float, str, float)
-    balance_err = Signal()
+    # v2.4.4（A-1）：两个余额信号都带上**请求代次**——worker 与槽都只碰自己那一代
+    # 的状态（旧代的迟到结果由槽丢弃并记日志，见 pet_balance._consume）
+    balance_updated = Signal(int, float, str, float)
+    balance_err = Signal(int)
     # v2.3.0（1.2 Function Calling）：工具调用（worker 线程 → 主线程，一律带请求 id）
     tool_confirm_required = Signal(str, str, str)  # (请求id, 工具名, 参数JSON) 写入前问用户
     tool_call = Signal(str, str, str)              # (请求id, 工具名, 参数JSON) 主线程执行并回结果
@@ -730,9 +732,10 @@ def _fill_state_pix(win, form, states, res, custom):
 def _state_pending_count(pending):
     """待建状态图**条目数**（各形态待建集合大小之和）；空/None 时为 0。
 
-    v2.4.3（第三轮找茬 P2-5①）：接力装载的"推进判据"——本轮解完与解之前的条目数相同
-    就说明一个都没建成（pending 里的名字不在 _STATE_MARK_MAP 名单内，当前不可达），
-    _build_state_pix_slice 据此清空 pending 自锁，免得 QTimer(0) 链永久自排空转。
+    接力装载的"推进判据"：本轮解完与解之前的条目数相同 = 一个都没建成。
+    v2.4.3（第三轮找茬 P2-5①）：_build_state_pix_slice 据此收口自锁，免得 QTimer(0) 链永久
+    自排空转。v2.4.4（A-2）收口方式改成**只摘"这一轮证明建不出来"的名字**（判死记进
+    _state_pix_dead），不再整表清空 pending；本函数只负责数条目，判死在切片里做。
     放模块级：与 _fill_state_pix 同理，stub 也能调（纯函数、只读 dict）。
     """
     return sum(len(v) for v in (pending or {}).values())
@@ -852,7 +855,12 @@ class PetWindow(QWidget):
             except Exception:
                 pass  # 有意忽略：预热 winId 尽力而为，失败窗口仍可用
         self._dragging_food = None
-        self._fetching_balance = False
+        # v2.4.4（A-1）：余额在途守卫从"一个布尔"换成**请求代次**——_balance_gen 单调
+        # 自增；_balance_active_gen = 在途/待消费的那一代（None = 空闲）。布尔会被 worker
+        # 的 finally 在"结果已 emit、槽还没轮到跑"的窗口里提前复位（用户这时再点一次
+        # 「查询余额」会真的起第二个并发线程）。语义见 pet_balance.refresh/_worker/_consume。
+        self._balance_gen = 0
+        self._balance_active_gen = None
         self._shown_balance = None
         self._balance_anim = None
         self._currency = "CNY"
@@ -996,6 +1004,11 @@ class PetWindow(QWidget):
         # （_show_state("laugh") 会经 _state_pix → _ensure_state_pix 就地补建），其余
         # 16 张 PNG（默认角色）或"每形态每状态一次程序化合成"（自定义角色）推迟到首帧之后。
         self._state_pix_pending = {}
+        # v2.4.4（A-2）：这一轮"证明建不出来"的状态名（试过且没建出来 / 不在状态名单里）。
+        # 只跳过**这些**名字，pending 里没试过的留到下一轮——旧口径在零推进时整表清空
+        # pending，而 _ensure_state_pix 开头的"pending 为空就直接 return"是一道单向门：
+        # 某轮因异常走进 finally 后，该状态就永久缺失（_show_state 只记一行日志后静默 no-op）。
+        self._state_pix_dead = set()
         self._startup_assets_done = False  # v2.4.2：接力装载是否跑完（探针/测试的收口判据）
         self._export_writer = None         # v2.4.2：在途的导出写包器（分片写，见 _export_step）
         self._export_voice_n = 0           # 本次导出带的参考音个数（完成文案用）
@@ -3183,6 +3196,7 @@ class PetWindow(QWidget):
         "一次性全建的"逐位相同，差别只在时序。
         """
         names = tuple(_STATE_MARK_MAP)  # 状态名单一来源，避免双处维护
+        self._state_pix_dead = set()  # v2.4.4（A-2）：重建=重新给每个名字一次机会
         custom = bool(self._custom_role)
         rid = self.cfg.get("role", "") if custom else ""
         states_paths = (self.role_lib.form_state_paths(rid) if (custom and self.role_lib) else [])
@@ -3230,9 +3244,21 @@ class PetWindow(QWidget):
             self._state_pix_pending = {}
 
     def _state_pending(self, state):
-        """state（或其吃饱别名）是否还有形态没建——接力装载的推进判据。"""
+        """state（或其吃饱别名）是否还有形态没建——接力装载的推进判据。
+
+        v2.4.4（A-2）：已判死的名字（_state_pix_dead，见 _build_state_pix_slice）不再算
+        "待建"——否则接力链会为一个永远建不出来的名字空转。
+
+        v2.4.4（复审 L2）：**别名的判死不再算到别名头上**——pending 才是唯一真源。名字还在
+        pending 里就说明它没被建过，_ensure_state_pix 会把它（连同别名）一起处理并摘掉。
+        此前那条"别名判死"会让 dead={angry} + pending={hiss} 时 _state_pending("hiss") 恒
+        False → 这一轮一个名字都不试 → 零推进收口又摘不掉 hiss（它在 _STATE_MARK_MAP 名单
+        里、也"没试过"，两条判死理由都不成立）→ 接力链每轮排一个 QTimer(0)，30 轮不收敛。
+        """
         pend = self._state_pix_pending
         if not pend:
+            return False
+        if state in self._state_pix_dead:
             return False
         alias = self.FULL_STATE_ALIAS.get(state)
         for miss in pend.values():
@@ -3249,21 +3275,50 @@ class PetWindow(QWidget):
         v2.4.3（第三轮找茬 P2-5①）：**零推进自锁**。pending 里的名字若全都不在
         _STATE_MARK_MAP 名单里（当前不可达，纯防御），下面的循环一次 _ensure_state_pix
         都不会调，pending 永远清不掉 → 接力链的 QTimer(0) 会永久自排（主线程空转）。
-        所以本轮"待建条目数没变少"就直接清空 pending 收口（= 没有可建的）。
+        所以本轮"待建条目数没变少"就收口——判"没有可建的"。
+
+        v2.4.4（A-2）：收口**不再整表清空** pending（审查 A/B 实测：pending 一旦清空，
+        _ensure_state_pix 开头那道"pend 为空就 return"就是单向门——该状态从此永久缺失，
+        _show_state 只记一行日志后静默 no-op，直到重启）。现在只把"这一轮真的证明建不出来"
+        的名字记进 _state_pix_dead 并摘掉（判死规则见 finally 里的注释），pending 里没试过
+        的留到下一轮；**异常那一轮什么都不判死**（抛错说明不了任何名字建不出来，这正是
+        修复前那条"异常一次 → 状态永久缺失"的路径）。
         """
         t0 = time.perf_counter()
         _before = _state_pending_count(self._state_pix_pending)
+        _tried = set()
+        _raised = False
         try:
             for s in tuple(_STATE_MARK_MAP):
                 if not self._state_pix_pending:
                     return
                 if self._state_pending(s):
+                    _tried.add(s)
                     self._ensure_state_pix(s)
                 if (time.perf_counter() - t0) * 1000.0 >= budget_ms:
                     return
+        except BaseException:
+            _raised = True
+            raise
         finally:
-            if self._state_pix_pending and _state_pending_count(self._state_pix_pending) >= _before:
-                self._state_pix_pending = {}
+            if not _raised and self._state_pix_pending \
+                    and _state_pending_count(self._state_pix_pending) >= _before:
+                # 零推进收口：只摘"这一轮证明建不出来"的名字，其余留到下一轮（A-2）。
+                # 判死两类，都能当场给出理由：
+                #   · _tried 里仍在 pending 的——真的调过 _ensure_state_pix、返回后却没摘掉
+                #     （纯防御：正常路径不可达，_ensure_state_pix 建不出来也会减掉名字）；
+                #   · 不在 _STATE_MARK_MAP 名单里的——本切片只按名单推进，这些名字永远走不到
+                #     （纯防御，v2.4.3 那条"零推进自锁"防的就是它）。
+                # 异常那一轮不进这里（_raised）：抛错说明不了任何名字建不出来。
+                _reachable = set(_STATE_MARK_MAP)
+                _dead = {s for _miss in self._state_pix_pending.values() for s in _miss
+                         if s in _tried or s not in _reachable}
+                if _dead:
+                    self._state_pix_dead |= _dead
+                    for _miss in self._state_pix_pending.values():
+                        _miss -= _dead
+                    if not any(self._state_pix_pending.values()):
+                        self._state_pix_pending = {}
 
     def _custom_state_pix(self, res_path, base, state):
         """P2-5 状态图合并点：资源图（forms[i].states[state]）优先；

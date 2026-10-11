@@ -10,6 +10,9 @@ spec.json 结构：
       "tests": ["tests/test_x.py::test_y", ...],
       "expect_fail": ["tests/test_x.py::test_y", ...]}]}   # 可选，见下
 
+v2.4.4（判定口径 bug）：比对按**基名**——pytest 的参数化实例写成 `test_x[参数]`，spec 里
+通常只写不带参数的节点名；此前不剥后缀，用例真红了也被记成 WRONG TEST。
+
 v2.4.3（质量审查 M5）判定收紧：此前只要 rc != 0 就算 CAUGHT——别的用例被负载抖红也算
 "这条变异被抓住了"。现在要求**预期用例真的出现在失败列表里**：
   · expect_fail 给了 → 它点名的用例必须**全部**在 failed 里；
@@ -50,8 +53,22 @@ def _write(path, text):
 
 
 def _short(nodeid):
-    """用例 nodeid → 只留最后一段（run_pytest 的 FAILED 行也是这个口径）。"""
-    return str(nodeid).split("::")[-1].split(" ")[0]
+    """用例 nodeid → 只留最后一段，并**剥掉参数化后缀**（run_pytest 的 FAILED 行口径）。
+
+    v2.4.4（判定口径 bug）：pytest 的参数化实例在 FAILED 行里写作
+    `test_x[behaviors.json-pet_behaviors-BehaviorService]`，而 spec 里通常只写不带参数的
+    节点名。此前这里只切 "::" 与空格、**不剥 [...]** → "用例其实红了"被记成 WRONG TEST
+    （mutations_compat_v242.json 的 M-C9 就是这样，它的 failed 里躺着那条红的参数化实例，
+    却被判成"红的是别的用例"）。
+    """
+    last = str(nodeid).split("::")[-1].split(" ")[0]
+    return last.split("[", 1)[0] if "[" in last else last
+
+
+def _failed_hit(expect, failed):
+    """expect（带不带参数化后缀都行）是否命中这一轮**真红**的用例（同样按基名比对）。"""
+    want = _short(expect)
+    return any(_short(f) == want for f in failed)
 
 
 def judge(mutation, rc, failed):
@@ -66,11 +83,11 @@ def judge(mutation, rc, failed):
     expect = [_short(t) for t in (mutation.get("expect_fail") or [])]
     if not expect:
         expect = [_short(t) for t in mutation.get("tests") or []]
-        hit = [e for e in expect if e in failed]
+        hit = [e for e in expect if _failed_hit(e, failed)]
         if hit:
             return "CAUGHT", list(failed)
     else:
-        miss = [e for e in expect if e not in failed]
+        miss = [e for e in expect if not _failed_hit(e, failed)]
         if not miss:
             return "CAUGHT", list(failed)
     return "WRONG TEST", list(failed)

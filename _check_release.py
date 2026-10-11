@@ -10,6 +10,7 @@
   check_shipped_files()  SYNC_FILES（代码/文档）在磁盘上都还在（v2.4.3）
   mutation_lock_problems() 变异验证进行中 → 结果不可信，拒绝判定（v2.4.3）
   mutation_evidence_notes() 变异结果 JSON 的源码指纹过期 → 提示"该证据需复跑"（v2.4.3）
+  mutation_verdict_notes() 变异结果 JSON 里有没通过的判定（SPEC-BAD/WRONG TEST…）→ 提示（v2.4.4）
   asset_manifest_notes() 素材清单判据没生效（无 git / 素材未入库）→ 提示（v2.4.3）
 
 用法：python _check_release.py [zip路径]；退出码 0=通过，1=有问题（逐条打印）
@@ -497,8 +498,10 @@ def mutation_lock_problems(root=None, now=None):
 # 这里只做**提示**（不进 fails）：证据过期是开发期的正常中间态；但绝不能静默。
 # 文件清单与 _dev/_mutate_lib.repo_fingerprint 同口径，由 tests/test_release_check.py 的
 # 一条用例钉住"两处清单不许漂移"。
+# v2.4.4：补进 pet_balance.py —— A-1（请求代次）改了它、3 条锚点随之失效，而在此之前这份
+# 清单里没有它，发布门一条"证据过期"都不会提示（真盲区：证据对着旧实现，门禁全程静默）。
 MUTATION_FINGERPRINT_FILES = ("桌宠.py", "pet_export.py", "pet_lines.py", "pet_alarm.py",
-                              "pet_behaviors.py", "_check_release.py")
+                              "pet_behaviors.py", "_check_release.py", "pet_balance.py")
 
 
 def file_fingerprint(path):
@@ -534,27 +537,48 @@ def stale_fingerprints(recorded, current):
     return out
 
 
+def _iter_dev_results(root=None):
+    """_dev/*.json → [(文件名, 解析后的数据)]；读不动/解析失败的直接跳过。
+
+    （开发期会留下半成品 JSON；这里只读不写，坏了就当没有——与两处调用方的旧行为一致。）
+    """
+    import json as _json
+    dev = os.path.join(os.path.abspath(root or ROOT), "_dev")
+    out = []
+    if not os.path.isdir(dev):
+        return out
+    for name in sorted(os.listdir(dev)):
+        if not name.endswith(".json"):
+            continue
+        try:
+            with open(os.path.join(dev, name), encoding="utf-8") as f:
+                out.append((name, _json.load(f)))
+        except Exception:
+            continue
+    return out
+
+
+def result_items(data):
+    """结果 JSON 的条目列表：两种落盘形态（顶层 items / spec 内嵌 results.items）都认。"""
+    if not isinstance(data, dict):
+        return []
+    items = data.get("items")
+    if not isinstance(items, list):
+        res = data.get("results")
+        items = res.get("items") if isinstance(res, dict) else None
+    return items if isinstance(items, list) else []
+
+
 def mutation_evidence_notes(root=None, current=None):
     """_dev/*.json 里记的源码指纹 ≠ 当前树 → 每条一句"该证据已过期，需复跑"提示。
 
     两种落盘形态都认：结果 JSON 顶层 repo_fingerprint、以及 spec 内嵌的
     results.repo_fingerprint（mutate_check.py 回写的那种）。没有指纹段的 JSON 跳过。
     """
-    import json as _json
     base = os.path.abspath(root or ROOT)
-    dev = os.path.join(base, "_dev")
     cur = current if current is not None else tree_fingerprint(base)
     notes = []
-    if not os.path.isdir(dev):
-        return notes
-    for name in sorted(os.listdir(dev)):
-        if not name.endswith(".json"):
-            continue
-        try:
-            with open(os.path.join(dev, name), encoding="utf-8") as f:
-                data = _json.load(f)
-        except Exception:
-            continue
+    for name, data in _iter_dev_results(base):
         rec = data.get("repo_fingerprint") if isinstance(data, dict) else None
         if not isinstance(rec, dict) and isinstance(data, dict):
             res = data.get("results")
@@ -563,6 +587,27 @@ def mutation_evidence_notes(root=None, current=None):
         if stale:
             notes.append("变异证据 %s 的源码指纹已过期（不是对着当前树测的，复核前请重跑"
                          "对应 spec）：%s" % (name, "；".join(stale)))
+    return notes
+
+
+# v2.4.4（兼容审查 M2）：只提示"指纹过期"是不够的——判定**本身没通过**的结果同样静默：
+# SPEC-BAD / ANCHOR-LOST（锚点失效，"这条还没被验证"）、WRONG TEST（rc≠0 但红的不是它）、
+# NOT CAUGHT（变异逃逸）、INVALID（变异不合法）、BASELINE-RED（基线红，本轮无判定）。
+# 复核的人很容易把"N/N 全抓到"里的这些缺口读成通过，所以让发布门点名（仍然只提示、不挡发布）。
+MUTATION_BAD_VERDICTS = ("NOT CAUGHT", "WRONG TEST", "SPEC-BAD", "ANCHOR-LOST", "INVALID",
+                         "BASELINE-RED")
+
+
+def mutation_verdict_notes(root=None):
+    """_dev/*.json 的 results 段里有没通过的判定 → 每条一句提示（只提示，不挡发布）。"""
+    notes = []
+    for name, data in _iter_dev_results(root):
+        bad = ["%s=%s" % (it.get("id"), it.get("verdict"))
+               for it in result_items(data)
+               if str(it.get("verdict") or "").upper() in MUTATION_BAD_VERDICTS]
+        if bad:
+            notes.append("变异证据 %s 有没通过的判定（这些条目等于**这条护栏还没被验证**，"
+                         "别读成通过；重锚/修口径后重跑）：%s" % (name, "；".join(bad)))
     return notes
 
 
@@ -785,7 +830,8 @@ def main():
     # check_zip 只查包内，谁都没点名"少了一张 shipped 素材"。
     _lock_fails, _lock_notes = mutation_lock_problems()
     fails += _lock_fails
-    for _note in _lock_notes + mutation_evidence_notes() + asset_manifest_notes():
+    for _note in (_lock_notes + mutation_evidence_notes() + mutation_verdict_notes()
+                  + asset_manifest_notes()):
         print("  [提示] %s" % _note)
     print("[1b] 工作区清单：assets 索引 %d 个 / 磁盘 %d 个，SYNC_FILES %d 个"
           % (len(tracked_assets()), len(disk_assets()), len(SYNC_FILES)))

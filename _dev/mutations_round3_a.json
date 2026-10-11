@@ -4,24 +4,27 @@
   "mutations": [
     {
       "id": "M-A1",
-      "why": "balance worker 的 finally 不再复位 _fetching_balance（守卫泄漏）",
+      "why": "worker 交不出去时不再收尾（那一代永远挂着 = 守卫泄漏）",
       "file": "pet_balance.py",
-      "old": "        finally:\n            try:\n                self.pet._fetching_balance = False\n            except Exception:\n                pass  # 有意忽略：pet 已销毁时连标志都不用管（进程正在退出）",
-      "new": "        finally:\n            pass  # MUTATION: 守卫复位拿掉",
+      "old": "        if not handed:\n            self._retire(gen, \"结果没能交给槽\")",
+      "new": "        if not handed:\n            pass  # MUTATION: 交不出去也不收尾（守卫泄漏）",
       "tests": [
-        "tests/test_round3_a_fixes.py::test_worker_emits_result_and_resets_guard_on_success",
-        "tests/test_round3_a_fixes.py::test_worker_survives_request_exception_and_resets_guard",
-        "tests/test_round3_a_fixes.py::test_refresh_is_not_wedged_after_an_emit_failure"
+        "tests/test_round3_a_fixes.py::test_worker_hands_the_result_to_the_slot_which_releases_the_generation",
+        "tests/test_round3_a_fixes.py::test_worker_survives_request_exception_and_the_slot_still_releases",
+        "tests/test_round3_a_fixes.py::test_refresh_is_not_wedged_after_an_emit_failure",
+        "tests/test_round3_a_fixes.py::test_worker_retires_its_generation_when_emit_hits_a_deleted_object",
+        "tests/test_round3_a_fixes.py::test_worker_does_not_emit_while_closing",
+        "tests/test_round3_a_fixes.py::test_worker_treats_unreadable_closing_flag_as_closing"
       ]
     },
     {
       "id": "M-A2",
       "why": "拿掉顶层 except：_request_balance 之后的行抛异常时直接冲出 daemon 线程",
       "file": "pet_balance.py",
-      "old": "        except Exception as e:\n            # _request_balance 内部已全兜；这里防的是\"它之后的行\"（含参数解包、标志读写）\n            self._log_safe(\"balance_worker crashed: %r\" % (e,))\n            self._emit(\"balance_err\")\n        finally:",
-      "new": "        finally:",
+      "old": "        except Exception as e:\n            # _request_balance 内部已全兜；这里防的是\"它之后的行\"（含参数解包、标志读写）\n            self._log_safe(\"balance_worker crashed: %r\" % (e,))\n            handed = self._emit(\"balance_err\", gen)",
+      "new": "        except Exception as e:\n            raise  # MUTATION: 顶层 except 拿掉，异常直接冲出 daemon 线程",
       "tests": [
-        "tests/test_round3_a_fixes.py::test_worker_survives_request_exception_and_resets_guard"
+        "tests/test_round3_a_fixes.py::test_worker_survives_request_exception_and_the_slot_still_releases"
       ]
     },
     {
@@ -170,7 +173,7 @@
   ],
   "results": {
     "title": "变异验证 spec：mutations_round3_a.json",
-    "checked_at": "2026-10-10 23:44:46",
+    "checked_at": "2026-10-11 11:06:28",
     "total": 16,
     "caught": 16,
     "not_caught": 0,
@@ -180,27 +183,28 @@
         "id": "M-A1",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "3 failed in 0.77s",
+        "tail": "4 failed, 2 passed in 0.81s",
         "failed": [
-          "test_worker_emits_result_and_resets_guard_on_success",
-          "test_worker_survives_request_exception_and_resets_guard",
-          "test_refresh_is_not_wedged_after_an_emit_failure"
+          "test_refresh_is_not_wedged_after_an_emit_failure",
+          "test_worker_retires_its_generation_when_emit_hits_a_deleted_object",
+          "test_worker_does_not_emit_while_closing",
+          "test_worker_treats_unreadable_closing_flag_as_closing"
         ]
       },
       {
         "id": "M-A2",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.51s",
+        "tail": "1 failed in 0.54s",
         "failed": [
-          "test_worker_survives_request_exception_and_resets_guard"
+          "test_worker_survives_request_exception_and_the_slot_still_releases"
         ]
       },
       {
         "id": "M-A3",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "2 failed in 0.62s",
+        "tail": "2 failed in 0.57s",
         "failed": [
           "test_worker_does_not_emit_while_closing",
           "test_worker_treats_unreadable_closing_flag_as_closing"
@@ -210,7 +214,7 @@
         "id": "M-A4",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.53s",
+        "tail": "1 failed in 0.57s",
         "failed": [
           "test_widgets_never_hardcode_a_font_family"
         ]
@@ -219,7 +223,7 @@
         "id": "M-A5",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.52s",
+        "tail": "1 failed in 0.53s",
         "failed": [
           "test_ui_font_uses_the_fallback_chain"
         ]
@@ -237,7 +241,7 @@
         "id": "M-A7",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed, 1 passed in 0.52s",
+        "tail": "1 failed, 1 passed in 0.51s",
         "failed": [
           "test_requests_and_pyinstaller_have_upper_bounds"
         ]
@@ -255,7 +259,7 @@
         "id": "M-A9",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.53s",
+        "tail": "1 failed in 0.54s",
         "failed": [
           "test_last_updated_carries_timezone_offset"
         ]
@@ -264,7 +268,7 @@
         "id": "M-A10",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.59s",
+        "tail": "1 failed in 0.61s",
         "failed": [
           "test_zipinfo_compresslevel_is_still_consumed"
         ]
@@ -273,7 +277,7 @@
         "id": "M-A11",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.54s",
+        "tail": "1 failed in 0.57s",
         "failed": [
           "test_almost_utf8_documents_the_small_file_degradation"
         ]
@@ -282,7 +286,7 @@
         "id": "M-A12",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.56s",
+        "tail": "1 failed in 0.52s",
         "failed": [
           "test_almost_utf8_documents_the_small_file_degradation"
         ]
@@ -291,7 +295,7 @@
         "id": "M-A13",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.52s",
+        "tail": "1 failed in 0.54s",
         "failed": [
           "test_readme_annotation_scope_matches_the_code"
         ]
@@ -300,7 +304,7 @@
         "id": "M-A14",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.50s",
+        "tail": "1 failed in 0.53s",
         "failed": [
           "test_readme_says_the_big_files_are_not_done"
         ]
@@ -309,7 +313,7 @@
         "id": "M-A15",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.50s",
+        "tail": "1 failed in 0.51s",
         "failed": [
           "test_module_docstrings_state_the_annotation_scope"
         ]
@@ -318,7 +322,7 @@
         "id": "M-A16",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.55s",
+        "tail": "1 failed in 0.53s",
         "failed": [
           "test_module_docstrings_state_the_annotation_scope"
         ]
@@ -338,19 +342,21 @@
       "tests/test_round3_a_fixes.py::test_ui_font_uses_the_fallback_chain",
       "tests/test_round3_a_fixes.py::test_widgets_never_hardcode_a_font_family",
       "tests/test_round3_a_fixes.py::test_worker_does_not_emit_while_closing",
-      "tests/test_round3_a_fixes.py::test_worker_emits_result_and_resets_guard_on_success",
-      "tests/test_round3_a_fixes.py::test_worker_survives_request_exception_and_resets_guard",
+      "tests/test_round3_a_fixes.py::test_worker_hands_the_result_to_the_slot_which_releases_the_generation",
+      "tests/test_round3_a_fixes.py::test_worker_retires_its_generation_when_emit_hits_a_deleted_object",
+      "tests/test_round3_a_fixes.py::test_worker_survives_request_exception_and_the_slot_still_releases",
       "tests/test_round3_a_fixes.py::test_worker_treats_unreadable_closing_flag_as_closing",
       "tests/test_round3_a_fixes.py::test_zipinfo_compresslevel_is_still_consumed"
     ],
     "note": "变异只在 %TEMP% 影子副本里做，真实仓库只读（只写 _dev/.mutation.lock）",
     "repo_fingerprint": {
-      "桌宠.py": "b5896376b7eb",
+      "桌宠.py": "dfb0cae9b8f9",
       "pet_export.py": "2fe39233056b",
       "pet_lines.py": "5332f60b5f26",
       "pet_alarm.py": "1149e94deee3",
       "pet_behaviors.py": "8f57255144f6",
-      "_check_release.py": "13d464ff5eaa"
+      "_check_release.py": "6aad6446bc0e",
+      "pet_balance.py": "2828b2ebc0c9"
     }
   }
 }

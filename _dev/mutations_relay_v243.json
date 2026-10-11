@@ -1,6 +1,6 @@
 {
-  "note": "v2.4.3 启动接力 / 撒钱预载分片 / 一行兼容修复（SND_PURGE）—— 把修复拿掉必须变红。判定口径 v2.4.3（质量审查 M5）：expect_fail 点名的用例必须真的出现在失败列表里，别的用例被抖红不算 CAUGHT。被 tests/test_relay_v243.py 的 7 组用例守护。",
-  "owner": "agent-compat-r3",
+  "note": "v2.4.3 启动接力 / 撒钱预载分片 / 一行兼容修复（SND_PURGE）＋ v2.4.4 收口（A-1 余额请求代次 / A-2 状态图死名单 / C-2 分片判据去墙钟）—— 把修复拿掉必须变红。本轮（v2.4.4）的**收口主 spec**（三块修复的锚点都钉在这里；素材缺失那一块另见 _dev/mutations_asset_absence_v244.json）；M-R8 已按 A-2 的内联实现重锚。判定口径 v2.4.3（质量审查 M5）：expect_fail 点名的用例必须真的出现在失败列表里，别的用例被抖红不算 CAUGHT。",
+  "owner": "agent-v244",
   "mutations": [
     {
       "id": "M-R1",
@@ -50,10 +50,11 @@
       "new": "        for _k in keys:  # MUTATION: 一轮全解\n            self._load_default_frame_set(_k)",
       "tests": [
         "tests/test_relay_v243.py::test_frame_relay_slice_is_exactly_one_group_per_round",
-        "tests/test_relay_v243.py::test_default_relay_keeps_one_phase_per_round"
+        "tests/test_startup_defer_v242.py::test_startup_task_is_chunked_not_one_shot"
       ],
       "expect_fail": [
-        "tests/test_relay_v243.py::test_frame_relay_slice_is_exactly_one_group_per_round"
+        "tests/test_relay_v243.py::test_frame_relay_slice_is_exactly_one_group_per_round",
+        "tests/test_startup_defer_v242.py::test_startup_task_is_chunked_not_one_shot"
       ]
     },
     {
@@ -99,14 +100,17 @@
       "id": "M-R8",
       "why": "状态图分片零推进时不自锁（pending 清不掉 → QTimer(0) 链永久自排空转）",
       "file": "桌宠.py",
-      "old": "            if self._state_pix_pending and _state_pending_count(self._state_pix_pending) >= _before:\n                self._state_pix_pending = {}",
-      "new": "            pass  # MUTATION: 零推进自锁拿掉",
+      "old": "                _dead = {s for _miss in self._state_pix_pending.values() for s in _miss\n                         if s in _tried or s not in _reachable}",
+      "new": "                _dead = set()  # MUTATION: 零推进收口拿掉（pending 原样留着 → 链永久自排空转）",
       "tests": [
         "tests/test_relay_v243.py::test_state_slice_selflocks_on_zero_progress",
-        "tests/test_relay_v243.py::test_relay_terminates_with_unbuildable_pending"
+        "tests/test_relay_v243.py::test_relay_terminates_with_unbuildable_pending",
+        "tests/test_relay_v243.py::test_zero_progress_retires_only_the_unbuildable_names",
+        "tests/test_relay_v243.py::test_zero_progress_with_a_zero_budget_keeps_the_untried_names"
       ],
       "expect_fail": [
-        "tests/test_relay_v243.py::test_state_slice_selflocks_on_zero_progress"
+        "tests/test_relay_v243.py::test_state_slice_selflocks_on_zero_progress",
+        "tests/test_relay_v243.py::test_relay_terminates_with_unbuildable_pending"
       ]
     },
     {
@@ -147,13 +151,179 @@
       "expect_fail": [
         "tests/test_relay_v243.py::test_default_relay_keeps_one_phase_per_round"
       ]
+    },
+    {
+      "id": "M-R12",
+      "why": "A-2：异常那一轮也判死（去掉 _raised 守卫 → 抛错那张状态图被判死摘掉，永久缺失）",
+      "file": "桌宠.py",
+      "old": "            if not _raised and self._state_pix_pending \\",
+      "new": "            if self._state_pix_pending \\",
+      "tests": [
+        "tests/test_relay_v243.py::test_state_pix_recovers_after_one_build_exception",
+        "tests/test_relay_v243.py::test_production_step_entry_keeps_pending_after_an_exception"
+      ],
+      "expect_fail": [
+        "tests/test_relay_v243.py::test_state_pix_recovers_after_one_build_exception",
+        "tests/test_relay_v243.py::test_production_step_entry_keeps_pending_after_an_exception"
+      ]
+    },
+    {
+      "id": "M-R13",
+      "why": "A-2：判死规则丢了「不在名单里的名字」（零推进什么都不摘 → pending 清不掉，链永久自排）",
+      "file": "桌宠.py",
+      "old": "                _dead = {s for _miss in self._state_pix_pending.values() for s in _miss\n                         if s in _tried or s not in _reachable}",
+      "new": "                _dead = {s for _miss in self._state_pix_pending.values() for s in _miss\n                         if s in _tried}",
+      "tests": [
+        "tests/test_relay_v243.py::test_state_slice_selflocks_on_zero_progress",
+        "tests/test_relay_v243.py::test_relay_terminates_with_unbuildable_pending"
+      ],
+      "expect_fail": [
+        "tests/test_relay_v243.py::test_state_slice_selflocks_on_zero_progress",
+        "tests/test_relay_v243.py::test_relay_terminates_with_unbuildable_pending"
+      ]
+    },
+    {
+      "id": "M-R14",
+      "why": "A-2：判死规则丢了「试过没建出来的」（_ensure_state_pix 空转时 pending 清不掉）",
+      "file": "桌宠.py",
+      "old": "                         if s in _tried or s not in _reachable}",
+      "new": "                         if s not in _reachable}",
+      "tests": [
+        "tests/test_relay_v243.py::test_tried_but_unbuilt_names_are_retired_so_the_relay_converges"
+      ],
+      "expect_fail": [
+        "tests/test_relay_v243.py::test_tried_but_unbuilt_names_are_retired_so_the_relay_converges"
+      ]
+    },
+    {
+      "id": "M-R15",
+      "why": "A-2：零推进退回整表清空（= v2.4.3 口径：这一轮还没试过的名字也被一起丢掉 → 永久缺失）",
+      "file": "桌宠.py",
+      "old": "                _reachable = set(_STATE_MARK_MAP)\n                _dead = {s for _miss in self._state_pix_pending.values() for s in _miss\n                         if s in _tried or s not in _reachable}\n                if _dead:\n                    self._state_pix_dead |= _dead\n                    for _miss in self._state_pix_pending.values():\n                        _miss -= _dead\n                    if not any(self._state_pix_pending.values()):\n                        self._state_pix_pending = {}",
+      "new": "                self._state_pix_pending = {}  # MUTATION: 退回整表清空（单向门）",
+      "tests": [
+        "tests/test_relay_v243.py::test_zero_progress_with_a_zero_budget_keeps_the_untried_names",
+        "tests/test_relay_v243.py::test_state_slice_selflocks_on_zero_progress"
+      ],
+      "expect_fail": [
+        "tests/test_relay_v243.py::test_zero_progress_with_a_zero_budget_keeps_the_untried_names",
+        "tests/test_relay_v243.py::test_state_slice_selflocks_on_zero_progress"
+      ]
+    },
+    {
+      "id": "M-V1",
+      "why": "A-1：worker 提前复位在途（回到 v2.4.3 的无条件 finally → 结果还在队列里就放行 → 第二个并发线程）",
+      "file": "pet_balance.py",
+      "old": "        if not handed:\n            self._retire(gen, \"结果没能交给槽\")",
+      "new": "        self._retire(gen, \"MUTATION: 提前复位（= v2.4.3 的无条件 finally）\")",
+      "tests": [
+        "tests/test_round3_a_fixes.py::test_worker_hands_the_result_to_the_slot_which_releases_the_generation",
+        "tests/test_round3_a_fixes.py::test_second_click_queues_instead_of_starting_a_second_thread"
+      ],
+      "expect_fail": [
+        "tests/test_round3_a_fixes.py::test_worker_hands_the_result_to_the_slot_which_releases_the_generation",
+        "tests/test_round3_a_fixes.py::test_second_click_queues_instead_of_starting_a_second_thread"
+      ]
+    },
+    {
+      "id": "M-V2",
+      "why": "A-1：槽不判代次（旧代的迟到结果照收 → 弹气泡/放金币音/撒钱各多一份，且抹掉新一代标记）",
+      "file": "pet_balance.py",
+      "old": "        if cur != gen:",
+      "new": "        if False:  # MUTATION: 槽不再判代次（旧代照收）",
+      "tests": [
+        "tests/test_round3_a_fixes.py::test_stale_generation_result_is_dropped_without_side_effects",
+        "tests/test_round3_a_fixes.py::test_stale_generation_error_is_dropped_too"
+      ],
+      "expect_fail": [
+        "tests/test_round3_a_fixes.py::test_stale_generation_result_is_dropped_without_side_effects",
+        "tests/test_round3_a_fixes.py::test_stale_generation_error_is_dropped_too"
+      ]
+    },
+    {
+      "id": "M-V3",
+      "why": "A-1：refresh 不看在途（结果待消费的窗口里再点一次 → 真的起第二个并发线程，started==2）",
+      "file": "pet_balance.py",
+      "old": "        if getattr(self.pet, \"_balance_active_gen\", None) is not None:",
+      "new": "        if False:  # MUTATION: 不看在途（每次点击都起新线程）",
+      "tests": [
+        "tests/test_round3_a_fixes.py::test_second_click_queues_instead_of_starting_a_second_thread"
+      ],
+      "expect_fail": [
+        "tests/test_round3_a_fixes.py::test_second_click_queues_instead_of_starting_a_second_thread"
+      ]
+    },
+    {
+      "id": "M-V4",
+      "why": "A-1：自动轮询也走手动反馈（每次轮询都弹气泡 + 放金币音 + 撒钱）",
+      "file": "pet_balance.py",
+      "old": "        if manual:\n            if currency == \"CNY\":",
+      "new": "        if True:  # MUTATION: 自动轮询也走手动反馈\n            if currency == \"CNY\":",
+      "tests": [
+        "tests/test_round3_a_fixes.py::test_auto_poll_landing_has_no_manual_side_effects"
+      ],
+      "expect_fail": [
+        "tests/test_round3_a_fixes.py::test_auto_poll_landing_has_no_manual_side_effects"
+      ]
+    },
+    {
+      "id": "M-V5",
+      "why": "C-2：状态图切片忽略预算（一轮把整张状态表建完 → 每轮张数上界红）",
+      "file": "桌宠.py",
+      "old": "                if (time.perf_counter() - t0) * 1000.0 >= budget_ms:\n                    return",
+      "new": "                pass  # MUTATION: 预算判断拿掉（一轮建完整张表）",
+      "tests": [
+        "tests/test_startup_defer_v242.py::test_startup_task_is_chunked_not_one_shot"
+      ],
+      "expect_fail": [
+        "tests/test_startup_defer_v242.py::test_startup_task_is_chunked_not_one_shot"
+      ]
+    },
+    {
+      "id": "M-V6",
+      "why": "C-2：撒钱预载忽略预算（一片解完 86 帧 → 每片帧数上界红）",
+      "file": "桌宠.py",
+      "old": "                if (time.perf_counter() - t0) * 1000.0 >= _FRAME_SLICE_MS:\n                    _rescheduled = True\n                    QTimer.singleShot(0, self,\n                                      self._gslot(\"money_preload\", self._money_preload_step))\n                    return",
+      "new": "                pass  # MUTATION: 预算判断拿掉（一片解完 86 帧）",
+      "tests": [
+        "tests/test_relay_v243.py::test_money_preload_is_sliced_and_matches_eager_load"
+      ],
+      "expect_fail": [
+        "tests/test_relay_v243.py::test_money_preload_is_sliced_and_matches_eager_load"
+      ]
+    },
+    {
+      "id": "M-V7",
+      "why": "A-1：_retire 不再判'是不是自己那一代'（旧代的收尾会误伤新一代的在途/手动标记）",
+      "file": "pet_balance.py",
+      "old": "            if getattr(pet, \"_balance_active_gen\", None) == gen:",
+      "new": "            if True:  # MUTATION: 不判代次，旧代也照收",
+      "tests": [
+        "tests/test_round3_a_fixes.py::test_retire_only_touches_its_own_generation"
+      ],
+      "expect_fail": [
+        "tests/test_round3_a_fixes.py::test_retire_only_touches_its_own_generation"
+      ]
+    },
+    {
+      "id": "M-V8",
+      "why": "C-2：切片预算放宽 8 倍（12→100）——每片上界是从它算出来的，判据会跟着放宽",
+      "file": "桌宠.py",
+      "old": "_FRAME_SLICE_MS = 12.0",
+      "new": "_FRAME_SLICE_MS = 100.0  # MUTATION: 预算放宽 8 倍",
+      "tests": [
+        "tests/test_relay_v243.py::test_slice_budget_is_pinned_so_the_bounds_cannot_be_loosened"
+      ],
+      "expect_fail": [
+        "tests/test_relay_v243.py::test_slice_budget_is_pinned_so_the_bounds_cannot_be_loosened"
+      ]
     }
   ],
   "results": {
     "title": "变异验证 spec：mutations_relay_v243.json",
-    "checked_at": "2026-10-10 23:44:03",
-    "total": 11,
-    "caught": 11,
+    "checked_at": "2026-10-11 11:05:58",
+    "total": 23,
+    "caught": 23,
     "not_caught": 0,
     "blocked": 0,
     "items": [
@@ -161,7 +331,7 @@
         "id": "M-R1",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.93s",
+        "tail": "1 failed in 1.06s",
         "failed": [
           "test_stop_voice_clip_uses_modern_stop_flags"
         ]
@@ -170,7 +340,7 @@
         "id": "M-R2",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "2 failed in 0.82s",
+        "tail": "2 failed in 0.95s",
         "failed": [
           "test_money_preload_is_sliced_and_matches_eager_load",
           "test_money_preload_is_sliced_even_with_a_zero_budget"
@@ -180,7 +350,7 @@
         "id": "M-R3",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.90s",
+        "tail": "1 failed in 0.84s",
         "failed": [
           "test_money_preload_defers_to_the_consumer"
         ]
@@ -189,17 +359,17 @@
         "id": "M-R4",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "2 failed in 0.86s",
+        "tail": "2 failed in 0.96s",
         "failed": [
           "test_frame_relay_slice_is_exactly_one_group_per_round",
-          "test_default_relay_keeps_one_phase_per_round"
+          "test_startup_task_is_chunked_not_one_shot"
         ]
       },
       {
         "id": "M-R5",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.98s",
+        "tail": "1 failed in 0.92s",
         "failed": [
           "test_custom_role_skips_default_frame_sets_but_keeps_petpet"
         ]
@@ -208,7 +378,7 @@
         "id": "M-R6",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.94s",
+        "tail": "1 failed in 0.68s",
         "failed": [
           "test_custom_role_skips_default_frame_sets_but_keeps_petpet"
         ]
@@ -217,7 +387,7 @@
         "id": "M-R7",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.74s",
+        "tail": "1 failed in 0.68s",
         "failed": [
           "test_relay_chain_closes_when_a_step_raises"
         ]
@@ -226,17 +396,18 @@
         "id": "M-R8",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "2 failed in 0.88s",
+        "tail": "3 failed, 1 passed in 0.82s",
         "failed": [
           "test_state_slice_selflocks_on_zero_progress",
-          "test_relay_terminates_with_unbuildable_pending"
+          "test_relay_terminates_with_unbuildable_pending",
+          "test_zero_progress_retires_only_the_unbuildable_names"
         ]
       },
       {
         "id": "M-R9",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.83s",
+        "tail": "1 failed in 0.69s",
         "failed": [
           "test_custom_role_switching_back_to_default_loads_idle"
         ]
@@ -245,7 +416,7 @@
         "id": "M-R10",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.73s",
+        "tail": "1 failed in 0.67s",
         "failed": [
           "test_money_preload_is_sliced_even_with_a_zero_budget"
         ]
@@ -254,9 +425,122 @@
         "id": "M-R11",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.77s",
+        "tail": "1 failed in 0.73s",
         "failed": [
           "test_default_relay_keeps_one_phase_per_round"
+        ]
+      },
+      {
+        "id": "M-R12",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "2 failed in 0.77s",
+        "failed": [
+          "test_state_pix_recovers_after_one_build_exception",
+          "test_production_step_entry_keeps_pending_after_an_exception"
+        ]
+      },
+      {
+        "id": "M-R13",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "2 failed in 0.81s",
+        "failed": [
+          "test_state_slice_selflocks_on_zero_progress",
+          "test_relay_terminates_with_unbuildable_pending"
+        ]
+      },
+      {
+        "id": "M-R14",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 0.77s",
+        "failed": [
+          "test_tried_but_unbuilt_names_are_retired_so_the_relay_converges"
+        ]
+      },
+      {
+        "id": "M-R15",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "2 failed in 0.77s",
+        "failed": [
+          "test_zero_progress_with_a_zero_budget_keeps_the_untried_names",
+          "test_state_slice_selflocks_on_zero_progress"
+        ]
+      },
+      {
+        "id": "M-V1",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "2 failed in 0.60s",
+        "failed": [
+          "test_worker_hands_the_result_to_the_slot_which_releases_the_generation",
+          "test_second_click_queues_instead_of_starting_a_second_thread"
+        ]
+      },
+      {
+        "id": "M-V2",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "2 failed in 0.57s",
+        "failed": [
+          "test_stale_generation_result_is_dropped_without_side_effects",
+          "test_stale_generation_error_is_dropped_too"
+        ]
+      },
+      {
+        "id": "M-V3",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 0.52s",
+        "failed": [
+          "test_second_click_queues_instead_of_starting_a_second_thread"
+        ]
+      },
+      {
+        "id": "M-V4",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 0.51s",
+        "failed": [
+          "test_auto_poll_landing_has_no_manual_side_effects"
+        ]
+      },
+      {
+        "id": "M-V5",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 0.96s",
+        "failed": [
+          "test_startup_task_is_chunked_not_one_shot"
+        ]
+      },
+      {
+        "id": "M-V6",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 0.83s",
+        "failed": [
+          "test_money_preload_is_sliced_and_matches_eager_load"
+        ]
+      },
+      {
+        "id": "M-V7",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 0.51s",
+        "failed": [
+          "test_retire_only_touches_its_own_generation"
+        ]
+      },
+      {
+        "id": "M-V8",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 0.62s",
+        "failed": [
+          "test_slice_budget_is_pinned_so_the_bounds_cannot_be_loosened"
         ]
       }
     ],
@@ -269,19 +553,33 @@
       "tests/test_relay_v243.py::test_money_preload_defers_to_the_consumer",
       "tests/test_relay_v243.py::test_money_preload_is_sliced_and_matches_eager_load",
       "tests/test_relay_v243.py::test_money_preload_is_sliced_even_with_a_zero_budget",
+      "tests/test_relay_v243.py::test_production_step_entry_keeps_pending_after_an_exception",
       "tests/test_relay_v243.py::test_relay_chain_closes_when_a_step_raises",
       "tests/test_relay_v243.py::test_relay_terminates_with_unbuildable_pending",
+      "tests/test_relay_v243.py::test_slice_budget_is_pinned_so_the_bounds_cannot_be_loosened",
+      "tests/test_relay_v243.py::test_state_pix_recovers_after_one_build_exception",
       "tests/test_relay_v243.py::test_state_slice_selflocks_on_zero_progress",
-      "tests/test_relay_v243.py::test_stop_voice_clip_uses_modern_stop_flags"
+      "tests/test_relay_v243.py::test_stop_voice_clip_uses_modern_stop_flags",
+      "tests/test_relay_v243.py::test_tried_but_unbuilt_names_are_retired_so_the_relay_converges",
+      "tests/test_relay_v243.py::test_zero_progress_retires_only_the_unbuildable_names",
+      "tests/test_relay_v243.py::test_zero_progress_with_a_zero_budget_keeps_the_untried_names",
+      "tests/test_round3_a_fixes.py::test_auto_poll_landing_has_no_manual_side_effects",
+      "tests/test_round3_a_fixes.py::test_retire_only_touches_its_own_generation",
+      "tests/test_round3_a_fixes.py::test_second_click_queues_instead_of_starting_a_second_thread",
+      "tests/test_round3_a_fixes.py::test_stale_generation_error_is_dropped_too",
+      "tests/test_round3_a_fixes.py::test_stale_generation_result_is_dropped_without_side_effects",
+      "tests/test_round3_a_fixes.py::test_worker_hands_the_result_to_the_slot_which_releases_the_generation",
+      "tests/test_startup_defer_v242.py::test_startup_task_is_chunked_not_one_shot"
     ],
     "note": "变异只在 %TEMP% 影子副本里做，真实仓库只读（只写 _dev/.mutation.lock）",
     "repo_fingerprint": {
-      "桌宠.py": "b5896376b7eb",
+      "桌宠.py": "dfb0cae9b8f9",
       "pet_export.py": "2fe39233056b",
       "pet_lines.py": "5332f60b5f26",
       "pet_alarm.py": "1149e94deee3",
       "pet_behaviors.py": "8f57255144f6",
-      "_check_release.py": "13d464ff5eaa"
+      "_check_release.py": "6aad6446bc0e",
+      "pet_balance.py": "2828b2ebc0c9"
     }
   }
 }

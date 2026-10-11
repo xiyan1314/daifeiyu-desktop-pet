@@ -1,0 +1,239 @@
+{
+  "note": "发行拆分的素材缺失降级（tests/test_asset_absence_v244.py 的 15 条用例）——把每条降级路径拿掉必须变红。判定口径 v2.4.3（质量审查 M5）：expect_fail 点名的用例必须真的出现在失败列表里。",
+  "owner": "agent-asset-absence",
+  "mutations": [
+    {
+      "id": "M-A1",
+      "why": "角色基础图缺失时不再回退程序化占位鱼（用户看到一片空白/直接崩）",
+      "file": "桌宠.py",
+      "old": "        normal_side = self._load_img([\"character.png\", \"assets/character.png\"]) or self._fallback_pix()",
+      "new": "        normal_side = self._load_img([\"character.png\", \"assets/character.png\"])  # MUTATION: 占位鱼兜底拿掉",
+      "tests": [
+        "tests/test_asset_absence_v244.py::test_character_images_missing_fall_back_to_placeholder_fish"
+      ],
+      "expect_fail": [
+        "tests/test_asset_absence_v244.py::test_character_images_missing_fall_back_to_placeholder_fish"
+      ]
+    },
+    {
+      "id": "M-A2",
+      "why": "摸头帧集缺失时不再早退（空帧集也进播放态，特效层空转）",
+      "file": "桌宠.py",
+      "old": "        if not self._fx_petpet:\n            return\n",
+      "new": "        if not self._fx_petpet:\n            pass  # MUTATION: 缺帧也继续\n",
+      "tests": [
+        "tests/test_asset_absence_v244.py::test_frame_sets_missing_degrade_to_static_form_and_still_run"
+      ],
+      "expect_fail": [
+        "tests/test_asset_absence_v244.py::test_frame_sets_missing_degrade_to_static_form_and_still_run"
+      ]
+    },
+    {
+      "id": "M-A3",
+      "why": "启动接力链的 finally 收口拿掉（缺素材时 _startup_assets_done 恒 False，链不收敛）",
+      "file": "桌宠.py",
+      "old": "        finally:\n            if not _rescheduled:\n                self._startup_assets_done = True",
+      "new": "        finally:\n            if not _rescheduled:\n                pass  # MUTATION: 接力收口拿掉",
+      "tests": [
+        "tests/test_asset_absence_v244.py::test_startup_relay_converges_without_any_assets[none]",
+        "tests/test_asset_absence_v244.py::test_entire_assets_dir_unavailable_keeps_every_consumer_alive"
+      ],
+      "expect_fail": [
+        "tests/test_asset_absence_v244.py::test_startup_relay_converges_without_any_assets[none]"
+      ]
+    },
+    {
+      "id": "M-A4",
+      "why": "撒钱消费点的空帧集守卫拿掉（fx 目录不存在也进撒钱播放态）",
+      "file": "桌宠.py",
+      "old": "        if not self._fx_money:\n            return\n",
+      "new": "        if False:  # MUTATION: 空帧集也继续\n            return\n",
+      "tests": [
+        "tests/test_asset_absence_v244.py::test_money_preload_with_unavailable_fx_dir_converges_silently[none]"
+      ],
+      "expect_fail": [
+        "tests/test_asset_absence_v244.py::test_money_preload_with_unavailable_fx_dir_converges_silently[none]"
+      ]
+    },
+    {
+      "id": "M-A5",
+      "why": "撒钱预载入口改成先列目录（'优化'掉 86 次空解码）→ assets/fx 不存在时直接抛",
+      "file": "桌宠.py",
+      "old": "        self._money_preload = {\"k\": 0, \"frames\": []}\n        QTimer.singleShot(0, self, self._gslot(\"money_preload\", self._money_preload_step))",
+      "new": "        os.listdir(self._fx_money_dir)  # MUTATION: 目录预检（fx 目录不存在时 FileNotFoundError）\n        self._money_preload = {\"k\": 0, \"frames\": []}\n        QTimer.singleShot(0, self, self._gslot(\"money_preload\", self._money_preload_step))",
+      "tests": [
+        "tests/test_asset_absence_v244.py::test_money_preload_with_unavailable_fx_dir_converges_silently[empty]"
+      ],
+      "expect_fail": [
+        "tests/test_asset_absence_v244.py::test_money_preload_with_unavailable_fx_dir_converges_silently[empty]"
+      ]
+    },
+    {
+      "id": "M-A6",
+      "why": "自定义角色口径失效（接力白解用不到的默认三组帧集）",
+      "file": "桌宠.py",
+      "old": "        if self._custom_role:\n            return (\"petpet\",)\n        return tuple(key for key, _sub, _prefix, _count, _attr in _DEFAULT_FRAME_SETS)",
+      "new": "        return tuple(key for key, _sub, _prefix, _count, _attr in _DEFAULT_FRAME_SETS)  # MUTATION: 无视角色口径",
+      "tests": [
+        "tests/test_asset_absence_v244.py::test_custom_role_without_animations_falls_back_to_static_and_keeps_petpet"
+      ],
+      "expect_fail": [
+        "tests/test_asset_absence_v244.py::test_custom_role_without_animations_falls_back_to_static_and_keeps_petpet"
+      ]
+    },
+    {
+      "id": "M-A7",
+      "why": "音效三级链的合成回退音拿掉（缺音效目录时一声不响）",
+      "file": "pet_audio.py",
+      "old": "    data = _fallback.get(fb_name)\n    if data is None:\n        return",
+      "new": "    return  # MUTATION: 合成回退音拿掉\n    data = _fallback.get(fb_name)\n    if data is None:\n        return",
+      "tests": [
+        "tests/test_asset_absence_v244.py::test_sounds_dir_missing_uses_synth_fallback"
+      ],
+      "expect_fail": [
+        "tests/test_asset_absence_v244.py::test_sounds_dir_missing_uses_synth_fallback"
+      ]
+    },
+    {
+      "id": "M-A8",
+      "why": "状态图缺失时的守卫拿掉（拿 None 去 setPixmap → 抛异常）",
+      "file": "桌宠.py",
+      "old": "        pix = self._state_pix(state)\n        if pix is None:\n            _log_error(\"state image missing: %s\" % state)\n            return",
+      "new": "        pix = self._state_pix(state)\n        if pix is None:\n            _log_error(\"state image missing: %s\" % state)  # MUTATION: 守卫拿掉\n",
+      "tests": [
+        "tests/test_asset_absence_v244.py::test_state_images_missing_show_nothing_and_only_log"
+      ],
+      "expect_fail": [
+        "tests/test_asset_absence_v244.py::test_state_images_missing_show_nothing_and_only_log"
+      ]
+    },
+    {
+      "id": "M-A9",
+      "why": "坏配置不再回落默认值（数据文件损坏时直接抛）",
+      "file": "桌宠.py",
+      "old": "    except Exception as e:\n        _log_error(\"load_config 读取失败（按默认值运行）: %r\" % (e,))",
+      "new": "    except Exception as e:\n        raise  # MUTATION: 坏配置不再回落默认值",
+      "tests": [
+        "tests/test_asset_absence_v244.py::test_runtime_data_files_missing_are_regenerated"
+      ],
+      "expect_fail": [
+        "tests/test_asset_absence_v244.py::test_runtime_data_files_missing_are_regenerated"
+      ]
+    }
+  ],
+  "results": {
+    "title": "变异验证 spec：mutations_asset_absence_v244.json",
+    "checked_at": "2026-10-11 11:08:30",
+    "total": 9,
+    "caught": 9,
+    "not_caught": 0,
+    "blocked": 0,
+    "items": [
+      {
+        "id": "M-A1",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 1.37s",
+        "failed": [
+          "test_character_images_missing_fall_back_to_placeholder_fish"
+        ]
+      },
+      {
+        "id": "M-A2",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 0.76s",
+        "failed": [
+          "test_frame_sets_missing_degrade_to_static_form_and_still_run"
+        ]
+      },
+      {
+        "id": "M-A3",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "2 failed in 1.28s",
+        "failed": [
+          "test_startup_relay_converges_without_any_assets[none]",
+          "test_entire_assets_dir_unavailable_keeps_every_consumer_alive"
+        ]
+      },
+      {
+        "id": "M-A4",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 0.81s",
+        "failed": [
+          "test_money_preload_with_unavailable_fx_dir_converges_silently[none]"
+        ]
+      },
+      {
+        "id": "M-A5",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 0.79s",
+        "failed": [
+          "test_money_preload_with_unavailable_fx_dir_converges_silently[empty]"
+        ]
+      },
+      {
+        "id": "M-A6",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 0.77s",
+        "failed": [
+          "test_custom_role_without_animations_falls_back_to_static_and_keeps_petpet"
+        ]
+      },
+      {
+        "id": "M-A7",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 1.15s",
+        "failed": [
+          "test_sounds_dir_missing_uses_synth_fallback"
+        ]
+      },
+      {
+        "id": "M-A8",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 1.30s",
+        "failed": [
+          "test_state_images_missing_show_nothing_and_only_log"
+        ]
+      },
+      {
+        "id": "M-A9",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 1.26s",
+        "failed": [
+          "test_runtime_data_files_missing_are_regenerated"
+        ]
+      }
+    ],
+    "spec": "mutations_asset_absence_v244.json",
+    "tests": [
+      "tests/test_asset_absence_v244.py::test_character_images_missing_fall_back_to_placeholder_fish",
+      "tests/test_asset_absence_v244.py::test_custom_role_without_animations_falls_back_to_static_and_keeps_petpet",
+      "tests/test_asset_absence_v244.py::test_entire_assets_dir_unavailable_keeps_every_consumer_alive",
+      "tests/test_asset_absence_v244.py::test_frame_sets_missing_degrade_to_static_form_and_still_run",
+      "tests/test_asset_absence_v244.py::test_money_preload_with_unavailable_fx_dir_converges_silently[empty]",
+      "tests/test_asset_absence_v244.py::test_money_preload_with_unavailable_fx_dir_converges_silently[none]",
+      "tests/test_asset_absence_v244.py::test_runtime_data_files_missing_are_regenerated",
+      "tests/test_asset_absence_v244.py::test_sounds_dir_missing_uses_synth_fallback",
+      "tests/test_asset_absence_v244.py::test_startup_relay_converges_without_any_assets[none]",
+      "tests/test_asset_absence_v244.py::test_state_images_missing_show_nothing_and_only_log"
+    ],
+    "note": "变异只在 %TEMP% 影子副本里做，真实仓库只读（只写 _dev/.mutation.lock）",
+    "repo_fingerprint": {
+      "桌宠.py": "dfb0cae9b8f9",
+      "pet_export.py": "2fe39233056b",
+      "pet_lines.py": "5332f60b5f26",
+      "pet_alarm.py": "1149e94deee3",
+      "pet_behaviors.py": "8f57255144f6",
+      "_check_release.py": "6aad6446bc0e",
+      "pet_balance.py": "2828b2ebc0c9"
+    }
+  }
+}

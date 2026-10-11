@@ -379,3 +379,47 @@ def test_fingerprint_file_list_matches_the_mutation_lib():
     assert files, "在 _dev/_mutate_lib.py 里找不到 repo_fingerprint 的文件清单"
     assert tuple(files) == tuple(chk.MUTATION_FINGERPRINT_FILES), \
         "两处清单漂移：%r vs %r" % (files, chk.MUTATION_FINGERPRINT_FILES)
+    # v2.4.4（任务 1）：pet_balance.py 必须在清单里。A-1（请求代次）改了它、3 条锚点随之失效，
+    # 而发布门此前一条"证据过期"都不提示。少了它，这条用例红（防的是"又漏一个关键文件"）。
+    assert "pet_balance.py" in chk.MUTATION_FINGERPRINT_FILES, \
+        "pet_balance.py 不在发布门的指纹清单里（改了它不会有任何提示）：%r" % (
+            chk.MUTATION_FINGERPRINT_FILES,)
+    assert "pet_balance.py" in files,         "pet_balance.py 不在变异库的指纹清单里：%r" % (files,)
+    missing = [rel for rel in chk.MUTATION_FINGERPRINT_FILES
+               if not os.path.isfile(os.path.join(chk.ROOT, rel))]
+    assert missing == [], "指纹清单点名了不存在的文件（这份清单本身就是过期证据）：%r" % (missing,)
+
+
+def test_mutation_verdict_notes_flags_unverified_entries(tmp_path):
+    """M2（v2.4.4 兼容审查）：发布门不只提示"指纹过期"，没通过的判定也要出声。
+
+    SPEC-BAD / ANCHOR-LOST / WRONG TEST / NOT CAUGHT / INVALID / BASELINE-RED 这些条目等于
+    "这条护栏还没被验证"，此前完全静默（复核的人只会看到"N/N 全抓到"里的一个缺口）。
+
+    能真失败：把 mutation_verdict_notes 改成恒返回 [] → 第二、三组断言红。
+    """
+    dev = tmp_path / "_dev"
+    dev.mkdir()
+    (dev / "mutations_ok.json").write_text(json.dumps({
+        "mutations": [],
+        "results": {"items": [{"id": "M-1", "verdict": "CAUGHT"},
+                              {"id": "M-2", "verdict": "CAUGHT"}]}}), encoding="utf-8")
+    assert chk.mutation_verdict_notes(str(tmp_path)) == [], "全 CAUGHT 时不许报警"
+    (dev / "mutations_bad.json").write_text(json.dumps({
+        "results": {"items": [{"id": "M-C10", "verdict": "SPEC-BAD"},
+                              {"id": "M-C9", "verdict": "WRONG TEST"},
+                              {"id": "M-3", "verdict": "CAUGHT"}]}}), encoding="utf-8")
+    notes = chk.mutation_verdict_notes(str(tmp_path))
+    assert len(notes) == 1 and "mutations_bad.json" in notes[0], notes
+    assert "M-C10=SPEC-BAD" in notes[0] and "M-C9=WRONG TEST" in notes[0], notes
+    assert "M-3" not in notes[0], "CAUGHT 的条目不该被点名：%r" % (notes[0],)
+    # 旧形态（结果 JSON 顶层 items，export_slice / startup_defer 那三条单脚本驱动）也要认
+    (dev / "mutations_legacy.json").write_text(json.dumps(
+        {"items": [{"id": "M6 feed", "verdict": "ANCHOR-LOST"}]}), encoding="utf-8")
+    notes2 = chk.mutation_verdict_notes(str(tmp_path))
+    assert len(notes2) == 2, notes2
+    assert any("mutations_legacy.json" in n and "ANCHOR-LOST" in n for n in notes2), notes2
+    # 坏 JSON / 不是结果的文件不许把它带崩（开发期会留半成品）
+    (dev / "broken.json").write_text("{ not json", encoding="utf-8")
+    (dev / "other.json").write_text(json.dumps({"mutations": []}), encoding="utf-8")
+    assert len(chk.mutation_verdict_notes(str(tmp_path))) == 2

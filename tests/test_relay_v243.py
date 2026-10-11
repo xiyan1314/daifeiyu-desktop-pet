@@ -31,6 +31,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import 桌宠 as main  # noqa: E402
 import pet_anim  # noqa: E402
+from PySide6.QtGui import QPixmap  # noqa: E402
 from PySide6.QtWidgets import QApplication  # noqa: E402
 
 
@@ -212,10 +213,15 @@ def _money_decode_spy(monkeypatch, per_frame_ms=0.5):
 def test_money_preload_is_sliced_and_matches_eager_load(pet, monkeypatch):
     """撒钱帧集预载必须分片，且素材与一次性全解**逐张相同**。
 
+    v2.4.4（C-2）：分片判据是可数的量——**每片解了几帧**（用例注入 0.5ms/帧的人为成本），
+    不再是"单片 < 120ms"那条墙钟（本机实测只剩约 17ms 余量，负载一抖就假红）。
+
     能真失败：把 _preload_money_fx 改回"一次 load_frame_set(.., 86)" → 入口调用后
-    `pet._fx_money` 直接是 86 帧、`seen` 里 86 条 → 前两条断言红。
+    `pet._fx_money` 直接是 86 帧、`seen` 里 86 条 → 前两条断言红；
+    把 _money_preload_step 的预算判断拿掉 → 一片解完 86 帧 → 每片帧数上界红。
     """
-    seen = _money_decode_spy(monkeypatch)
+    per_frame_ms = 0.5
+    seen = _money_decode_spy(monkeypatch, per_frame_ms=per_frame_ms)
     pet._fx_money = []
     pet._money_preload = None
     pet._preload_money_fx()
@@ -223,26 +229,53 @@ def test_money_preload_is_sliced_and_matches_eager_load(pet, monkeypatch):
     assert seen == [], "入口就解了 %d 帧" % len(seen)
     assert pet._money_preload is not None, "入口没登记在途状态"
 
-    steps = []
+    per_step, steps = [], []
     guard = 0
     while pet._money_preload is not None and guard < 500:
         guard += 1
+        before = len(seen)
         t0 = time.perf_counter()
         pet._money_preload_step()
+        per_step.append(len(seen) - before)
         steps.append((time.perf_counter() - t0) * 1000.0)
 
     assert len(seen) == main._MONEY_FRAME_COUNT, "预载共解了 %d 帧" % len(seen)
-    assert len(steps) >= 2,         "只用了 %d 片：不是分片（%d 帧都在一片里，单片 %.1fms）" % (
-            len(steps), len(seen), max(steps) if steps else -1)
-    # v2.4.3（第三轮找茬复审 L②）：**结构判据**（片数 ≥2）才是主判据——退化成一片时它先红。
-    # 这里的墙钟阈值只做大方向兜底：用例自己注入了 0.5ms/帧 ×86 帧 ≈43ms 的人为下限，
-    # 并发负载下单组解码实测 17~20ms（原 60ms 只剩 ~17ms 余量，会把负载记成回归）。
-    assert max(steps) < 120.0, "单片占了 %.1f ms（远超一个切片的量级）：%r" % (max(steps), steps)
+    assert len(per_step) >= 2,         "只用了 %d 片：不是分片（%d 帧都在一片里，单片 %.1fms）" % (
+            len(per_step), len(seen), max(steps) if steps else -1)
+    # v2.4.4（C-2）：主判据是**每片解了几帧**（确定性、负载无关），不再卡墙钟。
+    # 用例自己注入 0.5ms/帧的人为成本 → 预算 12ms 的一片最多 ceil(12/0.5)+2 = 26 帧；
+    # 负载只会让同一个墙钟预算**更早**用光（每片更少），所以"每片 ≤ N"在并发负载下不会
+    # 假红。旧口径"单片 < 120ms"在本机实测只剩约 17ms 余量（审查记过的那次抖动），
+    # 一片 86 帧的退化会直接突破这条上界（M-R10/M-V6 的变异验证就是它）。
+    # C-2（质量审查 M1）：这条上界是**从被测预算算出来的**，所以预算本身由
+    # test_slice_budget_is_pinned_so_the_bounds_cannot_be_loosened 钉住（12.0）；
+    # 否则"预算放宽 8 倍"会让上界跟着放宽、判据自己吸收掉退化。
+    per_step_limit = int(main._FRAME_SLICE_MS / per_frame_ms) + 2
+    assert max(per_step) <= per_step_limit,         "单片解了 %d 帧（预算 %.0fms ÷ 每帧 %.1fms 的上界是 %d 帧）：不是分片" % (
+            max(per_step), main._FRAME_SLICE_MS, per_frame_ms, per_step_limit)
 
     want = pet_anim.load_frame_set(pet._fx_money_dir, main._MONEY_FRAME_PREFIX,
                                    main._MONEY_FRAME_COUNT)
     assert len(pet._fx_money) == len(want) == main._MONEY_FRAME_COUNT
     assert all(a.toImage() == b.toImage() for a, b in zip(pet._fx_money, want)),         "分片预载的素材与一次性全解不一致"
+
+
+def test_slice_budget_is_pinned_so_the_bounds_cannot_be_loosened():
+    """C-2（v2.4.4 质量审查 M1）：切片预算必须钉死——C-2 的每片上界是从它自己算出来的。
+
+    `test_money_preload_is_sliced_and_matches_eager_load` 与
+    `test_startup_task_is_chunked_not_one_shot` 的 per_step_limit 都是
+    "int(_FRAME_SLICE_MS / 每单位成本) + 常数"：预算一放宽，上界跟着放宽（审查实测
+    _FRAME_SLICE_MS 12→100（8×）时两条用例**全绿**）——"分片变粗"这类退化会被判据自己
+    吸收掉。这里把预算钉成常量：要动预算就必须**同时**动这一条与那两条判据，而不是静默地
+    把判据一起放宽（见 M-V8：把 12.0 改成 100.0 必须被这条抓住）。
+
+    能真失败：把 桌宠.py 的 _FRAME_SLICE_MS 改成 100.0 → 第一条断言红。
+    """
+    assert main._FRAME_SLICE_MS == 12.0,         "切片预算被放宽了（C-2 的每片上界是从它算出来的，判据会跟着放宽）：%r" % (
+            main._FRAME_SLICE_MS,)
+    assert main._EXPORT_SLICE_MS == 12.0,         "导出切片预算被改了：%r（test_compat_v242_fixes 里那句 '与 _EXPORT_SLICE_MS 同值' 也跟着失效）" % (
+            main._EXPORT_SLICE_MS,)
 
 
 def test_money_preload_is_sliced_even_with_a_zero_budget(pet, monkeypatch):
@@ -504,25 +537,177 @@ def test_relay_chain_closes_when_a_step_raises(pet, monkeypatch):
     assert pet._startup_assets_done
 
 
-# ---------------- 7. 状态图分片：零推进自锁 ----------------
+# ---------------- 7. 状态图分片：零推进收口 ----------------
 
 def test_state_slice_selflocks_on_zero_progress(pet):
-    """pending 里全是不可建的名字时，本轮必须清空 pending（否则 QTimer(0) 链永久自排）。
+    """pending 里全是不可建的名字时，本轮必须把 pending 收干净（否则 QTimer(0) 链永久自排）。
 
-    能真失败：去掉 _build_state_pix_slice 的自锁 → pending 原样留着 → 红。
+    v2.4.4（A-2）：收口方式从"整表清空"改成"判死不可建的名字并摘掉"（_state_pix_dead），
+    本用例的断言口径不变（pending 必须空），另外钉住"判死的是哪个名字"。
+
+    能真失败：去掉 _build_state_pix_slice 的零推进收口 → pending 原样留着 → 红。
     """
     pet._state_pix_pending = {"normal": {"__no_such_state__"}}
+    pet._state_pix_dead = set()
     pet._build_state_pix_slice()
-    assert pet._state_pix_pending == {},         "零推进时没自锁：pending=%r（接力链会永久自排空转）" % (pet._state_pix_pending,)
+    assert pet._state_pix_pending == {},         "零推进时没收口：pending=%r（接力链会永久自排空转）" % (pet._state_pix_pending,)
+    assert pet._state_pix_dead == {"__no_such_state__"},         "判死的名单不对（应当只有那个走不到的名字）：%r" % (pet._state_pix_dead,)
 
 
 def test_relay_terminates_with_unbuildable_pending(pet):
     """端到端：pending 不可建时接力链也必须收敛（而不是无限自排）。"""
     pet._startup_assets_done = False
     pet._state_pix_pending = {"normal": {"__no_such_state__"}}
+    pet._state_pix_dead = set()
     rounds = 0
     while not pet._startup_assets_done and rounds < 12:
         rounds += 1
         pet._startup_assets_step()
     assert pet._startup_assets_done,         "接力链没有收敛（跑了 %d 轮仍是 pending=%r）" % (rounds, pet._state_pix_pending)
     assert rounds < 12, "收敛用了 %d 轮：太慢" % rounds
+
+
+def test_dead_alias_does_not_block_a_still_pending_name(pet):
+    """L2（兼容审查）：别名的判死不许连坐到**还活着的名字**上——pending 才是唯一真源。
+
+    `_state_pix_dead={angry}` + `pending={hiss}`（hiss 是 angry 的吃饱别名）时，
+    `_state_pending("hiss")` 此前恒 False → 这一轮一个名字都不试 → 零推进收口也摘不掉
+    hiss（它在 _STATE_MARK_MAP 名单里、又"没试过"，两条判死理由都不成立）→ 接力链每轮
+    排一个 QTimer(0)，30 轮都不收敛（审查用真窗口实测）。
+
+    能真失败：把别名判死加回 `_state_pending` → 循环跑满 30 轮仍不收敛 → 第一条断言红。
+    """
+    pet._state_pix_pending = {"normal": {"hiss"}, "full": {"hiss"}}
+    pet._state_pix_dead = {"angry"}
+    pet._startup_assets_done = False
+    rounds = 0
+    while not pet._startup_assets_done and rounds < 30:
+        rounds += 1
+        pet._startup_assets_step()
+    assert pet._startup_assets_done,         "接力链没收敛（跑了 %d 轮仍是 pending=%r）：别名判死把还在 pending 的 hiss 一起挡住了" % (
+            rounds, pet._state_pix_pending)
+    assert rounds < 30, "收敛用了 %d 轮：太慢" % rounds
+
+
+# ---------------- 8. v2.4.4（A-2）：零推进只判死"建不出来"的名字（不许整表清空） ----------------
+
+def test_zero_progress_retires_only_the_unbuildable_names(pet):
+    """pending 里混着"能建的"与"走不到的"：只能判死走不到的那个，剩下的不许一起丢。
+
+    能真失败：把零推进收口改回"pending = {}"（= v2.4.3 那次收口）→
+    第一条断言红（可建的名字被顺手丢了）；把"不在名单里的判死"这条拿掉 → 最后一轮
+    pending 清不掉 → 第三条断言红。
+    """
+    pet._state_pix_pending = {"normal": {"__no_such_state__", "angry"}, "full": {"angry"}}
+    pet._state_pix_dead = set()
+    pet._build_state_pix_slice()
+    assert pet.state_pix["normal"].get("angry") is not None,         "可建的名字被当成'走不到'一起丢了"
+    assert pet._state_pix_dead == set(),         "这一轮有推进（建出了 angry），不该判死任何名字：%r" % (pet._state_pix_dead,)
+    assert pet._state_pix_pending.get("normal") == {"__no_such_state__"}         and not pet._state_pix_pending.get("full"),         "pending 里应当只剩走不到的那个名字（angry 两个形态都已建）：%r" % (pet._state_pix_pending,)
+    # 第二轮：剩下的全是走不到的 → 零推进 → 判死并摘掉（链要能收敛）
+    pet._build_state_pix_slice()
+    assert pet._state_pix_pending == {}, "走不到的名字没被摘掉：接力链会永久自排"
+    assert pet._state_pix_dead == {"__no_such_state__"},         "判死的名单不对：%r" % (pet._state_pix_dead,)
+
+
+def test_zero_progress_with_a_zero_budget_keeps_the_untried_names(pet):
+    """预算为 0 时这一轮一张都没试到：pending 必须原样留着（旧口径整表清空 → 名字丢失）。
+
+    这是"整表清空"真正会咬人的那种轮次：第一个状态就不是待建 → 预算检查立刻返回 →
+    本轮零推进，但 pending 里的名字**一次都没试过**。修复前（v2.4.3）这里会 pending = {}，
+    那个名字从此永久缺失（_ensure_state_pix 开头的单向门）。
+
+    能真失败：把零推进收口改回"pending = {}" → 第一条断言红（angry 被整表清空带走）。
+    """
+    pet._state_pix_pending = {"normal": {"angry"}, "full": {"angry"}}
+    pet._state_pix_dead = set()
+    pet._build_state_pix_slice(budget_ms=0.0)     # 第一个状态就不是待建 → 立刻超预算返回
+    assert pet._state_pix_dead == set(),         "这一轮一个名字都没试（零推进），不该判死任何名字：%r" % (pet._state_pix_dead,)
+    assert pet._state_pending("angry"),         "预算 0 的一轮把还没试过的 angry 整表清空了（旧口径：该状态永久缺失）"
+    # 下一轮（正常预算）必须真的把它补建出来
+    pet._build_state_pix_slice()
+    assert pet._state_pix("angry") is not None, "留下的名字没有在下一轮被补建"
+
+
+def test_tried_but_unbuilt_names_are_retired_so_the_relay_converges(pet, monkeypatch):
+    """试过却一张都没建出来（_ensure_state_pix 空转）时也要收口，否则链永久自排。
+
+    能真失败：把"tried 里仍在 pending 的算死"这条拿掉 → pending 永远清不掉 → 两条断言红。
+    """
+    pet._state_pix_dead = set()
+    monkeypatch.setattr(pet, "_ensure_state_pix", lambda state: None)   # 试了，但什么都没建
+    pet._startup_assets_done = False
+    rounds = 0
+    while not pet._startup_assets_done and rounds < 20:
+        rounds += 1
+        pet._startup_assets_step()
+    assert pet._startup_assets_done, "接力链没收敛：pending=%r" % (pet._state_pix_pending,)
+    assert pet._state_pix_pending == {} and pet._state_pix_dead,         "试过且没建出来的名字没被判死：pending=%r dead=%r" % (
+            pet._state_pix_pending, pet._state_pix_dead)
+
+
+def test_state_pix_recovers_after_one_build_exception(pet, monkeypatch):
+    """**A-2 验收核心**：建状态图抛过一次之后，恢复真方法再调 _state_pix(angry) 仍能补建。
+
+    修复前（v2.4.3）：那一轮的 finally 见"零推进"就整表清空 pending，而 _ensure_state_pix
+    开头是"pend 为空就 return"——单向门，该状态从此永久缺失（_show_state 只记一行日志后
+    静默 no-op），直到重启。
+
+    能真失败：把零推进收口改回"整表清空 pending" → 第二步 pending 已空 → _state_pix("angry")
+    拿到 None → 红；把"异常那一轮不判死"（_raised 守卫）拿掉 → _state_pix_dead 非空 → 红。
+    """
+    real = pet._ensure_state_pix
+    tried = []
+
+    def boom(state):
+        tried.append(state)
+        raise RuntimeError("boom: 建状态图时炸了")
+
+    pet._state_pix_pending = {"normal": {"angry"}, "full": {"angry"}}   # 这一轮零推进 + 抛错
+    pet._state_pix_dead = set()
+    monkeypatch.setattr(pet, "_ensure_state_pix", boom)
+    with pytest.raises(RuntimeError):
+        pet._build_state_pix_slice()
+    assert tried == ["angry"], "夹具失效：这一轮试的不是 angry：%r" % (tried,)
+    assert pet._state_pix_pending,         "异常那一轮把 pending 清空了（单向门：angry 从此永久缺失）"
+    assert pet._state_pending("angry"),         "异常那一轮把 angry 从 pending 里摘掉了（它再也不会被补建）"
+    assert pet._state_pix_dead == set(),         "异常说明不了任何名字建不出来，不许判死：%r" % (pet._state_pix_dead,)
+    # 恢复真方法（异常只发生一次）→ 按需补建必须照常工作
+    monkeypatch.setattr(pet, "_ensure_state_pix", real)
+    ref = QPixmap(main.resource_path("assets/n_angry.png"))
+    assert not ref.isNull(), "夹具前提：assets/n_angry.png 应当存在"
+    pix = pet._state_pix("angry")
+    assert pix is not None, "异常一次之后 angry 再也补不出来了（A-2 的核心症状：永久缺失）"
+    assert pix.toImage() == ref.toImage(), "补出来的不是 assets/n_angry.png"
+    assert not pet._state_pending("angry"), "补建后 angry 仍被标成待建"
+
+
+def test_production_step_entry_keeps_pending_after_an_exception(pet, monkeypatch):
+    """走生产入口（_gslot 包住接力步）：抛错那一轮也要留住 pending，之后按需补建仍可。
+
+    能真失败：同上的"整表清空"变异 → 第一条断言红（pending 没了）。
+    """
+    pet._ensure_default_frames()      # 先把帧集支消化掉（本用例只关心状态图支）
+    pet._wire_anim_sets()
+    pet._startup_assets_done = False
+    real = pet._ensure_state_pix
+    calls, fired = [], []
+
+    def boom_once(state):
+        """只炸**一次**（就是接力那一轮）；之后同一条按需补建路径必须照常工作。"""
+        calls.append(state)
+        if not fired:
+            fired.append(state)
+            raise RuntimeError("boom: 第一次建状态图就失败（这一轮零推进）")
+        return real(state)
+
+    pet._state_pix_pending = {"normal": {"angry"}, "full": {"angry"}}
+    pet._state_pix_dead = set()
+    monkeypatch.setattr(pet, "_ensure_state_pix", boom_once)
+    pet._gslot("startup_assets", pet._startup_assets_step)()   # 生产路径就是这么调的
+    assert fired == ["angry"], "夹具失效：这一轮试的不是 angry：%r" % (fired,)
+    assert pet._state_pix_pending, "抛错那一轮把 pending 弄丢了（之后按需补建全部失效）"
+    assert pet._state_pending("angry"), "抛错那一轮把 angry 判死并摘掉了（单向门）"
+    assert pet._state_pix_dead == set(), "异常不许判死任何名字：%r" % (pet._state_pix_dead,)
+    assert pet._state_pix("angry") is not None, "抛错一次之后该状态再也补不出来了"
+    assert not pet._state_pending("angry")

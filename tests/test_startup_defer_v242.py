@@ -19,7 +19,9 @@
      就地补齐（删掉各自那行 ensure → 红）。
 """
 import os
+import re
 import sys
+import time
 
 import pytest
 
@@ -192,23 +194,100 @@ def test_lazy_fill_only_touches_the_requested_state(pet):
 
 # ---------------- 3. 交接是分片的 ----------------
 
-def test_startup_task_is_chunked_not_one_shot(pet):
-    """接力装载必须**多轮**完成，且单轮只做一小片。
+# v2.4.4（C-2）：分片测试的判据从**墙钟阈值**改成**每轮做了多少活**（确定性可数）。
+# 旧口径断言"单轮 < 60ms"，而同一份代码在影子副本（冷缓存 + 机器上还有别的会话在跑
+# pytest）里实测抖到 96/70/97ms —— 那是测量环境，不是回归（_mutate_lib 的基线重跑就是
+# 为它加的）。现在注入"每解一张素材就故意慢 N 毫秒"的 spy，让"单轮解了几张/几组"成为
+# 判据：负载只会让墙钟预算**提前**用光（每轮推进得更少），所以"每轮 ≤ N"这类上界在并发
+# 负载下不会假红；而"一轮做完"的退化会立刻突破上界。
 
-    能真失败：把 _startup_assets_step 改成"一轮把帧集和状态图都做完" → 步数掉到 1~2，
-    第一条断言红；把三组帧集的解码塞回构造期 → 接力任务无事可做 → 步数 1，同样红。
+_FRAME_PREFIXES = tuple(sorted((prefix for _k, _s, prefix, _c, _a in main._DEFAULT_FRAME_SETS),
+                               key=len, reverse=True))   # idle_full 比 idle 长，先匹配
+_STATE_IMG_RE = re.compile(r"^[nf]_[A-Za-z_]+\.png$")
+
+
+def _frame_group(path):
+    """素材路径 → 帧集组名（不是帧集素材返回 None）。"""
+    base = os.path.basename(path)
+    for prefix in _FRAME_PREFIXES:
+        if base.startswith(prefix + "_f"):
+            return prefix
+    return None
+
+
+def _is_state_img(path):
+    """是不是状态图素材（n_angry.png / f_laugh.png 这类）。"""
+    return bool(_STATE_IMG_RE.match(os.path.basename(path)))
+
+
+def _slow_decode_spy(monkeypatch, per_decode_ms=1.0):
+    """记录并**人为拖慢**每张素材的解码（QPixmap(路径)）：分片测试的正确姿势。
+
+    与撒钱预载那条（tests/test_relay_v243.py::_money_decode_spy）同一套：本机 Qt 缓存
+    命中时单张 < 0.1ms，整批会落进一片，判据就测不出来；人为放大单张成本之后，
+    "一轮解了几张"既是确定性的，又能代表真实冷解码的量级。
+    两个模块都要包（桌宠.py 与 pet_anim.py 各自 import 了 QPixmap）。
     """
-    steps = []
+    real = main.QPixmap
+    seen = []
+
+    def counting(*a, **k):
+        if a and isinstance(a[0], str):
+            seen.append(a[0])
+            t0 = time.perf_counter()
+            while (time.perf_counter() - t0) * 1000.0 < per_decode_ms:
+                pass
+        return real(*a, **k)
+
+    monkeypatch.setattr(main, "QPixmap", counting, raising=False)
+    monkeypatch.setattr(pet_anim, "QPixmap", counting, raising=False)
+    return seen
+
+
+def test_startup_task_is_chunked_not_one_shot(pet, monkeypatch):
+    """接力装载必须**多轮**完成，且单轮只推进一个小组——判据全是可数的量。
+
+    每轮的三条判据（v2.4.4 C-2；spy 把单张解码人为放大到 4ms）：
+      · 每轮最多解**一组**帧集（组是原子单位，见 _load_frame_sets_slice）；
+      · 每轮解的张数不超过"一个切片预算 + 一个单位"能解的量（状态在多个形态上各一张，
+        所以按每单位 ≤2 张折算）——预算忽略掉时一轮就会把整张表建完；
+      · 总步数 ≥3（不是"把一次做完换了个地方"）。
+
+    能真失败：把 _startup_assets_step 改成"一轮把帧集和状态图都做完" → 首轮就解完三组
+    （组数 3）→ 第一条红；把 _load_frame_sets_slice 改成一轮全解 → 同样红；把
+    _build_state_pix_slice 的预算判断拿掉 → 一轮建完整张表（张数超上界）→ 第二条红；
+    把三组帧集的解码塞回构造期 → 接力无事可做 → 步数 1 → 第三条红。
+    """
+    per_decode_ms = 4.0
+    seen = _slow_decode_spy(monkeypatch, per_decode_ms=per_decode_ms)
+    max_group = max(count for _k, _s, _p, count, _a in main._DEFAULT_FRAME_SETS)
+    # 一个切片最多"花光预算 + 再多做一个单位"；状态图每个状态在形态上各一张（≤2 张/单位）
+    # C-2（质量审查 M1）：上界从被测预算算出来 → 预算本身由
+    # tests/test_relay_v243.py::test_slice_budget_is_pinned_so_the_bounds_cannot_be_loosened
+    # 钉住（12.0）；否则预算放宽会让上界一起放宽，"分片变粗"就抓不住了。
+    per_step_limit = 2 * (int(main._FRAME_SLICE_MS / per_decode_ms) + 2)
+    steps, groups_per_step, decoded_per_step = [], [], []
     guard = 0
     while not pet._startup_assets_done and guard < 60:
         guard += 1
-        import time as _t
-        t0 = _t.perf_counter()
+        before = len(seen)
         pet._startup_assets_step()
-        steps.append((_t.perf_counter() - t0) * 1000.0)
+        done = seen[before:]
+        steps.append(done)
+        groups_per_step.append({g for g in (_frame_group(p) for p in done) if g})
+        decoded_per_step.append(len(done))
     assert pet._startup_assets_done, "接力装载没有收敛（跑了 %d 步）" % len(steps)
     assert len(steps) >= 3, "接力装载只剩 %d 步：不是分片，是把一次做完换了个地方" % len(steps)
-    assert max(steps) < 60.0, "单轮占了 %.1f ms，超过一个切片的量级：%r" % (max(steps), steps)
+    merged = [g for g in groups_per_step if len(g) > 1]
+    assert not merged, ("某一轮解了多个帧集组（组是原子单位，一轮恰好一组）：%r"
+                        "（逐轮 %r）" % (merged, groups_per_step))
+    frames_per_step = [sum(1 for p in done if _frame_group(p)) for done in steps]
+    assert max(frames_per_step) <= max_group,         "单轮解了 %d 张帧（最大的一组才 %d 张）：%r" % (max(frames_per_step), max_group,
+                                                        frames_per_step)
+    worst = max(decoded_per_step) if decoded_per_step else 0
+    assert worst <= per_step_limit,         "单轮解了 %d 张素材（预算 %.0fms ÷ 每张 %.0fms 的上界是 %d 张）：不是分片" % (
+            worst, main._FRAME_SLICE_MS, per_decode_ms, per_step_limit)
+    assert any(_is_state_img(p) for p in (p for done in steps for p in done)),         "整轮跑完一张状态图都没解：夹具没覆盖状态图支"
 
 
 # ---------------- 4. 首屏画面没变 ----------------

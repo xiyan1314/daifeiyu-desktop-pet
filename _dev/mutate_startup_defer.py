@@ -44,7 +44,7 @@ MUTATIONS = [
      '        if not self._custom_role:\n            self._ensure_default_frames(("idle", "idle_full") if self.form != self.form_keys[0]\n                                        else ("idle",))\n',
      '        pass  # MUTATION：起播前不补本形态帧集（整段 if 一起拿掉，否则空 if 体是语法错）\n'),
     ("M6 feed 不再补吃帧", SRC,
-     '        if self._ensure_default_frames():\n            self._wire_anim_sets()\n',
+     '        if not self._custom_role and self._ensure_default_frames():\n            self._wire_anim_sets()\n',
      ''),
         ('M7 _start_petting 不再补 petpet 帧集', SRC,
      '        # v2.4.2（兼容 L2）：补齐必须放在**三个早退之后**——此前它在最前面，一次普通拖动\n        # （press_dist>32）/按住未松/busy 重排都会同步解三组默认帧集（≈26ms），把"延迟装载"\n        # 又拉回了交互路径上；真起播才付这份钱。\n        self._ensure_default_frames()\n',

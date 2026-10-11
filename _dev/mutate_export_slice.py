@@ -41,9 +41,9 @@ MUTATIONS = [
      '                    break\n',
      '                if False:\n                    break\n'),
     ("E3 不写 manifest.json", SRC,
-     '            self._zf.writestr(MANIFEST_NAME,\n'
+     '            self._zf.writestr(_zi,\n'
      '                              json.dumps(self.plan["manifest"], ensure_ascii=False, indent=2))\n',
-     '            pass\n'),
+     '            pass  # MUTATION: 不写 manifest.json\n'),
     ("E4 abort 不清理临时文件", SRC,
      '        self._cleanup_tmp()\n        self.done = True\n\n    def finish(self):',
      '        self.done = True\n\n    def finish(self):'),
