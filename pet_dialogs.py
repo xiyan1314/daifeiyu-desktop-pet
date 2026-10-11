@@ -37,6 +37,14 @@
 - class _VoicePickDialog(QDialog) + pick_voice_assets(pet)：导出时勾选要随包带的参考音。
 - 入口函数：open_voice / open_lines / open_resource_manager / open_idle / open_physics
   （open_lines 与 open_resource_manager 是 v2.1 补的历史缺陷：菜单一直在调用但从未定义）。
+- v2.5.0（B）尺寸与可滚动性三件套（**新增对话框必须照用**，否则 tests/test_dialog_fit_v250.py 红）：
+  clamp_dialog(dlg, W, H) —— 取代写死的 self.resize(W, H)：尺寸钳进屏幕可用区域
+  （上限 = 可用区域 × DIALOG_MAX_RATIO，另给下限保护，全部按逻辑像素）；
+  scroll_content(dlg) —— 内容区进 QScrollArea，返回内容布局；
+  stick_buttons(dlg, row) —— 按钮行钉在滚动区**之外**（确定/取消永远不会被滚走）；
+  class _FitDialog(QDialog) —— 14 个对话框的公共基类，showEvent 里按所在屏幕再钳一次。
+  背景：用户报"有些窗口内容多、窗口大、看不到底，而且缩小不了"——实测根因是尺寸写死
+  加上全文件没有一个滚动容器（详见 _dev/dialog_size_report.md）。
 
 与主程序的耦合方式（全部防御性 getattr，缺省不崩）：
 - pet.cfg（配置 dict）、pet.role_lib、pet.audio_lib、pet.book（可能 None）
@@ -85,6 +93,7 @@ from PySide6.QtWidgets import (
     QDoubleSpinBox,
     QFileDialog,
     QFormLayout,
+    QFrame,
     QGridLayout,
     QGroupBox,
     QHBoxLayout,
@@ -97,6 +106,7 @@ from PySide6.QtWidgets import (
     QMessageBox,
     QPlainTextEdit,
     QPushButton,
+    QScrollArea,
     QSpinBox,
     QTableWidget,
     QTableWidgetItem,
@@ -208,6 +218,10 @@ QScrollBar:horizontal { background: #262b40; height: 10px; border-radius: 5px; }
 QScrollBar::handle:horizontal { background: #3d477f; border-radius: 5px; min-width: 24px; }
 QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal { width: 0; }
 QMessageBox, QInputDialog, QFileDialog { background-color: #1e2234; color: #e8ecff; }
+/* v2.5.0（B）：内容区滚动容器。滚动区本身不画底/框，让 QDialog 的深色底直接透上来；
+   第二个选择器只命中"滚动视口里那一层内容壳"（A > B > C 是直接子级），不波及孙控件。 */
+QScrollArea { background: transparent; border: none; }
+QScrollArea > QWidget > QWidget { background: transparent; }
 """).replace(DIALOG_QSS_FONT_TOKEN, DIALOG_FONT_FAMILY)
 
 # 音效组槽位：kind -> 面板行标签
@@ -627,6 +641,143 @@ def _qt_parent(pet):
     return pet if isinstance(pet, QWidget) else None
 
 
+# ---------------- v2.5.0（B）：对话框尺寸钳制 + 内容区可滚动 ----------------
+# 用户报的现象：有些窗口内容多、窗口大、**看不到底**，而且**缩小不了**——底部内容
+# （说明文字、列表末尾，往往是确定/取消按钮）够不到。
+#
+# 体检实测（_dev/dialog_size_report.md）根因两条，都跟 DPI 无关，按**逻辑像素**算就对不上：
+#   1) 尺寸写死：self.resize(700, 640) 这类调用把"设计尺寸"当成"实际尺寸"。VoiceDialog
+#      在 100% 缩放下就长到 903 逻辑像素（800x800 逻辑屏都装不下）。
+#   2) 内容区没有滚动容器（改动前全文件 QScrollArea 出现 **0** 次）：窗口被挤小之后 Qt
+#      把超出的部分**裁掉**而不是给滚动条，底部内容永久够不到；而 minimumSizeHint 又被
+#      布局撑大（VoiceDialog 903、RoleImportDialog 740），于是"也缩小不了"。
+#
+# 修法是一套，不再逐个窗口各写一份：
+#   · 内容区进 QScrollArea（scroll_content）——内容再多也能滚到底；
+#   · 按钮行留在滚动区**之外**（stick_buttons）——确定/取消永远不会被滚走；
+#   · 尺寸钳进屏幕可用区域（clamp_dialog）——上限 = 可用区域 × 85%，另外给下限保护；
+#   · 全部按**逻辑像素**：Qt 的几何本来就是逻辑像素（物理像素 = 逻辑 × devicePixelRatio），
+#     所以 125% / 150% 缩放下不需要任何额外换算，也不会写出"按 1080p 物理像素写死"的值。
+
+DIALOG_MAX_RATIO = 0.85   # 窗口最大尺寸 = 所在屏幕可用区域 × 该比例（给边框/任务栏留余量）
+DIALOG_MIN_W = 320        # 下限保护：屏幕再小也别把窗口压成一条缝（逻辑像素）
+DIALOG_MIN_H = 240
+
+
+def dialog_available_geometry(widget=None):
+    """widget **所在屏幕**的可用区域（QRect，逻辑像素，已扣任务栏/停靠区）。
+
+    v2.5.0 B：单独抽一层，是为了让验收用例能注入"小屏"——真实屏幕尺寸在测试里
+    改不了，而"窗口在 1024x600 的屏上装不下"正是用户报的那个 bug。任何异常返回 None。
+    """
+    try:
+        screen = widget.screen() if widget is not None else None
+        if screen is None:
+            app = QApplication.instance()
+            screen = app.primaryScreen() if app is not None else None
+        if screen is None:
+            return None
+        return screen.availableGeometry()
+    except Exception:
+        return None
+
+
+def dialog_size_limits(widget=None):
+    """返回 (min_w, min_h, max_w, max_h)：对话框允许的尺寸区间（逻辑像素）。
+
+    上限 = 可用区域 × DIALOG_MAX_RATIO。取不到屏幕（无 QApplication / 无屏）时退化为
+    "只留下限、不设上限"——对话框构造期抛异常等于这个功能打不开，宁可少钳一次也不能崩。
+    """
+    min_w, min_h = DIALOG_MIN_W, DIALOG_MIN_H
+    avail = dialog_available_geometry(widget)
+    if avail is None:
+        return min_w, min_h, 16777215, 16777215   # QWIDGETSIZE_MAX：拿不到屏就不设上限
+    max_w = max(min_w, int(avail.width() * DIALOG_MAX_RATIO))
+    max_h = max(min_h, int(avail.height() * DIALOG_MAX_RATIO))
+    return min(min_w, max_w), min(min_h, max_h), max_w, max_h
+
+
+def clamp_dialog(dlg, want_w=None, want_h=None):
+    """把对话框尺寸钳进屏幕可用区域（**取代写死的 resize**），返回最终 (w, h)。
+
+    - want_* 只是"内容希望的尺寸"（缺省取**当前尺寸**，取不到才退回 sizeHint()）；
+      超出可用区域就缩回来；
+    - minimumSize 给下限保护，但**不会把本来就小的框撑大**（下限取
+      min(DIALOG_MIN_*, want_*)，所以 286x113 的金额框仍是 286x113）；
+    - maximumSize 保证窗口**永远不可能**大过可用区域的 85%——这就是"看不到底"的根治；
+    - 重复调用安全：显示前会按当前屏幕重钳一次（多屏/改缩放后仍然成立）。
+    """
+    min_w, min_h, max_w, max_h = dialog_size_limits(dlg)
+    hint = dlg.sizeHint()
+    # 缺省用**当前尺寸**而不是 sizeHint()：内容区套了 QScrollArea 之后，滚动区自己的
+    # sizeHint() 是 Qt 写死的默认值（实测 432x288），**不再等于内容想要的大小**——
+    # 拿它当"期望尺寸"会把设计好的 600x540 直接缩成 454x340（实测踩过）。
+    # 设计尺寸由每个对话框在 __init__ 里显式传给本函数。
+    if want_w is None:
+        want_w = dlg.width()
+    if want_h is None:
+        want_h = dlg.height()
+    want_w = int(want_w) if int(want_w) > 0 else max(int(hint.width()), DIALOG_MIN_W)
+    want_h = int(want_h) if int(want_h) > 0 else max(int(hint.height()), DIALOG_MIN_H)
+    min_w = max(1, min(DIALOG_MIN_W, want_w, max_w))
+    min_h = max(1, min(DIALOG_MIN_H, want_h, max_h))
+    dlg.setMinimumSize(min_w, min_h)
+    dlg.setMaximumSize(max_w, max_h)
+    dlg.resize(max(min_w, min(want_w, max_w)), max(min_h, min(want_h, max_h)))
+    return dlg.width(), dlg.height()
+
+
+def scroll_content(dlg):
+    """把对话框/面板的内容区装进 QScrollArea，返回**内容布局**（按钮行别加这里）。
+
+    结构：dlg → 外层 QVBoxLayout → [ QScrollArea(伸缩因子 1) , 按钮行(由 stick_buttons 加) ]
+    内容再多也能滚到底，窗口再小也不会把底部裁掉。
+    """
+    outer = QVBoxLayout(dlg)
+    body = QWidget()
+    lay = QVBoxLayout(body)
+    lay.setContentsMargins(0, 0, 0, 0)   # 边距留在外层布局，视觉与改动前一致
+    area = QScrollArea()
+    area.setWidgetResizable(True)        # 跟着窗口伸缩，而不是固定成内容尺寸
+    area.setFrameShape(QFrame.Shape.NoFrame)
+    area.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+    area.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+    area.viewport().setAutoFillBackground(False)   # 让 QDialog 的深色底透上来
+    body.setAutoFillBackground(False)
+    area.setWidget(body)
+    outer.addWidget(area, 1)
+    dlg._scroll_area = area              # 验收用例要断言"有滚动容器 + 真能滚"
+    dlg._content_body = body
+    return lay
+
+
+def stick_buttons(dlg, row):
+    """把按钮行钉在滚动区**之外**（对话框底部），返回该行。
+
+    确定/取消绝不能被滚走：行挂在 scroll_content() 建的那个外层布局上，
+    排在滚动区后面，所以永远可见。
+    """
+    outer = dlg.layout()
+    if outer is None:
+        outer = QVBoxLayout(dlg)
+    outer.addLayout(row)
+    dlg._btn_row = row
+    return row
+
+
+class _FitDialog(QDialog):
+    """所有对话框的公共基类（v2.5.0 B）：**显示前**按所在屏幕再钳一次尺寸。
+
+    单在这一处重钳，是为了覆盖全部打开路径（modal() 的 show+exec、桌宠.py 里的裸
+    exec()、测试里的 show()），以及"构造时在一屏、显示时在另一屏"（多屏用户把桌宠
+    拖到副屏再打开设置）。子类自己在 __init__ 里已经钳过一次，这里只做兜底。
+    """
+
+    def showEvent(self, event):
+        clamp_dialog(self)
+        super().showEvent(event)
+
+
 # ---------------- 视频 / GIF 抽帧 ----------------
 
 
@@ -904,7 +1055,7 @@ class _ImportWorker(QThread):
 
 
 # ---------------- 角色导入向导 ----------------
-class RoleImportDialog(QDialog):
+class RoleImportDialog(_FitDialog):
     """导入角色向导：1~8 个形态自由增删、每个形态独立命名选图（喂食循环切换）。
 
     素材支持静态图与多帧动画（多选图片 / 视频-GIF 抽帧）；
@@ -919,7 +1070,7 @@ class RoleImportDialog(QDialog):
         super().__init__(_qt_parent(parent))
         self.setWindowTitle("导入角色")
         self.setStyleSheet(DIALOG_QSS)
-        self.resize(600, 430)
+        clamp_dialog(self, 600, 430)   # v2.5.0 B：钳进屏幕可用区域（原来写死 resize）
         self._tmpdir = None
         self._result = None
         self._worker = None       # P1-1：在途工作线程（None=空闲）
@@ -935,7 +1086,7 @@ class RoleImportDialog(QDialog):
         except Exception:
             pass  # instance() 为 None（无应用上下文）时静默跳过：此时也不存在退出流程
 
-        root = QVBoxLayout(self)
+        root = scroll_content(self)   # v2.5.0 B：内容区可滚动（按钮行在滚动区之外）
         root.addWidget(QLabel("选好图片点「导入」即可：自动去背景、裁剪边距、统一大小。"))
 
         name_row = QHBoxLayout()
@@ -1063,7 +1214,7 @@ class RoleImportDialog(QDialog):
         btns.addWidget(self._stop_btn)
         btns.addWidget(self._ok)
         btns.addWidget(self._cancel)
-        root.addLayout(btns)
+        stick_buttons(self, btns)   # v2.5.0 B：按钮行钉在滚动区之外，永远可见
 
     @staticmethod
     def _make_preview(title):
@@ -1424,7 +1575,7 @@ class RoleImportDialog(QDialog):
         return self._result
 
 
-class RoleEditDialog(QDialog):
+class RoleEditDialog(_FitDialog):
     """P1-7 轻量角色编辑：改名 / 形态改名+调序 / 换图（重新处理，不换 id）/
     渲染参数（anchor/scale/offset）/ 帧间隔 / 正面图（front）/ 状态图（states）。
 
@@ -1455,9 +1606,9 @@ class RoleEditDialog(QDialog):
 
         self.setWindowTitle("编辑角色「%s」" % self._role.get("name", ""))
         self.setStyleSheet(DIALOG_QSS)
-        self.resize(600, 540)
+        clamp_dialog(self, 600, 540)   # v2.5.0 B
 
-        root = QVBoxLayout(self)
+        root = scroll_content(self)   # v2.5.0 B：内容区可滚动
         name_row = QHBoxLayout()
         name_row.addWidget(QLabel("角色名"))
         self._name_edit = QLineEdit(self._role.get("name", ""))
@@ -1614,7 +1765,7 @@ class RoleEditDialog(QDialog):
         btns.addStretch(1)
         btns.addWidget(self._ok)
         btns.addWidget(self._cancel)
-        root.addLayout(btns)
+        stick_buttons(self, btns)   # v2.5.0 B：按钮行在滚动区之外
 
         self._refresh_form_list()
 
@@ -2056,10 +2207,10 @@ class RoleEditDialog(QDialog):
 
     def _add_proc_action(self):
         """添加程序化合成动作（呼吸/摇摆/点头，用角色自身贴图合成，无需素材）。"""
-        dlg = QDialog(self)
+        dlg = _FitDialog(self)   # v2.5.0 B：内联对话框也走同一套尺寸钳制（原来裸 QDialog）
         dlg.setWindowTitle("程序化合成动作")
         dlg.setStyleSheet(DIALOG_QSS)
-        lay = QVBoxLayout(dlg)
+        lay = scroll_content(dlg)
         nm = QLineEdit()
         nm.setPlaceholderText("动作名（英文/数字/下划线）")
         lay.addWidget(nm)
@@ -2087,7 +2238,9 @@ class RoleEditDialog(QDialog):
         _apply_proc_defaults()
         ok = QPushButton("添加")
         ok.clicked.connect(dlg.accept)
-        lay.addWidget(ok)
+        _btn_row = QHBoxLayout()
+        _btn_row.addWidget(ok)
+        stick_buttons(dlg, _btn_row)   # v2.5.0 B：按钮行在滚动区之外
         if dlg.exec() != QDialog.DialogCode.Accepted:
             return
         name = nm.text().strip()
@@ -2132,7 +2285,7 @@ class RoleEditDialog(QDialog):
 
 
 # ---------------- v2.0.2：行为自定义 ----------------
-class BehaviorDialog(QDialog):
+class BehaviorDialog(_FitDialog):
     """行为自定义对话框：列表 + 新建/编辑/删除 + 步骤编辑 + 试播 + 导入/导出。
 
     待机行为 / 触发秒数 / 变身时长也在这里配置（写 pet.cfg 并 save_cfg 持久化）。
@@ -2146,8 +2299,8 @@ class BehaviorDialog(QDialog):
         self._editing_id = None
         self.setWindowTitle("行为自定义")
         self.setStyleSheet(DIALOG_QSS)
-        self.resize(640, 500)
-        lay = QVBoxLayout(self)
+        clamp_dialog(self, 640, 500)   # v2.5.0 B
+        lay = scroll_content(self)   # v2.5.0 B：内容区可滚动
 
         # ---- 待机行为设置（断点：待机行为红线） ----
         idle_row = QHBoxLayout()
@@ -2217,7 +2370,7 @@ class BehaviorDialog(QDialog):
             _b = QPushButton(_label)
             _b.clicked.connect(_cb)
             btn_row.addWidget(_b)
-        lay.addLayout(btn_row)
+        stick_buttons(self, btn_row)   # v2.5.0 B：按钮行在滚动区之外
         self._refresh()
 
     # ---------- 展示辅助 ----------
@@ -2500,7 +2653,7 @@ class BehaviorDialog(QDialog):
 
 
 # ---------------- v2.0.5：闹钟 ----------------
-class AlarmDialog(QDialog):
+class AlarmDialog(_FitDialog):
     """闹钟设置：列表 + 新建/编辑/删除 + 自定义铃声（wav/mp3）+ 启用开关 + 试听。"""
 
     DEFAULT_TIME = QTime(7, 30)  # 新建闹钟默认时间（唯一来源）
@@ -2514,8 +2667,8 @@ class AlarmDialog(QDialog):
         self._ring_dirty = False
         self.setWindowTitle("闹钟")
         self.setStyleSheet(DIALOG_QSS)
-        self.resize(540, 470)
-        lay = QVBoxLayout(self)
+        clamp_dialog(self, 540, 470)   # v2.5.0 B
+        lay = scroll_content(self)   # v2.5.0 B：内容区可滚动
         lay.addWidget(QLabel("闹钟列表（到点气泡提醒 + 铃声 + 语音播报；"
                              "今天已过的时刻会立即响一次）"))
         self._list = QListWidget()
@@ -2555,7 +2708,7 @@ class AlarmDialog(QDialog):
             _b = QPushButton(_lbl)
             _b.clicked.connect(_cb)
             btn_row.addWidget(_b)
-        lay.addLayout(btn_row)
+        stick_buttons(self, btn_row)   # v2.5.0 B：按钮行在滚动区之外
         self._time.setTime(self.DEFAULT_TIME)  # 打开即显示默认 07:30（点「新建」同款）
         self._refresh()
 
@@ -2710,7 +2863,7 @@ def shutdown_api_tests():
             pass  # 有意忽略：线程已被删除（幂等收敛）
 
 
-class AISettingsDialog(QDialog):
+class AISettingsDialog(_FitDialog):
     """AI 接口/模型/人设/回复长度设置（P1-10，OpenAI 兼容，支持本地 Ollama）。
 
     v2.0.4：服务商预设（一键填地址/模型）+ 连通性测试（错误归类中文提示）。"""
@@ -2721,9 +2874,9 @@ class AISettingsDialog(QDialog):
         self._worker = None
         self.setWindowTitle("AI 设置")
         self.setStyleSheet(DIALOG_QSS)
-        self.resize(560, 560)
+        clamp_dialog(self, 560, 560)   # v2.5.0 B
         cfg = _get(parent, "cfg") or {}
-        root = QVBoxLayout(self)
+        root = scroll_content(self)   # v2.5.0 B：内容区可滚动
         # v2.0.4：服务商预设（选中即填接口地址与模型名，仍可手改）
         preset_row = QHBoxLayout()
         preset_row.addWidget(QLabel("服务商预设"))
@@ -2831,7 +2984,7 @@ class AISettingsDialog(QDialog):
         btns.addStretch(1)
         btns.addWidget(ok)
         btns.addWidget(cancel)
-        root.addLayout(btns)
+        stick_buttons(self, btns)   # v2.5.0 B：按钮行在滚动区之外
 
     def _on_persona_changed(self, _idx):
         """预设选择：仅「自定义」时启用人设编辑框。"""
@@ -2932,7 +3085,7 @@ class RolePanel(QWidget):
         self._lib = _get(parent, "role_lib")
         self.setStyleSheet(DIALOG_QSS)
 
-        root = QHBoxLayout(self)
+        root = scroll_content(self)   # v2.5.0 B：面板内容也可滚动（不再顶大容器的最小尺寸）
         left = QVBoxLayout()
         self._info = QLabel("当前：默认角色")
         left.addWidget(self._info)
@@ -3217,7 +3370,7 @@ class SoundPanel(QWidget):
         self._lib = _get(parent, "audio_lib")
         self.setStyleSheet(DIALOG_QSS)
 
-        root = QVBoxLayout(self)
+        root = scroll_content(self)   # v2.5.0 B：面板内容可滚动
         root.addWidget(QLabel("音频片段（自定义音效素材）"))
         top = QHBoxLayout()
         self._list = QListWidget()
@@ -3409,7 +3562,7 @@ class VoiceAssetPanel(QWidget):
         self._lib = _get(parent, "voice_assets")
         self.setStyleSheet(DIALOG_QSS)
 
-        root = QVBoxLayout(self)
+        root = scroll_content(self)   # v2.5.0 B：面板内容可滚动
         root.addWidget(QLabel("声音素材（参考音）：声音克隆用，建议 3~10 秒干净人声（wav 最佳）"))
         top = QHBoxLayout()
         self._list = QListWidget()
@@ -3517,7 +3670,7 @@ class VoiceAssetPanel(QWidget):
         self._refresh()
 
 
-class ResourceManagerDialog(QDialog):
+class ResourceManagerDialog(_FitDialog):
     """QTabWidget 三页签（角色 / 音效 / 声音素材），内嵌 RolePanel / SoundPanel / VoiceAssetPanel。"""
 
     def __init__(self, parent=None, initial_tab=0):
@@ -3525,9 +3678,9 @@ class ResourceManagerDialog(QDialog):
         self._pet = parent
         self.setWindowTitle("资源管理")
         self.setStyleSheet(DIALOG_QSS)
-        self.resize(700, 560)
+        clamp_dialog(self, 700, 560)   # v2.5.0 B
 
-        root = QVBoxLayout(self)
+        root = scroll_content(self)   # v2.5.0 B：内容区可滚动
         self._tabs = QTabWidget()
         self._tabs.addTab(RolePanel(parent), "角色")
         self._tabs.addTab(SoundPanel(parent), "音效")
@@ -3539,11 +3692,11 @@ class ResourceManagerDialog(QDialog):
         close_btn = QPushButton("关闭")
         close_btn.clicked.connect(self.reject)
         row.addWidget(close_btn)
-        root.addLayout(row)
+        stick_buttons(self, row)   # v2.5.0 B：按钮行在滚动区之外
 
 
 # ---------------- d) 记账账本对话框 ----------------
-class AmountNoteDialog(QDialog):
+class AmountNoteDialog(_FitDialog):
     """记一笔：金额 QDoubleSpinBox(0.01~99999) + 备注 QLineEdit + 确定/取消。"""
 
     def __init__(self, parent=None, amount=None, note=""):
@@ -3552,7 +3705,7 @@ class AmountNoteDialog(QDialog):
         super().__init__(_qt_parent(parent))
         self.setWindowTitle("记一笔")
         self.setStyleSheet(DIALOG_QSS)
-        root = QVBoxLayout(self)
+        root = scroll_content(self)   # v2.5.0 B：内容区可滚动
         grid = QGridLayout()
         grid.addWidget(QLabel("金额："), 0, 0)
         self._amount = QDoubleSpinBox()
@@ -3581,14 +3734,14 @@ class AmountNoteDialog(QDialog):
         row.addStretch(1)
         row.addWidget(ok_btn)
         row.addWidget(cancel_btn)
-        root.addLayout(row)
+        stick_buttons(self, row)   # v2.5.0 B：按钮行在滚动区之外
 
     def values(self):
         """返回 (金额 float 保留两位, 备注 str)。"""
         return round(float(self._amount.value()), 2), self._note.text().strip()
 
 
-class LedgerDialog(QDialog):
+class LedgerDialog(_FitDialog):
     """账本：汇总 + 实时搜索 + 今日 / 近 7 天 / 全部 三页签 + 记一笔 / 导出 CSV。"""
 
     def __init__(self, parent=None):
@@ -3597,9 +3750,9 @@ class LedgerDialog(QDialog):
         self._book = _get(parent, "book")
         self.setWindowTitle("记账账本")
         self.setStyleSheet(DIALOG_QSS)
-        self.resize(680, 540)
+        clamp_dialog(self, 680, 540)   # v2.5.0 B
 
-        root = QVBoxLayout(self)
+        root = scroll_content(self)   # v2.5.0 B：内容区可滚动
         self._summary = QLabel("")
         self._summary.setStyleSheet("font-weight:bold;color:#ffd65a;")
         root.addWidget(self._summary)
@@ -3633,7 +3786,7 @@ class LedgerDialog(QDialog):
         row.addWidget(self._btn_export)
         row.addStretch(1)
         row.addWidget(close_btn)
-        root.addLayout(row)
+        stick_buttons(self, row)   # v2.5.0 B：按钮行在滚动区之外
 
         if self._book is None:
             self._btn_add.setEnabled(False)
@@ -3721,7 +3874,7 @@ class LedgerDialog(QDialog):
 
 
 # ---------------- e) 气泡样式对话框 ----------------
-class BubbleStyleDialog(QDialog):
+class BubbleStyleDialog(_FitDialog):
     """气泡样式：三色 + 字号 8~18 + 圆角 0~30 + 实时预览。"""
 
     def __init__(self, parent=None):
@@ -3742,7 +3895,7 @@ class BubbleStyleDialog(QDialog):
         except Exception:
             pass  # 有意忽略：样式配置异常回退默认（防御性）
 
-        root = QVBoxLayout(self)
+        root = scroll_content(self)   # v2.5.0 B：内容区可滚动
         grid = QGridLayout()
         self._color_btns = {}
         for i, (label, key) in enumerate((("背景色", "bg"), ("文字色", "fg"), ("描边色", "border"))):
@@ -3786,7 +3939,7 @@ class BubbleStyleDialog(QDialog):
         row.addWidget(save_btn)
         row.addWidget(reset_btn)
         row.addWidget(cancel_btn)
-        root.addLayout(row)
+        stick_buttons(self, row)   # v2.5.0 B：按钮行在滚动区之外
 
         self._update_color_buttons()
         self._apply_preview()
@@ -3847,7 +4000,7 @@ class BubbleStyleDialog(QDialog):
 
 
 # ---------------- f) 台词设置对话框（v2.1：独立台词自定义模块 UI） ----------------
-class LinesDialog(QDialog):
+class LinesDialog(_FitDialog):
     """台词自定义：台词库（增删改查/排序/批量/清空/撤销）/ 对白编排 / 失效引用。
 
     v2.1：内置台词也可删（真删不留正文，只记 id 防复活）；条数不限，
@@ -3862,9 +4015,9 @@ class LinesDialog(QDialog):
         self._editing_dlg = None      # 正在编辑的对白 id
         self.setWindowTitle("台词设置")
         self.setStyleSheet(DIALOG_QSS)
-        self.resize(780, 620)
+        clamp_dialog(self, 780, 620)   # v2.5.0 B
 
-        root = QVBoxLayout(self)
+        root = scroll_content(self)   # v2.5.0 B：内容区可滚动
         self._banner = QLabel("")
         self._banner.setWordWrap(True)
         root.addWidget(self._banner)
@@ -3880,7 +4033,7 @@ class LinesDialog(QDialog):
         close_btn = QPushButton("关闭")
         close_btn.clicked.connect(self.accept)
         row.addWidget(close_btn)
-        root.addLayout(row)
+        stick_buttons(self, row)   # v2.5.0 B：按钮行在滚动区之外
         self._refresh_all()
 
     # ---------- 公共数据 ----------
@@ -4497,7 +4650,7 @@ class LinesDialog(QDialog):
 
 
 
-class PhysicsDialog(QDialog):
+class PhysicsDialog(_FitDialog):
     """P1-手感：甩抛物理参数设置（重力/反弹/地面摩擦/顶边反弹/力度增益）。"""
 
     def __init__(self, parent=None):
@@ -4505,9 +4658,9 @@ class PhysicsDialog(QDialog):
         self._pet = parent
         self.setWindowTitle("物理参数")
         self.setStyleSheet(DIALOG_QSS)
-        self.resize(430, 330)
+        clamp_dialog(self, 430, 330)   # v2.5.0 B
         cfg = (_get(parent, "cfg") or {}).get("physics") or {}
-        root = QVBoxLayout(self)
+        root = scroll_content(self)   # v2.5.0 B：内容区可滚动
         root.addWidget(QLabel("甩抛手感参数（重力 0 = 漂浮模式；非法值自动回退默认）"))
         self._spin = {}
         for label, key, lo, hi in (
@@ -4538,7 +4691,7 @@ class PhysicsDialog(QDialog):
         btns.addStretch(1)
         btns.addWidget(ok)
         btns.addWidget(cancel)
-        root.addLayout(btns)
+        stick_buttons(self, btns)   # v2.5.0 B：按钮行在滚动区之外
 
     def _save(self):
         data = {"gravity": self._spin["gravity"].value(),
@@ -4559,7 +4712,7 @@ def open_physics(pet):
         pet_log.log_error("physics dialog failed: %r" % (e,))
 
 
-class VoiceDialog(QDialog):
+class VoiceDialog(_FitDialog):
     """v2.1 语言系统（AI 配音）：可插拔克隆后端 + 角色声音绑定 + 台词朗读 + 事件片段。
 
     存储分工：声音素材在「资源管理 → 声音素材」（资源库），本面板只做**绑定与合成播放**；
@@ -4580,9 +4733,9 @@ class VoiceDialog(QDialog):
         self._bind_combos = {}
         self.setWindowTitle("语音设置（AI 配音）")
         self.setStyleSheet(DIALOG_QSS)
-        self.resize(700, 640)
+        clamp_dialog(self, 700, 640)   # v2.5.0 B
 
-        root = QVBoxLayout(self)
+        root = scroll_content(self)   # v2.5.0 B：内容区可滚动
         tabs = QTabWidget()
         tabs.addTab(self._build_voice_tab(), "配音")
         tabs.addTab(self._build_bind_tab(), "角色绑定")
@@ -4598,7 +4751,7 @@ class VoiceDialog(QDialog):
         btns.addStretch(1)
         btns.addWidget(ok)
         btns.addWidget(cancel)
-        root.addLayout(btns)
+        stick_buttons(self, btns)   # v2.5.0 B：按钮行在滚动区之外
 
     # ---------- 页 1：后端与开关 ----------
     def _build_voice_tab(self):
@@ -5223,7 +5376,7 @@ def _app_events():
 
 
 # ---------------- v2.1：待机设置对话框 ----------------
-class IdleDialog(QDialog):
+class IdleDialog(_FitDialog):
     """待机设置：双触发（满足一个就待机）/ 待机形态 / 待机动作列表（按模式挑选）/ 播放模式。
 
     - 触发 A：吃饱形态结束后 idle_delay_after_full 秒（默认 2s；0=形态一结束即可待机）。
@@ -5239,9 +5392,9 @@ class IdleDialog(QDialog):
         self._idle = pet_behaviors.normalize_idle_cfg(cfg if isinstance(cfg, dict) else {})
         self.setWindowTitle("待机设置")
         self.setStyleSheet(DIALOG_QSS)
-        self.resize(660, 560)
+        clamp_dialog(self, 660, 560)   # v2.5.0 B
 
-        root = QVBoxLayout(self)
+        root = scroll_content(self)   # v2.5.0 B：内容区可滚动
         # 触发
         box1 = QGroupBox("触发条件（两个来源，满足一个就待机）")
         f1 = QFormLayout(box1)
@@ -5324,7 +5477,7 @@ class IdleDialog(QDialog):
         btns.addStretch(1)
         btns.addWidget(ok)
         btns.addWidget(cancel)
-        root.addLayout(btns)
+        stick_buttons(self, btns)   # v2.5.0 B：按钮行在滚动区之外
         self._refresh_table()
 
     # ---------- 数据 ----------
@@ -5543,15 +5696,15 @@ def open_idle(pet):
         _dialog_failed(pet, "待机设置", e)
 
 
-class _VoicePickDialog(QDialog):
+class _VoicePickDialog(_FitDialog):
     """导出时勾选要随包带走的声音素材（默认一个都不带）。"""
 
     def __init__(self, pet, parent=None):
         super().__init__(_qt_parent(parent or pet))
         self.setWindowTitle("打包声音素材（可选）")
         self.setStyleSheet(DIALOG_QSS)
-        self.resize(460, 380)
-        lay = QVBoxLayout(self)
+        clamp_dialog(self, 460, 380)   # v2.5.0 B
+        lay = scroll_content(self)   # v2.5.0 B：内容区可滚动
         lay.addWidget(QLabel("默认不打包参考音（体积与隐私考虑）。勾选要带上的："))
         self._list = QListWidget()
         assets = []
@@ -5581,7 +5734,7 @@ class _VoicePickDialog(QDialog):
         cancel.clicked.connect(self.reject)
         row.addWidget(ok)
         row.addWidget(cancel)
-        lay.addLayout(row)
+        stick_buttons(self, row)   # v2.5.0 B：按钮行在滚动区之外
 
     def _check_all(self, on):
         for i in range(self._list.count()):
@@ -5599,11 +5752,28 @@ def pick_role_meta(parent, default_name=""):
 
     返回 dict 或 None（用户取消）。纯展示元数据，留空=空串，不参与任何校验。
     """
-    dlg = QDialog(_qt_parent(parent))
+    dlg, name, author, desc, tags = build_role_meta_dialog(parent, default_name)
+    if modal(dlg) != QDialog.DialogCode.Accepted:
+        return None
+    return {
+        "name": name.text().strip()[:40],
+        "author": author.text().strip()[:40],
+        "description": desc.text().strip()[:120],
+        "tags": [t.strip()[:16] for t in tags.text().replace("，", ",").split(",") if t.strip()][:8],
+        "created_at": time.strftime("%Y-%m-%d"),
+    }
+
+
+def build_role_meta_dialog(parent, default_name=""):
+    """v2.3.0「角色信息」对话框的**构造**部分（v2.5.0 B 抽出来，尺寸验收要用）。
+
+    工厂只建窗口不 exec；pick_role_meta 负责 modal 与取值。返回
+    (dlg, name, author, desc, tags)。"""
+    dlg = _FitDialog(_qt_parent(parent))   # v2.5.0 B：原来裸 QDialog，没有屏幕钳制
     dlg.setWindowTitle("角色信息（会写进角色包，别人导入时能看到）")
     dlg.setStyleSheet(DIALOG_QSS)
-    dlg.resize(460, 300)
-    root = QVBoxLayout(dlg)
+    clamp_dialog(dlg, 460, 300)   # v2.5.0 B
+    root = scroll_content(dlg)   # v2.5.0 B：内容区可滚动
     form = QFormLayout()
     name = QLineEdit(str(default_name or ""))
     author = QLineEdit()
@@ -5622,16 +5792,8 @@ def pick_role_meta(parent, default_name=""):
     btn_cancel = QPushButton("取消")
     row.addWidget(btn_cancel)
     row.addWidget(btn_ok)
-    root.addLayout(row)
-    if modal(dlg) != QDialog.DialogCode.Accepted:
-        return None
-    return {
-        "name": name.text().strip()[:40],
-        "author": author.text().strip()[:40],
-        "description": desc.text().strip()[:120],
-        "tags": [t.strip()[:16] for t in tags.text().replace("，", ",").split(",") if t.strip()][:8],
-        "created_at": time.strftime("%Y-%m-%d"),
-    }
+    stick_buttons(dlg, row)   # v2.5.0 B：按钮行在滚动区之外
+    return dlg, name, author, desc, tags
 
 
 def pick_voice_assets(pet):

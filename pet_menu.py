@@ -6,21 +6,27 @@
 独立模块：不 import 桌宠.py。顶层 QMenu 必须经 pet._new_menu() 构造
 （v13 通过 stub 桌宠.QMenu 捕获菜单结构，必须走桌宠模块级 QMenu 名字）；
 动作 connect 到 pet 及其服务的原方法，菜单项文本 / 层级 / 勾选逻辑原样保留。
+
+v2.5.0（A1/A2）：服务构造搬进 pet_services.ServiceRegistry；本模块（该子系统）补全类型注解。
 """
-from PySide6.QtCore import Qt
+from typing import Any, Callable
+
+from PySide6.QtCore import QPoint, Qt
 from PySide6.QtGui import QActionGroup
-from PySide6.QtWidgets import QHBoxLayout, QLabel, QSlider, QWidget, QWidgetAction
+from PySide6.QtWidgets import (QHBoxLayout, QLabel, QMenu, QSlider, QWidget,
+                               QWidgetAction)
 
 import pet_dialogs  # 资源管理 / 气泡样式 / 台词 / AI 设置 / 帧数上限对话框入口
 
 
 class MenuBuilder:
-    def __init__(self, pet, save_cfg, autostart_enabled):
+    def __init__(self, pet: Any, save_cfg: Callable[[dict], None],
+                 autostart_enabled: Callable[[], bool]) -> None:
         self.pet = pet
         self._save_cfg = save_cfg
         self._autostart_enabled = autostart_enabled
 
-    def open(self, gp):
+    def open(self, gp: QPoint) -> None:
         pet = self.pet
         menu = pet._new_menu()
 
@@ -236,7 +242,7 @@ class MenuBuilder:
         pet._top_act = pet._follow_act = pet._wander_act = pet._ai_act = pet._autostart_act = None
         menu.deleteLater()
 
-    def _make_size_action(self, menu):
+    def _make_size_action(self, menu: QMenu) -> QWidgetAction:
         """大小滑块（QWidgetAction）：拖动实时缩放，落盘走 400ms 防抖。"""
         pet = self.pet
         w = QWidget()
@@ -251,7 +257,7 @@ class MenuBuilder:
         lay.addWidget(slider, 1)
         lay.addWidget(pct)
 
-        def onval(v):
+        def onval(v: int) -> None:
             pct.setText("%d%%" % v)
             pet.set_scale(v / 100.0)
             pet.cfg["scale"] = pet.scale

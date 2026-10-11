@@ -321,7 +321,7 @@
   ],
   "results": {
     "title": "变异验证 spec：mutations_relay_v243.json",
-    "checked_at": "2026-10-11 11:05:58",
+    "checked_at": "2026-10-11 14:39:40",
     "total": 23,
     "caught": 23,
     "not_caught": 0,
@@ -331,7 +331,7 @@
         "id": "M-R1",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 1.06s",
+        "tail": "1 failed in 1.93s",
         "failed": [
           "test_stop_voice_clip_uses_modern_stop_flags"
         ]
@@ -340,7 +340,7 @@
         "id": "M-R2",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "2 failed in 0.95s",
+        "tail": "2 failed in 1.51s",
         "failed": [
           "test_money_preload_is_sliced_and_matches_eager_load",
           "test_money_preload_is_sliced_even_with_a_zero_budget"
@@ -350,7 +350,7 @@
         "id": "M-R3",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.84s",
+        "tail": "1 failed in 1.61s",
         "failed": [
           "test_money_preload_defers_to_the_consumer"
         ]
@@ -359,7 +359,7 @@
         "id": "M-R4",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "2 failed in 0.96s",
+        "tail": "2 failed in 1.68s",
         "failed": [
           "test_frame_relay_slice_is_exactly_one_group_per_round",
           "test_startup_task_is_chunked_not_one_shot"
@@ -369,7 +369,7 @@
         "id": "M-R5",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.92s",
+        "tail": "1 failed in 1.51s",
         "failed": [
           "test_custom_role_skips_default_frame_sets_but_keeps_petpet"
         ]
@@ -378,7 +378,7 @@
         "id": "M-R6",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.68s",
+        "tail": "1 failed in 1.21s",
         "failed": [
           "test_custom_role_skips_default_frame_sets_but_keeps_petpet"
         ]
@@ -387,7 +387,7 @@
         "id": "M-R7",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.68s",
+        "tail": "1 failed in 1.38s",
         "failed": [
           "test_relay_chain_closes_when_a_step_raises"
         ]
@@ -396,7 +396,7 @@
         "id": "M-R8",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "3 failed, 1 passed in 0.82s",
+        "tail": "3 failed, 1 passed in 1.67s",
         "failed": [
           "test_state_slice_selflocks_on_zero_progress",
           "test_relay_terminates_with_unbuildable_pending",
@@ -407,7 +407,7 @@
         "id": "M-R9",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.69s",
+        "tail": "1 failed in 1.16s",
         "failed": [
           "test_custom_role_switching_back_to_default_loads_idle"
         ]
@@ -416,7 +416,7 @@
         "id": "M-R10",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.67s",
+        "tail": "1 failed in 1.12s",
         "failed": [
           "test_money_preload_is_sliced_even_with_a_zero_budget"
         ]
@@ -425,7 +425,7 @@
         "id": "M-R11",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.73s",
+        "tail": "1 failed in 1.22s",
         "failed": [
           "test_default_relay_keeps_one_phase_per_round"
         ]
@@ -434,7 +434,7 @@
         "id": "M-R12",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "2 failed in 0.77s",
+        "tail": "2 failed in 1.22s",
         "failed": [
           "test_state_pix_recovers_after_one_build_exception",
           "test_production_step_entry_keeps_pending_after_an_exception"
@@ -444,7 +444,7 @@
         "id": "M-R13",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "2 failed in 0.81s",
+        "tail": "2 failed in 1.21s",
         "failed": [
           "test_state_slice_selflocks_on_zero_progress",
           "test_relay_terminates_with_unbuildable_pending"
@@ -454,7 +454,7 @@
         "id": "M-R14",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.77s",
+        "tail": "1 failed in 1.13s",
         "failed": [
           "test_tried_but_unbuilt_names_are_retired_so_the_relay_converges"
         ]
@@ -463,7 +463,7 @@
         "id": "M-R15",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "2 failed in 0.77s",
+        "tail": "2 failed in 1.17s",
         "failed": [
           "test_zero_progress_with_a_zero_budget_keeps_the_untried_names",
           "test_state_slice_selflocks_on_zero_progress"
@@ -473,7 +473,7 @@
         "id": "M-V1",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "2 failed in 0.60s",
+        "tail": "2 failed in 1.03s",
         "failed": [
           "test_worker_hands_the_result_to_the_slot_which_releases_the_generation",
           "test_second_click_queues_instead_of_starting_a_second_thread"
@@ -483,7 +483,7 @@
         "id": "M-V2",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "2 failed in 0.57s",
+        "tail": "2 failed in 0.85s",
         "failed": [
           "test_stale_generation_result_is_dropped_without_side_effects",
           "test_stale_generation_error_is_dropped_too"
@@ -493,7 +493,7 @@
         "id": "M-V3",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.52s",
+        "tail": "1 failed in 0.80s",
         "failed": [
           "test_second_click_queues_instead_of_starting_a_second_thread"
         ]
@@ -502,7 +502,7 @@
         "id": "M-V4",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.51s",
+        "tail": "1 failed in 0.84s",
         "failed": [
           "test_auto_poll_landing_has_no_manual_side_effects"
         ]
@@ -511,7 +511,7 @@
         "id": "M-V5",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.96s",
+        "tail": "1 failed in 1.88s",
         "failed": [
           "test_startup_task_is_chunked_not_one_shot"
         ]
@@ -520,7 +520,7 @@
         "id": "M-V6",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.83s",
+        "tail": "1 failed in 1.22s",
         "failed": [
           "test_money_preload_is_sliced_and_matches_eager_load"
         ]
@@ -529,7 +529,7 @@
         "id": "M-V7",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.51s",
+        "tail": "1 failed in 0.76s",
         "failed": [
           "test_retire_only_touches_its_own_generation"
         ]
@@ -538,7 +538,7 @@
         "id": "M-V8",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.62s",
+        "tail": "1 failed in 0.97s",
         "failed": [
           "test_slice_budget_is_pinned_so_the_bounds_cannot_be_loosened"
         ]
@@ -573,12 +573,12 @@
     ],
     "note": "变异只在 %TEMP% 影子副本里做，真实仓库只读（只写 _dev/.mutation.lock）",
     "repo_fingerprint": {
-      "桌宠.py": "dfb0cae9b8f9",
+      "桌宠.py": "e1df5d7bcff1",
       "pet_export.py": "2fe39233056b",
       "pet_lines.py": "5332f60b5f26",
       "pet_alarm.py": "1149e94deee3",
       "pet_behaviors.py": "8f57255144f6",
-      "_check_release.py": "6aad6446bc0e",
+      "_check_release.py": "737ea59c1cae",
       "pet_balance.py": "2828b2ebc0c9"
     }
   }

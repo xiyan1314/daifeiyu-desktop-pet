@@ -3,8 +3,11 @@
 天气服务：open-meteo 拉取（城市配置对话框保留在桌宠.py——v13 stub 桌宠.QInputDialog）。
 
 独立模块：不 import 桌宠.py；signals / cfg / 日志全部注入。
+
+v2.5.0（A1/A2）：服务构造搬进 pet_services.ServiceRegistry；本模块（该子系统）补全类型注解。
 """
 import threading
+from typing import Any, Callable
 
 import requests
 
@@ -26,13 +29,14 @@ WEATHER_CODES = {
 class WeatherService:
     """天气线程服务：fetch() 一次查询（_weather_inflight 守卫语义不变）。"""
 
-    def __init__(self, pet, signals, cfg_getter, log):
+    def __init__(self, pet: Any, signals: Any, cfg_getter: Callable[[], dict],
+                 log: Callable[[str], None]) -> None:
         self.pet = pet            # _weather_inflight / show_bubble / _show_emote
         self.signals = signals
         self._cfg = cfg_getter
         self._log = log
 
-    def fetch(self):
+    def fetch(self) -> None:
         if self.pet._weather_inflight:
             self.pet.show_bubble("已经在查天气啦~")
             return
@@ -42,10 +46,10 @@ class WeatherService:
         self.pet.show_bubble("查天气中……等我一下下~")
         threading.Thread(target=self._worker, args=(city,), daemon=True).start()
 
-    def on_done(self):
+    def on_done(self) -> None:
         self.pet._weather_inflight = False
 
-    def _request_weather(self, city):
+    def _request_weather(self, city: str) -> tuple[bool, str]:
         """同步查一次天气（纯 HTTP，不碰 Qt）。返回 (True, 文案) 或 (False, 失败文案)。"""
         try:
             geo = requests.get(
@@ -74,14 +78,14 @@ class WeatherService:
             self._log("weather_worker: %r" % (e,))
             return False, "天气服务开小差了……"
 
-    def _worker(self, city):
+    def _worker(self, city: str) -> None:
         try:
             _ok, _text = self._request_weather(city)
             self.signals.weather.emit(_text)
         finally:
             self.signals.weather_done.emit()
 
-    def fetch_sync(self, city=None):
+    def fetch_sync(self, city: Any = None) -> tuple[bool, str | dict]:
         """v2.3.0（1.2 Function Calling）：工具 check_weather 的同步只读数据源。
 
         由 ChatService 的**工作线程**直接调用（不碰 Qt、不参与 _weather_inflight 状态机）。

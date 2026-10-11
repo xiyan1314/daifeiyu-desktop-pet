@@ -4,8 +4,11 @@ AI 对话入口与设置（Key 管理 / 开关 / 人设设置 / 对话记忆轮�
 
 独立模块：不 import 桌宠.py；save_config / set_redact_key / _remove_files / 运行时路径
 等模块全局以构造参数注入；对话框走本模块的 QInputDialog（与桌宠.QInputDialog 同一类）。
+
+v2.5.0（A1/A2）：服务构造搬进 pet_services.ServiceRegistry；本模块（该子系统）补全类型注解。
 """
 import os
+from typing import Any, Callable
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QDialog, QInputDialog, QLineEdit
@@ -19,8 +22,11 @@ class AIService:
 
     PRAISE_KEYWORDS = ("夸", "棒", "可爱", "漂亮", "好看", "喜欢", "厉害", "乖", "萌", "聪明")
 
-    def __init__(self, pet, chat_service, cfg_getter, save_cfg, redact_fn, remove_files,
-                 paths, book_getter, log, defaults):
+    def __init__(self, pet: Any, chat_service: Any, cfg_getter: Callable[[], dict],
+                 save_cfg: Callable[[dict], None], redact_fn: Callable[[str], None],
+                 remove_files: Callable[..., None], paths: tuple[str, ...],
+                 book_getter: Callable[[], Any], log: Callable[[str], None],
+                 defaults: dict) -> None:
         self.pet = pet
         self.chat = chat_service
         self._cfg = cfg_getter
@@ -33,7 +39,7 @@ class AIService:
         self._defaults = defaults
 
     # ---- AI 对话开关 ----
-    def set_ai_enabled(self, on):
+    def set_ai_enabled(self, on: Any) -> None:
         cfg = self._cfg()
         cfg["ai_enabled"] = bool(on)
         self._save_cfg(cfg)
@@ -46,7 +52,7 @@ class AIService:
                     self.pet._ai_act.setChecked(False)  # 同步菜单勾选状态，避免残留
                 self.pet.show_bubble("要先填 DeepSeek API Key 才能开 AI 对话哦~")
 
-    def set_api_key(self):
+    def set_api_key(self) -> None:
         # 挂到桌宠窗口（置顶窗口的子对话框必然显示在最上层）：
         # 桌宠本身 WindowDoesNotAcceptFocus + 无父对话框会被 Windows 前台锁拦下（只响一声）
         pet = self.pet
@@ -70,7 +76,7 @@ class AIService:
                 self._redact(key)
                 pet.show_bubble("记住啦！可以和我聊天了~")
 
-    def clear_api_key(self):
+    def clear_api_key(self) -> None:
         pet = self.pet
         cfg = self._cfg()
         usage_path, data_dir, config_path, memory_path = self._paths
@@ -116,7 +122,7 @@ class AIService:
                         "它还记得你的称呼和喜好，可在「AI 设置」里清除长期记忆）~")
 
     # ---- 和它说话 ----
-    def talk(self):
+    def talk(self) -> None:
         pet = self.pet
         if self.chat.inflight():
             pet.show_bubble("还在想呢，等一下下~")
@@ -153,7 +159,7 @@ class AIService:
         self.chat.ask(msg)
 
     # ---- AI 设置 / 对话记忆 ----
-    def apply_settings(self, data=None):
+    def apply_settings(self, data: Any = None) -> None:
         """应用 AI 设置（对话框保存后回调；data 为 {配置键: 值}）。"""
         if not isinstance(data, dict):
             return
@@ -164,7 +170,7 @@ class AIService:
         self._save_cfg(cfg)
         self.pet.show_bubble("AI 设置已更新，下次聊天就按新口味来~")
 
-    def set_chat_rounds(self):
+    def set_chat_rounds(self) -> None:
         pet = self.pet
         dlg = QInputDialog(pet)
         dlg.setWindowTitle("对话记忆")
@@ -187,5 +193,5 @@ class AIService:
         else:
             pet.show_bubble("不带记忆啦，每次都是全新的鱼~")
 
-    def open_ai_settings(self):
+    def open_ai_settings(self) -> None:
         pet_dialogs.open_ai_settings(self.pet)

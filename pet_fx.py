@@ -4,9 +4,14 @@
 MIT License
 Copyright (c) 大肥鱼桌宠项目
 
-职责：把一个「一次性特效」的帧序列（如摸摸头 petpet_f00..09、撒钱 money_f00..85）
-画在主程序已有的 QGraphicsPixmapItem 上（主程序在 QGraphicsScene 里创建的 emote_item），
-由 QTimer 驱动换帧，播完后自动收起。
+职责：把一个「一次性特效」的帧序列（如摸摸头、撒钱）画在主程序已有的
+QGraphicsPixmapItem 上（主程序在 QGraphicsScene 里创建的 emote_item），由 QTimer 驱动换帧，
+播完后自动收起。
+
+帧集的**前缀与张数不在本模块写死**（v2.5.0 · A-3）：产品路径的真源是 桌宠.py 的具名常量
+（_MONEY_FRAME_PREFIX / _MONEY_FRAME_COUNT、_DEFAULT_FRAME_SETS 里的 petpet 项）；本模块
+只按调用方给的 (prefix, count) 干活，文档与 __main__ 自测改用 frame_sets() 按 assets/fx
+磁盘实况数——pet_* 不能 import 桌宠（循环依赖），所以真源是素材本身。
 
 典型用法（主程序侧）::
 
@@ -16,17 +21,20 @@ Copyright (c) 大肥鱼桌宠项目
     self.scene.addItem(self.emote_item)
     self.fx = pet_fx.AnimatedEmote(self.emote_item, self)
 
-    # 摸摸头
-    self.fx.play(pet_fx.load_frame_set(fx_dir, "petpet", 10),
+    # 摸摸头（前缀/张数由调用方决定：桌宠.py 走 _DEFAULT_FRAME_SETS 里的 petpet 项）
+    self.fx.play(pet_fx.load_frame_set(fx_dir, prefix, count),
                  interval_ms=66, loops=1, on_finish=lambda em: self._on_fx_done())
 
-    # 撒钱（更长的帧集可以配更短的间隔）
-    self.fx.play(pet_fx.load_frame_set(fx_dir, "money", 86), interval_ms=30, loops=1)
+    # 撒钱（更长的帧集可以配更短的间隔；桌宠.py 传 _MONEY_FRAME_PREFIX/_MONEY_FRAME_COUNT）
+    self.fx.play(pet_fx.load_frame_set(fx_dir, _MONEY_FRAME_PREFIX, _MONEY_FRAME_COUNT),
+                 interval_ms=30, loops=1)
 
     # 也可只监听信号：self.fx.finished.connect(self._on_fx_done)
 
 对外接口：
 - AnimatedEmote(item, parent=None)：绑定一个 QGraphicsPixmapItem。
+- frame_sets(fx_dir) -> {前缀: 张数}：按磁盘实况数特效帧集（只读目录，不建 Qt 对象；
+  文档与 __main__ 自测据此写，免得把某一组的前缀/张数写死在本文件里）。
 - play(frames, interval_ms=66, loops=1, on_finish=None) -> bool：
   frames 为 QPixmap 列表（由 pet_anim.load_frame_set 加载）；loops=-1 无限循环，
   loops>=1 播完对应遍数后停止；空列表 / loops=0 视为「立即播完」，回调照发、返回 False。
@@ -49,12 +57,39 @@ Copyright (c) 大肥鱼桌宠项目
 Python 3.10+（项目运行环境 3.10.2）。
 """
 
+import os
+import re
+
 from PySide6.QtCore import QObject, QTimer, Signal
 
 import pet_log
 
 # 复用项目既有帧集加载工具（读 <prefix>_f%02d.png）；同时方便外部 from pet_fx import load_frame_set
 from pet_anim import load_frame_set
+
+# v2.5.0（A-3）：<前缀>_fNN.png 的帧文件名形状（frame_sets 按它数张数）
+_FX_FRAME_NAME_RE = re.compile(r"^(?P<prefix>.+)_f(?P<idx>\d+)\.png$")
+
+
+def frame_sets(fx_dir):
+    """扫特效帧目录 → {前缀: 张数}（本模块不写死任何前缀与张数）。
+
+    真源是 assets/fx 里的素材本身：产品路径由 桌宠.py 的具名常量
+    （_MONEY_FRAME_PREFIX / _MONEY_FRAME_COUNT、_DEFAULT_FRAME_SETS）驱动，
+    文档与 __main__ 自测按磁盘实况数（pet_* 不能 import 桌宠：循环依赖）。
+    读目录失败返回 {}（调用方据此报错，不静默跑一半）。
+    """
+    out = {}
+    try:
+        names = os.listdir(fx_dir)
+    except OSError:
+        return out
+    for name in names:
+        m = _FX_FRAME_NAME_RE.match(name)
+        if m:
+            key = m.group("prefix")
+            out[key] = out.get(key, 0) + 1
+    return out
 
 
 class AnimatedEmote(QObject):
@@ -212,7 +247,6 @@ class AnimatedEmote(QObject):
 # ---------------- 冒烟测试（无显示器环境，可直接运行本文件） ----------------
 if __name__ == "__main__":
     # P0-2：以下 print 为命令行冒烟工具输出（python pet_fx.py 运行可见），保留不改为日志
-    import os
     import sys
 
     # 无头运行：必须在 QApplication 创建前设置（已显式指定时尊重外部设置）
@@ -231,8 +265,16 @@ if __name__ == "__main__":
 
     fx = AnimatedEmote(item)
 
-    petpet = load_frame_set(ASSETS_FX, "petpet", 10)   # 10 帧
-    money = load_frame_set(ASSETS_FX, "money", 86)     # 86 帧
+    # 帧集前缀与张数**按磁盘实况数**（本文件不写死某一组；产品路径的真源见模块 docstring）
+    sets = frame_sets(ASSETS_FX)
+    if len(sets) < 2:
+        print("assets/fx 里少于两组帧集：%r（冒烟需要一个短帧集与一个长帧集）" % (sets,))
+        sys.exit(2)
+    order = sorted(sets, key=lambda k: (sets[k], k))
+    short_prefix, long_prefix = order[0], order[-1]
+    short_n, long_n = sets[short_prefix], sets[long_prefix]
+    petpet = load_frame_set(ASSETS_FX, short_prefix, short_n)   # 短帧集（摸头）
+    money = load_frame_set(ASSETS_FX, long_prefix, long_n)      # 长帧集（撒钱）
 
     fails = []
     finished_count = [0]
@@ -247,42 +289,42 @@ if __name__ == "__main__":
 
     print("=== pet_fx.AnimatedEmote 冒烟测试（offscreen） ===")
     print("assets/fx:", ASSETS_FX)
-    print("petpet 帧数:", len(petpet), "| money 帧数:", len(money))
-    check("素材加载：petpet 10 帧", len(petpet) == 10)
-    check("素材加载：money 86 帧", len(money) == 86)
+    print("%s 帧数:" % short_prefix, len(petpet), "| %s 帧数:" % long_prefix, len(money))
+    check("素材加载：%s %d 帧" % (short_prefix, short_n), len(petpet) == short_n)
+    check("素材加载：%s %d 帧" % (long_prefix, long_n), len(money) == long_n)
 
-    # ---- 阶段 1：petpet（10 帧，默认 interval_ms=66，loops=1） ----
+    # ---- 阶段 1：短帧集（默认 interval_ms=66，loops=1） ----
     def petpet_start():
-        ok = fx.play(petpet, loops=1, on_finish=lambda em: calls.append(("petpet", em)))
-        check("petpet: play() 返回 True", ok is True)
-        check("petpet: 首帧立即 setPixmap",
+        ok = fx.play(petpet, loops=1, on_finish=lambda em: calls.append((short_prefix, em)))
+        check("短帧集: play() 返回 True", ok is True)
+        check("短帧集: 首帧立即 setPixmap",
               item.pixmap().cacheKey() == petpet[0].cacheKey())
-        check("petpet: 首帧立即 show()（item 可见）", item.isVisible())
-        check("petpet: is_playing == True", fx.is_playing is True)
+        check("短帧集: 首帧立即 show()（item 可见）", item.isVisible())
+        check("短帧集: is_playing == True", fx.is_playing is True)
 
     def petpet_done():
-        check("petpet: 播完后 is_playing == False", fx.is_playing is False)
-        check("petpet: 播完后 item 隐藏", not item.isVisible())
-        check("petpet: finished 信号触发 1 次", finished_count[0] == 1,
+        check("短帧集: 播完后 is_playing == False", fx.is_playing is False)
+        check("短帧集: 播完后 item 隐藏", not item.isVisible())
+        check("短帧集: finished 信号触发 1 次", finished_count[0] == 1,
               "得到 %d 次" % finished_count[0])
-        check("petpet: on_finish 回调 1 次且参数为 AnimatedEmote 实例",
-              len(calls) == 1 and calls[0][0] == "petpet" and calls[0][1] is fx)
+        check("短帧集: on_finish 回调 1 次且参数为 AnimatedEmote 实例",
+              len(calls) == 1 and calls[0][0] == short_prefix and calls[0][1] is fx)
 
-    # ---- 阶段 2：money（86 帧，interval_ms=30，loops=1） ----
+    # ---- 阶段 2：长帧集（interval_ms=30，loops=1） ----
     def money_start():
-        ok = fx.play(money, interval_ms=30, loops=1, on_finish=lambda em: calls.append(("money", em)))
-        check("money: play() 返回 True", ok is True)
-        check("money: 首帧立即 setPixmap",
+        ok = fx.play(money, interval_ms=30, loops=1, on_finish=lambda em: calls.append((long_prefix, em)))
+        check("长帧集: play() 返回 True", ok is True)
+        check("长帧集: 首帧立即 setPixmap",
               item.pixmap().cacheKey() == money[0].cacheKey())
-        check("money: is_playing == True", fx.is_playing is True)
+        check("长帧集: is_playing == True", fx.is_playing is True)
 
     def money_done():
-        check("money: 播完后 is_playing == False", fx.is_playing is False)
-        check("money: 播完后 item 隐藏", not item.isVisible())
-        check("money: finished 信号累计 2 次", finished_count[0] == 2,
+        check("长帧集: 播完后 is_playing == False", fx.is_playing is False)
+        check("长帧集: 播完后 item 隐藏", not item.isVisible())
+        check("长帧集: finished 信号累计 2 次", finished_count[0] == 2,
               "得到 %d 次" % finished_count[0])
-        check("money: on_finish 回调累计 2 次且第二次带 self",
-              len(calls) == 2 and calls[1][0] == "money" and calls[1][1] is fx)
+        check("长帧集: on_finish 回调累计 2 次且第二次带 self",
+              len(calls) == 2 and calls[1][0] == long_prefix and calls[1][1] is fx)
 
     # ---- 阶段 3：无限循环 loops=-1 + stop() ----
     def inf_start():
@@ -330,9 +372,10 @@ if __name__ == "__main__":
 
     # 时序驱动：每步执行后等一段（留足动画时间）再进下一步
     plan = [
-        ("阶段 1：petpet 10 帧（默认 66ms，loops=1）", petpet_start, 1000),
+        ("阶段 1：%s %d 帧（默认 66ms，loops=1）" % (short_prefix, short_n), petpet_start, 1000),
         ("阶段 1 校验：播完状态", petpet_done, 20),
-        ("阶段 2：money 86 帧（30ms，loops=1）", money_start, 3400),
+        ("阶段 2：%s %d 帧（30ms，loops=1）" % (long_prefix, long_n), money_start,
+         max(1000, long_n * 30 + 900)),   # 长帧集的等待时间跟着实际张数走（不再写死）
         ("阶段 2 校验：播完状态", money_done, 20),
         ("阶段 3：无限循环 loops=-1", inf_start, 400),
         ("阶段 3 校验：stop() 生效", inf_done, 20),

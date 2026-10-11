@@ -185,6 +185,24 @@ desktop-pet/
 > 素材说明：petpet/money 动图与 task-end-a/exp-orb 音效概念借自 MIT 开源的
 > dsh-whale-widget 插件（DeepSeek-Balance-Whale-Widget 系列），帧图由 GIF 转换生成。
 
+## ⚙️ config.json 为什么只存改动项（v2.5.0 说明）
+
+`config.json` 从 v2 起是 **diff 存储**：只落盘与内置默认值不同的键，外加 `schema_version`
+与 DPAPI 加密的 `api_key`。副作用是**顶层未知键会被丢弃**——这是**有意为之**，不是缺陷：
+
+1. `config.json` 是**程序按 schema 自有**的配置文件，不是用户数据。合法键由代码里的
+   `DEFAULT_CONFIG` 定义；不在其中的键没有任何代码路径会读，带回去只会让已废弃的键
+   （例如 v2.0 的 `lines_extra`，现在只作迁移源）永久复活。
+2. diff 存储的基准是「代码里的默认值」：写回 = 默认值 × 用户改动。若连未知键一起带回，
+   就变成「旧文件 × 新代码」，两版之间字段的废弃与改名永远清不掉。
+3. **未来版本的键靠"不写回"保护，而不是靠保留**：读到比本版本更高的 `schema_version` 时
+   进兼容模式（只读运行，任何保存都不落盘），所以不会发生「新版本配置被旧版本降级覆盖」。
+
+对照：`alarms.json` / `behaviors.json` / `lines.json` 这些**用户数据**文件的顶层未知键
+必须原样保留（v2.4.2 起）——它们的合法内容由用户写，不由代码 schema 定义。
+
+要新增配置项：先把键加进 `桌宠.DEFAULT_CONFIG`（或另开一个自己的数据文件），否则保存时不留痕。
+
 ## 🔧 换成你自己的角色
 
 **方式一（推荐，v1.3+）：** 右键 →「🐟 角色」→「导入角色…」选透明底 PNG 即可，支持多角色随时切换。
@@ -208,7 +226,7 @@ v2.4.1 的发布说明里有一句「**pet_tools + pet_lines 82 个函数补全�
 | `pet_io.py` | ✅ 25/28 | 公开 API 与纯函数全覆盖；未标的 3 个是 `_MergeGuard` 的 `__init__/__enter__/__exit__` |
 | `pet_book.py` | ⚠️ 25/34 | 未标的是 8 个私有辅助（`_load`/`_save_all`/`_archive_day`…）与模块级 `esc` |
 | `pet_chat.py` / `pet_balance.py` / `pet_widgets.py` / `pet_export.py` / `pet_config.py` / `pet_alarm.py` / `pet_behaviors.py` | ❌ 0 | 本轮只澄清口径，未新增注解 |
-| `桌宠.py`（253 函数）/ `pet_dialogs.py`（251）/ `pet_voice.py`（87）/ `pet_resources.py`（79）/ `pet_anim.py`（9）/ `pet_actions.py`（7） | ❌ 0 | **单独立项**，不在 v2.4.1 那句「82/82」的口径内 |
+| `桌宠.py`（254 函数）/ `pet_dialogs.py`（258）/ `pet_voice.py`（87）/ `pet_resources.py`（80）/ `pet_anim.py`（9）/ `pet_actions.py`（7） | ❌ 0 | **单独立项**，不在 v2.4.1 那句「82/82」的口径内 |
 
 也就是说：**已经补注解的是 `pet_tools` / `pet_lines` / `pet_io` / `pet_book` 这几个
 Qt-free 模块（其中前两个是全量），三大核心文件与其余 GUI 模块仍是零注解**。评估注解覆盖率

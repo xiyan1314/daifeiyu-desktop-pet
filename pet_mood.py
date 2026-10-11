@@ -10,6 +10,8 @@ MIT License
 - emote(str)  ：头顶表情符号（heart/sparkle/tear/anger/exclaim/question/zzz/note/drool，
                  已有绘制器由主程序 _show_emote 提供）。
 
+v2.5.0（A1/A2）：服务构造搬进 pet_services.ServiceRegistry；本模块（该子系统）补全类型注解。
+
 设计要点：
 - 仅依赖 PySide6.QtCore（QObject / QTimer / Signal）与标准库 time/random；
   不 import QApplication/QPixmap，模块可在无 GUI 环境被 import。
@@ -32,6 +34,8 @@ from PySide6.QtCore import QObject, QTimer, Signal
 # ---------------- 台词库（中文，每组 3~5 条） ----------------
 # v2.1.2：情绪台词改由台词库提供（用户可增删改）；这里只是"库不可用时的兜底常量"，
 # 文本单一来源在 pet_lines（它零 Qt，不会造成循环 import）。
+from typing import Any, Callable  # noqa: E402
+
 import pet_log  # noqa: E402
 from pet_lines import (  # noqa: E402
     LINES_MOOD_PUZZLED as LINES_PUZZLED, LINES_MOOD_ANGRY as LINES_ANGRY,
@@ -53,7 +57,8 @@ class Mood(QObject):
     MISCHIEF_MIN_S = 45.0       # 调皮事件最短间隔（秒）
     MISCHIEF_MAX_S = 90.0       # 调皮事件最长间隔（秒）
 
-    def __init__(self, parent=None, line_picker=None):
+    def __init__(self, parent: Any = None,
+                 line_picker: Callable[..., str] | None = None) -> None:
         super().__init__(parent)
         # v2.1.2：line_picker(category, fallback_list) -> 台词文本（由桌宠注入台词库）
         self._line_picker = line_picker
@@ -74,7 +79,7 @@ class Mood(QObject):
         # 之后每次 tick() 到点发射，再重新随机 45~90 秒的下一次间隔。
         self._next_mischief = 0.0
 
-    def _pick(self, category, fallback):
+    def _pick(self, category: str, fallback: list) -> str:
         """情绪台词取词：优先台词库（用户可增删改）。
 
         v2.1.2 修复：库可用但这一类被用户删空时，取词器返回空串 → 这里也返回空串
@@ -88,18 +93,18 @@ class Mood(QObject):
                 pass  # 有意忽略：取词器异常 → 回落内置常量（气泡不能因为取词崩掉）
         return random.choice(fallback) if fallback else ""
 
-    def _emit_line(self, category, fallback):
+    def _emit_line(self, category: str, fallback: list) -> None:
         """取词并发射情绪气泡（空串=用户把这组删光了 → 这次不喊）。"""
         text = self._pick(category, fallback)
         if text:
             self.bubble.emit(text)
 
-    def prime_mischief(self):
+    def prime_mischief(self) -> None:
         """把下一次调皮事件推迟到随机 45~90 秒后（启动时调用，避免刚启动就坏笑）。"""
         self._next_mischief = time.monotonic() + random.uniform(self.MISCHIEF_MIN_S, self.MISCHIEF_MAX_S)
 
     # ================= 戳链 =================
-    def poke(self):
+    def poke(self) -> None:
         """戳一下：距上次超过 2.5s 重置计数为 1，否则 +1，按计数晋级情绪。"""
         now = time.monotonic()
         if self._poke_count == 0 or now - self._last_poke > self.POKE_RESET_SECONDS:
@@ -122,39 +127,39 @@ class Mood(QObject):
             self.emote.emit("anger")
 
     # ================= 食物情绪 =================
-    def food_shown(self):
+    def food_shown(self) -> None:
         """食物托盘打开 → 馋嘴；并启动 8 秒定时器，超时不给吃就委屈。"""
         self.state.emit("drool")
         self._emit_line("mood_drool", LINES_DROOL)
         self.emote.emit("drool")
         self._food_timer.start()  # 重复调用会重启 8 秒窗口
 
-    def food_hidden(self):
+    def food_hidden(self) -> None:
         """托盘关闭 → 停掉 8 秒定时器（不再进入委屈）。"""
         self._food_timer.stop()
 
-    def _withhold(self):
+    def _withhold(self) -> None:
         """8 秒没吃到 → 委屈哭泣（私有，由食物定时器超时触发）。"""
         self.state.emit("cry")
         self._emit_line("mood_cry", LINES_CRY)
         self.emote.emit("tear")
 
-    def fed(self):
+    def fed(self) -> None:
         """已喂食：只停掉 8 秒定时器，不 emit（吃完展示由外部决定）。"""
         self._food_timer.stop()
 
-    def blush(self):
+    def blush(self) -> None:
         """被夸 → 害羞脸红。"""
         self.state.emit("blush")
         self._emit_line("mood_blush", LINES_BLUSH)
         self.emote.emit("heart")
 
-    def stop_all(self):
+    def stop_all(self) -> None:
         """停止全部内部定时器（退出清理用）。"""
         self._food_timer.stop()
 
     # ================= 调皮事件 =================
-    def tick(self):
+    def tick(self) -> None:
         """调皮事件调度（选型 A：由外部周期定时器调用，如 PetWindow 每 1s 调一次）。
 
         内部用「随机间隔」节流：距上次调皮不足当前随机间隔时直接返回；
@@ -166,7 +171,7 @@ class Mood(QObject):
         self._do_mischief()
         self._next_mischief = now + random.uniform(self.MISCHIEF_MIN_S, self.MISCHIEF_MAX_S)
 
-    def _do_mischief(self):
+    def _do_mischief(self) -> None:
         """实际发射「做坏事得意」情绪（由 tick() 调用，也供冒烟测试直接验证）。"""
         self.state.emit("smug")
         self._emit_line("mood_smug", LINES_SMUG)
@@ -190,31 +195,31 @@ if __name__ == "__main__":
     mood.bubble.connect(bubbles.append)
     mood.emote.connect(emotes.append)
 
-    def step0():
+    def step0() -> None:
         mood.poke()  # 计数 1 → puzzled
         QTimer.singleShot(100, mood, step1)
 
-    def step1():
+    def step1() -> None:
         mood.poke()  # 计数 2 → angry（距上次 100ms < 2.5s）
         QTimer.singleShot(100, mood, step2)
 
-    def step2():
+    def step2() -> None:
         mood.poke()  # 计数 3 → hiss
         QTimer.singleShot(100, mood, step3)
 
-    def step3():
+    def step3() -> None:
         mood.food_shown()  # → drool + 启动 8s 定时器
         QTimer.singleShot(50, mood, step4)
 
-    def step4():
+    def step4() -> None:
         mood._withhold()  # 手动触发超时逻辑 → cry
         QTimer.singleShot(50, mood, step5)
 
-    def step5():
+    def step5() -> None:
         mood.tick()  # 首次 tick() 立即触发一次 → smug
         QTimer.singleShot(50, mood, finish)
 
-    def finish():
+    def finish() -> None:
         # 断言戳链：puzzled → angry → hiss
         assert states[:3] == ["puzzled", "angry", "hiss"], states
         # 断言食物情绪与调皮事件

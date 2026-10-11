@@ -157,15 +157,34 @@ def _is_guard_wrapper(node):
     return name in _GUARD_WRAPPERS
 
 
-def _scope_bindings(body):
+def _param_names(args):
+    """函数形参名集合（posonly / 普通 / *args / kwonly / **kwargs）。
+
+    v2.5.0（D7-A）：形参与局部绑定一样会**遮住**同名模块级/全仓函数——旧口径里形参
+    既不在 vals 也不在 bad，于是 `def wire_shadow(self, _mod_fn): self.boom.connect(_mod_fn)`
+    会拿全仓同名函数的签名去判定，报出假的 M 问题。
+    """
+    out = {a.arg for a in list(getattr(args, "posonlyargs", [])) + list(args.args)
+           + list(args.kwonlyargs)}
+    if args.vararg is not None:
+        out.add(args.vararg.arg)
+    if args.kwarg is not None:
+        out.add(args.kwarg.arg)
+    return out
+
+
+def _scope_bindings(body, params=()):
     """作用域内（**不下钻**嵌套函数体 / lambda / 类体）的名字绑定。
 
     → (vals: {名: [值表达式]}, defs: {名: [嵌套 FunctionDef]}, bad: 有歧义的名集合)
 
     歧义来源一律进 bad，bad 里的名字**永不解析**（宁可漏检）：元组/列表解包、for /
     with / except / import / global / nonlocal、海象、增强赋值、推导式绑定。
+
+    v2.5.0（D7-A）：params 传本函数的形参名（见 _param_names），同样进 bad——
+    形参遮同名，判不了就不判。
     """
-    vals, defs, bad = {}, {}, set()
+    vals, defs, bad = {}, {}, set(params)
 
     def _bad(target):
         for n in ast.walk(target):
@@ -226,7 +245,7 @@ def _scope_table(tree):
     out = []
     for node in ast.walk(tree):
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-            vals, defs, bad = _scope_bindings(node.body)
+            vals, defs, bad = _scope_bindings(node.body, _param_names(node.args))
             hi = getattr(node, "end_lineno", None) or node.lineno
             out.append((node.lineno, hi, vals, defs, bad))
     vals, defs, bad = _scope_bindings(tree.body)

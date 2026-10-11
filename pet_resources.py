@@ -323,6 +323,29 @@ def _wav_duration(path):
     return None
 
 
+# v2.5.0（D7-A）：keep_source（保留原图）失败的上报限流表 {标签: 上次记录时间}。
+# 口径照抄 pet_log.guard_slot：同一个名字 60s 只记一条——勾了"保留原图"的用户连续导入
+# 一批角色而每次都失败时，error.log 里既有线索、又不会被同一句话刷满。
+_SOURCE_FAIL_SEEN = {}
+_SOURCE_FAIL_GAP_S = 60.0
+
+
+def _log_source_fail(rid, err):
+    """保留原图失败上报（限流：同名 60s 一条；不影响导入本身的结果）。
+
+    v2.5.0（D7-A）新增：此前这里是一个纯 pass 的静默 except——用户勾了"保留原图"，
+    界面上看不出失败，error.log 里也没有任何线索（_dev/audit_silent_except.py
+    的 A 档判据据此把 pet_resources 记成 A=1）。补日志不放宽 A 档判据：失败仍旧
+    只是"少了一份原图"，导入结果与返回值逐位不变。
+    """
+    now = time.monotonic()
+    if now - _SOURCE_FAIL_SEEN.get("keep_source", 0.0) < _SOURCE_FAIL_GAP_S:
+        return  # 限流窗口内：同一句不再重复记（口径同 pet_log.guard_slot）
+    _SOURCE_FAIL_SEEN["keep_source"] = now
+    pet_log.log_error("keep_source failed（原图保留失败，导入本身仍成功）: role %s, %r"
+                      % (rid, err))
+
+
 # ---------------- 角色库 ----------------
 class RoleLibrary:
     """自定义角色管理：导入 / 切换 / 删除透明 PNG 角色，索引 roles.json。
@@ -1111,8 +1134,10 @@ class RoleLibrary:
                             target = os.path.join(sdir, "%s_%d%s" % (stem, j, ext))
                             j += 1
                         shutil.copyfile(sf, target)
-                except Exception:
-                    pass  # 有意忽略：原图保留失败不影响导入（体积优化开关，尽力而为）
+                except Exception as e:
+                    # 有意忽略：原图保留失败不影响导入（体积优化开关，尽力而为）。
+                    # v2.5.0（D7-A）：但不再**静默**——留一条限流日志供排查。
+                    _log_source_fail(rid, e)
             self._data["roles"].append(role)
             err = self._save()
             if err:

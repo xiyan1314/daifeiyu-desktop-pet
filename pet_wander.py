@@ -5,8 +5,11 @@
 独立模块：不 import 桌宠.py；依赖 pet 的鸭子类型接口
 （busy/has_frames/item/sprites/form/pos/width/move/flip/walk_phase/squash_y/
 _apply_transform/walk_timer/_walk_interval/_wander_target/_was_walking/_wake/菜单 act）。
+
+v2.5.0（A1/A2）：服务构造搬进 pet_services.ServiceRegistry；本模块（该子系统）补全类型注解。
 """
 import random
+from typing import Any, Callable
 
 from PySide6.QtCore import QPoint
 from PySide6.QtGui import QCursor
@@ -20,7 +23,7 @@ WALK_FAR_DIST = 200      # 远距阈值：超过走快追档
 WALK_NEAR_CAP = 8        # 近距每 tick 上限
 
 
-def _walk_step(d, cap=None):
+def _walk_step(d: int, cap: int | None = None) -> int:
     """行走步进（模块级纯函数，供验证脚本直接断言）：
     每轴走剩余距离 WALK_EASE，夹紧在 [WALK_STEP_MIN, cap]。
 
@@ -36,16 +39,17 @@ def _walk_step(d, cap=None):
 class WanderController:
     """跟随 / 散步控制器：三区速度、目标生成、换屏目标作废（P1-4）。"""
 
-    def __init__(self, pet, cfg_getter, screen_geo, save_cfg):
+    def __init__(self, pet: Any, cfg_getter: Callable[[], dict],
+                 screen_geo: Callable[[Any], Any], save_cfg: Callable[[dict], None]) -> None:
         self.pet = pet
         self._cfg = cfg_getter
         self._screen_geo = screen_geo
         self._save_cfg = save_cfg
 
-    def set_target(self, target):
+    def set_target(self, target: Any) -> None:
         self.pet._wander_target = target
 
-    def restart(self):
+    def restart(self) -> None:
         """跟随/散步开关或拖动结束后重启行走定时器；全关时复位朝向与贴图。"""
         pet = self.pet
         cfg = self._cfg()
@@ -60,12 +64,12 @@ class WanderController:
             pet.squash_y = 1.0
             pet._apply_transform()
 
-    def on_drag_end(self):
+    def on_drag_end(self) -> None:
         """拖拽松手：被暂停的行走按原状态恢复。"""
         if self.pet._was_walking:
             self.pet.walk_timer.start(self.pet._walk_interval)
 
-    def set_follow(self, on):
+    def set_follow(self, on: Any) -> None:
         cfg = self._cfg()
         cfg["follow_mouse"] = bool(on)
         if on:
@@ -76,7 +80,7 @@ class WanderController:
         self._save_cfg(cfg)
         self.restart()
 
-    def set_wander(self, on):
+    def set_wander(self, on: Any) -> None:
         cfg = self._cfg()
         cfg["wander"] = bool(on)
         if on:
@@ -88,7 +92,7 @@ class WanderController:
         self._save_cfg(cfg)
         self.restart()
 
-    def tick(self):
+    def tick(self) -> None:
         pet = self.pet
         if getattr(pet, "_sleeping", False):
             return  # v2.2（质量审查）：睡着不再满屏漂移（v2.1.7 起跟随/散步中允许入睡，但没停 walk_timer）
@@ -151,6 +155,6 @@ class WanderController:
         pet.squash_y = 0.95 if pet.walk_phase == 0 else 1.0
         pet._apply_transform()
 
-    def _reached(self, target):
+    def _reached(self, target: Any) -> bool:
         p = self.pet.pos()
         return abs(p.x() - target.x()) < 8 and abs(p.y() - target.y()) < 8

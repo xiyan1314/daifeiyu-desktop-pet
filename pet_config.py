@@ -269,9 +269,28 @@ def normalize_cfg(cfg, defaults, persona_ids):
 
 
 def write_config(path, cfg, defaults, schema_version, log, encrypt_fn):
-    """save_config 核心：diff 存储（api_key 特殊处理）+ 原子替换。"""
+    """save_config 核心：diff 存储（api_key 特殊处理）+ 原子替换。
+
+    diff 存储 = 只落盘**与 defaults 不同**的键（外加 schema_version 与 api_key 密文）。
+    于是**不在 defaults 里的顶层未知键会被丢弃——这是有意为之，不是缺陷**
+    （v2.5.0 · D7-A 把口径写清楚，免得每轮审查重提一遍）：
+
+      ① config.json 是**程序按 schema 自有**的配置文件，不是用户数据文件。合法键由
+         DEFAULT_CONFIG 定义，未知键没有任何代码路径会读它；带回去只会让已废弃的键
+         （例如 v2.0 的 lines_extra——现在只作迁移源）永久复活。
+      ② diff 存储的基准是"代码里的默认值"：写回 = 默认值 × 用户改动。若把未知键一起
+         带回去，就变成"旧文件 × 新代码"，两版之间字段的废弃/改名永远清不掉。
+      ③ 未来版本的键**不靠保留来保护，靠不写回**：桌宠.save_config 读到更高的
+         schema_version 时进兼容模式（只读运行，任何保存都不落盘）——不会出现
+         "新版本配置被本版本降级覆盖"。
+
+    对照：alarms.json / behaviors.json / lines.json 这些**用户数据**文件的顶层未知键
+    必须原样保留（v2.4.2 起）——它们的合法内容由用户写，不由代码 schema 定义。
+    要新增配置项：先把键加进 桌宠.DEFAULT_CONFIG（或另开一个自己的数据文件）。
+    """
     try:
         # P1-3：diff 存储——只落盘与默认值不同的键（api_key 特殊处理），schema 版本随写
+        # v2.5.0（D7-A）：k not in defaults 的未知键**有意丢弃**——理由见本函数 docstring。
         out = {"schema_version": schema_version}
         for k, v in cfg.items():
             if k in defaults and v != defaults[k]:

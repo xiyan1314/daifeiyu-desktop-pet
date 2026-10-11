@@ -46,32 +46,29 @@ import pet_physics
 import pet_voice
 import pet_anim
 import pet_fx
-import pet_mood
 import pet_audio
 import pet_resources
-import pet_book
 import pet_dialogs
 import pet_screen
 import pet_config
 import pet_lines
 import pet_widgets
-import pet_wander
 import pet_chat
-import pet_weather
-import pet_balance
-import pet_menu
-import pet_ai
-import pet_actions
 import pet_main
 import pet_behaviors
 import pet_export
 import pet_alarm
 import pet_tools  # v2.3.0（1.2）：工具注册表/执行器（Qt-free，无环）
 import pet_io  # v2.3.1：原子写/清扫临时文件（P2-B 导入恢复、L4 退出清 tmp）
+import pet_services  # v2.5.0（A1）：子系统构造注册表（服务构造的单一产地，含 pet_ 前缀自动进护栏）
+# v2.5.0（A1）：上面少了 8 个 import pet_xxx——pet_book / pet_wander / pet_weather /
+# pet_balance / pet_menu / pet_ai / pet_actions / pet_mood 的服务构造整段搬进了 pet_services，本文件
+# 再无一处引用它们（tests/test_deadcode_types_v241 的“零引用导入”检查会点名）。模块本身仍由
+# pet_services 导入；from pet_wander import WALK_INTERVAL_MS… 这类**取名字**的再导出照旧保留。
 
 
 APP_NAME = "大肥鱼桌宠"
-VERSION = "2.4.4"
+VERSION = "2.5.0"
 PAD = 1.25  # 窗口相对角色的透明边距（为压扁/回弹预留空间）
 IDLE_FRAME_MS = 140      # 待机帧间隔
 IDLE_FORM_HOLD_SECS = 8  # v2.1.3：只有形态、没有动作可播时的展示期上限（到期回用户形态）
@@ -741,6 +738,44 @@ def _state_pending_count(pending):
     return sum(len(v) for v in (pending or {}).values())
 
 
+def _service_deps():
+    """ServiceRegistry 的构造注入面（v2.5.0 A1）：19 个模块级依赖一次收齐。
+
+    **必须是函数，不能是模块级常量**：DATA_DIR / CONFIG_PATH / USAGE_PATH / MEMORY_PATH
+    这些名字在测试里是"**先** monkeypatch main.DATA_DIR、**再**构造 PetWindow"
+    （见 tests/test_relay_v243.py 的 _point_data_dir）。模块级常量在 import 时就固化成了
+    真实用户目录，测试隔离当场失效。函数体在 PetWindow() 构造时才求值，与旧 __init__
+    逐行读同名全局的**时机完全一致**。
+
+    这里的每一项都是搬迁前 __init__ 直接按值传给服务构造的**同一个对象**（函数 / 常量 /
+    信号集），不做二次包装——包一层 lambda 会改"构造期取的是哪一份"的语义。
+    """
+    return {
+        # 路径与常量（原 __init__ 直接读的模块全局）
+        "data_dir": DATA_DIR,
+        "config_path": CONFIG_PATH,
+        "usage_path": USAGE_PATH,
+        "memory_path": MEMORY_PATH,
+        "defaults": DEFAULT_CONFIG,
+        "max_reply_len": MAX_REPLY_LEN,
+        "sleep_after": SLEEP_AFTER_SECONDS,
+        # 跨线程信号集合（原模块全局 signals）+ pet_log 口径的记错函数
+        "signals": signals,
+        "log": _log_error,
+        # 配置读写 / 脱敏 / 删文件 / 音效 / 表情标签 / 对话记忆 / 人设提示词 / 待机取词 / 自启查询
+        "save_cfg": save_config,
+        "set_redact_key": set_redact_key,
+        "remove_files": _remove_files,
+        "play_sound": play_sound,
+        "parse_emote": parse_emote_tag,
+        "load_memory": load_chat_memory,
+        "save_memory": save_chat_memory,
+        "ai_prompt": _build_ai_sys_prompt,
+        "idle_picker": pick_idle_action,
+        "autostart_enabled": is_autostart_enabled,
+    }
+
+
 class PetWindow(QWidget):
     # v2.0.1：帧间隔默认值以类属性暴露（pet_actions 等服务不 import 桌宠，须经实例访问）
     IDLE_FRAME_MS = IDLE_FRAME_MS
@@ -782,66 +817,11 @@ class PetWindow(QWidget):
             pet_resources.FRAME_MAX = max(2, min(60, int(self.cfg.get("role_frame_max", 24) or 24)))
         except (TypeError, ValueError):
             pet_resources.FRAME_MAX = 24  # norm-ok
-        self.role_lib = pet_resources.RoleLibrary(DATA_DIR)
-        self.audio_lib = pet_resources.AudioLibrary(DATA_DIR)
-        self.role_lib.set_active(self.cfg.get("role", ""))  # roles.json 与 config 同步
-        try:
-            self.book = pet_book.Book(DATA_DIR)
-        except Exception as e:
-            _log_error("book init failed: %r" % (e,))
-            self.book = None
-        self._usage = self.book.today_usage() if self.book is not None else 0.0
-        self._preview_player = None  # mp3 试听兜底播放器（惰性构建）
-        # ---- v2.1：台词库（独立台词自定义模块）+ 声音素材库（资源库内，与音效分开） ----
-        self.lines_lib = pet_lines.LineService(DATA_DIR, _log_error)
-        self.voice_assets = pet_resources.VoiceAssetLibrary(DATA_DIR)
-        self._migrate_lines_extra()  # v2.0 的 cfg["lines_extra"] → v2.1 台词库（一次性）
-        self.lines_lib.on_changed(signals.lines_changed.emit)  # 跨线程安全：只 emit，不碰控件
-        self.role_lib.on_deleted(lambda rid: signals.voice_refs_changed.emit(-1))
-        self.voice_assets.on_deleted(lambda sid: signals.voice_refs_changed.emit(-1))
-        self.lines_pools = {}
-        self._refresh_lines()
-
-        # ---- P0-1：服务接线（Balance/Weather/Chat/Wander/Menu/AI/动作 抽至独立模块） ----
-        # 服务不 import 桌宠：配置/回调/信号全部构造注入；守卫状态仍归属 PetWindow（语义不变）
-        self.wander = pet_wander.WanderController(self, lambda: self.cfg, self._screen_geo, save_config)
-        self.weather = pet_weather.WeatherService(self, signals, lambda: self.cfg, _log_error)
-        # v2.3.0（1.2 Function Calling）：工具上下文——能力全部注入，pet_tools 不认识任何业务模块。
-        # 全用 lambda 晚绑定：balance/actions 在本行之后才构造，而工具只会在对话发生时被调用。
-        self.tool_ctx = pet_tools.ToolContext(
-            balance=lambda: self.balance.fetch_sync(),      # 只读：worker 线程内联（网络 I/O）
-            weather=lambda: self.weather.fetch_sync(),      # 只读：worker 线程内联
-            ledger=lambda: self._tool_ledger_summary(),     # 只读：账本摘要
-            ui=lambda name, args: self.chat.marshal(name, args),           # 主线程执行并等结果
-            ui_async=lambda name, args: self.chat.marshal_nowait(name, args),  # 只投递（对话框）
-            log=_log_error)
-        self.chat = pet_chat.ChatService(self, signals, lambda: self.cfg, _build_ai_sys_prompt,
-                                         parse_emote_tag, load_chat_memory, save_chat_memory,
-                                         play_sound, _log_error, MAX_REPLY_LEN,
-                                         context_builder=self._build_ai_context,  # v2.3.0：1.1+1.3
-                                         memory_path=MEMORY_PATH,
-                                         tool_ctx=self.tool_ctx)  # v2.3.0（1.2）：工具调用
-        self.ai = pet_ai.AIService(self, self.chat, lambda: self.cfg, save_config, set_redact_key,
-                                   _remove_files, (USAGE_PATH, DATA_DIR, CONFIG_PATH, MEMORY_PATH),
-                                   lambda: self.book, _log_error, DEFAULT_CONFIG)
-        self.balance = pet_balance.BalanceService(self, signals, lambda: self.cfg, lambda: self.book,
-                                                  play_sound, save_config, _log_error, self.ai.set_api_key)
-        self.actions = pet_actions.ActionService(self, lambda: self.cfg, pick_idle_action,
-                                                 SLEEP_AFTER_SECONDS)
-        # v2.0：语音服务（默认关闭；片段播放注入 preview_audio）
-        # v2.1：升级为配音系统——注入台词库/角色库/声音素材库，可插拔克隆后端 + 播放队列
-        self.voice = pet_voice.VoiceService(DATA_DIR, lambda: self.cfg,
-                                            self._play_voice_clip, _log_error,
-                                            stop_clip=self._stop_voice_clip,
-                                            save_cfg=save_config,
-                                            lines=self.lines_lib,
-                                            roles=self.role_lib,
-                                            voice_assets=self.voice_assets)
-        # v2.0.2：行为自定义服务（待机行为/行为序列；执行调度在本类主线程）
-        self.behaviors = pet_behaviors.BehaviorService(DATA_DIR)
-        # v2.0.5：闹钟服务（到点判定在主线程 QTimer 轮询）
-        self.alarms = pet_alarm.AlarmService(DATA_DIR)
-        self.menu_builder = pet_menu.MenuBuilder(self, save_config, is_autostart_enabled)
+        # v2.5.0（A1）：服务构造整段搬进 pet_services.ServiceRegistry（单一产地），这里只留一行调用。
+        # 构造顺序 / 实参 / 异常语义 / 挂回的属性名与搬迁前逐位相同；模块级依赖（路径常量、
+        # signals、日志、配置读写…）由 _service_deps() 在**调用时**取，见那个函数的注释。
+        # 两段原始位置：L785~L803（库与账本）+ L807~L844（P0-1 服务接线）。
+        self.services = pet_services.ServiceRegistry(self, **_service_deps())
 
         self.bubble = Bubble()
         self.badge = Badge()
@@ -962,7 +942,10 @@ class PetWindow(QWidget):
         self._using_front = True
 
         # ---- 阶段1：帧动画 ----
-        self.anim = pet_anim.FrameAnim(self)
+        # v2.5.0（A1）：构造搬进注册表（build_anim 只做 pet.anim = pet_anim.FrameAnim(pet)）。
+        # 调用点**必须**留在这里：上面 _build_sprites() 已经把精灵/形态建好，下面几行还要
+        # 按 _custom_role 决定解不解 idle 帧集——提前构造就是改构造顺序。
+        self.services.build_anim()
         assets_dir = resource_dir("assets")
         self._assets_dir = assets_dir  # v2.4.2：接力装载按组查素材目录（见 _DEFAULT_FRAME_SETS）
         # v2.4.2（启动耗时 P2）：四组默认素材帧集只**同步解 idle**，其余三组推迟到首帧之后。
@@ -1022,7 +1005,10 @@ class PetWindow(QWidget):
 
         # ---- 阶段2：情绪状态机 ----
         # v2.1.2：情绪台词也走台词库（用户可增删改）；库为空/不可用时 pet_mood 回落内置常量
-        self.mood = pet_mood.Mood(self, line_picker=self._mood_line)
+        # v2.5.0（A1）：构造搬进注册表（build_mood 只做 pet.mood = pet_mood.Mood(pet,
+        # line_picker=pet._mood_line)）。调用点同样按原位置留在这里（下面几行马上要接
+        # 它的 state/bubble/emote 三条信号）。
+        self.services.build_mood()
         self.mood.state.connect(self._on_mood_state)
         self.mood.bubble.connect(self._mood_bubble)  # busy 门控：喂食/跳跃中不覆盖互动气泡
         self.mood.emote.connect(self._mood_emote)
@@ -3478,7 +3464,13 @@ class PetWindow(QWidget):
         # v2.4.2（兼容 L2）：补齐必须放在**三个早退之后**——此前它在最前面，一次普通拖动
         # （press_dist>32）/按住未松/busy 重排都会同步解三组默认帧集（≈26ms），把"延迟装载"
         # 又拉回了交互路径上；真起播才付这份钱。
-        self._ensure_default_frames()
+        # v2.5.0（A3）：再补上**角色口径**——与 feed() 的 not self._custom_role 守卫同源。
+        # 摸头真正要的只有 assets/fx/petpet（四组里唯一共用的那组，见 _startup_frame_sets），
+        # 旧写法不传组名 = 补齐全部四组；自定义角色下 idle/idle_full/eat 一张都用不到，
+        # "接力装载还没跑完就长按摸头"会在交互路径上白解三组。传 _startup_frame_sets() 后：
+        # 默认角色返回四组全名 → 与旧的"不传组名"**逐位等价**（_ensure_default_frames 内部
+        # 就是按 _DEFAULT_FRAME_SETS 顺序过滤），自定义角色只补 petpet → 摸头照播。
+        self._ensure_default_frames(self._startup_frame_sets())
         if not self._fx_petpet:
             return
         self._petting = True

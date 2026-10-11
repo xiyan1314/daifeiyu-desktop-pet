@@ -35,7 +35,9 @@ SYNC_FILES = ["桌宠.py", "main.py", "pet_actions.py", "pet_ai.py", "pet_alarm.
               "pet_config.py", "pet_dialogs.py", "pet_export.py", "pet_fx.py", "pet_lines.py",
               "pet_io.py",   # v2.3.1：全仓共用原子 IO（被 8 个模块 import，漏了包必崩）
               "pet_log.py", "pet_main.py", "pet_menu.py", "pet_mood.py", "pet_physics.py",
-              "pet_resources.py", "pet_screen.py", "pet_tools.py", "pet_voice.py", "pet_wander.py",
+              "pet_resources.py", "pet_screen.py",
+              "pet_services.py",   # v2.5.0（A1）：子系统构造注册表（桌宠.py import 它，漏了必 ImportError）
+              "pet_tools.py", "pet_voice.py", "pet_wander.py",
               "pet_weather.py", "pet_widgets.py", "version_info.txt", "_verify_green.py",
               "README.md", "README.en.md", "LICENSE", VBS_NAME]
 

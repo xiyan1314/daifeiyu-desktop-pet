@@ -32,6 +32,13 @@
 `repro_quiet.py` 的跑法注释（已加 `-B`）；根目录 `ROADMAP.md`「铁律 1」与 `决策记录-2026-10-11.md` 同口径。
 ⚠️ 仍**未**加 `-B` 的活文档：`_verify_green.py:8` 的用法示例（`_verify_green.py:8` 写的是 `.\python.exe _verify_green.py`）—— 它不归 `_dev/` 管，已报给人类。
 
+⚠️ **这条又被踩了一次（2026-10-11 13:45–13:50 实测）**：绿色版目录里出现 **24 个 `__pycache__` /
+232 个 `.pyc`（合计 3,728,732 B）**，最新一批是 `Lib/__pycache__/shlex.cpython-310.pyc`（13:50:50）——
+而当天 09:16 的交接记录里这个数字是 **0 个 pyc / 0 个 `__pycache__`**。也就是说**本场会话里有人**
+在绿色版目录里跑了未加 `-B` 的解释器（`git status` 依旧干净，肉眼看不见）。收尾前必须：核对后清掉这
+24 个目录，再用 `-B` 复跑绿色版自检；同时比对该目录下用户数据（`config.json` / `roles.json` /
+`ledger*.json` / `memory*.json` / `roles/`）的**路径 + 大小 + mtime**，确认一个字节没动。
+
 **铁律 2：跑全量 pytest 之前，确认 `_dev/.mutation.lock/` 不存在。**
 
 变异脚本全程在 `%TEMP%` 影子副本里变异与跑用例（真仓只读），但会在真仓放一个运行锁**目录**
@@ -116,6 +123,20 @@ spec 清单（**状态列的 CAUGHT 数 = 该文件 `results` 段当前的实测
 由各自的单脚本驱动，同轮一并对齐（5/5 · 8/8 · 9/9）。**12 个结果 JSON / 116 条变异的指纹（7 个键，含 `pet_balance.py`）
 全部与当前树一致**——发布门的 `mutation_evidence_notes()` 与 `mutation_verdict_notes()` 双双静默，
 就是"这批证据对着这棵树"的机器判据。
+
+**v2.5.0 第 2 轮勘误（代理 C 实测）**：上面"12 个结果 JSON 的指纹全部与当前树一致"**只在那批复跑的
+时刻成立**——复跑在 11:05–11:09，而 `桌宠.py` 最后一次写入是 **11:17:18**（提交 `2a6563c` 里是
+`aebe068e71de`），于是 12 个 JSON 记的 `dfb0cae9b8f9` 在定版那一刻就**全部**过期（v2.4.4 交接只承认了
+其中 2 条）。第 2 轮三路并行又在改 `桌宠.py` 与 `_check_release.py`，所以：**指纹对齐只在对齐的那一刻
+成立**。代理 C 本轮按任务书复跑了两条单脚本证据（`startup_defer` 8/8 · `guardrails_can_fail` 9/9，实耗
+47.7s / 10.1s），第二条跑的**过程中** `桌宠.py` 又变了两次（`ed9e8f6df365` → `ce950ac96e11`）——
+结论：**12 条等三路都落地后统一复跑一遍**（9 个 spec 各 15–45s + 3 条单脚本驱动，整批约 4–5 分钟），
+否则发布门会一直挂 12 条"指纹过期"提示。
+
+**D7-A（代理 C · v2.5.0）的定向变异验证**：`_dev/verify_d7a_v250_agent_c.py` —— 把三条改动逐个拿掉，
+`tests/test_d7a_v250_agent_c.py` 必须变红。**实测 6/6 检出**（keep_source 补的日志 / 限流窗口 / 形参进 bad /
+diff 未知键带回 / pet_fx 重新写死帧集 / README 口径说明被删）。它**不产出结果 JSON、不记指纹**：这三条是
+"补日志 + 收紧静态检查 + 写口径"，不属于 `mutations_*.json` 那套需要复跑的指纹证据。
 
 **判定口径的两条已知伪红 + 一条已知偶发红**（复核 `results` 时先看这里，别当成回归）：
 1. ~~**参数化后缀**~~ **v2.4.4 已修**：pytest 的 FAILED 行写的是 `test_x[param-id]`，此前 `_short()` 只切 `::`
@@ -279,7 +300,7 @@ advance("中") 仍是正常宽度——Qt 自己做字体链接，所以"候选�
 |---|---|
 | **复审 M2**：`pet_balance` 的 `_fetching_balance` 由 worker 的 finally 复位，槽还没跑时用户再点一次会真起第二个并发线程（探针实测 started==2；过后反馈会落到别的结果上 = 重复/错配） | ✅ **v2.4.4 已修（A-1）**：`_fetching_balance` 布尔 → **请求代次**（`_balance_gen` / `_balance_active_gen`）；在途只在**槽消费完那一代**（或结果交不出去时的 `_retire`）才清空，旧代迟到结果丢弃并记一条日志。证据：`mutations_relay_v243.json` 的 M-V1/V2/V3 + 新增 M-V4（自动轮询无手动反馈）/ M-V7（`_retire` 代次守卫）（钉 `tests/test_relay_v243.py` + `tests/test_round3_a_fixes.py`）。**锚点已重锚并复跑**：`round3_a` M-A1/A2、`compat_v243` M-C10、`relay_v243` M-V3（见 §一） |
 | **复审 M4**：状态图分片的"零推进自锁"整表清空 pending，异常后那个状态永久缺图 | ✅ **v2.4.4 已修（A-2）**：改成"只摘掉**真正试过且没建出来**的名字"（死名单），pending 里没试过的留到下一轮；异常一次后恢复方法再调 `_state_pix` 仍能补建。证据：`mutations_relay_v243.json` 的 M-R12..M-R15（M-R8 也已按内联实现重锚） |
-| **复审 L④**：`pet_fx.py` 的 86 / "money" 仍是写死的（"单一来源"只在 `桌宠.py` 内成立） | ⏳ **未动**：产品路径早已由 `桌宠.py:121-122` 的 `_MONEY_FRAME_COUNT` / `_MONEY_FRAME_PREFIX` 驱动；`pet_fx.py` 里剩的 86 / "money" 只在**模块 docstring 示例**与 `__main__` 自测段。统一它们要动 import 方向（`pet_fx` 被 `桌宠` import），留到下一轮 |
+| **复审 L④**：`pet_fx.py` 的 86 / "money" 仍是写死的（"单一来源"只在 `桌宠.py` 内成立） | ✅ **v2.5.0 做了"文档与自测不再写死"（A-3 · 代理 C）**：模块 docstring 改成指向 `桌宠.py` 的具名常量（`_MONEY_FRAME_PREFIX` / `_MONEY_FRAME_COUNT` / `_DEFAULT_FRAME_SETS`），`__main__` 自测新增 `pet_fx.frame_sets(assets/fx)` **按磁盘实况数**前缀与张数（长帧集的等待时间也跟着实际张数走，不再写死 3400ms）。**没有真单源化**：那要动 import 方向（`pet_fx` 被 `桌宠` import），本轮不做——所以真源仍是"素材本身 + 桌宠.py 的常量"，由 `tests/test_d7a_v250_agent_c.py` 的一条用例钉住"磁盘实况 == 桌宠.py 具名常量"（漂移即红） |
 
 > **v2.4.4 已修的口径缺口**（上一轮暴露的，不是代码问题）：`_mutate_lib.repo_fingerprint` 的"关键文件"
 > 清单里原本**没有 `pet_balance.py`** → A-1（改的正是它）不会在任何"证据过期"提示里出现，三条锚点失效
