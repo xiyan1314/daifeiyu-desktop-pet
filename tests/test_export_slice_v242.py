@@ -15,9 +15,18 @@
   3. 分片真的分片（budget_ms 生效，多次 step 才写完；把 budget 忽略 → 红）；
   4. abort 不留半截包（正式输出文件从没被创建；不清理 tmp → 红）。
 另有一条端到端：桌宠._export_role 必须把写盘交给分片器驱动（改回同步写 → 红）。
+
+v2.5.2（公开 CI 红门禁）：第 5 条端到端原先还靠一条**机器相关**的假定——"16 张 256px 噪声帧
+≈4MB，12ms 切片写不完"。windows-latest 上 zip 写得比开发机快，首片一次写完，进度气泡还没
+出现就结束了（CI #50：`首个气泡不是进度：[角色包已导出，可以分享给朋友啦~]`）。
+现在给写入器的**每个单位**（写一条小条目 / 写一块大条目）注入固定 8ms 成本：16 条 × 8ms
+= 128ms ≫ 12ms 预算 ⇒ 首片必然写不完 ⇒ 进度气泡必然出现；判据同时从"假定它写不完"升级成
+**结构性计数**：每片至多写几条（= 预算 ÷ 单位成本 + 2）、至少切几片（= 总条数 ÷ 每片上界）、
+条目数守恒。这三个数字只由结构决定，机器再快也松不动。
 """
 import hashlib
 import json
+import math
 import os
 import sys
 import zipfile
@@ -61,6 +70,40 @@ def _entry_hashes(zip_path):
             out[info.filename] = (info.file_size, info.CRC,
                                   hashlib.sha256(data).hexdigest())
     return out
+
+
+# ---------------- v2.5.2：让"写盘真的分片"不再取决于机器快慢 ----------------
+# 每个**写单位**（一条小条目 = 一次 zipfile.ZipFile.write；一块大条目 = 一次 _big_write_some，
+# 见 pet_export._BIG_ENTRY_MIN_BYTES / _BIG_ENTRY_CHUNK_BYTES）注入固定毫秒成本。两条路径
+# 都落在 BundleWriter.step 的预算计时区间里，于是"这一片写了几条"由结构（预算 ÷ 单位成本）
+# 决定，而不是由机器的压缩速度决定。
+_WRITER_UNIT_MS = 8.0
+
+
+def _spin_ms(ms):
+    """忙等固定毫秒。不用 time.sleep：Windows 上 sleep 粒度 ~15.6ms，上界会失真。"""
+    import time
+    t0 = time.perf_counter()
+    while (time.perf_counter() - t0) * 1000.0 < ms:
+        pass
+
+
+def _slow_writer_units(monkeypatch, unit_ms=_WRITER_UNIT_MS):
+    """给 BundleWriter 的两个写单位都注入固定毫秒成本（小条目一条 / 大条目一块）。"""
+    real_write = zipfile.ZipFile.write
+
+    def slow_write(zf_self, *a, **k):
+        _spin_ms(unit_ms)
+        return real_write(zf_self, *a, **k)
+
+    monkeypatch.setattr(zipfile.ZipFile, "write", slow_write)
+    real_chunk = pet_export.BundleWriter._big_write_some
+
+    def slow_chunk(w_self):
+        _spin_ms(unit_ms)
+        return real_chunk(w_self)
+
+    monkeypatch.setattr(pet_export.BundleWriter, "_big_write_some", slow_chunk)
 
 
 # ---------------- 1. 旧签名是薄壳 ----------------
@@ -231,7 +274,11 @@ def test_export_role_drives_the_writer_in_slices(pet, tmp_path, monkeypatch):
 
     能真失败：把 _export_role 改回同步调用 export_bundle → 既不构造 BundleWriter、
     step 也不会带 budget_ms → 前两条断言红。
-    （用例角色故意做大：16 张 256px 噪声帧 ≈4MB，一个 12ms 切片写不完 → 必须多片。）
+
+    v2.5.2（公开 CI 红门禁）：角色"够不够大"不再是判据——注入每单位固定 8ms 的写入成本后，
+    16 条 × 8ms = 128ms ≫ 12ms 预算，首片必然写不完（⇒ 进度气泡必然出现），片数由
+    "总条数 ÷ 每片上界"给出下界。顺带说明：不注入时这条在快机器上会假红（CI #50 就是
+    "导出一步到位、进度气泡从没出现"）。
     """
     import 桌宠 as main
     from PySide6.QtWidgets import QApplication
@@ -256,21 +303,31 @@ def test_export_role_drives_the_writer_in_slices(pet, tmp_path, monkeypatch):
     class WriterSpy(real_writer):
         def __init__(self, *a, **k):
             super().__init__(*a, **k)
-            self.steps = []
+            self.steps = []      # 每片传入的 budget_ms
+            self.marks = []      # 每片写完之后 written（= 已写条目数，用于"每片写了几条"）
             made.append(self)
 
         def step(self, budget_ms=None):
             self.steps.append(budget_ms)
-            return super().step(budget_ms=budget_ms)
+            n = super().step(budget_ms=budget_ms)
+            self.marks.append(self.written)
+            return n
 
     monkeypatch.setattr(main.pet_export, "BundleWriter", WriterSpy)
+    _slow_writer_units(monkeypatch)          # ← 每个写单位固定 8ms：分片从此与机器无关
 
     pet._export_role()
     assert made, "导出没有走 BundleWriter（还是同步的 export_bundle？）"
-    assert made[0].steps and made[0].steps[0] == main._EXPORT_SLICE_MS, \
-        "第一片没有按 _EXPORT_SLICE_MS 预算切（steps=%r）" % (made[0].steps,)
+    w = made[0]
+    assert w.steps and w.steps[0] == main._EXPORT_SLICE_MS, \
+        "第一片没有按 _EXPORT_SLICE_MS 预算切（steps=%r）" % (w.steps,)
     assert pet._bubbles and pet._bubbles[-1].startswith("正在导出角色包"), \
         "首个气泡不是进度：%r" % (pet._bubbles[-1:],)
+    # 结构性前提（取代"16 张 4MB ≈ 12ms 切片写不完"的机器相关假定）：首片必然写不完
+    assert w.marks and w.marks[0] < w.total, (
+        "首片就写完了 %s/%d 条：每单位注入 %.1fms（整包合计 %.1fms、预算 %.1fms）却一次写完"
+        % (w.marks[0] if w.marks else "?", w.total, _WRITER_UNIT_MS,
+           w.total * _WRITER_UNIT_MS, main._EXPORT_SLICE_MS))
 
     guard = 0
     while pet._export_writer is not None and guard < 4000:
@@ -282,7 +339,18 @@ def test_export_role_drives_the_writer_in_slices(pet, tmp_path, monkeypatch):
     assert m is not None and not err, err
     assert pet._bubbles[-1].startswith("角色包已导出"), \
         "完成气泡文案变了：%r" % (pet._bubbles[-1],)
-    assert len(made[0].steps) >= 2, "只切了一片（等于没分片）：%r" % (made[0].steps,)
+    # 结构性判据（取代"只切了一片"的弱断言）：每片写了几条 + 至少切几片 + 条目数守恒
+    cap = int(math.ceil(main._EXPORT_SLICE_MS / _WRITER_UNIT_MS)) + 2
+    deltas = [b - a for a, b in zip([0] + w.marks[:-1], w.marks)]
+    assert max(deltas) <= cap, (
+        "有一片写了 %d 条（上界 %d = ceil(预算 %.1fms ÷ 单位成本 %.1fms) + 2）：要么 step 的预算"
+        "检查没生效、要么注入的写入 spy 没生效（逐片 %r）"
+        % (max(deltas), cap, main._EXPORT_SLICE_MS, _WRITER_UNIT_MS, deltas))
+    min_steps = int(math.ceil(w.total / float(cap)))
+    assert len(w.steps) >= min_steps, (
+        "只切了 %d 片：%d 条 ÷ 每片至多 %d 条 ⇒ 至少 %d 片（逐片 %r）"
+        % (len(w.steps), w.total, cap, min_steps, deltas))
+    assert w.marks[-1] == w.total, "收尾时条目数对不上：%d/%d" % (w.marks[-1], w.total)
 
 
 def test_export_role_reports_the_same_error_text(pet, tmp_path, monkeypatch):

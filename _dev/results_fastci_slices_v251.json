@@ -1,0 +1,233 @@
+{
+  "title": "v2.5.2 分片判据去墙钟化：快机器不假红 + 牙齿",
+  "results": [
+    {
+      "id": "A 基线（原样）",
+      "expect": "GREEN",
+      "expect_failed": [],
+      "rc": 0,
+      "verdict": "OK",
+      "failed": [],
+      "tail": "3 passed in 3.69s",
+      "metrics": [],
+      "asserts": []
+    },
+    {
+      "id": "B 读数（每片几张/几片）",
+      "expect": "GREEN",
+      "expect_failed": [],
+      "rc": 0,
+      "verdict": "OK",
+      "failed": [],
+      "tail": "3 passed in 3.69s",
+      "metrics": [
+        "METRICS m4 per_step=[2, 1, 1, 1, 1, 1, 1, 1, 1, 0] cap=4 sync_units=1 decodes=10 steps=10 spin=n=11 min=5.0 med=5.0 max=5.0",
+        "METRICS m2 per_step=[3, 1, 1, 1, 1, 1, 0] cap=4 steps=7 spin=n=24 min=5.0 med=5.0 max=5.0",
+        "METRICS export steps=8 deltas=[2, 2, 2, 2, 2, 2, 2, 2] cap=4 total=16 spin=n=16 min=8.0 med=8.0 max=8.0"
+      ],
+      "asserts": []
+    },
+    {
+      "id": "C1 快机器：活变小",
+      "expect": "GREEN",
+      "expect_failed": [],
+      "rc": 0,
+      "verdict": "OK",
+      "failed": [],
+      "tail": "3 passed in 2.30s",
+      "metrics": [
+        "METRICS m4 per_step=[1, 2, 2, 2, 2, 1] cap=4 sync_units=1 decodes=10 steps=6 spin=n=11 min=5.0 med=5.0 max=5.6",
+        "METRICS m2 per_step=[3, 2, 2, 1] cap=4 steps=4 spin=n=24 min=5.0 med=5.0 max=5.6",
+        "METRICS export steps=8 deltas=[2, 2, 2, 2, 2, 2, 2, 2] cap=4 total=16 spin=n=16 min=8.0 med=8.0 max=8.0"
+      ],
+      "asserts": []
+    },
+    {
+      "id": "C2 预算与单位成本同比 ×10",
+      "expect": "GREEN",
+      "expect_failed": [],
+      "rc": 0,
+      "verdict": "OK",
+      "failed": [],
+      "tail": "3 passed in 5.98s",
+      "metrics": [
+        "METRICS m4 per_step=[3, 2, 2, 2, 1] cap=4 sync_units=2 decodes=10 steps=5 spin=n=12 min=50.0 med=50.0 max=50.0",
+        "METRICS m2 per_step=[3, 2, 2, 1] cap=4 steps=4 spin=n=26 min=50.0 med=50.0 max=50.0",
+        "METRICS export steps=8 deltas=[2, 2, 2, 2, 2, 2, 2, 2] cap=4 total=16 spin=n=16 min=80.0 med=80.0 max=80.0"
+      ],
+      "asserts": []
+    },
+    {
+      "id": "C4 只拿掉'慢'（保留 512px 重活）",
+      "expect": "观察",
+      "expect_failed": [],
+      "rc": 1,
+      "verdict": "OK",
+      "failed": [
+        "test_async_window_does_not_play_the_previous_roles_frames",
+        "test_export_role_drives_the_writer_in_slices"
+      ],
+      "tail": "2 failed, 1 passed in 3.39s",
+      "metrics": [
+        "METRICS m4 per_step=[3, 2, 2, 2, 1] cap=4 sync_units=1 decodes=10 steps=5 spin=[]"
+      ],
+      "asserts": [
+        "E       AssertionError: 收尾分片逐片解了 [7, 1] 张（上界 4 = ceil(预算 12.0ms ÷ 单位成本 5.0ms) + 1）",
+        "tests\\test_anim_slice_v241.py:368: AssertionError",
+        "E       AssertionError: 有一片写了 6 条（上界 4 = ceil(预算 12.0ms ÷ 单位成本 8.0ms) + 2）：要么 step 的预算检查没生效、要么注入的写入 spy 没生效（逐片 [4, 6, 6]）",
+        "tests\\test_export_slice_v242.py:351: AssertionError"
+      ]
+    },
+    {
+      "id": "C3 拿掉注入+活变小（复现 CI #50）",
+      "expect": "RED",
+      "expect_failed": [
+        "test_cold_big_frame_set_is_sliced_and_completes",
+        "test_async_window_does_not_play_the_previous_roles_frames",
+        "test_export_role_drives_the_writer_in_slices"
+      ],
+      "rc": 1,
+      "verdict": "OK",
+      "failed": [
+        "test_cold_big_frame_set_is_sliced_and_completes",
+        "test_async_window_does_not_play_the_previous_roles_frames",
+        "test_export_role_drives_the_writer_in_slices"
+      ],
+      "tail": "3 failed in 2.22s",
+      "metrics": [],
+      "asserts": [
+        "E       AssertionError: (c) 有一片解了 7 张（上界 4 = ceil(预算 12.0ms ÷ 单位成本 5.0ms) + 1）：要么分片循环的预算检查没生效、要么注入的解码 spy 没生效（逐片 [7, 3, 0]）",
+        "tests\\test_anim_slice_v241.py:236: AssertionError",
+        "E       AssertionError: 前提不成立：没进异步分支（每单位 5.0ms × 8 张 = 40.0ms，预算 12.0ms）",
+        "tests\\test_anim_slice_v241.py:355: AssertionError",
+        "E       AssertionError: 首个气泡不是进度：['角色包已导出，可以分享给朋友啦~']",
+        "tests\\test_export_slice_v242.py:330: AssertionError"
+      ]
+    },
+    {
+      "id": "D1 分片步忽略预算",
+      "expect": "RED",
+      "expect_failed": [
+        "test_cold_big_frame_set_is_sliced_and_completes",
+        "test_async_window_does_not_play_the_previous_roles_frames"
+      ],
+      "rc": 1,
+      "verdict": "OK",
+      "failed": [
+        "test_cold_big_frame_set_is_sliced_and_completes",
+        "test_async_window_does_not_play_the_previous_roles_frames"
+      ],
+      "tail": "2 failed, 1 passed in 4.13s",
+      "metrics": [
+        "METRICS export steps=8 deltas=[2, 2, 2, 2, 2, 2, 2, 2] cap=4 total=16 spin=n=16 min=8.0 med=8.0 max=8.0"
+      ],
+      "asserts": [
+        "E       AssertionError: (c) 有一片解了 10 张（上界 4 = ceil(预算 12.0ms ÷ 单位成本 5.0ms) + 1）：要么分片循环的预算检查没生效、要么注入的解码 spy 没生效（逐片 [10]）",
+        "tests\\test_anim_slice_v241.py:238: AssertionError",
+        "E       AssertionError: 收尾分片逐片解了 [8] 张（上界 4 = ceil(预算 12.0ms ÷ 单位成本 5.0ms) + 1）",
+        "tests\\test_anim_slice_v241.py:370: AssertionError"
+      ]
+    },
+    {
+      "id": "D2 进异步分支不再自损",
+      "expect": "RED",
+      "expect_failed": [
+        "test_async_window_does_not_play_the_previous_roles_frames"
+      ],
+      "rc": 1,
+      "verdict": "OK",
+      "failed": [
+        "test_async_window_does_not_play_the_previous_roles_frames"
+      ],
+      "tail": "1 failed, 2 passed in 4.07s",
+      "metrics": [
+        "METRICS m4 per_step=[2, 1, 1, 1, 1, 1, 1, 1, 1, 0] cap=4 sync_units=1 decodes=10 steps=10 spin=n=11 min=5.0 med=5.0 max=5.0",
+        "METRICS export steps=8 deltas=[2, 2, 2, 2, 2, 2, 2, 2] cap=4 total=16 spin=n=16 min=8.0 med=8.0 max=8.0"
+      ],
+      "asserts": [
+        "E       AssertionError: 窗口期 idle 槽还挂着旧角色的帧集（_play_idle 会拿它起播）",
+        "tests\\test_anim_slice_v241.py:360: AssertionError"
+      ]
+    },
+    {
+      "id": "D3 首片同步段忽略预算",
+      "expect": "RED",
+      "expect_failed": [
+        "test_cold_big_frame_set_is_sliced_and_completes",
+        "test_async_window_does_not_play_the_previous_roles_frames"
+      ],
+      "rc": 1,
+      "verdict": "OK",
+      "failed": [
+        "test_cold_big_frame_set_is_sliced_and_completes",
+        "test_async_window_does_not_play_the_previous_roles_frames"
+      ],
+      "tail": "2 failed, 1 passed in 3.44s",
+      "metrics": [
+        "METRICS export steps=8 deltas=[2, 2, 2, 2, 2, 2, 2, 2] cap=4 total=16 spin=n=16 min=8.0 med=8.0 max=8.0"
+      ],
+      "asserts": [
+        "E       AssertionError: (a) 首片就把 10 帧全解完了：每单位注入 5.0ms（整批合计 50.0ms、预算 12.0ms）——分片路径没被覆盖到（首片同步段 160.9ms、取了 10 次帧）",
+        "tests\\test_anim_slice_v241.py:224: AssertionError",
+        "E       AssertionError: 前提不成立：没进异步分支（每单位 5.0ms × 8 张 = 40.0ms，预算 12.0ms）",
+        "tests\\test_anim_slice_v241.py:357: AssertionError"
+      ]
+    },
+    {
+      "id": "D4 UI 侧 budget_ms=None",
+      "expect": "RED",
+      "expect_failed": [
+        "test_export_role_drives_the_writer_in_slices"
+      ],
+      "rc": 1,
+      "verdict": "OK",
+      "failed": [
+        "test_export_role_drives_the_writer_in_slices"
+      ],
+      "tail": "1 failed, 2 passed in 3.35s",
+      "metrics": [
+        "METRICS m4 per_step=[2, 1, 1, 1, 1, 1, 1, 1, 1, 0] cap=4 sync_units=1 decodes=10 steps=10 spin=n=11 min=5.0 med=5.0 max=5.0",
+        "METRICS m2 per_step=[3, 1, 1, 1, 1, 1, 0] cap=4 steps=7 spin=n=24 min=5.0 med=5.0 max=5.0"
+      ],
+      "asserts": [
+        "E       AssertionError: 第一片没有按 _EXPORT_SLICE_MS 预算切（steps=[None]）",
+        "tests\\test_export_slice_v242.py:331: AssertionError"
+      ]
+    },
+    {
+      "id": "D5 step 忽略 budget_ms",
+      "expect": "RED",
+      "expect_failed": [
+        "test_export_role_drives_the_writer_in_slices"
+      ],
+      "rc": 1,
+      "verdict": "OK",
+      "failed": [
+        "test_export_role_drives_the_writer_in_slices"
+      ],
+      "tail": "1 failed, 2 passed in 3.38s",
+      "metrics": [
+        "METRICS m4 per_step=[2, 1, 1, 1, 1, 1, 1, 1, 1, 0] cap=4 sync_units=1 decodes=10 steps=10 spin=n=11 min=5.0 med=5.0 max=5.0",
+        "METRICS m2 per_step=[3, 1, 1, 1, 1, 1, 0] cap=4 steps=7 spin=n=24 min=5.0 med=5.0 max=5.0"
+      ],
+      "asserts": [
+        "E       AssertionError: 首个气泡不是进度：['角色包已导出，可以分享给朋友啦~']",
+        "tests\\test_export_slice_v242.py:333: AssertionError"
+      ]
+    }
+  ],
+  "note": "变异/插桩只在 %TEMP% 影子副本里做，真实仓库只读（只写 _dev/.mutation.lock）",
+  "repo_fingerprint": {
+    "桌宠.py": "b13d33d2c98d",
+    "pet_export.py": "c01e1593efd2",
+    "pet_lines.py": "5332f60b5f26",
+    "pet_alarm.py": "1149e94deee3",
+    "pet_behaviors.py": "8f57255144f6",
+    "_check_release.py": "b0447bfc5c44",
+    "pet_balance.py": "2828b2ebc0c9",
+    "pet_plugin.py": "3f1003898a10",
+    "pet_plugin_host.py": "6501e8858242",
+    "pet_dialogs.py": "e5a3d6a1949a",
+    "pet_menu.py": "920daac1b835"
+  }
+}

@@ -1,0 +1,148 @@
+{
+  "title": "v2.5.2 公开 CI 红门禁：三条分片判据的牙齿（快机器不假红 + 破坏分片必红）",
+  "mutations": [
+    {
+      "id": "F1 分片步忽略预算（一整批一片解完）",
+      "why": "_anim_chunk_step 的预算检查是「每片解几张」上界的唯一来源；拿掉它，异步批一步就把 10 张解完",
+      "file": "桌宠.py",
+      "old": "                if (time.perf_counter() - t0) * 1000.0 >= _FRAME_SLICE_MS:\n                    _rescheduled = True\n                    QTimer.singleShot(0, self, self._gslot(\"anim_chunk\", self._anim_chunk_step))",
+      "new": "                if False:\n                    _rescheduled = True\n                    QTimer.singleShot(0, self, self._gslot(\"anim_chunk\", self._anim_chunk_step))",
+      "tests": [
+        "tests/test_anim_slice_v241.py::test_cold_big_frame_set_is_sliced_and_completes"
+      ],
+      "expect_fail": [
+        "tests/test_anim_slice_v241.py::test_cold_big_frame_set_is_sliced_and_completes"
+      ]
+    },
+    {
+      "id": "F2 进异步分支不再自损",
+      "why": "_anim_start_async 的「停表 + idle 槽置空 + 贴静态图」是分片窗口期不播上一个角色帧的保障",
+      "file": "桌宠.py",
+      "old": "            self.anim.add_set(\"idle\", [])",
+      "new": "            pass",
+      "tests": [
+        "tests/test_anim_slice_v241.py::test_async_window_does_not_play_the_previous_roles_frames"
+      ],
+      "expect_fail": [
+        "tests/test_anim_slice_v241.py::test_async_window_does_not_play_the_previous_roles_frames"
+      ]
+    },
+    {
+      "id": "F3 首片同步段忽略预算",
+      "why": "_wire_anim_sets 首片的预算中断是「分片前缀」的保障；拿掉它，首片就把整批解完（同步臂）",
+      "file": "桌宠.py",
+      "old": "                    if (time.perf_counter() - t0) * 1000.0 >= _FRAME_SLICE_MS:\n                        done = False",
+      "new": "                    if False:\n                        done = False",
+      "tests": [
+        "tests/test_anim_slice_v241.py::test_cold_big_frame_set_is_sliced_and_completes",
+        "tests/test_anim_slice_v241.py::test_async_window_does_not_play_the_previous_roles_frames"
+      ],
+      "expect_fail": [
+        "tests/test_anim_slice_v241.py::test_cold_big_frame_set_is_sliced_and_completes",
+        "tests/test_anim_slice_v241.py::test_async_window_does_not_play_the_previous_roles_frames"
+      ]
+    },
+    {
+      "id": "F4 UI 侧不分片（budget_ms=None）",
+      "why": "桌宠._export_step 必须按 _EXPORT_SLICE_MS 分片驱动写包器；传 None 就退回一口气写完",
+      "file": "桌宠.py",
+      "old": "w.step(budget_ms=_EXPORT_SLICE_MS)",
+      "new": "w.step(budget_ms=None)",
+      "tests": [
+        "tests/test_export_slice_v242.py::test_export_role_drives_the_writer_in_slices"
+      ],
+      "expect_fail": [
+        "tests/test_export_slice_v242.py::test_export_role_drives_the_writer_in_slices"
+      ]
+    },
+    {
+      "id": "F5 BundleWriter.step 忽略 budget_ms",
+      "why": "写包器的预算检查是「每片写几条」上界的唯一来源；忽略它就一片写完（进度气泡/分片都消失）",
+      "file": "pet_export.py",
+      "old": "if budget_ms is not None and (time.perf_counter() - t0) * 1000.0 >= budget_ms:",
+      "new": "if False:",
+      "tests": [
+        "tests/test_export_slice_v242.py::test_export_role_drives_the_writer_in_slices"
+      ],
+      "expect_fail": [
+        "tests/test_export_slice_v242.py::test_export_role_drives_the_writer_in_slices"
+      ]
+    }
+  ],
+  "results": {
+    "title": "变异验证 spec：mutations_fastci_slices_v251.json",
+    "checked_at": "2026-10-11 17:43:26",
+    "total": 5,
+    "caught": 5,
+    "not_caught": 0,
+    "blocked": 0,
+    "items": [
+      {
+        "id": "F1 分片步忽略预算（一整批一片解完）",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 2.00s",
+        "failed": [
+          "test_cold_big_frame_set_is_sliced_and_completes"
+        ]
+      },
+      {
+        "id": "F2 进异步分支不再自损",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 3.62s",
+        "failed": [
+          "test_async_window_does_not_play_the_previous_roles_frames"
+        ]
+      },
+      {
+        "id": "F3 首片同步段忽略预算",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "2 failed in 2.14s",
+        "failed": [
+          "test_cold_big_frame_set_is_sliced_and_completes",
+          "test_async_window_does_not_play_the_previous_roles_frames"
+        ]
+      },
+      {
+        "id": "F4 UI 侧不分片（budget_ms=None）",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 1.33s",
+        "failed": [
+          "test_export_role_drives_the_writer_in_slices"
+        ]
+      },
+      {
+        "id": "F5 BundleWriter.step 忽略 budget_ms",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 1.32s",
+        "failed": [
+          "test_export_role_drives_the_writer_in_slices"
+        ]
+      }
+    ],
+    "spec": "mutations_fastci_slices_v251.json",
+    "tests": [
+      "tests/test_anim_slice_v241.py::test_async_window_does_not_play_the_previous_roles_frames",
+      "tests/test_anim_slice_v241.py::test_cold_big_frame_set_is_sliced_and_completes",
+      "tests/test_export_slice_v242.py::test_export_role_drives_the_writer_in_slices"
+    ],
+    "note": "变异只在 %TEMP% 影子副本里做，真实仓库只读（只写 _dev/.mutation.lock）",
+    "repo_fingerprint": {
+      "桌宠.py": "b13d33d2c98d",
+      "pet_export.py": "c01e1593efd2",
+      "pet_lines.py": "5332f60b5f26",
+      "pet_alarm.py": "1149e94deee3",
+      "pet_behaviors.py": "8f57255144f6",
+      "_check_release.py": "b0447bfc5c44",
+      "pet_balance.py": "2828b2ebc0c9",
+      "pet_plugin.py": "3f1003898a10",
+      "pet_plugin_host.py": "6501e8858242",
+      "pet_dialogs.py": "e5a3d6a1949a",
+      "pet_menu.py": "920daac1b835"
+    }
+  }
+}
