@@ -1,6 +1,6 @@
 {
   "title": "护栏能真失败自检（tests/test_guardrails_v24.py 的用例 / 定向变异）",
-  "checked_at": "2026-10-12 12:08:36",
+  "checked_at": "2026-10-12 12:18:27",
   "total": 9,
   "caught": 9,
   "not_caught": 0,

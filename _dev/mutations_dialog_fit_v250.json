@@ -124,9 +124,9 @@
     },
     {
       "id": "M-D09",
-      "why": "RoleEditDialog：删掉设计尺寸那一行 clamp_dialog(self, 600, 540)",
+      "why": "RoleEditDialog：删掉设计尺寸那一行 clamp_dialog(self, 620, 540)（第 4 轮重锚：v2.5.1 A(L5) 把设计宽 600→620 消除 20px 横向滚动条，600/540 那条字面量在当前树上已不存在）",
       "file": "pet_dialogs.py",
-      "old": "        clamp_dialog(self, 600, 540)   # v2.5.0 B\n",
+      "old": "        clamp_dialog(self, 620, 540)   # v2.5.1 A（L5）：设计宽 600→620，消除 20px 横向滚动条\n",
       "new": "",
       "tests": [
         "tests/test_dialog_fit_v250.py::test_每个对话框的设计尺寸就是它自己的契约",
@@ -250,17 +250,17 @@
   ],
   "results": {
     "title": "变异验证 spec：mutations_dialog_fit_v250.json",
-    "checked_at": "2026-10-12 12:01:46",
+    "checked_at": "2026-10-12 12:16:18",
     "total": 17,
-    "caught": 16,
-    "not_caught": 1,
+    "caught": 17,
+    "not_caught": 0,
     "blocked": 0,
     "items": [
       {
         "id": "M-D01",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "2 failed, 14 passed in 1.32s",
+        "tail": "2 failed, 14 passed in 1.65s",
         "failed": [
           "test_每个对话框的设计尺寸就是它自己的契约[AISettingsDialog]",
           "test_每个对话框的设计尺寸都写在源码里"
@@ -270,7 +270,7 @@
         "id": "M-D02",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "2 failed, 14 passed in 1.25s",
+        "tail": "2 failed, 14 passed in 1.30s",
         "failed": [
           "test_每个对话框的设计尺寸就是它自己的契约[AlarmDialog]",
           "test_每个对话框的设计尺寸都写在源码里"
@@ -280,7 +280,7 @@
         "id": "M-D03",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "2 failed, 14 passed in 1.36s",
+        "tail": "2 failed, 14 passed in 1.32s",
         "failed": [
           "test_每个对话框的设计尺寸就是它自己的契约[BehaviorDialog]",
           "test_每个对话框的设计尺寸都写在源码里"
@@ -290,7 +290,7 @@
         "id": "M-D04",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "2 failed, 14 passed in 2.09s",
+        "tail": "2 failed, 14 passed in 1.20s",
         "failed": [
           "test_每个对话框的设计尺寸就是它自己的契约[IdleDialog]",
           "test_每个对话框的设计尺寸都写在源码里"
@@ -300,7 +300,7 @@
         "id": "M-D05",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "2 failed, 14 passed in 1.36s",
+        "tail": "2 failed, 14 passed in 1.23s",
         "failed": [
           "test_每个对话框的设计尺寸就是它自己的契约[LedgerDialog]",
           "test_每个对话框的设计尺寸都写在源码里"
@@ -310,7 +310,7 @@
         "id": "M-D06",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "2 failed, 14 passed in 1.21s",
+        "tail": "2 failed, 14 passed in 1.27s",
         "failed": [
           "test_每个对话框的设计尺寸就是它自己的契约[LinesDialog]",
           "test_每个对话框的设计尺寸都写在源码里"
@@ -320,7 +320,7 @@
         "id": "M-D07",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "2 failed, 14 passed in 1.23s",
+        "tail": "2 failed, 14 passed in 1.27s",
         "failed": [
           "test_每个对话框的设计尺寸就是它自己的契约[PhysicsDialog]",
           "test_每个对话框的设计尺寸都写在源码里"
@@ -330,7 +330,7 @@
         "id": "M-D08",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "2 failed, 14 passed in 1.19s",
+        "tail": "2 failed, 14 passed in 1.35s",
         "failed": [
           "test_每个对话框的设计尺寸就是它自己的契约[ResourceManagerDialog]",
           "test_每个对话框的设计尺寸都写在源码里"
@@ -338,16 +338,19 @@
       },
       {
         "id": "M-D09",
-        "verdict": "SPEC-BAD",
-        "rc": 0,
-        "tail": "锚点匹配 0 次",
-        "failed": []
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "2 failed, 14 passed in 1.31s",
+        "failed": [
+          "test_每个对话框的设计尺寸就是它自己的契约[RoleEditDialog]",
+          "test_每个对话框的设计尺寸都写在源码里"
+        ]
       },
       {
         "id": "M-D10",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "2 failed, 14 passed in 1.29s",
+        "tail": "2 failed, 14 passed in 1.27s",
         "failed": [
           "test_每个对话框的设计尺寸就是它自己的契约[RoleImportDialog]",
           "test_每个对话框的设计尺寸都写在源码里"
@@ -357,7 +360,7 @@
         "id": "M-D11",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "2 failed, 14 passed in 1.32s",
+        "tail": "2 failed, 14 passed in 1.23s",
         "failed": [
           "test_每个对话框的设计尺寸就是它自己的契约[VoiceDialog]",
           "test_每个对话框的设计尺寸都写在源码里"
@@ -367,7 +370,7 @@
         "id": "M-D12",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "2 failed, 14 passed in 1.23s",
+        "tail": "2 failed, 14 passed in 1.21s",
         "failed": [
           "test_每个对话框的设计尺寸就是它自己的契约[_VoicePickDialog]",
           "test_每个对话框的设计尺寸都写在源码里"
@@ -377,7 +380,7 @@
         "id": "M-D13",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.85s",
+        "tail": "1 failed in 0.86s",
         "failed": [
           "test_上限就是85百分比而不是写死像素"
         ]
@@ -404,7 +407,7 @@
         "id": "M-D16",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "20 failed in 1.39s",
+        "tail": "20 failed in 1.37s",
         "failed": [
           "test_每个窗口都不超屏_能滚到底_按钮可见[RoleImportDialog]",
           "test_每个窗口都不超屏_能滚到底_按钮可见[RoleEditDialog]",
@@ -432,7 +435,7 @@
         "id": "M-D17",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "17 failed, 3 passed in 1.45s",
+        "tail": "17 failed, 3 passed in 1.38s",
         "failed": [
           "test_每个窗口都不超屏_能滚到底_按钮可见[RoleImportDialog]",
           "test_每个窗口都不超屏_能滚到底_按钮可见[RoleEditDialog]",

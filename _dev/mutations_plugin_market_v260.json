@@ -212,13 +212,26 @@
       "expect_fail": [
         "tests/test_plugin_market_v252.py::test_同一个版本重复安装不顶掉回滚点"
       ]
+    },
+    {
+      "id": "M-A17",
+      "why": "v2.6.0 第 4 轮（找茬审查 A-3）：_fresh 的 still_there 判据被摘掉——「登记里有账」被当成「库里真的有」，用户删掉过 / 上一版目录读不出来时按新包指纹补的账，会让库里**还缺**的条目再也补不回来（报「未新增/已一致」，内容却始终缺着）。与 M-A06 是同一条 if 的两个**相反**方向：M-A06 让去重完全失效（旧内容重复落），M-A17 让去重过度（缺的内容不补）；两条各自被不同的用例抓住，不是重复。",
+      "file": "pet_plugin_host.py",
+      "old": "        if fp and fp in seen and (still_there is None or still_there(it)):",
+      "new": "        if fp and fp in seen:  # MUTATION：只要登记里有账就不补",
+      "tests": [
+        "tests/test_plugin_host_v251.py::test_上一版目录读不出来时_用新包指纹补账并如实告知"
+      ],
+      "expect_fail": [
+        "tests/test_plugin_host_v251.py::test_上一版目录读不出来时_用新包指纹补账并如实告知"
+      ]
     }
   ],
   "results": {
     "title": "变异验证 spec：mutations_plugin_market_v260.json",
-    "checked_at": "2026-10-12 12:02:57",
-    "total": 16,
-    "caught": 16,
+    "checked_at": "2026-10-12 12:33:32",
+    "total": 17,
+    "caught": 17,
     "not_caught": 0,
     "blocked": 0,
     "items": [
@@ -226,7 +239,7 @@
         "id": "M-A01",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.66s",
+        "tail": "1 failed in 0.73s",
         "failed": [
           "test_sha256不符_拒收并删掉临时文件"
         ]
@@ -235,7 +248,7 @@
         "id": "M-A02",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.51s",
+        "tail": "1 failed in 0.54s",
         "failed": [
           "test_bytes不符_拒收且不留残余"
         ]
@@ -244,7 +257,7 @@
         "id": "M-A03",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.59s",
+        "tail": "1 failed in 0.62s",
         "failed": [
           "test_随包索引_相对url解析到随包本地副本_不联网"
         ]
@@ -253,7 +266,7 @@
         "id": "M-A04",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.50s",
+        "tail": "1 failed in 0.53s",
         "failed": [
           "test_密钥不可装的条目也列出来_不静默隐藏"
         ]
@@ -262,7 +275,7 @@
         "id": "M-A05",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed, 1 passed in 0.64s",
+        "tail": "1 failed, 1 passed in 0.68s",
         "failed": [
           "test_内容指纹落在安装登记里"
         ]
@@ -271,7 +284,7 @@
         "id": "M-A06",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.56s",
+        "tail": "1 failed in 0.61s",
         "failed": [
           "test_更新把新版新增内容并入_旧内容不重复落"
         ]
@@ -280,7 +293,7 @@
         "id": "M-A07",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.58s",
+        "tail": "1 failed in 0.62s",
         "failed": [
           "test_landed_是历次落地的累积账"
         ]
@@ -289,7 +302,7 @@
         "id": "M-A08",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.70s",
+        "tail": "1 failed in 0.61s",
         "failed": [
           "test_回滚_撤销本版新增_不碰用户自己的内容"
         ]
@@ -298,7 +311,7 @@
         "id": "M-A09",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.56s",
+        "tail": "1 failed in 0.63s",
         "failed": [
           "test_回滚_撤销本版新增_不碰用户自己的内容"
         ]
@@ -307,7 +320,7 @@
         "id": "M-A10",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.56s",
+        "tail": "1 failed in 0.61s",
         "failed": [
           "test_旧登记没有指纹_也能不重复落地"
         ]
@@ -316,7 +329,7 @@
         "id": "M-A11",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.60s",
+        "tail": "1 failed in 0.61s",
         "failed": [
           "test_安装走后台线程_落地在主线程"
         ]
@@ -325,7 +338,7 @@
         "id": "M-A12",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.61s",
+        "tail": "1 failed in 0.65s",
         "failed": [
           "test_安装走后台线程_落地在主线程"
         ]
@@ -334,7 +347,7 @@
         "id": "M-A13",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.57s",
+        "tail": "1 failed in 0.61s",
         "failed": [
           "test_在途期间连点不起第二个下载_结果只落一次"
         ]
@@ -343,7 +356,7 @@
         "id": "M-A14",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.64s",
+        "tail": "1 failed in 0.63s",
         "failed": [
           "test_更新按钮只在有新版本时出现_回滚按钮只在有上一版时出现"
         ]
@@ -352,7 +365,7 @@
         "id": "M-A15",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "2 failed, 14 passed in 1.45s",
+        "tail": "2 failed, 14 passed in 1.54s",
         "failed": [
           "test_每个对话框的设计尺寸就是它自己的契约[PluginManagerDialog]",
           "test_每个对话框的设计尺寸都写在源码里"
@@ -362,9 +375,18 @@
         "id": "M-A16",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.65s",
+        "tail": "1 failed in 0.66s",
         "failed": [
           "test_同一个版本重复安装不顶掉回滚点"
+        ]
+      },
+      {
+        "id": "M-A17",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 0.66s",
+        "failed": [
+          "test_上一版目录读不出来时_用新包指纹补账并如实告知"
         ]
       }
     ],
@@ -372,6 +394,7 @@
     "tests": [
       "tests/test_dialog_fit_v250.py::test_每个对话框的设计尺寸就是它自己的契约",
       "tests/test_dialog_fit_v250.py::test_每个对话框的设计尺寸都写在源码里",
+      "tests/test_plugin_host_v251.py::test_上一版目录读不出来时_用新包指纹补账并如实告知",
       "tests/test_plugin_market_v252.py::test_bytes不符_拒收且不留残余",
       "tests/test_plugin_market_v252.py::test_landed_是历次落地的累积账",
       "tests/test_plugin_market_v252.py::test_sha256不符_拒收并删掉临时文件",

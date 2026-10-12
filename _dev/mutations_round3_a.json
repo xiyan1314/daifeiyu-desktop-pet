@@ -132,10 +132,10 @@
     },
     {
       "id": "M-A13",
-      "why": "README 注解表格数字改成与 AST 实测不符",
+      "why": "README 注解表格数字改成与 AST 实测不符（第 4 轮重锚：pet_tools.py 的注解数 v2.6.0 已是 41/41，旧锚点 39/39 在 README.md / README.en.md 都 0 命中）",
       "file": "README.md",
-      "old": "| ✅ 39/39 |",
-      "new": "| ✅ 38/39 |",
+      "old": "| ✅ 41/41 |",
+      "new": "| ✅ 40/41 |",
       "tests": [
         "tests/test_round3_a_fixes.py::test_readme_annotation_scope_matches_the_code"
       ]
@@ -173,17 +173,17 @@
   ],
   "results": {
     "title": "变异验证 spec：mutations_round3_a.json",
-    "checked_at": "2026-10-12 12:05:29",
+    "checked_at": "2026-10-12 12:17:29",
     "total": 16,
-    "caught": 15,
-    "not_caught": 1,
+    "caught": 16,
+    "not_caught": 0,
     "blocked": 0,
     "items": [
       {
         "id": "M-A1",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "4 failed, 2 passed in 0.84s",
+        "tail": "4 failed, 2 passed in 0.89s",
         "failed": [
           "test_refresh_is_not_wedged_after_an_emit_failure",
           "test_worker_retires_its_generation_when_emit_hits_a_deleted_object",
@@ -195,7 +195,7 @@
         "id": "M-A2",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.51s",
+        "tail": "1 failed in 0.55s",
         "failed": [
           "test_worker_survives_request_exception_and_the_slot_still_releases"
         ]
@@ -204,7 +204,7 @@
         "id": "M-A3",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "2 failed in 0.53s",
+        "tail": "2 failed in 0.58s",
         "failed": [
           "test_worker_does_not_emit_while_closing",
           "test_worker_treats_unreadable_closing_flag_as_closing"
@@ -214,7 +214,7 @@
         "id": "M-A4",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.51s",
+        "tail": "1 failed in 0.56s",
         "failed": [
           "test_widgets_never_hardcode_a_font_family"
         ]
@@ -223,7 +223,7 @@
         "id": "M-A5",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.51s",
+        "tail": "1 failed in 0.55s",
         "failed": [
           "test_ui_font_uses_the_fallback_chain"
         ]
@@ -232,7 +232,7 @@
         "id": "M-A6",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed, 1 passed in 0.51s",
+        "tail": "1 failed, 1 passed in 0.56s",
         "failed": [
           "test_requests_and_pyinstaller_have_upper_bounds"
         ]
@@ -241,7 +241,7 @@
         "id": "M-A7",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed, 1 passed in 0.50s",
+        "tail": "1 failed, 1 passed in 0.55s",
         "failed": [
           "test_requests_and_pyinstaller_have_upper_bounds"
         ]
@@ -250,7 +250,7 @@
         "id": "M-A8",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.47s",
+        "tail": "1 failed in 0.52s",
         "failed": [
           "test_ci_pins_pytest_to_the_lock_version"
         ]
@@ -259,7 +259,7 @@
         "id": "M-A9",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.54s",
+        "tail": "1 failed in 0.57s",
         "failed": [
           "test_last_updated_carries_timezone_offset"
         ]
@@ -268,7 +268,7 @@
         "id": "M-A10",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.59s",
+        "tail": "1 failed in 0.64s",
         "failed": [
           "test_zipinfo_compresslevel_is_still_consumed"
         ]
@@ -277,7 +277,7 @@
         "id": "M-A11",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.53s",
+        "tail": "1 failed in 0.56s",
         "failed": [
           "test_almost_utf8_documents_the_small_file_degradation"
         ]
@@ -286,23 +286,25 @@
         "id": "M-A12",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.50s",
+        "tail": "1 failed in 0.56s",
         "failed": [
           "test_almost_utf8_documents_the_small_file_degradation"
         ]
       },
       {
         "id": "M-A13",
-        "verdict": "SPEC-BAD",
-        "rc": 0,
-        "tail": "锚点匹配 0 次",
-        "failed": []
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 0.65s",
+        "failed": [
+          "test_readme_annotation_scope_matches_the_code"
+        ]
       },
       {
         "id": "M-A14",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.51s",
+        "tail": "1 failed in 0.55s",
         "failed": [
           "test_readme_says_the_big_files_are_not_done"
         ]
@@ -311,7 +313,7 @@
         "id": "M-A15",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.49s",
+        "tail": "1 failed in 0.53s",
         "failed": [
           "test_module_docstrings_state_the_annotation_scope"
         ]
@@ -320,7 +322,7 @@
         "id": "M-A16",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.51s",
+        "tail": "1 failed in 0.55s",
         "failed": [
           "test_module_docstrings_state_the_annotation_scope"
         ]

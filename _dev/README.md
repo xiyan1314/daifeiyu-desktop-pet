@@ -13,7 +13,7 @@
 
 ---
 
-## 零、四条铁律（动手之前先看一眼；代价都是实测过的）
+## 零、五条铁律（动手之前先看一眼；代价都是实测过的）
 
 **铁律 1：在绿色版目录里调用 `python.exe`，一律加 `-B`（或设 `PYTHONDONTWRITEBYTECODE=1`）。**
 
@@ -67,6 +67,28 @@
 2. **常量 ↔ 文档**：`pet_plugin.WIN_ILLEGAL_CHARS` / `WIN_RESERVED_NAMES` 与
    `_dev/plugin_format_v251.md` **互查**——常量里的每个名字都要在文档里，文档里多写一个
    `com10`（常量里没有）也要红：`tests/test_plugin_v251.py::test_windows名字判据与文档同时写死`。
+
+**铁律 5：定版前必须对着出货修订复跑全部 `_dev/mutations_*.json`（含三份旧形态的单脚本驱动）。**
+
+证据有没有效，只由"跑在**这一份**源码上"决定——spec 里的 `old` 是**源码字面量**，任何一次重构、改名、
+调参会让它匹配 0 次（`SPEC-BAD` / `ANCHOR-LOST`），而**结果 JSON 里的 CAUGHT 数字不会自己变**：它还是
+上一版跑出来的，读起来照样"17/17 全绿"。所以 **SPEC-BAD / ANCHOR-LOST / NOT CAUGHT / WRONG TEST
+一律不许当"通过"**——它们的含义是"**这条没被验证**"，不是"这条没问题"。
+
+复跑面 = 全部 `mutations_*.json` 走 `python -B _dev/mutate_check.py <spec>`，**外加**三份**旧形态**
+由各自单脚本驱动：`mutate_export_slice.py` 5/5 · `mutate_startup_defer.py` 8/8 ·
+`verify_guardrails_can_fail.py` 9/9（三份**不吃** `mutate_check.py`，喂进去只会 `KeyError: mutations`，
+这是预期）。跑完对着发布门的两个提示通道复核到**双双静默**：`mutation_evidence_notes()`（指纹过期 /
+缺键）+ `mutation_verdict_notes()`（判定不通过）。
+
+**反面教材（v2.6.0 第 4 轮实测，别重演）**：`mutations_dialog_fit_v250.json` 的 **M-D09** 钉的是
+`clamp_dialog(self, 600, 540)`，而 **v2.5.1 的 A/L5 就把 RoleEditDialog 的设计宽改成了 620**——
+`git show 1b5d591:pet_dialogs.py` 里**只有 `620/540`、根本没有 `600/540`**：这条锚点在 **v2.5.1 就已经
+死了、跨 v2.5.1 与 v2.6.0 两个版本静默**。没被发现的原因很直接：v2.5.1 给同一件事另立了 M-L1（620），
+v2.5.0 那份 spec **再没被整批复跑过**，而它的 `results` 段一直躺着"17/17 CAUGHT"。
+同轮 5 条 SPEC-BAD 里另有 4 条是本轮改动的漂移（`compat_v243` M-C12 · `plugin_v251` M-H2/M-H3 ·
+`round3_a` M-A13），其中 **M-C12 是"命中 2 次"而不是 0 次**——发布门口径是 **匹配次数 `!= 1`** 即
+SPEC-BAD（v2.6.0 新增的 `missing_fingerprint_keys` 复制了同一段两句判空，把唯一锚点变成了歧义）。
 
 ---
 
@@ -157,14 +179,21 @@ spec 清单（**状态列的 CAUGHT 数 = 该文件 `results` 段当前的实测
 | `mutations_q_item3.json` | M-Q10..Q15 语音/错误文案等 | 6/6 CAUGHT |
 | `mutations_compat_v242.json` | M-C1..C15 v2.4.2 兼容修复 | **15/15 CAUGHT**（M-C9 此前记 WRONG TEST：参数化实例确实红了、是判定口径没认出来；v2.4.4 修完 `_short` 后按基名比对 → CAUGHT，见下方"参数化后缀"一条） |
 | `mutations_release_door.json` | G-D1/G-A1/G-L1 发布门新判据（D 条目 / 素材清单 / 变异锁） | 3/3 CAUGHT |
-| `mutations_round3_a.json` | 另一路代理的 v2.4.2 第三轮 spec（同一套机制） | **16/16 CAUGHT**（v2.4.4 已重锚：M-A1 钉 `if not handed: self._retire(...)`、M-A2 钉顶层 except 的 `handed = self._emit("balance_err", gen)`，两个改名后的用例节点同步更新） |
+| `mutations_round3_a.json` | 另一路代理的 v2.4.2 第三轮 spec（同一套机制） | **16/16 CAUGHT**（v2.4.4 已重锚：M-A1 钉 `if not handed: self._retire(...)`、M-A2 钉顶层 except 的 `handed = self._emit("balance_err", gen)`，两个改名后的用例节点同步更新；2026-10-12 第 4 轮复跑 16/16，M-A13 重锚：pet_tools.py 注解数 39→41） |
 | `mutations_relay_v243.json` | **v2.4.4 收口主 spec**：启动接力 / 撒钱预载分片 / SND_PURGE（M-R1..M-R15）＋ A-1 余额请求代次 / A-2 状态图死名单 / C-2 分片判据去墙钟（M-V1/V2/V3/V4/V5/V6/V7/V8）；钉 `tests/test_relay_v243.py` + `tests/test_round3_a_fixes.py` | **23/23 CAUGHT**（v2.4.4 补三条：M-V4 自动轮询不许有手动反馈 / M-V7 `_retire` 的代次守卫 / M-V8 切片预算放宽 8 倍必须红；M-V1/V2/V3 随 A-1、L2 重锚） |
 | `mutations_asset_absence_v244.json` | 素材缺失降级：占位鱼 / 摸头缺帧 / 接力收口 / 撒钱空帧集与目录预检 / 自定义角色口径 / 合成回退音 / 状态图守卫 / 坏配置回落（M-A1..A9，钉 `tests/test_asset_absence_v244.py`） | 9/9 CAUGHT |
-| `mutations_compat_v243.json` | 兼容审查 M1/M3/M4 + 质量审查 M1/M4/L2/L3 + 找茬复审 M1/M3/M5/L①（M-C1..C13） | **13/13 CAUGHT**（M-C10 此前 SPEC-BAD：锚点钉的是旧 `args=(key,)`；A-1 改代次后按 `args=(key, gen)` 重锚 → CAUGHT） |
+| `mutations_compat_v243.json` | 兼容审查 M1/M3/M4 + 质量审查 M1/M4/L2/L3 + 找茬复审 M1/M3/M5/L①（M-C1..C13） | **13/13 CAUGHT**（M-C10 此前 SPEC-BAD：锚点钉的是旧 `args=(key,)`；A-1 改代次后按 `args=(key, gen)` 重锚 → CAUGHT；2026-10-12 第 4 轮复跑 13/13，M-C12 重锚：旧锚点被 v2.6.0 新增的 `missing_fingerprint_keys` 复制成 2 处、命中 2 次即 SPEC-BAD） |
 | `mutations_services_v250.json` | **v2.5.0 第 3 轮新增**：服务注册表（A1）构造顺序 + **实参级** golden + 摸头守卫（A3）——M-S1 wander/weather 顺序对调 · M-S2 WeatherService 的 signals↔lambda 对调 · M-S3 MenuBuilder 后两实参对调 · M-S4 mood 拆回字面 new · M-S5 A3 口径退回（不传组名） · M-S6 从 SYNC_FILES 删掉新模块 | **6/6 CAUGHT** |
-| `mutations_dialog_fit_v250.json` | **v2.5.0 第 3 轮新增**：对话框尺寸与滚动（B）——M-D01..D12 **逐个**删掉 12 个类的设计尺寸 clamp · M-D13 自指比例 0.85→1.5 · M-D14 重钳兜底 · M-D15 下限保护 · M-D16 滚动容器 · M-D17 按钮行进滚动区 | **17/17 CAUGHT** |
-| `mutations_plugin_v251.json` | **v2.5.1 代理A新增**：插件包校验器（M-P1 code 一致性 · M-P2 路径穿越 · M-P3 双版本门 · M-P4 禁止项清单 · M-P5 files 覆盖 · M-P6 容量上限复用 · M-P7 执行位 · M-P8 read_installed 不抛）· 发布门反向校验（M-R1 漏件必须报 · M-R2 AST 扫描不许空转 · M-R3 用户插件必须点名）· L5 设计宽 620（M-L1） | **12/12 CAUGHT**（2026-10-11 实测；M-P4/M-P8 首轮 NOT CAUGHT——M-P4 的"点名"被扩展名白名单分支同样满足、M-P8 的锚点钉在了走不到的分支上，都已重锚 + 收紧断言后复跑） |
+| `mutations_dialog_fit_v250.json` | **v2.5.0 第 3 轮新增**：对话框尺寸与滚动（B）——M-D01..D12 **逐个**删掉 12 个类的设计尺寸 clamp · M-D13 自指比例 0.85→1.5 · M-D14 重钳兜底 · M-D15 下限保护 · M-D16 滚动容器 · M-D17 按钮行进滚动区 | **17/17 CAUGHT**（2026-10-12 第 4 轮复跑：M-D09 重锚——v2.5.1 A/L5 把设计宽 600→620，旧锚点自 v2.5.1 起静默失效，见 §零 铁律 5 的反面教材） |
+| `mutations_plugin_v251.json` | **v2.5.1 代理A新增**：插件包校验器（M-P1 code 一致性 · M-P2 路径穿越 · M-P3 双版本门 · M-P4 禁止项清单 · M-P5 files 覆盖 · M-P6 容量上限复用 · M-P7 执行位 · M-P8 read_installed 不抛）· 发布门反向校验（M-R1 漏件必须报 · M-R2 AST 扫描不许空转 · M-R3 用户插件必须点名）· 安装器（M-H1 P1-1 保留名自保 · M-H2 S1-c already 必须以 landed 为准 · M-H3 S1-a 登记写失败回滚 · M-H4 P2-1 未落地内容必须点名）· M-P9 min_host_version 版本号判据 · L5 设计宽 620（M-L1） | **17/17 CAUGHT**（2026-10-12 第 4 轮复跑：M-H2/M-H3 重锚——v2.6.0 给 `_has_landed` 补了内容指纹参、登记失败的回滚调用收成无条件 `_unland`；2026-10-11 实测；M-P4/M-P8 首轮 NOT CAUGHT——M-P4 的"点名"被扩展名白名单分支同样满足、M-P8 的锚点钉在了走不到的分支上，都已重锚 + 收紧断言后复跑） |
 | `mutations_plugin_gap_v260.json` | **v2.6.0 代理C新增**：校验器与安装器两处口径差收口（M-G1 Windows 非法字符 · M-G2 保留设备名 · M-G3 空 files · M-G4/G5 发布门"缺键"提示与纯函数 · M-G6/G7 文档↔常量双向契约 · M-G8 安装器不再交出校验器那句原因） | **8/8 CAUGHT**（2026-10-12 实测：`python -B _dev/mutate_check.py _dev/mutations_plugin_gap_v260.json`） |
+| `mutations_plugin_market_v260.json` | **v2.6.0 第 2 阶段新增**：插件市场（M-A01..A04 索引层 sha256 / 声明字节数 / 相对 url 解析 / host_min 可装性）· 按内容指纹合并与回滚（M-A05 指纹落账 · M-A06 去重失效 · M-A07 landed 累积 · M-A08 撤销本版新增 · M-A09 保留上一版 payload · M-A10 旧登记补账 · M-A16 同版本重复安装不顶回滚点 · **M-A17 `_fresh` 的 still_there 被摘掉：登记有账就当库里真有，库里缺的内容补不回来**）· 市场界面（M-A11..A15） | **17/17 CAUGHT**（2026-10-12 第 4 轮复跑；M-A17 是本轮**新增**的一条，与 M-A06 锚同一行、方向相反：M-A06 去重失效＝旧内容重复落，M-A17 去重过度＝缺的内容不补） |
+
+**2026-10-12 v2.6.0 第 4 轮（出货修订 `bb73d5b`）整批复跑记录**：整批由人发起，报出 **5 条 SPEC-BAD**
+（`compat_v243` M-C12 · `dialog_fit_v250` M-D09 · `plugin_v251` M-H2/M-H3 · `round3_a` M-A13），
+**全部重锚后复跑**为 13/13 · 17/17 · 17/17 · 16/16；同轮给 `plugin_market_v260` 补了 M-A17 → 17/17；
+三份旧形态单脚本同轮对齐 **5/5 · 8/8 · 9/9**；本轮回写的 7 份证据指纹**全部与当前树一致**。
+这 5 条**全是锚点漂移**（不是护栏失效），其中 M-D09 是历史欠账——见 §零 铁律 5 的反面教材。
 
 **2026-10-11 v2.4.4 证据对齐复跑**（真仓只读、逐个在 %TEMP% 影子里跑；本次总耗时约 255s）：上表
 **9 个 spec 全部 rc=0、共 94 条变异 100% CAUGHT**；三条**不是** `mutate_check.py` 形态的结果文件

@@ -1341,7 +1341,13 @@ def test_S1_c_手工拷进来的插件目录_装同id的真包必须真的落地
     登记）→ 再装同 id 的真包，此前 ok=True「已更新…（内容在首次安装时已落地）」而 landed={}、
     台词一条没进 = 装了个空壳还报成功。
 
-    能真失败：让 already 只看"登记里有这条"（不看 landed 是否有内容）→ 内容不落地，红。
+    能真失败：让 already 只看"登记里有这条"（不看 landed 是否有内容）→ 本用例红。
+
+    v2.6.0 第 4 轮重锚实测（注入 already = known is not None）：内容此时**照常落地**——_land
+    无条件跑，_fresh 的 still_there 判据还会把库里缺的补回来（实测「新版新增的 2 项内容并
+    入」）；所以红的是下面那条**文案**断言：登记里没有落地账却被报成「覆盖旧版本」，手工拷
+    进来的目录还被当成上一版轮换到 .prev-<id>/。旧形态里"内容不落地 = 空壳"那一半在
+    v2.6.0 已经构造不出来（护栏仍在，守的是另一半）。
     """
     lines_lib = pet_lines.LineService(str(tmp_path))
     host = pet_plugin_host.PluginHost(str(tmp_path), HOST_VERSION, lines_lib=lines_lib)

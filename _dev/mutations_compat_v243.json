@@ -149,10 +149,10 @@
     },
     {
       "id": "M-C12",
-      "why": "变异证据指纹过期不再提示（质量审查 M4）",
+      "why": "变异证据指纹过期不再提示（质量审查 M4；第 4 轮重锚：v2.6.0 新增的 missing_fingerprint_keys 复制了同样的两句前置判空，旧锚点在当前树上命中 2 次 → 追加 stale_fingerprints 独有的下一行 out = [] 消歧；变异效果不变：stale_fingerprints 恒返回空）",
       "file": "_check_release.py",
-      "old": "    if not isinstance(recorded, dict) or not recorded:\n        return []",
-      "new": "    if True:  # MUTATION\n        return []",
+      "old": "    if not isinstance(recorded, dict) or not recorded:\n        return []\n    out = []",
+      "new": "    if True:  # MUTATION\n        return []\n    out = []",
       "tests": [
         "tests/test_release_check.py::test_mutation_evidence_notes_flags_a_stale_result_json",
         "tests/test_release_check.py::test_stale_fingerprints_reports_only_mismatches"
@@ -177,17 +177,17 @@
   ],
   "results": {
     "title": "变异验证 spec：mutations_compat_v243.json",
-    "checked_at": "2026-10-12 12:00:56",
+    "checked_at": "2026-10-12 12:15:31",
     "total": 13,
-    "caught": 12,
-    "not_caught": 1,
+    "caught": 13,
+    "not_caught": 0,
     "blocked": 0,
     "items": [
       {
         "id": "M-C1",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "2 failed in 1.14s",
+        "tail": "2 failed in 1.38s",
         "failed": [
           "test_no_shipped_source_hardcodes_a_single_font_family",
           "test_dialog_qss_uses_the_single_source_fallback_chain"
@@ -197,7 +197,7 @@
         "id": "M-C2",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.53s",
+        "tail": "1 failed in 0.76s",
         "failed": [
           "test_dialog_qss_uses_the_single_source_fallback_chain"
         ]
@@ -206,7 +206,7 @@
         "id": "M-C3",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.73s",
+        "tail": "1 failed in 0.82s",
         "failed": [
           "test_font_fallback_mechanism_comment_is_hedged"
         ]
@@ -215,7 +215,7 @@
         "id": "M-C4",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed, 1 passed in 0.50s",
+        "tail": "1 failed, 1 passed in 0.56s",
         "failed": [
           "test_every_declared_package_has_an_upper_bound"
         ]
@@ -224,7 +224,7 @@
         "id": "M-C5",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.54s",
+        "tail": "1 failed in 0.61s",
         "failed": [
           "test_readme_annotation_scope_matches_the_code"
         ]
@@ -233,7 +233,7 @@
         "id": "M-C6",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.81s",
+        "tail": "1 failed in 0.91s",
         "failed": [
           "test_clean_tree_shows_utf8_paths_not_octal_escapes"
         ]
@@ -242,7 +242,7 @@
         "id": "M-C7",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.84s",
+        "tail": "1 failed in 1.03s",
         "failed": [
           "test_asset_manifest_ignores_gitignored_files"
         ]
@@ -260,7 +260,7 @@
         "id": "M-C9",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.58s",
+        "tail": "1 failed in 0.50s",
         "failed": [
           "test_manifest_timestamp_is_fixed_so_exports_are_reproducible"
         ]
@@ -269,7 +269,7 @@
         "id": "M-C10",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 2.74s",
+        "tail": "1 failed in 0.59s",
         "failed": [
           "test_refresh_resets_guard_when_thread_start_fails"
         ]
@@ -278,23 +278,26 @@
         "id": "M-C11",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.58s",
+        "tail": "1 failed in 0.66s",
         "failed": [
           "test_closing_flag_renamed_does_not_silently_drop_results"
         ]
       },
       {
         "id": "M-C12",
-        "verdict": "SPEC-BAD",
-        "rc": 0,
-        "tail": "锚点匹配 2 次",
-        "failed": []
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "2 failed in 0.49s",
+        "failed": [
+          "test_mutation_evidence_notes_flags_a_stale_result_json",
+          "test_stale_fingerprints_reports_only_mismatches"
+        ]
       },
       {
         "id": "M-C13",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.45s",
+        "tail": "1 failed in 0.50s",
         "failed": [
           "test_asset_manifest_notes_when_the_check_cannot_run"
         ]
