@@ -121,7 +121,13 @@ def decrypt_secret(stored):
     if stored.startswith("dpapi:"):
         try:
             return _dpapi_unprotect(base64.b64decode(stored[6:])).decode("utf-8")
-        except Exception:
+        except Exception as e:
+            # v2.6.0（D7-B ①）：此前这里静默返回 ""——DPAPI 解密失败与"从没设过 Key"在界面上
+            # **长得一模一样**（设置页的 Key 框变空），用户只会以为自己没存过（换机器/换用户
+            # /凭据被清都会走到这里）。补一条限流日志：失败原因留在 error.log；
+            # 返回值口径逐位不变（""＝按未设置处理），调用方与既有断言都不受影响。
+            pet_log.log_throttled("config.decrypt_secret",
+                                  "API Key 解密失败（按未设置处理）：%r" % (e,))
             return ""
     return stored  # 兼容旧版明文（仅读取，不再写入）
 

@@ -231,9 +231,12 @@ def repo_fingerprint(root=None):
     # （v2.4.4 给 pet_balance.py 补过同一个盲区）。与
     # _check_release.MUTATION_FINGERPRINT_FILES **逐项一致**（顺序也一致），
     # tests/test_release_check.py 有一条用例钉住两处不许漂。
+    # v2.6.0（找茬审查 C-5）：补进 pet_plugin_index.py —— 本轮新模块、M-A01~M-A04 的锚点全在
+    # 它上面，而它在清单里缺席（与 _check_release.MUTATION_FINGERPRINT_FILES **逐项一致**、
+    # 顺序也一致；tests/test_release_check.py 有一条用例钉住两处不许漂）。
     for rel in ("桌宠.py", "pet_export.py", "pet_lines.py", "pet_alarm.py", "pet_behaviors.py",
                 "_check_release.py", "pet_balance.py", "pet_plugin.py", "pet_plugin_host.py",
-                "pet_dialogs.py", "pet_menu.py"):
+                "pet_dialogs.py", "pet_menu.py", "pet_plugin_index.py"):
         p = os.path.join(base, rel)
         if os.path.isfile(p):
             with open(p, "rb") as f:

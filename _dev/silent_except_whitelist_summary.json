@@ -1,0 +1,4396 @@
+{
+ "schema": 1,
+ "note": "D7-B 静默 except 白名单（数据）。判定逻辑在 _dev/silent_except_whitelist.py，测试在 tests/test_silent_except_v252.py。改代码后先跑 --check。",
+ "reasons": {
+  "reported": "失败已随返回值/哨兵上报调用方（调用方据此弹提示或降级），不需要再写一条日志",
+  "cleanup": "尽力而为的清理/回滚：失败只会在磁盘上留孤儿文件，不改变用户可见结果",
+  "teardown": "关闭/退出/销毁路径：进程即将结束或对象即将销毁，记日志没有接收方",
+  "probe": "能力/存在性探针：失败本身就是安全的假值（is_running=False / 没有这个能力）",
+  "optional": "可选能力降级（音效/动画/缩放/预览/悬停提示）：失败＝该能力缺席，不丢数据",
+  "fallback": "坏值回默认（反序列化/归一化/类型转换）：不改变用户可见结果",
+  "self-logging": "日志设施自身的兜底：写日志失败无处可记（代码内已有 stderr 出口）",
+  "unreviewed": "尚未人工判定——测试会因此变红（刻意如此：白名单不许自动扩容）"
+ },
+ "delegated_files": [],
+ "entries": [
+  {
+   "key": "pet_actions.py|cpu_tick|0d4b0e40a6",
+   "file": "pet_actions.py",
+   "func": "cpu_tick",
+   "shape": "0d4b0e40a6",
+   "count": 1,
+   "tier": "C",
+   "reason": "optional",
+   "why": "可选能力降级（音效/动画/缩放/预览/悬停提示）：失败＝该能力缺席，不丢数据",
+   "evidence": "except Exception: pass",
+   "lines": [
+    163
+   ]
+  },
+  {
+   "key": "pet_alarm.py|import_ringtone|2cbdc8d672",
+   "file": "pet_alarm.py",
+   "func": "import_ringtone",
+   "shape": "2cbdc8d672",
+   "count": 2,
+   "tier": "B",
+   "reason": "reported",
+   "why": "失败已随返回值/哨兵上报调用方（调用方据此弹提示或降级），不需要再写一条日志",
+   "evidence": "except OSError as e: return None, \"无法读取文件：%s\" % e",
+   "lines": [
+    388,
+    402
+   ]
+  },
+  {
+   "key": "pet_alarm.py|normalize_time|8a172e7f74",
+   "file": "pet_alarm.py",
+   "func": "normalize_time",
+   "shape": "8a172e7f74",
+   "count": 1,
+   "tier": "B",
+   "reason": "fallback",
+   "why": "坏值回默认（反序列化/归一化/类型转换）：不改变用户可见结果",
+   "evidence": "except (TypeError, ValueError): return \"\"",
+   "lines": [
+    62
+   ]
+  },
+  {
+   "key": "pet_anim.py|load_frame_set|7e0edba79a",
+   "file": "pet_anim.py",
+   "func": "load_frame_set",
+   "shape": "7e0edba79a",
+   "count": 1,
+   "tier": "B",
+   "reason": "fallback",
+   "why": "坏值回默认（反序列化/归一化/类型转换）：不改变用户可见结果",
+   "evidence": "except Exception: pix = QPixmap()",
+   "lines": [
+    121
+   ]
+  },
+  {
+   "key": "pet_audio.py|<module>|b6ba078cd7",
+   "file": "pet_audio.py",
+   "func": "<module>",
+   "shape": "b6ba078cd7",
+   "count": 1,
+   "tier": "B",
+   "reason": "optional",
+   "why": "可选能力降级（音效/动画/缩放/预览/悬停提示）：失败＝该能力缺席，不丢数据",
+   "evidence": "except ImportError: winsound = None",
+   "lines": [
+    47
+   ]
+  },
+  {
+   "key": "pet_audio.py|_on_default_device_changed|b6ba078cd7",
+   "file": "pet_audio.py",
+   "func": "_on_default_device_changed",
+   "shape": "b6ba078cd7",
+   "count": 1,
+   "tier": "B",
+   "reason": "optional",
+   "why": "可选能力降级（音效/动画/缩放/预览/悬停提示）：失败＝该能力缺席，不丢数据",
+   "evidence": "except Exception: dev_id = None",
+   "lines": [
+    205
+   ]
+  },
+  {
+   "key": "pet_audio.py|_probe_wav|63eb142d38",
+   "file": "pet_audio.py",
+   "func": "_probe_wav",
+   "shape": "63eb142d38",
+   "count": 1,
+   "tier": "B",
+   "reason": "reported",
+   "why": "失败已随返回值/哨兵上报调用方（调用方据此弹提示或降级），不需要再写一条日志",
+   "evidence": "except Exception: return False, None",
+   "lines": [
+    120
+   ]
+  },
+  {
+   "key": "pet_audio.py|_qt_playable|ea239d3505",
+   "file": "pet_audio.py",
+   "func": "_qt_playable",
+   "shape": "ea239d3505",
+   "count": 1,
+   "tier": "B",
+   "reason": "probe",
+   "why": "能力/存在性探针：失败本身就是安全的假值（is_running=False / 没有这个能力）",
+   "evidence": "except Exception: return False",
+   "lines": [
+    311
+   ]
+  },
+  {
+   "key": "pet_audio.py|_rebuild_effects|0d4b0e40a6",
+   "file": "pet_audio.py",
+   "func": "_rebuild_effects",
+   "shape": "0d4b0e40a6",
+   "count": 1,
+   "tier": "C",
+   "reason": "teardown",
+   "why": "关闭/退出/销毁路径：进程即将结束或对象即将销毁，记日志没有接收方",
+   "evidence": "except Exception: pass",
+   "lines": [
+    184
+   ]
+  },
+  {
+   "key": "pet_audio.py|_rebuild_effects|e18b5abc2b",
+   "file": "pet_audio.py",
+   "func": "_rebuild_effects",
+   "shape": "e18b5abc2b",
+   "count": 1,
+   "tier": "B",
+   "reason": "optional",
+   "why": "可选能力降级（音效/动画/缩放/预览/悬停提示）：失败＝该能力缺席，不丢数据",
+   "evidence": "except Exception: _effects[name] = None",
+   "lines": [
+    191
+   ]
+  },
+  {
+   "key": "pet_audio.py|_winsound_file_play|ea239d3505",
+   "file": "pet_audio.py",
+   "func": "_winsound_file_play",
+   "shape": "ea239d3505",
+   "count": 2,
+   "tier": "B",
+   "reason": "probe",
+   "why": "能力/存在性探针：失败本身就是安全的假值（is_running=False / 没有这个能力）",
+   "evidence": "except Exception: return False",
+   "lines": [
+    232,
+    240
+   ]
+  },
+  {
+   "key": "pet_audio.py|init|0d4b0e40a6",
+   "file": "pet_audio.py",
+   "func": "init",
+   "shape": "0d4b0e40a6",
+   "count": 1,
+   "tier": "C",
+   "reason": "optional",
+   "why": "可选能力降级（音效/动画/缩放/预览/悬停提示）：失败＝该能力缺席，不丢数据",
+   "evidence": "except Exception: pass",
+   "lines": [
+    168
+   ]
+  },
+  {
+   "key": "pet_audio.py|init|229c6b4856",
+   "file": "pet_audio.py",
+   "func": "init",
+   "shape": "229c6b4856",
+   "count": 1,
+   "tier": "C",
+   "reason": "optional",
+   "why": "可选能力降级（音效/动画/缩放/预览/悬停提示）：失败＝该能力缺席，不丢数据",
+   "evidence": "except Exception: return",
+   "lines": [
+    145
+   ]
+  },
+  {
+   "key": "pet_audio.py|play|0d4b0e40a6",
+   "file": "pet_audio.py",
+   "func": "play",
+   "shape": "0d4b0e40a6",
+   "count": 3,
+   "tier": "C",
+   "reason": "optional",
+   "why": "可选能力降级（音效/动画/缩放/预览/悬停提示）：失败＝该能力缺席，不丢数据",
+   "evidence": "except Exception: pass",
+   "lines": [
+    332,
+    353,
+    369
+   ]
+  },
+  {
+   "key": "pet_balance.py|_closing|ea239d3505",
+   "file": "pet_balance.py",
+   "func": "_closing",
+   "shape": "ea239d3505",
+   "count": 1,
+   "tier": "B",
+   "reason": "fallback",
+   "why": "坏值回默认（反序列化/归一化/类型转换）：不改变用户可见结果",
+   "evidence": "except Exception: return True",
+   "lines": [
+    138
+   ]
+  },
+  {
+   "key": "pet_balance.py|_log_safe|0d4b0e40a6",
+   "file": "pet_balance.py",
+   "func": "_log_safe",
+   "shape": "0d4b0e40a6",
+   "count": 1,
+   "tier": "C",
+   "reason": "self-logging",
+   "why": "日志设施自身的兜底：写日志失败无处可记（代码内已有 stderr 出口）",
+   "evidence": "except Exception: pass",
+   "lines": [
+    145
+   ]
+  },
+  {
+   "key": "pet_balance.py|_request_balance|d6a593f552",
+   "file": "pet_balance.py",
+   "func": "_request_balance",
+   "shape": "d6a593f552",
+   "count": 1,
+   "tier": "B",
+   "reason": "reported",
+   "why": "失败已随返回值/哨兵上报调用方（调用方据此弹提示或降级），不需要再写一条日志",
+   "evidence": "except Exception as e: return False, repr(e)",
+   "lines": [
+    121
+   ]
+  },
+  {
+   "key": "pet_balance.py|_retire|0d4b0e40a6",
+   "file": "pet_balance.py",
+   "func": "_retire",
+   "shape": "0d4b0e40a6",
+   "count": 1,
+   "tier": "C",
+   "reason": "optional",
+   "why": "可选能力降级（音效/动画/缩放/预览/悬停提示）：失败＝该能力缺席，不丢数据",
+   "evidence": "except Exception: pass",
+   "lines": [
+    180
+   ]
+  },
+  {
+   "key": "pet_balance.py|on_updated|0d4b0e40a6",
+   "file": "pet_balance.py",
+   "func": "on_updated",
+   "shape": "0d4b0e40a6",
+   "count": 1,
+   "tier": "C",
+   "reason": "teardown",
+   "why": "关闭/退出/销毁路径：进程即将结束或对象即将销毁，记日志没有接收方",
+   "evidence": "except RuntimeError: pass",
+   "lines": [
+    294
+   ]
+  },
+  {
+   "key": "pet_balance.py|set_budget|68c6d5258d",
+   "file": "pet_balance.py",
+   "func": "set_budget",
+   "shape": "68c6d5258d",
+   "count": 1,
+   "tier": "B",
+   "reason": "fallback",
+   "why": "坏值回默认（反序列化/归一化/类型转换）：不改变用户可见结果",
+   "evidence": "except (TypeError, ValueError): cur = cfg.get(\"budget\", 0.0) or 0.0",
+   "lines": [
+    367
+   ]
+  },
+  {
+   "key": "pet_behaviors.py|_clamp_int|91dfaff564",
+   "file": "pet_behaviors.py",
+   "func": "_clamp_int",
+   "shape": "91dfaff564",
+   "count": 1,
+   "tier": "B",
+   "reason": "reported",
+   "why": "失败已随返回值/哨兵上报调用方（调用方据此弹提示或降级），不需要再写一条日志",
+   "evidence": "except (TypeError, ValueError): return default",
+   "lines": [
+    191
+   ]
+  },
+  {
+   "key": "pet_behaviors.py|_to_float|91dfaff564",
+   "file": "pet_behaviors.py",
+   "func": "_to_float",
+   "shape": "91dfaff564",
+   "count": 1,
+   "tier": "B",
+   "reason": "reported",
+   "why": "失败已随返回值/哨兵上报调用方（调用方据此弹提示或降级），不需要再写一条日志",
+   "evidence": "except (TypeError, ValueError): return default",
+   "lines": [
+    104
+   ]
+  },
+  {
+   "key": "pet_behaviors.py|import_file|2cbdc8d672",
+   "file": "pet_behaviors.py",
+   "func": "import_file",
+   "shape": "2cbdc8d672",
+   "count": 1,
+   "tier": "B",
+   "reason": "reported",
+   "why": "失败已随返回值/哨兵上报调用方（调用方据此弹提示或降级），不需要再写一条日志",
+   "evidence": "except Exception as e: return None, \"文件读取失败：%s\" % e",
+   "lines": [
+    579
+   ]
+  },
+  {
+   "key": "pet_behaviors.py|normalize_idle_cfg|0df3277ee3",
+   "file": "pet_behaviors.py",
+   "func": "normalize_idle_cfg",
+   "shape": "0df3277ee3",
+   "count": 2,
+   "tier": "B",
+   "reason": "reported",
+   "why": "失败已随返回值/哨兵上报调用方（调用方据此弹提示或降级），不需要再写一条日志",
+   "evidence": "except (TypeError, ValueError): delay = DEFAULT_BEHAVIOR_CFG[\"idle_trigger_delay\"]",
+   "lines": [
+    162,
+    168
+   ]
+  },
+  {
+   "key": "pet_behaviors.py|normalize_idle_cfg|b6ba078cd7",
+   "file": "pet_behaviors.py",
+   "func": "normalize_idle_cfg",
+   "shape": "b6ba078cd7",
+   "count": 1,
+   "tier": "B",
+   "reason": "fallback",
+   "why": "坏值回默认（反序列化/归一化/类型转换）：不改变用户可见结果",
+   "evidence": "except Exception: weight = 1.0",
+   "lines": [
+    135
+   ]
+  },
+  {
+   "key": "pet_behaviors.py|update_idle_action|0b1bb55e20",
+   "file": "pet_behaviors.py",
+   "func": "update_idle_action",
+   "shape": "0b1bb55e20",
+   "count": 1,
+   "tier": "B",
+   "reason": "reported",
+   "why": "失败已随返回值/哨兵上报调用方（调用方据此弹提示或降级），不需要再写一条日志",
+   "evidence": "except (TypeError, ValueError): return False, \"顺序必须是数字\"",
+   "lines": [
+    280
+   ]
+  },
+  {
+   "key": "pet_behaviors.py|validate_steps|8b36bf6c9e",
+   "file": "pet_behaviors.py",
+   "func": "validate_steps",
+   "shape": "8b36bf6c9e",
+   "count": 1,
+   "tier": "B",
+   "reason": "fallback",
+   "why": "坏值回默认（反序列化/归一化/类型转换）：不改变用户可见结果",
+   "evidence": "except (TypeError, ValueError): ms = 500",
+   "lines": [
+    371
+   ]
+  },
+  {
+   "key": "pet_book.py|__init__|0d4b0e40a6",
+   "file": "pet_book.py",
+   "func": "__init__",
+   "shape": "0d4b0e40a6",
+   "count": 1,
+   "tier": "C",
+   "reason": "self-logging",
+   "why": "日志设施自身的兜底：写日志失败无处可记（代码内已有 stderr 出口）",
+   "evidence": "except Exception: pass",
+   "lines": [
+    253
+   ]
+  },
+  {
+   "key": "pet_book.py|_date_shift|fef37b58bf",
+   "file": "pet_book.py",
+   "func": "_date_shift",
+   "shape": "fef37b58bf",
+   "count": 1,
+   "tier": "B",
+   "reason": "reported",
+   "why": "失败已随返回值/哨兵上报调用方（调用方据此弹提示或降级），不需要再写一条日志",
+   "evidence": "except Exception: return _today()",
+   "lines": [
+    120
+   ]
+  },
+  {
+   "key": "pet_book.py|_ensure_today|0d4b0e40a6",
+   "file": "pet_book.py",
+   "func": "_ensure_today",
+   "shape": "0d4b0e40a6",
+   "count": 1,
+   "tier": "C",
+   "reason": "self-logging",
+   "why": "日志设施自身的兜底：写日志失败无处可记（代码内已有 stderr 出口）",
+   "evidence": "except Exception: pass",
+   "lines": [
+    453
+   ]
+  },
+  {
+   "key": "pet_book.py|_migrate_usage|b6ba078cd7",
+   "file": "pet_book.py",
+   "func": "_migrate_usage",
+   "shape": "b6ba078cd7",
+   "count": 2,
+   "tier": "B",
+   "reason": "fallback",
+   "why": "坏值回默认（反序列化/归一化/类型转换）：不改变用户可见结果",
+   "evidence": "except Exception: usage = 0.0",
+   "lines": [
+    407,
+    412
+   ]
+  },
+  {
+   "key": "pet_book.py|_normalize_record|7e0edba79a",
+   "file": "pet_book.py",
+   "func": "_normalize_record",
+   "shape": "7e0edba79a",
+   "count": 1,
+   "tier": "B",
+   "reason": "fallback",
+   "why": "坏值回默认（反序列化/归一化/类型转换）：不改变用户可见结果",
+   "evidence": "except Exception: lt = time.localtime()",
+   "lines": [
+    140
+   ]
+  },
+  {
+   "key": "pet_book.py|_recover_from_disk|0d4b0e40a6",
+   "file": "pet_book.py",
+   "func": "_recover_from_disk",
+   "shape": "0d4b0e40a6",
+   "count": 1,
+   "tier": "C",
+   "reason": "self-logging",
+   "why": "日志设施自身的兜底：写日志失败无处可记（代码内已有 stderr 出口）",
+   "evidence": "except Exception: pass",
+   "lines": [
+    356
+   ]
+  },
+  {
+   "key": "pet_book.py|_save_all|0d4b0e40a6",
+   "file": "pet_book.py",
+   "func": "_save_all",
+   "shape": "0d4b0e40a6",
+   "count": 2,
+   "tier": "C",
+   "reason": "self-logging",
+   "why": "日志设施自身的兜底：写日志失败无处可记（代码内已有 stderr 出口）",
+   "evidence": "except Exception: pass",
+   "lines": [
+    372,
+    385
+   ]
+  },
+  {
+   "key": "pet_book.py|add_manual|229c6b4856",
+   "file": "pet_book.py",
+   "func": "add_manual",
+   "shape": "229c6b4856",
+   "count": 1,
+   "tier": "C",
+   "reason": "fallback",
+   "why": "坏值回默认（反序列化/归一化/类型转换）：不改变用户可见结果",
+   "evidence": "except Exception: return",
+   "lines": [
+    543
+   ]
+  },
+  {
+   "key": "pet_book.py|check_alerts|c55acc99f3",
+   "file": "pet_book.py",
+   "func": "check_alerts",
+   "shape": "c55acc99f3",
+   "count": 1,
+   "tier": "B",
+   "reason": "reported",
+   "why": "失败已随返回值/哨兵上报调用方（调用方据此弹提示或降级），不需要再写一条日志",
+   "evidence": "except Exception: return alerts",
+   "lines": [
+    631
+   ]
+  },
+  {
+   "key": "pet_book.py|daily_totals|b6ba078cd7",
+   "file": "pet_book.py",
+   "func": "daily_totals",
+   "shape": "b6ba078cd7",
+   "count": 1,
+   "tier": "B",
+   "reason": "fallback",
+   "why": "坏值回默认（反序列化/归一化/类型转换）：不改变用户可见结果",
+   "evidence": "except Exception: n = 7",
+   "lines": [
+    574
+   ]
+  },
+  {
+   "key": "pet_book.py|export_csv|d6a593f552",
+   "file": "pet_book.py",
+   "func": "export_csv",
+   "shape": "d6a593f552",
+   "count": 1,
+   "tier": "B",
+   "reason": "reported",
+   "why": "失败已随返回值/哨兵上报调用方（调用方据此弹提示或降级），不需要再写一条日志",
+   "evidence": "except Exception as e: # pet_io 的契约是\"绝不抛\"，这里再兜一层：导出失败绝不能掀掉调用方的界面 return False, str(e)",
+   "lines": [
+    689
+   ]
+  },
+  {
+   "key": "pet_book.py|observe_balance|ea239d3505",
+   "file": "pet_book.py",
+   "func": "observe_balance",
+   "shape": "ea239d3505",
+   "count": 1,
+   "tier": "B",
+   "reason": "fallback",
+   "why": "坏值回默认（反序列化/归一化/类型转换）：不改变用户可见结果",
+   "evidence": "except Exception: return None",
+   "lines": [
+    520
+   ]
+  },
+  {
+   "key": "pet_chat.py|_accepts_epoch_kwargs|8a172e7f74",
+   "file": "pet_chat.py",
+   "func": "_accepts_epoch_kwargs",
+   "shape": "8a172e7f74",
+   "count": 1,
+   "tier": "B",
+   "reason": "probe",
+   "why": "能力/存在性探针：失败本身就是安全的假值（is_running=False / 没有这个能力）",
+   "evidence": "except (TypeError, ValueError): return False",
+   "lines": [
+    413
+   ]
+  },
+  {
+   "key": "pet_chat.py|_epoch_now|ea239d3505",
+   "file": "pet_chat.py",
+   "func": "_epoch_now",
+   "shape": "ea239d3505",
+   "count": 1,
+   "tier": "B",
+   "reason": "fallback",
+   "why": "坏值回默认（反序列化/归一化/类型转换）：不改变用户可见结果",
+   "evidence": "except Exception: return None",
+   "lines": [
+    455
+   ]
+  },
+  {
+   "key": "pet_chat.py|_log_msg|0d4b0e40a6",
+   "file": "pet_chat.py",
+   "func": "_log_msg",
+   "shape": "0d4b0e40a6",
+   "count": 1,
+   "tier": "C",
+   "reason": "self-logging",
+   "why": "日志设施自身的兜底：写日志失败无处可记（代码内已有 stderr 出口）",
+   "evidence": "except Exception: pass",
+   "lines": [
+    248
+   ]
+  },
+  {
+   "key": "pet_chat.py|_worker|b6ba078cd7",
+   "file": "pet_chat.py",
+   "func": "_worker",
+   "shape": "b6ba078cd7",
+   "count": 1,
+   "tier": "B",
+   "reason": "fallback",
+   "why": "坏值回默认（反序列化/归一化/类型转换）：不改变用户可见结果",
+   "evidence": "except Exception: body = \"\"",
+   "lines": [
+    632
+   ]
+  },
+  {
+   "key": "pet_chat.py|test_api_connection|63eb142d38",
+   "file": "pet_chat.py",
+   "func": "test_api_connection",
+   "shape": "63eb142d38",
+   "count": 3,
+   "tier": "B",
+   "reason": "reported",
+   "why": "失败已随返回值/哨兵上报调用方（调用方据此弹提示或降级），不需要再写一条日志",
+   "evidence": "except requests.exceptions.Timeout: return False, \"响应超时：服务商可能过载，或接口地址不是 OpenAI 兼容端点\"",
+   "lines": [
+    155,
+    157,
+    159
+   ]
+  },
+  {
+   "key": "pet_chat.py|test_api_connection|b6ba078cd7",
+   "file": "pet_chat.py",
+   "func": "test_api_connection",
+   "shape": "b6ba078cd7",
+   "count": 1,
+   "tier": "B",
+   "reason": "fallback",
+   "why": "坏值回默认（反序列化/归一化/类型转换）：不改变用户可见结果",
+   "evidence": "except Exception: body = \"\"",
+   "lines": [
+    152
+   ]
+  },
+  {
+   "key": "pet_config.py|normalize_cfg|01a3c5529d",
+   "file": "pet_config.py",
+   "func": "normalize_cfg",
+   "shape": "01a3c5529d",
+   "count": 1,
+   "tier": "B",
+   "reason": "fallback",
+   "why": "坏值回默认（反序列化/归一化/类型转换）：不改变用户可见结果",
+   "evidence": "except Exception: cfg[\"bubble_style\"] = dict(defaults[\"bubble_style\"])",
+   "lines": [
+    259
+   ]
+  },
+  {
+   "key": "pet_config.py|normalize_cfg|3b411ed692",
+   "file": "pet_config.py",
+   "func": "normalize_cfg",
+   "shape": "3b411ed692",
+   "count": 2,
+   "tier": "B",
+   "reason": "fallback",
+   "why": "坏值回默认（反序列化/归一化/类型转换）：不改变用户可见结果",
+   "evidence": "except (TypeError, ValueError): cfg[\"scale\"] = 1.0",
+   "lines": [
+    164,
+    202
+   ]
+  },
+  {
+   "key": "pet_config.py|normalize_cfg|88eb50cdeb",
+   "file": "pet_config.py",
+   "func": "normalize_cfg",
+   "shape": "88eb50cdeb",
+   "count": 1,
+   "tier": "B",
+   "reason": "fallback",
+   "why": "坏值回默认（反序列化/归一化/类型转换）：不改变用户可见结果",
+   "evidence": "except (TypeError, ValueError): cfg[_k] = _d",
+   "lines": [
+    191
+   ]
+  },
+  {
+   "key": "pet_config.py|normalize_cfg|9c55851c66",
+   "file": "pet_config.py",
+   "func": "normalize_cfg",
+   "shape": "9c55851c66",
+   "count": 1,
+   "tier": "B",
+   "reason": "fallback",
+   "why": "坏值回默认（反序列化/归一化/类型转换）：不改变用户可见结果",
+   "evidence": "except (TypeError, ValueError): cfg[\"transform_seconds\"] = _bcfg[\"transform_seconds\"]",
+   "lines": [
+    239
+   ]
+  },
+  {
+   "key": "pet_config.py|normalize_cfg|df575adcaa",
+   "file": "pet_config.py",
+   "func": "normalize_cfg",
+   "shape": "df575adcaa",
+   "count": 1,
+   "tier": "B",
+   "reason": "fallback",
+   "why": "坏值回默认（反序列化/归一化/类型转换）：不改变用户可见结果",
+   "evidence": "except (TypeError, ValueError): cfg[k] = 0.0",
+   "lines": [
+    264
+   ]
+  },
+  {
+   "key": "pet_config.py|normalize_physics|0f91a9c28e",
+   "file": "pet_config.py",
+   "func": "normalize_physics",
+   "shape": "0f91a9c28e",
+   "count": 1,
+   "tier": "B",
+   "reason": "fallback",
+   "why": "坏值回默认（反序列化/归一化/类型转换）：不改变用户可见结果",
+   "evidence": "except (TypeError, ValueError): bad.append(k)",
+   "lines": [
+    45
+   ]
+  },
+  {
+   "key": "pet_dialogs.py|__init__|0d4b0e40a6",
+   "file": "pet_dialogs.py",
+   "func": "__init__",
+   "shape": "0d4b0e40a6",
+   "count": 2,
+   "tier": "C",
+   "reason": "optional",
+   "why": "可选能力降级（音效/动画/缩放/预览/悬停提示）：失败＝该能力缺席，不丢数据",
+   "evidence": "except Exception: pass",
+   "lines": [
+    1104,
+    3913
+   ]
+  },
+  {
+   "key": "pet_dialogs.py|__init__|49f751de88",
+   "file": "pet_dialogs.py",
+   "func": "__init__",
+   "shape": "49f751de88",
+   "count": 1,
+   "tier": "C",
+   "reason": "fallback",
+   "why": "坏值回默认（反序列化/归一化/类型转换）：不改变用户可见结果",
+   "evidence": "except (TypeError, ValueError): pass",
+   "lines": [
+    3736
+   ]
+  },
+  {
+   "key": "pet_dialogs.py|__init__|60c0ba5dbc",
+   "file": "pet_dialogs.py",
+   "func": "__init__",
+   "shape": "60c0ba5dbc",
+   "count": 1,
+   "tier": "B",
+   "reason": "optional",
+   "why": "可选能力降级（音效/动画/缩放/预览/悬停提示）：失败＝该能力缺席，不丢数据",
+   "evidence": "except Exception: assets = []",
+   "lines": [
+    5731
+   ]
+  },
+  {
+   "key": "pet_dialogs.py|_action_names|60c0ba5dbc",
+   "file": "pet_dialogs.py",
+   "func": "_action_names",
+   "shape": "60c0ba5dbc",
+   "count": 1,
+   "tier": "B",
+   "reason": "fallback",
+   "why": "坏值回默认（反序列化/归一化/类型转换）：不改变用户可见结果",
+   "evidence": "except Exception: names = []",
+   "lines": [
+    4942
+   ]
+  },
+  {
+   "key": "pet_dialogs.py|_add_frame_action|0d4b0e40a6",
+   "file": "pet_dialogs.py",
+   "func": "_add_frame_action",
+   "shape": "0d4b0e40a6",
+   "count": 1,
+   "tier": "C",
+   "reason": "cleanup",
+   "why": "尽力而为的清理/回滚：失败只会在磁盘上留孤儿文件，不改变用户可见结果",
+   "evidence": "except Exception: pass",
+   "lines": [
+    2218
+   ]
+  },
+  {
+   "key": "pet_dialogs.py|_app_events|0d4b0e40a6",
+   "file": "pet_dialogs.py",
+   "func": "_app_events",
+   "shape": "0d4b0e40a6",
+   "count": 1,
+   "tier": "C",
+   "reason": "optional",
+   "why": "可选能力降级（音效/动画/缩放/预览/悬停提示）：失败＝该能力缺席，不丢数据",
+   "evidence": "except Exception: pass",
+   "lines": [
+    5392
+   ]
+  },
+  {
+   "key": "pet_dialogs.py|_asset_items|0d4b0e40a6",
+   "file": "pet_dialogs.py",
+   "func": "_asset_items",
+   "shape": "0d4b0e40a6",
+   "count": 1,
+   "tier": "C",
+   "reason": "optional",
+   "why": "可选能力降级（音效/动画/缩放/预览/悬停提示）：失败＝该能力缺席，不丢数据",
+   "evidence": "except Exception: pass",
+   "lines": [
+    5143
+   ]
+  },
+  {
+   "key": "pet_dialogs.py|_behaviors|0e3d3bb412",
+   "file": "pet_dialogs.py",
+   "func": "_behaviors",
+   "shape": "0e3d3bb412",
+   "count": 1,
+   "tier": "B",
+   "reason": "fallback",
+   "why": "坏值回默认（反序列化/归一化/类型转换）：不改变用户可见结果",
+   "evidence": "except Exception: return []",
+   "lines": [
+    5513
+   ]
+  },
+  {
+   "key": "pet_dialogs.py|_call|0d4b0e40a6",
+   "file": "pet_dialogs.py",
+   "func": "_call",
+   "shape": "0d4b0e40a6",
+   "count": 1,
+   "tier": "C",
+   "reason": "self-logging",
+   "why": "日志设施自身的兜底：写日志失败无处可记（代码内已有 stderr 出口）",
+   "evidence": "except Exception: pass",
+   "lines": [
+    300
+   ]
+  },
+  {
+   "key": "pet_dialogs.py|_cleanup_staged|0d4b0e40a6",
+   "file": "pet_dialogs.py",
+   "func": "_cleanup_staged",
+   "shape": "0d4b0e40a6",
+   "count": 1,
+   "tier": "C",
+   "reason": "cleanup",
+   "why": "尽力而为的清理/回滚：失败只会在磁盘上留孤儿文件，不改变用户可见结果",
+   "evidence": "except Exception: pass",
+   "lines": [
+    2145
+   ]
+  },
+  {
+   "key": "pet_dialogs.py|_closing_now|ea239d3505",
+   "file": "pet_dialogs.py",
+   "func": "_closing_now",
+   "shape": "ea239d3505",
+   "count": 1,
+   "tier": "B",
+   "reason": "fallback",
+   "why": "坏值回默认（反序列化/归一化/类型转换）：不改变用户可见结果",
+   "evidence": "except Exception: return True",
+   "lines": [
+    6424
+   ]
+  },
+  {
+   "key": "pet_dialogs.py|_collect|8b36bf6c9e",
+   "file": "pet_dialogs.py",
+   "func": "_collect",
+   "shape": "8b36bf6c9e",
+   "count": 1,
+   "tier": "B",
+   "reason": "fallback",
+   "why": "坏值回默认（反序列化/归一化/类型转换）：不改变用户可见结果",
+   "evidence": "except (TypeError, ValueError): weight = 1.0",
+   "lines": [
+    5565
+   ]
+  },
+  {
+   "key": "pet_dialogs.py|_content_bbox|ea239d3505",
+   "file": "pet_dialogs.py",
+   "func": "_content_bbox",
+   "shape": "ea239d3505",
+   "count": 1,
+   "tier": "B",
+   "reason": "fallback",
+   "why": "坏值回默认（反序列化/归一化/类型转换）：不改变用户可见结果",
+   "evidence": "except Exception: return None",
+   "lines": [
+    476
+   ]
+  },
+  {
+   "key": "pet_dialogs.py|_dialog_failed|0d4b0e40a6",
+   "file": "pet_dialogs.py",
+   "func": "_dialog_failed",
+   "shape": "0d4b0e40a6",
+   "count": 1,
+   "tier": "C",
+   "reason": "optional",
+   "why": "可选能力降级（音效/动画/缩放/预览/悬停提示）：失败＝该能力缺席，不丢数据",
+   "evidence": "except Exception: pass",
+   "lines": [
+    5683
+   ]
+  },
+  {
+   "key": "pet_dialogs.py|_download_worker|4e726113a9",
+   "file": "pet_dialogs.py",
+   "func": "_download_worker",
+   "shape": "4e726113a9",
+   "count": 1,
+   "tier": "B",
+   "reason": "reported",
+   "why": "失败已随返回值/哨兵上报调用方（调用方据此弹提示或降级），不需要再写一条日志",
+   "evidence": "except Exception as e: path, err = None, \"下载失败：%r\" % (e,)",
+   "lines": [
+    6346
+   ]
+  },
+  {
+   "key": "pet_dialogs.py|_drop_download|0d4b0e40a6",
+   "file": "pet_dialogs.py",
+   "func": "_drop_download",
+   "shape": "0d4b0e40a6",
+   "count": 1,
+   "tier": "C",
+   "reason": "cleanup",
+   "why": "尽力而为的清理/回滚：失败只会在磁盘上留孤儿文件，不改变用户可见结果",
+   "evidence": "except OSError: pass",
+   "lines": [
+    6416
+   ]
+  },
+  {
+   "key": "pet_dialogs.py|_extract_video_frames|2cbdc8d672",
+   "file": "pet_dialogs.py",
+   "func": "_extract_video_frames",
+   "shape": "2cbdc8d672",
+   "count": 1,
+   "tier": "B",
+   "reason": "reported",
+   "why": "失败已随返回值/哨兵上报调用方（调用方据此弹提示或降级），不需要再写一条日志",
+   "evidence": "except Exception as e: return None, \"抽帧失败：%s\" % e",
+   "lines": [
+    936
+   ]
+  },
+  {
+   "key": "pet_dialogs.py|_get|ea239d3505",
+   "file": "pet_dialogs.py",
+   "func": "_get",
+   "shape": "ea239d3505",
+   "count": 1,
+   "tier": "B",
+   "reason": "fallback",
+   "why": "坏值回默认（反序列化/归一化/类型转换）：不改变用户可见结果",
+   "evidence": "except Exception: return None",
+   "lines": [
+    276
+   ]
+  },
+  {
+   "key": "pet_dialogs.py|_index_log|0d4b0e40a6",
+   "file": "pet_dialogs.py",
+   "func": "_index_log",
+   "shape": "0d4b0e40a6",
+   "count": 1,
+   "tier": "C",
+   "reason": "self-logging",
+   "why": "日志设施自身的兜底：写日志失败无处可记（代码内已有 stderr 出口）",
+   "evidence": "except Exception: pass",
+   "lines": [
+    6446
+   ]
+  },
+  {
+   "key": "pet_dialogs.py|_index_worker|4e726113a9",
+   "file": "pet_dialogs.py",
+   "func": "_index_worker",
+   "shape": "4e726113a9",
+   "count": 1,
+   "tier": "B",
+   "reason": "reported",
+   "why": "失败已随返回值/哨兵上报调用方（调用方据此弹提示或降级），不需要再写一条日志",
+   "evidence": "except Exception as e: data, err = None, \"读取索引失败：%r\" % (e,)",
+   "lines": [
+    6262
+   ]
+  },
+  {
+   "key": "pet_dialogs.py|_load_local_ui|e3e42f15a0",
+   "file": "pet_dialogs.py",
+   "func": "_load_local_ui",
+   "shape": "e3e42f15a0",
+   "count": 1,
+   "tier": "B",
+   "reason": "fallback",
+   "why": "坏值回默认（反序列化/归一化/类型转换）：不改变用户可见结果",
+   "evidence": "except (TypeError, ValueError): self._lwait.setValue(30)",
+   "lines": [
+    4981
+   ]
+  },
+  {
+   "key": "pet_dialogs.py|_on_select|d2ceda6a8b",
+   "file": "pet_dialogs.py",
+   "func": "_on_select",
+   "shape": "d2ceda6a8b",
+   "count": 1,
+   "tier": "B",
+   "reason": "optional",
+   "why": "可选能力降级（音效/动画/缩放/预览/悬停提示）：失败＝该能力缺席，不丢数据",
+   "evidence": "except Exception: self._preview_full.setPixmap(QPixmap()) self._preview_full.setText(\"吃饱图无法预览\")",
+   "lines": [
+    3248
+   ]
+  },
+  {
+   "key": "pet_dialogs.py|_pick_video|0d4b0e40a6",
+   "file": "pet_dialogs.py",
+   "func": "_pick_video",
+   "shape": "0d4b0e40a6",
+   "count": 1,
+   "tier": "C",
+   "reason": "probe",
+   "why": "能力/存在性探针：失败本身就是安全的假值（is_running=False / 没有这个能力）",
+   "evidence": "except Exception: pass",
+   "lines": [
+    1504
+   ]
+  },
+  {
+   "key": "pet_dialogs.py|_preview_audio|0d4b0e40a6",
+   "file": "pet_dialogs.py",
+   "func": "_preview_audio",
+   "shape": "0d4b0e40a6",
+   "count": 2,
+   "tier": "C",
+   "reason": "optional",
+   "why": "可选能力降级（音效/动画/缩放/预览/悬停提示）：失败＝该能力缺席，不丢数据",
+   "evidence": "except Exception: pass",
+   "lines": [
+    341,
+    356
+   ]
+  },
+  {
+   "key": "pet_dialogs.py|_process_pending|2cbdc8d672",
+   "file": "pet_dialogs.py",
+   "func": "_process_pending",
+   "shape": "2cbdc8d672",
+   "count": 1,
+   "tier": "B",
+   "reason": "reported",
+   "why": "失败已随返回值/哨兵上报调用方（调用方据此弹提示或降级），不需要再写一条日志",
+   "evidence": "except Exception as e: return False, \"处理失败：%s\" % e",
+   "lines": [
+    2049
+   ]
+  },
+  {
+   "key": "pet_dialogs.py|_refresh_all|0d4b0e40a6",
+   "file": "pet_dialogs.py",
+   "func": "_refresh_all",
+   "shape": "0d4b0e40a6",
+   "count": 1,
+   "tier": "C",
+   "reason": "optional",
+   "why": "可选能力降级（音效/动画/缩放/预览/悬停提示）：失败＝该能力缺席，不丢数据",
+   "evidence": "except Exception: pass",
+   "lines": [
+    4661
+   ]
+  },
+  {
+   "key": "pet_dialogs.py|_refresh_bindings|1c114079ca",
+   "file": "pet_dialogs.py",
+   "func": "_refresh_bindings",
+   "shape": "1c114079ca",
+   "count": 1,
+   "tier": "B",
+   "reason": "optional",
+   "why": "可选能力降级（音效/动画/缩放/预览/悬停提示）：失败＝该能力缺席，不丢数据",
+   "evidence": "except Exception: cur = {}",
+   "lines": [
+    5154
+   ]
+  },
+  {
+   "key": "pet_dialogs.py|_refresh_launch_status|1c114079ca",
+   "file": "pet_dialogs.py",
+   "func": "_refresh_launch_status",
+   "shape": "1c114079ca",
+   "count": 1,
+   "tier": "B",
+   "reason": "fallback",
+   "why": "坏值回默认（反序列化/归一化/类型转换）：不改变用户可见结果",
+   "evidence": "except Exception: st = {}",
+   "lines": [
+    4990
+   ]
+  },
+  {
+   "key": "pet_dialogs.py|_refresh|0d4b0e40a6",
+   "file": "pet_dialogs.py",
+   "func": "_refresh",
+   "shape": "0d4b0e40a6",
+   "count": 1,
+   "tier": "C",
+   "reason": "optional",
+   "why": "可选能力降级（音效/动画/缩放/预览/悬停提示）：失败＝该能力缺席，不丢数据",
+   "evidence": "except Exception: pass",
+   "lines": [
+    3188
+   ]
+  },
+  {
+   "key": "pet_dialogs.py|_refresh|1c114079ca",
+   "file": "pet_dialogs.py",
+   "func": "_refresh",
+   "shape": "1c114079ca",
+   "count": 1,
+   "tier": "B",
+   "reason": "fallback",
+   "why": "坏值回默认（反序列化/归一化/类型转换）：不改变用户可见结果",
+   "evidence": "except Exception: binds = {}",
+   "lines": [
+    3622
+   ]
+  },
+  {
+   "key": "pet_dialogs.py|_refresh|32f149af10",
+   "file": "pet_dialogs.py",
+   "func": "_refresh",
+   "shape": "32f149af10",
+   "count": 1,
+   "tier": "B",
+   "reason": "fallback",
+   "why": "坏值回默认（反序列化/归一化/类型转换）：不改变用户可见结果",
+   "evidence": "except (TypeError, ValueError): # 有意忽略：坏值回默认（load 时 normalize 已兜底，此处防御外部直改 cfg） self._idle_secs.setValue(pet_behaviors.DEFAULT_BEH...",
+   "lines": [
+    2491
+   ]
+  },
+  {
+   "key": "pet_dialogs.py|_refresh|b6ba078cd7",
+   "file": "pet_dialogs.py",
+   "func": "_refresh",
+   "shape": "b6ba078cd7",
+   "count": 1,
+   "tier": "B",
+   "reason": "optional",
+   "why": "可选能力降级（音效/动画/缩放/预览/悬停提示）：失败＝该能力缺席，不丢数据",
+   "evidence": "except Exception: slots = None",
+   "lines": [
+    3442
+   ]
+  },
+  {
+   "key": "pet_dialogs.py|_remove_background|ea239d3505",
+   "file": "pet_dialogs.py",
+   "func": "_remove_background",
+   "shape": "ea239d3505",
+   "count": 1,
+   "tier": "B",
+   "reason": "fallback",
+   "why": "坏值回默认（反序列化/归一化/类型转换）：不改变用户可见结果",
+   "evidence": "except Exception: return None",
+   "lines": [
+    415
+   ]
+  },
+  {
+   "key": "pet_dialogs.py|_role_items|0d4b0e40a6",
+   "file": "pet_dialogs.py",
+   "func": "_role_items",
+   "shape": "0d4b0e40a6",
+   "count": 2,
+   "tier": "C",
+   "reason": "optional",
+   "why": "可选能力降级（音效/动画/缩放/预览/悬停提示）：失败＝该能力缺席，不丢数据",
+   "evidence": "except Exception: pass",
+   "lines": [
+    4064,
+    5134
+   ]
+  },
+  {
+   "key": "pet_dialogs.py|_save|0d4b0e40a6",
+   "file": "pet_dialogs.py",
+   "func": "_save",
+   "shape": "0d4b0e40a6",
+   "count": 5,
+   "tier": "C",
+   "reason": "fallback",
+   "why": "坏值回默认（反序列化/归一化/类型转换）：不改变用户可见结果",
+   "evidence": "except Exception: pass",
+   "lines": [
+    2093,
+    2109,
+    2123,
+    2133,
+    5380
+   ]
+  },
+  {
+   "key": "pet_dialogs.py|_shutdown_worker|0d4b0e40a6",
+   "file": "pet_dialogs.py",
+   "func": "_shutdown_worker",
+   "shape": "0d4b0e40a6",
+   "count": 1,
+   "tier": "C",
+   "reason": "teardown",
+   "why": "关闭/退出/销毁路径：进程即将结束或对象即将销毁，记日志没有接收方",
+   "evidence": "except Exception: pass",
+   "lines": [
+    1387
+   ]
+  },
+  {
+   "key": "pet_dialogs.py|_shutdown_worker|49f751de88",
+   "file": "pet_dialogs.py",
+   "func": "_shutdown_worker",
+   "shape": "49f751de88",
+   "count": 1,
+   "tier": "C",
+   "reason": "teardown",
+   "why": "关闭/退出/销毁路径：进程即将结束或对象即将销毁，记日志没有接收方",
+   "evidence": "except (RuntimeError, TypeError): pass",
+   "lines": [
+    1380
+   ]
+  },
+  {
+   "key": "pet_dialogs.py|_test_connection|b6ba078cd7",
+   "file": "pet_dialogs.py",
+   "func": "_test_connection",
+   "shape": "b6ba078cd7",
+   "count": 1,
+   "tier": "B",
+   "reason": "probe",
+   "why": "能力/存在性探针：失败本身就是安全的假值（is_running=False / 没有这个能力）",
+   "evidence": "except RuntimeError: _running = False",
+   "lines": [
+    3024
+   ]
+  },
+  {
+   "key": "pet_dialogs.py|_to_int|c55acc99f3",
+   "file": "pet_dialogs.py",
+   "func": "_to_int",
+   "shape": "c55acc99f3",
+   "count": 1,
+   "tier": "B",
+   "reason": "fallback",
+   "why": "坏值回默认（反序列化/归一化/类型转换）：不改变用户可见结果",
+   "evidence": "except Exception: return default",
+   "lines": [
+    3970
+   ]
+  },
+  {
+   "key": "pet_dialogs.py|_validate_image|63eb142d38",
+   "file": "pet_dialogs.py",
+   "func": "_validate_image",
+   "shape": "63eb142d38",
+   "count": 2,
+   "tier": "B",
+   "reason": "reported",
+   "why": "失败已随返回值/哨兵上报调用方（调用方据此弹提示或降级），不需要再写一条日志",
+   "evidence": "except Exception: return None, \"读取图片失败\"",
+   "lines": [
+    1436,
+    2010
+   ]
+  },
+  {
+   "key": "pet_dialogs.py|_voice_items|0d4b0e40a6",
+   "file": "pet_dialogs.py",
+   "func": "_voice_items",
+   "shape": "0d4b0e40a6",
+   "count": 1,
+   "tier": "C",
+   "reason": "optional",
+   "why": "可选能力降级（音效/动画/缩放/预览/悬停提示）：失败＝该能力缺席，不丢数据",
+   "evidence": "except Exception: pass",
+   "lines": [
+    4074
+   ]
+  },
+  {
+   "key": "pet_dialogs.py|closeEvent|0d4b0e40a6",
+   "file": "pet_dialogs.py",
+   "func": "closeEvent",
+   "shape": "0d4b0e40a6",
+   "count": 1,
+   "tier": "C",
+   "reason": "teardown",
+   "why": "关闭/退出/销毁路径：进程即将结束或对象即将销毁，记日志没有接收方",
+   "evidence": "except Exception: pass",
+   "lines": [
+    1582
+   ]
+  },
+  {
+   "key": "pet_dialogs.py|closeEvent|49f751de88",
+   "file": "pet_dialogs.py",
+   "func": "closeEvent",
+   "shape": "49f751de88",
+   "count": 1,
+   "tier": "C",
+   "reason": "teardown",
+   "why": "关闭/退出/销毁路径：进程即将结束或对象即将销毁，记日志没有接收方",
+   "evidence": "except (TypeError, RuntimeError): pass",
+   "lines": [
+    3063
+   ]
+  },
+  {
+   "key": "pet_dialogs.py|closeEvent|b6ba078cd7",
+   "file": "pet_dialogs.py",
+   "func": "closeEvent",
+   "shape": "b6ba078cd7",
+   "count": 1,
+   "tier": "B",
+   "reason": "probe",
+   "why": "能力/存在性探针：失败本身就是安全的假值（is_running=False / 没有这个能力）",
+   "evidence": "except RuntimeError: _running = False",
+   "lines": [
+    3058
+   ]
+  },
+  {
+   "key": "pet_dialogs.py|dialog_available_geometry|ea239d3505",
+   "file": "pet_dialogs.py",
+   "func": "dialog_available_geometry",
+   "shape": "ea239d3505",
+   "count": 1,
+   "tier": "B",
+   "reason": "probe",
+   "why": "能力/存在性探针：失败本身就是安全的假值（is_running=False / 没有这个能力）",
+   "evidence": "except Exception: return None",
+   "lines": [
+    699
+   ]
+  },
+  {
+   "key": "pet_dialogs.py|refresh_index|d5d4bea137",
+   "file": "pet_dialogs.py",
+   "func": "refresh_index",
+   "shape": "d5d4bea137",
+   "count": 1,
+   "tier": "B",
+   "reason": "reported",
+   "why": "失败已随返回值/哨兵上报调用方（调用方据此弹提示或降级），不需要再写一条日志",
+   "evidence": "except Exception as e: self._index_retire(gen, \"线程启动失败：%r\" % (e,)) self._apply_index(None, \"取数失败：%r\" % (e,)) return False",
+   "lines": [
+    6233
+   ]
+  },
+  {
+   "key": "pet_dialogs.py|run|76af6f6711",
+   "file": "pet_dialogs.py",
+   "func": "run",
+   "shape": "76af6f6711",
+   "count": 1,
+   "tier": "B",
+   "reason": "reported",
+   "why": "失败已随返回值/哨兵上报调用方（调用方据此弹提示或降级），不需要再写一条日志",
+   "evidence": "except Exception as e: self.failed.emit(\"处理失败：%s\" % e)",
+   "lines": [
+    1071
+   ]
+  },
+  {
+   "key": "pet_dialogs.py|run|f647be4c2b",
+   "file": "pet_dialogs.py",
+   "func": "run",
+   "shape": "f647be4c2b",
+   "count": 2,
+   "tier": "B",
+   "reason": "reported",
+   "why": "失败已随返回值/哨兵上报调用方（调用方据此弹提示或降级），不需要再写一条日志",
+   "evidence": "except ImportCancelled: self.failed.emit(\"已取消处理\")",
+   "lines": [
+    1069,
+    2860
+   ]
+  },
+  {
+   "key": "pet_dialogs.py|set_frame_max|0d4b0e40a6",
+   "file": "pet_dialogs.py",
+   "func": "set_frame_max",
+   "shape": "0d4b0e40a6",
+   "count": 1,
+   "tier": "C",
+   "reason": "optional",
+   "why": "可选能力降级（音效/动画/缩放/预览/悬停提示）：失败＝该能力缺席，不丢数据",
+   "evidence": "except Exception: pass",
+   "lines": [
+    5855
+   ]
+  },
+  {
+   "key": "pet_dialogs.py|shutdown_api_tests|0d4b0e40a6",
+   "file": "pet_dialogs.py",
+   "func": "shutdown_api_tests",
+   "shape": "0d4b0e40a6",
+   "count": 1,
+   "tier": "C",
+   "reason": "teardown",
+   "why": "关闭/退出/销毁路径：进程即将结束或对象即将销毁，记日志没有接收方",
+   "evidence": "except RuntimeError: pass",
+   "lines": [
+    2880
+   ]
+  },
+  {
+   "key": "pet_export.py|_cleanup_tmp|0d4b0e40a6",
+   "file": "pet_export.py",
+   "func": "_cleanup_tmp",
+   "shape": "0d4b0e40a6",
+   "count": 2,
+   "tier": "C",
+   "reason": "teardown",
+   "why": "关闭/退出/销毁路径：进程即将结束或对象即将销毁，记日志没有接收方",
+   "evidence": "except Exception: pass",
+   "lines": [
+    337,
+    342
+   ]
+  },
+  {
+   "key": "pet_export.py|_cleanup_tmp|bf57a1c0bb",
+   "file": "pet_export.py",
+   "func": "_cleanup_tmp",
+   "shape": "bf57a1c0bb",
+   "count": 1,
+   "tier": "B",
+   "reason": "teardown",
+   "why": "关闭/退出/销毁路径：进程即将结束或对象即将销毁，记日志没有接收方",
+   "evidence": "except Exception: # _zf 先关掉它就会抛 AttributeError（见 zipfile 的实现） self._big, self._big_src = None, None",
+   "lines": [
+    331
+   ]
+  },
+  {
+   "key": "pet_export.py|finish|0d4b0e40a6",
+   "file": "pet_export.py",
+   "func": "finish",
+   "shape": "0d4b0e40a6",
+   "count": 1,
+   "tier": "C",
+   "reason": "cleanup",
+   "why": "尽力而为的清理/回滚：失败只会在磁盘上留孤儿文件，不改变用户可见结果",
+   "evidence": "except Exception: pass",
+   "lines": [
+    476
+   ]
+  },
+  {
+   "key": "pet_export.py|finish|cf3481d345",
+   "file": "pet_export.py",
+   "func": "finish",
+   "shape": "cf3481d345",
+   "count": 1,
+   "tier": "B",
+   "reason": "reported",
+   "why": "失败已随返回值/哨兵上报调用方（调用方据此弹提示或降级），不需要再写一条日志",
+   "evidence": "except Exception as e: self._cleanup_tmp() return False, \"写入失败：%s\" % e",
+   "lines": [
+    468
+   ]
+  },
+  {
+   "key": "pet_export.py|import_bundle|0d4b0e40a6",
+   "file": "pet_export.py",
+   "func": "import_bundle",
+   "shape": "0d4b0e40a6",
+   "count": 3,
+   "tier": "B",
+   "reason": "cleanup",
+   "why": "尽力而为的清理/回滚：失败只会在磁盘上留孤儿文件，不改变用户可见结果",
+   "evidence": "except Exception: # 有意忽略：回滚保存尽力而为。**最坏后果 = 留一个空角色条目**（索引里有角色、 # 素材已被下面的 written 循环删掉 → 下次启动看到一个没有素材的形态）。 # 不引 pet_log 上报是对的取舍：为一个\"...",
+   "lines": [
+    744,
+    811,
+    820
+   ]
+  },
+  {
+   "key": "pet_export.py|import_bundle|1c114079ca",
+   "file": "pet_export.py",
+   "func": "import_bundle",
+   "shape": "1c114079ca",
+   "count": 1,
+   "tier": "B",
+   "reason": "fallback",
+   "why": "坏值回默认（反序列化/归一化/类型转换）：不改变用户可见结果",
+   "evidence": "except Exception: _local_keys = {}",
+   "lines": [
+    635
+   ]
+  },
+  {
+   "key": "pet_export.py|import_bundle|6694f9074c",
+   "file": "pet_export.py",
+   "func": "import_bundle",
+   "shape": "6694f9074c",
+   "count": 1,
+   "tier": "B",
+   "reason": "fallback",
+   "why": "坏值回默认（反序列化/归一化/类型转换）：不改变用户可见结果",
+   "evidence": "except (TypeError, ValueError): # v2.4.1（B 区 · A 档静默 except 判定）：**误报**——这里只做\"能不能比较 # 版本号\"的防御性读取，包里的 version 写坏了就按当前版本处理，最坏是 # 少弹一句...",
+   "lines": [
+    711
+   ]
+  },
+  {
+   "key": "pet_export.py|import_bundle|9a1133e616",
+   "file": "pet_export.py",
+   "func": "import_bundle",
+   "shape": "9a1133e616",
+   "count": 1,
+   "tier": "B",
+   "reason": "reported",
+   "why": "失败已随返回值/哨兵上报调用方（调用方据此弹提示或降级），不需要再写一条日志",
+   "evidence": "except Exception as e: # 非事务回滚：清理本次已入索引的角色条目与已解包文件（尽力而为） if role_appended: try: role_lib._data[\"roles\"].remove(role) role_lib._sav...",
+   "lines": [
+    805
+   ]
+  },
+  {
+   "key": "pet_export.py|plan_bundle|2cbdc8d672",
+   "file": "pet_export.py",
+   "func": "plan_bundle",
+   "shape": "2cbdc8d672",
+   "count": 1,
+   "tier": "B",
+   "reason": "reported",
+   "why": "失败已随返回值/哨兵上报调用方（调用方据此弹提示或降级），不需要再写一条日志",
+   "evidence": "except Exception as e: return None, \"导出失败：%s\" % e",
+   "lines": [
+    267
+   ]
+  },
+  {
+   "key": "pet_export.py|step|066a91909d",
+   "file": "pet_export.py",
+   "func": "step",
+   "shape": "066a91909d",
+   "count": 1,
+   "tier": "B",
+   "reason": "reported",
+   "why": "失败已随返回值/哨兵上报调用方（调用方据此弹提示或降级），不需要再写一条日志",
+   "evidence": "except Exception as e: self.error = e self.done = True",
+   "lines": [
+    437
+   ]
+  },
+  {
+   "key": "pet_export.py|validate_bundle|2cbdc8d672",
+   "file": "pet_export.py",
+   "func": "validate_bundle",
+   "shape": "2cbdc8d672",
+   "count": 2,
+   "tier": "B",
+   "reason": "reported",
+   "why": "失败已随返回值/哨兵上报调用方（调用方据此弹提示或降级），不需要再写一条日志",
+   "evidence": "except Exception as e: return None, \"打开失败：%s\" % e",
+   "lines": [
+    521,
+    546
+   ]
+  },
+  {
+   "key": "pet_export.py|validate_bundle|63eb142d38",
+   "file": "pet_export.py",
+   "func": "validate_bundle",
+   "shape": "63eb142d38",
+   "count": 2,
+   "tier": "B",
+   "reason": "reported",
+   "why": "失败已随返回值/哨兵上报调用方（调用方据此弹提示或降级），不需要再写一条日志",
+   "evidence": "except zipfile.BadZipFile: return None, \"文件不是有效的 zip 包\"",
+   "lines": [
+    519,
+    544
+   ]
+  },
+  {
+   "key": "pet_fx.py|_advance|a220ac94df",
+   "file": "pet_fx.py",
+   "func": "_advance",
+   "shape": "a220ac94df",
+   "count": 1,
+   "tier": "B",
+   "reason": "optional",
+   "why": "可选能力降级（音效/动画/缩放/预览/悬停提示）：失败＝该能力缺席，不丢数据",
+   "evidence": "except Exception: # 换帧出错就静默收尾，避免定时器空转 self._finish()",
+   "lines": [
+    218
+   ]
+  },
+  {
+   "key": "pet_fx.py|_finish|0d4b0e40a6",
+   "file": "pet_fx.py",
+   "func": "_finish",
+   "shape": "0d4b0e40a6",
+   "count": 1,
+   "tier": "C",
+   "reason": "optional",
+   "why": "可选能力降级（音效/动画/缩放/预览/悬停提示）：失败＝该能力缺席，不丢数据",
+   "evidence": "except Exception: pass",
+   "lines": [
+    239
+   ]
+  },
+  {
+   "key": "pet_fx.py|frame_sets|c55acc99f3",
+   "file": "pet_fx.py",
+   "func": "frame_sets",
+   "shape": "c55acc99f3",
+   "count": 1,
+   "tier": "B",
+   "reason": "reported",
+   "why": "失败已随返回值/哨兵上报调用方（调用方据此弹提示或降级），不需要再写一条日志",
+   "evidence": "except OSError: return out",
+   "lines": [
+    85
+   ]
+  },
+  {
+   "key": "pet_fx.py|is_playing|ea239d3505",
+   "file": "pet_fx.py",
+   "func": "is_playing",
+   "shape": "ea239d3505",
+   "count": 1,
+   "tier": "B",
+   "reason": "probe",
+   "why": "能力/存在性探针：失败本身就是安全的假值（is_running=False / 没有这个能力）",
+   "evidence": "except Exception: return False",
+   "lines": [
+    191
+   ]
+  },
+  {
+   "key": "pet_fx.py|play|14a22f2fcd",
+   "file": "pet_fx.py",
+   "func": "play",
+   "shape": "14a22f2fcd",
+   "count": 1,
+   "tier": "B",
+   "reason": "fallback",
+   "why": "坏值回默认（反序列化/归一化/类型转换）：不改变用户可见结果",
+   "evidence": "except Exception: self._loops = 1",
+   "lines": [
+    143
+   ]
+  },
+  {
+   "key": "pet_fx.py|play|60c0ba5dbc",
+   "file": "pet_fx.py",
+   "func": "play",
+   "shape": "60c0ba5dbc",
+   "count": 1,
+   "tier": "B",
+   "reason": "optional",
+   "why": "可选能力降级（音效/动画/缩放/预览/悬停提示）：失败＝该能力缺席，不丢数据",
+   "evidence": "except Exception: frame_list = []",
+   "lines": [
+    135
+   ]
+  },
+  {
+   "key": "pet_fx.py|play|da8589c089",
+   "file": "pet_fx.py",
+   "func": "play",
+   "shape": "da8589c089",
+   "count": 1,
+   "tier": "B",
+   "reason": "teardown",
+   "why": "关闭/退出/销毁路径：进程即将结束或对象即将销毁，记日志没有接收方",
+   "evidence": "except Exception: # 任何异常（含 item 已销毁）：静默收尾，不向上抛 self.stop() return False",
+   "lines": [
+    165
+   ]
+  },
+  {
+   "key": "pet_fx.py|stop|0d4b0e40a6",
+   "file": "pet_fx.py",
+   "func": "stop",
+   "shape": "0d4b0e40a6",
+   "count": 1,
+   "tier": "C",
+   "reason": "teardown",
+   "why": "关闭/退出/销毁路径：进程即将结束或对象即将销毁，记日志没有接收方",
+   "evidence": "except Exception: pass",
+   "lines": [
+    183
+   ]
+  },
+  {
+   "key": "pet_io.py|_almost_utf8|0d4b0e40a6",
+   "file": "pet_io.py",
+   "func": "_almost_utf8",
+   "shape": "0d4b0e40a6",
+   "count": 1,
+   "tier": "C",
+   "reason": "probe",
+   "why": "能力/存在性探针：失败本身就是安全的假值（is_running=False / 没有这个能力）",
+   "evidence": "except UnicodeDecodeError: pass",
+   "lines": [
+    353
+   ]
+  },
+  {
+   "key": "pet_io.py|_almost_utf8|ea239d3505",
+   "file": "pet_io.py",
+   "func": "_almost_utf8",
+   "shape": "ea239d3505",
+   "count": 1,
+   "tier": "B",
+   "reason": "probe",
+   "why": "能力/存在性探针：失败本身就是安全的假值（is_running=False / 没有这个能力）",
+   "evidence": "except Exception: return False",
+   "lines": [
+    357
+   ]
+  },
+  {
+   "key": "pet_io.py|_codec_name|c55acc99f3",
+   "file": "pet_io.py",
+   "func": "_codec_name",
+   "shape": "c55acc99f3",
+   "count": 1,
+   "tier": "B",
+   "reason": "reported",
+   "why": "失败已随返回值/哨兵上报调用方（调用方据此弹提示或降级），不需要再写一条日志",
+   "evidence": "except Exception: return e",
+   "lines": [
+    239
+   ]
+  },
+  {
+   "key": "pet_io.py|_log|0d4b0e40a6",
+   "file": "pet_io.py",
+   "func": "_log",
+   "shape": "0d4b0e40a6",
+   "count": 1,
+   "tier": "C",
+   "reason": "self-logging",
+   "why": "日志设施自身的兜底：写日志失败无处可记（代码内已有 stderr 出口）",
+   "evidence": "except Exception: pass",
+   "lines": [
+    116
+   ]
+  },
+  {
+   "key": "pet_io.py|_read_json_status|aa1f0fae7c",
+   "file": "pet_io.py",
+   "func": "_read_json_status",
+   "shape": "aa1f0fae7c",
+   "count": 1,
+   "tier": "B",
+   "reason": "fallback",
+   "why": "坏值回默认（反序列化/归一化/类型转换）：不改变用户可见结果",
+   "evidence": "except FileNotFoundError: return _default_from(factory, expect, log, path), False, False",
+   "lines": [
+    583
+   ]
+  },
+  {
+   "key": "pet_io.py|atomic_write_bytes|b789bc3cfb",
+   "file": "pet_io.py",
+   "func": "atomic_write_bytes",
+   "shape": "b789bc3cfb",
+   "count": 1,
+   "tier": "B",
+   "reason": "reported",
+   "why": "失败已随返回值/哨兵上报调用方（调用方据此弹提示或降级），不需要再写一条日志",
+   "evidence": "except PermissionError as e: # Windows 共享冲突：杀软/索引器/残留句柄瞬时锁住目标文件 last = e if i < attempts - 1: time.sleep(_RETRY_SLEEP)",
+   "lines": [
+    531
+   ]
+  },
+  {
+   "key": "pet_io.py|is_single_byte_encoding|8a172e7f74",
+   "file": "pet_io.py",
+   "func": "is_single_byte_encoding",
+   "shape": "8a172e7f74",
+   "count": 1,
+   "tier": "B",
+   "reason": "probe",
+   "why": "能力/存在性探针：失败本身就是安全的假值（is_running=False / 没有这个能力）",
+   "evidence": "except (LookupError, ValueError): return False",
+   "lines": [
+    262
+   ]
+  },
+  {
+   "key": "pet_io.py|is_single_byte_encoding|aa1d135f29",
+   "file": "pet_io.py",
+   "func": "is_single_byte_encoding",
+   "shape": "aa1d135f29",
+   "count": 1,
+   "tier": "B",
+   "reason": "probe",
+   "why": "能力/存在性探针：失败本身就是安全的假值（is_running=False / 没有这个能力）",
+   "evidence": "except UnicodeDecodeError: bad += 1 if bad > 8: return False",
+   "lines": [
+    258
+   ]
+  },
+  {
+   "key": "pet_io.py|is_single_byte_encoding|ea239d3505",
+   "file": "pet_io.py",
+   "func": "is_single_byte_encoding",
+   "shape": "ea239d3505",
+   "count": 1,
+   "tier": "B",
+   "reason": "probe",
+   "why": "能力/存在性探针：失败本身就是安全的假值（is_running=False / 没有这个能力）",
+   "evidence": "except Exception: return False",
+   "lines": [
+    264
+   ]
+  },
+  {
+   "key": "pet_io.py|preferred_encoding|ea239d3505",
+   "file": "pet_io.py",
+   "func": "preferred_encoding",
+   "shape": "ea239d3505",
+   "count": 1,
+   "tier": "B",
+   "reason": "probe",
+   "why": "能力/存在性探针：失败本身就是安全的假值（is_running=False / 没有这个能力）",
+   "evidence": "except Exception: return \"\"",
+   "lines": [
+    224
+   ]
+  },
+  {
+   "key": "pet_io.py|read_json_fallback|7625eb8a0f",
+   "file": "pet_io.py",
+   "func": "read_json_fallback",
+   "shape": "7625eb8a0f",
+   "count": 1,
+   "tier": "B",
+   "reason": "reported",
+   "why": "失败已随返回值/哨兵上报调用方（调用方据此弹提示或降级），不需要再写一条日志",
+   "evidence": "except UnicodeDecodeError: text = \"\" for cand in fallback_encodings(): if is_single_byte_encoding(cand) and _almost_utf8(raw): con...",
+   "lines": [
+    392
+   ]
+  },
+  {
+   "key": "pet_io.py|read_json_fallback|99e43c215f",
+   "file": "pet_io.py",
+   "func": "read_json_fallback",
+   "shape": "99e43c215f",
+   "count": 1,
+   "tier": "C",
+   "reason": "probe",
+   "why": "能力/存在性探针：失败本身就是安全的假值（is_running=False / 没有这个能力）",
+   "evidence": "except (UnicodeDecodeError, LookupError): continue",
+   "lines": [
+    399
+   ]
+  },
+  {
+   "key": "pet_lines.py|_norm_line|8b36bf6c9e",
+   "file": "pet_lines.py",
+   "func": "_norm_line",
+   "shape": "8b36bf6c9e",
+   "count": 1,
+   "tier": "B",
+   "reason": "fallback",
+   "why": "坏值回默认（反序列化/归一化/类型转换）：不改变用户可见结果",
+   "evidence": "except (TypeError, ValueError): order = 0",
+   "lines": [
+    513
+   ]
+  },
+  {
+   "key": "pet_log.py|_default_dir|0d4b0e40a6",
+   "file": "pet_log.py",
+   "func": "_default_dir",
+   "shape": "0d4b0e40a6",
+   "count": 1,
+   "tier": "C",
+   "reason": "self-logging",
+   "why": "日志设施自身的兜底：写日志失败无处可记（代码内已有 stderr 出口）",
+   "evidence": "except Exception: pass",
+   "lines": [
+    168
+   ]
+  },
+  {
+   "key": "pet_log.py|_default_dir|c55acc99f3",
+   "file": "pet_log.py",
+   "func": "_default_dir",
+   "shape": "c55acc99f3",
+   "count": 1,
+   "tier": "C",
+   "reason": "self-logging",
+   "why": "日志设施自身的兜底：写日志失败无处可记（代码内已有 stderr 出口）",
+   "evidence": "except Exception: return d",
+   "lines": [
+    174
+   ]
+  },
+  {
+   "key": "pet_log.py|_quarantine|ea239d3505",
+   "file": "pet_log.py",
+   "func": "_quarantine",
+   "shape": "ea239d3505",
+   "count": 1,
+   "tier": "B",
+   "reason": "self-logging",
+   "why": "日志设施自身的兜底：写日志失败无处可记（代码内已有 stderr 出口）",
+   "evidence": "except Exception: return \"\"",
+   "lines": [
+    63
+   ]
+  },
+  {
+   "key": "pet_log.py|_rotate_if_needed|40191e5b03",
+   "file": "pet_log.py",
+   "func": "_rotate_if_needed",
+   "shape": "40191e5b03",
+   "count": 1,
+   "tier": "B",
+   "reason": "reported",
+   "why": "失败已随返回值/哨兵上报调用方（调用方据此弹提示或降级），不需要再写一条日志",
+   "evidence": "except Exception as e: if _quarantine(path): return \"error.log 轮转失败（%r），已改名 error.log%s 重新开始\" % (e, BAD_SUFFIX) return \"error.log ...",
+   "lines": [
+    81
+   ]
+  },
+  {
+   "key": "pet_log.py|_rotate_if_needed|ea239d3505",
+   "file": "pet_log.py",
+   "func": "_rotate_if_needed",
+   "shape": "ea239d3505",
+   "count": 1,
+   "tier": "B",
+   "reason": "self-logging",
+   "why": "日志设施自身的兜底：写日志失败无处可记（代码内已有 stderr 出口）",
+   "evidence": "except Exception: return \"\"",
+   "lines": [
+    76
+   ]
+  },
+  {
+   "key": "pet_log.py|_run|0d4b0e40a6",
+   "file": "pet_log.py",
+   "func": "_run",
+   "shape": "0d4b0e40a6",
+   "count": 1,
+   "tier": "C",
+   "reason": "self-logging",
+   "why": "日志设施自身的兜底：写日志失败无处可记（代码内已有 stderr 出口）",
+   "evidence": "except Exception: pass",
+   "lines": [
+    119
+   ]
+  },
+  {
+   "key": "pet_log.py|_to_stderr|0d4b0e40a6",
+   "file": "pet_log.py",
+   "func": "_to_stderr",
+   "shape": "0d4b0e40a6",
+   "count": 1,
+   "tier": "C",
+   "reason": "self-logging",
+   "why": "日志设施自身的兜底：写日志失败无处可记（代码内已有 stderr 出口）",
+   "evidence": "except Exception: pass",
+   "lines": [
+    49
+   ]
+  },
+  {
+   "key": "pet_log.py|log_error|1a1f20eb5d",
+   "file": "pet_log.py",
+   "func": "log_error",
+   "shape": "1a1f20eb5d",
+   "count": 1,
+   "tier": "C",
+   "reason": "self-logging",
+   "why": "日志设施自身的兜底：写日志失败无处可记（代码内已有 stderr 出口）",
+   "evidence": "except Exception as e2: e = e2",
+   "lines": [
+    237
+   ]
+  },
+  {
+   "key": "pet_log.py|redact|0d4b0e40a6",
+   "file": "pet_log.py",
+   "func": "redact",
+   "shape": "0d4b0e40a6",
+   "count": 1,
+   "tier": "C",
+   "reason": "self-logging",
+   "why": "日志设施自身的兜底：写日志失败无处可记（代码内已有 stderr 出口）",
+   "evidence": "except Exception: pass",
+   "lines": [
+    189
+   ]
+  },
+  {
+   "key": "pet_main.py|acquire_single_instance|ea239d3505",
+   "file": "pet_main.py",
+   "func": "acquire_single_instance",
+   "shape": "ea239d3505",
+   "count": 1,
+   "tier": "B",
+   "reason": "fallback",
+   "why": "坏值回默认（反序列化/归一化/类型转换）：不改变用户可见结果",
+   "evidence": "except Exception: return True",
+   "lines": [
+    106
+   ]
+  },
+  {
+   "key": "pet_main.py|check_memory|0d4b0e40a6",
+   "file": "pet_main.py",
+   "func": "check_memory",
+   "shape": "0d4b0e40a6",
+   "count": 1,
+   "tier": "C",
+   "reason": "cleanup",
+   "why": "尽力而为的清理/回滚：失败只会在磁盘上留孤儿文件，不改变用户可见结果",
+   "evidence": "except Exception: pass",
+   "lines": [
+    31
+   ]
+  },
+  {
+   "key": "pet_main.py|check_memory|ea239d3505",
+   "file": "pet_main.py",
+   "func": "check_memory",
+   "shape": "ea239d3505",
+   "count": 1,
+   "tier": "B",
+   "reason": "probe",
+   "why": "能力/存在性探针：失败本身就是安全的假值（is_running=False / 没有这个能力）",
+   "evidence": "except Exception: return True",
+   "lines": [
+    36
+   ]
+  },
+  {
+   "key": "pet_main.py|cleanup_stale_mei|0d4b0e40a6",
+   "file": "pet_main.py",
+   "func": "cleanup_stale_mei",
+   "shape": "0d4b0e40a6",
+   "count": 2,
+   "tier": "C",
+   "reason": "cleanup",
+   "why": "尽力而为的清理/回滚：失败只会在磁盘上留孤儿文件，不改变用户可见结果",
+   "evidence": "except Exception: pass",
+   "lines": [
+    70,
+    72
+   ]
+  },
+  {
+   "key": "pet_main.py|has_pyinstaller_signature|ea239d3505",
+   "file": "pet_main.py",
+   "func": "has_pyinstaller_signature",
+   "shape": "ea239d3505",
+   "count": 1,
+   "tier": "B",
+   "reason": "probe",
+   "why": "能力/存在性探针：失败本身就是安全的假值（is_running=False / 没有这个能力）",
+   "evidence": "except Exception: return False",
+   "lines": [
+    87
+   ]
+  },
+  {
+   "key": "pet_mood.py|_pick|0d4b0e40a6",
+   "file": "pet_mood.py",
+   "func": "_pick",
+   "shape": "0d4b0e40a6",
+   "count": 1,
+   "tier": "C",
+   "reason": "optional",
+   "why": "可选能力降级（音效/动画/缩放/预览/悬停提示）：失败＝该能力缺席，不丢数据",
+   "evidence": "except Exception: pass",
+   "lines": [
+    92
+   ]
+  },
+  {
+   "key": "pet_plugin.py|_read_json|2cbdc8d672",
+   "file": "pet_plugin.py",
+   "func": "_read_json",
+   "shape": "2cbdc8d672",
+   "count": 1,
+   "tier": "B",
+   "reason": "reported",
+   "why": "失败已随返回值/哨兵上报调用方（调用方据此弹提示或降级），不需要再写一条日志",
+   "evidence": "except Exception as e: # 坏 JSON / 权限 / 半截文件… return None, \"%s\" % e",
+   "lines": [
+    463
+   ]
+  },
+  {
+   "key": "pet_plugin.py|read_installed|4d3d873818",
+   "file": "pet_plugin.py",
+   "func": "read_installed",
+   "shape": "4d3d873818",
+   "count": 1,
+   "tier": "B",
+   "reason": "reported",
+   "why": "失败已随返回值/哨兵上报调用方（调用方据此弹提示或降级），不需要再写一条日志",
+   "evidence": "except OSError as e: problems.append(\"插件目录读不出来（%s）：%s\" % (base, e)) return [], problems",
+   "lines": [
+    539
+   ]
+  },
+  {
+   "key": "pet_plugin.py|validate_plugin_zip|3329e7436c",
+   "file": "pet_plugin.py",
+   "func": "validate_plugin_zip",
+   "shape": "3329e7436c",
+   "count": 4,
+   "tier": "B",
+   "reason": "reported",
+   "why": "失败已随返回值/哨兵上报调用方（调用方据此弹提示或降级），不需要再写一条日志",
+   "evidence": "except Exception as e: # 权限/加密/半截文件… return _fail(\"打开失败：%s\" % e)",
+   "lines": [
+    305,
+    319,
+    325,
+    329
+   ]
+  },
+  {
+   "key": "pet_plugin.py|validate_plugin_zip|8f1bb90754",
+   "file": "pet_plugin.py",
+   "func": "validate_plugin_zip",
+   "shape": "8f1bb90754",
+   "count": 1,
+   "tier": "B",
+   "reason": "reported",
+   "why": "失败已随返回值/哨兵上报调用方（调用方据此弹提示或降级），不需要再写一条日志",
+   "evidence": "except zipfile.BadZipFile: return _fail(\"文件不是有效的 zip 包\")",
+   "lines": [
+    303
+   ]
+  },
+  {
+   "key": "pet_plugin.py|validate_plugin_zip|9a212c4208",
+   "file": "pet_plugin.py",
+   "func": "validate_plugin_zip",
+   "shape": "9a212c4208",
+   "count": 1,
+   "tier": "B",
+   "reason": "reported",
+   "why": "失败已随返回值/哨兵上报调用方（调用方据此弹提示或降级），不需要再写一条日志",
+   "evidence": "except Exception as e: return _fail(\"payload 条目读不出来（%s）：%s\" % (n, e))",
+   "lines": [
+    434
+   ]
+  },
+  {
+   "key": "pet_plugin_host.py|_drop_empty_dir|0d4b0e40a6",
+   "file": "pet_plugin_host.py",
+   "func": "_drop_empty_dir",
+   "shape": "0d4b0e40a6",
+   "count": 1,
+   "tier": "C",
+   "reason": "cleanup",
+   "why": "尽力而为的清理/回滚：失败只会在磁盘上留孤儿文件，不改变用户可见结果",
+   "evidence": "except OSError: pass",
+   "lines": [
+    396
+   ]
+  },
+  {
+   "key": "pet_plugin_host.py|_fp_file|ea239d3505",
+   "file": "pet_plugin_host.py",
+   "func": "_fp_file",
+   "shape": "ea239d3505",
+   "count": 1,
+   "tier": "B",
+   "reason": "fallback",
+   "why": "坏值回默认（反序列化/归一化/类型转换）：不改变用户可见结果",
+   "evidence": "except Exception: return \"\"",
+   "lines": [
+    508
+   ]
+  },
+  {
+   "key": "pet_plugin_host.py|_fp_json|8777245814",
+   "file": "pet_plugin_host.py",
+   "func": "_fp_json",
+   "shape": "8777245814",
+   "count": 1,
+   "tier": "B",
+   "reason": "fallback",
+   "why": "坏值回默认（反序列化/归一化/类型转换）：不改变用户可见结果",
+   "evidence": "except Exception: text = repr(obj)",
+   "lines": [
+    491
+   ]
+  },
+  {
+   "key": "pet_plugin_host.py|_fp_named_file|ea239d3505",
+   "file": "pet_plugin_host.py",
+   "func": "_fp_named_file",
+   "shape": "ea239d3505",
+   "count": 1,
+   "tier": "B",
+   "reason": "fallback",
+   "why": "坏值回默认（反序列化/归一化/类型转换）：不改变用户可见结果",
+   "evidence": "except Exception: return \"\"",
+   "lines": [
+    529
+   ]
+  },
+  {
+   "key": "pet_plugin_host.py|_land_behaviors|ddbdca2929",
+   "file": "pet_plugin_host.py",
+   "func": "_land_behaviors",
+   "shape": "ddbdca2929",
+   "count": 1,
+   "tier": "B",
+   "reason": "reported",
+   "why": "失败已随返回值/哨兵上报调用方（调用方据此弹提示或降级），不需要再写一条日志",
+   "evidence": "except Exception as e: self._rollback_behaviors(svc, added) return {}, \"行为文件准备失败（%s）：%s\" % (it[\"src\"], e)",
+   "lines": [
+    1506
+   ]
+  },
+  {
+   "key": "pet_plugin_host.py|_land_prompt|51ded0a197",
+   "file": "pet_plugin_host.py",
+   "func": "_land_prompt",
+   "shape": "51ded0a197",
+   "count": 1,
+   "tier": "B",
+   "reason": "reported",
+   "why": "失败已随返回值/哨兵上报调用方（调用方据此弹提示或降级），不需要再写一条日志",
+   "evidence": "except Exception as e: _remove_files(written, self._log, drop_empty_parents=True) return {}, \"写入人设文件失败（%s）：%s\" % (rel, e)",
+   "lines": [
+    1658
+   ]
+  },
+  {
+   "key": "pet_plugin_host.py|_land_prompt|f2b2d08fbf",
+   "file": "pet_plugin_host.py",
+   "func": "_land_prompt",
+   "shape": "f2b2d08fbf",
+   "count": 1,
+   "tier": "B",
+   "reason": "reported",
+   "why": "失败已随返回值/哨兵上报调用方（调用方据此弹提示或降级），不需要再写一条日志",
+   "evidence": "except Exception as e: return {}, \"无法创建人设目录：%s\" % e",
+   "lines": [
+    1652
+   ]
+  },
+  {
+   "key": "pet_plugin_host.py|_land_role_dict|64a25f9480",
+   "file": "pet_plugin_host.py",
+   "func": "_land_role_dict",
+   "shape": "64a25f9480",
+   "count": 1,
+   "tier": "B",
+   "reason": "reported",
+   "why": "失败已随返回值/哨兵上报调用方（调用方据此弹提示或降级），不需要再写一条日志",
+   "evidence": "except Exception as e: return {}, \"%s 归一化失败：%s\" % (ROLE_PAYLOAD, e)",
+   "lines": [
+    1295
+   ]
+  },
+  {
+   "key": "pet_plugin_host.py|_land_role_dict|efa6d9bb55",
+   "file": "pet_plugin_host.py",
+   "func": "_land_role_dict",
+   "shape": "efa6d9bb55",
+   "count": 1,
+   "tier": "B",
+   "reason": "reported",
+   "why": "失败已随返回值/哨兵上报调用方（调用方据此弹提示或降级），不需要再写一条日志",
+   "evidence": "except Exception as e: _remove_files(written, self._log, drop_empty_parents=True) return {}, \"写入角色素材失败：%s\" % e",
+   "lines": [
+    1319
+   ]
+  },
+  {
+   "key": "pet_plugin_host.py|_lib|ea239d3505",
+   "file": "pet_plugin_host.py",
+   "func": "_lib",
+   "shape": "ea239d3505",
+   "count": 1,
+   "tier": "B",
+   "reason": "probe",
+   "why": "能力/存在性探针：失败本身就是安全的假值（is_running=False / 没有这个能力）",
+   "evidence": "except Exception: return None",
+   "lines": [
+    818
+   ]
+  },
+  {
+   "key": "pet_plugin_host.py|_log_rollback|0d4b0e40a6",
+   "file": "pet_plugin_host.py",
+   "func": "_log_rollback",
+   "shape": "0d4b0e40a6",
+   "count": 1,
+   "tier": "C",
+   "reason": "self-logging",
+   "why": "日志设施自身的兜底：写日志失败无处可记（代码内已有 stderr 出口）",
+   "evidence": "except Exception: pass",
+   "lines": [
+    1431
+   ]
+  },
+  {
+   "key": "pet_plugin_host.py|_norm_dir|fca4fa2585",
+   "file": "pet_plugin_host.py",
+   "func": "_norm_dir",
+   "shape": "fca4fa2585",
+   "count": 1,
+   "tier": "B",
+   "reason": "fallback",
+   "why": "坏值回默认（反序列化/归一化/类型转换）：不改变用户可见结果",
+   "evidence": "except Exception: return os.path.normcase(text)",
+   "lines": [
+    178
+   ]
+  },
+  {
+   "key": "pet_plugin_host.py|_plan_prompts|b6ba078cd7",
+   "file": "pet_plugin_host.py",
+   "func": "_plan_prompts",
+   "shape": "b6ba078cd7",
+   "count": 1,
+   "tier": "B",
+   "reason": "fallback",
+   "why": "坏值回默认（反序列化/归一化/类型转换）：不改变用户可见结果",
+   "evidence": "except Exception: data = b\"\"",
+   "lines": [
+    683
+   ]
+  },
+  {
+   "key": "pet_plugin_host.py|_remove_files|0d4b0e40a6",
+   "file": "pet_plugin_host.py",
+   "func": "_remove_files",
+   "shape": "0d4b0e40a6",
+   "count": 1,
+   "tier": "C",
+   "reason": "self-logging",
+   "why": "日志设施自身的兜底：写日志失败无处可记（代码内已有 stderr 出口）",
+   "evidence": "except Exception: pass",
+   "lines": [
+    380
+   ]
+  },
+  {
+   "key": "pet_plugin_host.py|_sha256_file|ea239d3505",
+   "file": "pet_plugin_host.py",
+   "func": "_sha256_file",
+   "shape": "ea239d3505",
+   "count": 1,
+   "tier": "B",
+   "reason": "fallback",
+   "why": "坏值回默认（反序列化/归一化/类型转换）：不改变用户可见结果",
+   "evidence": "except Exception: return \"\"",
+   "lines": [
+    359
+   ]
+  },
+  {
+   "key": "pet_plugin_host.py|install_zip|2cbdc8d672",
+   "file": "pet_plugin_host.py",
+   "func": "install_zip",
+   "shape": "2cbdc8d672",
+   "count": 3,
+   "tier": "B",
+   "reason": "reported",
+   "why": "失败已随返回值/哨兵上报调用方（调用方据此弹提示或降级），不需要再写一条日志",
+   "evidence": "except Exception as e: return False, \"无法创建插件目录：%s\" % e",
+   "lines": [
+    881,
+    891,
+    895
+   ]
+  },
+  {
+   "key": "pet_plugin_host.py|list_installed|d3c5684227",
+   "file": "pet_plugin_host.py",
+   "func": "list_installed",
+   "shape": "d3c5684227",
+   "count": 1,
+   "tier": "B",
+   "reason": "reported",
+   "why": "失败已随返回值/哨兵上报调用方（调用方据此弹提示或降级），不需要再写一条日志",
+   "evidence": "except Exception as e: # 兜底：清单读不出来也不该让对话框打不开 rows, problems = [], [\"读取插件目录失败：%s\" % e]",
+   "lines": [
+    1123
+   ]
+  },
+  {
+   "key": "pet_plugin_host.py|rollback|2cbdc8d672",
+   "file": "pet_plugin_host.py",
+   "func": "rollback",
+   "shape": "2cbdc8d672",
+   "count": 1,
+   "tier": "B",
+   "reason": "reported",
+   "why": "失败已随返回值/哨兵上报调用方（调用方据此弹提示或降级），不需要再写一条日志",
+   "evidence": "except Exception as e: # 目录没换成 = 这次回滚没成立：**先别撤内容**（撤了就两边都不对了），如实报错 return False, (\"恢复上一版插件目录失败：%s——这次回滚没有生效，当前这一版仍在用\" % e)",
+   "lines": [
+    1075
+   ]
+  },
+  {
+   "key": "pet_plugin_host.py|uninstall|2cbdc8d672",
+   "file": "pet_plugin_host.py",
+   "func": "uninstall",
+   "shape": "2cbdc8d672",
+   "count": 1,
+   "tier": "C",
+   "reason": "reported",
+   "why": "失败已随返回值/哨兵上报调用方（调用方据此弹提示或降级），不需要再写一条日志",
+   "evidence": "except Exception as e: return False, \"删除插件目录失败：%s\" % e",
+   "lines": [
+    1029
+   ]
+  },
+  {
+   "key": "pet_plugin_index.py|_accepts_limit|8a172e7f74",
+   "file": "pet_plugin_index.py",
+   "func": "_accepts_limit",
+   "shape": "8a172e7f74",
+   "count": 1,
+   "tier": "B",
+   "reason": "probe",
+   "why": "能力/存在性探针：失败本身就是安全的假值（is_running=False / 没有这个能力）",
+   "evidence": "except (TypeError, ValueError): # 内建 / C 实现拿不到签名：当它不收 return False",
+   "lines": [
+    251
+   ]
+  },
+  {
+   "key": "pet_plugin_index.py|_drop_download|0d4b0e40a6",
+   "file": "pet_plugin_index.py",
+   "func": "_drop_download",
+   "shape": "0d4b0e40a6",
+   "count": 1,
+   "tier": "C",
+   "reason": "cleanup",
+   "why": "尽力而为的清理/回滚：失败只会在磁盘上留孤儿文件，不改变用户可见结果",
+   "evidence": "except OSError: pass",
+   "lines": [
+    635
+   ]
+  },
+  {
+   "key": "pet_plugin_index.py|_drop_empty_dir|0d4b0e40a6",
+   "file": "pet_plugin_index.py",
+   "func": "_drop_empty_dir",
+   "shape": "0d4b0e40a6",
+   "count": 1,
+   "tier": "C",
+   "reason": "cleanup",
+   "why": "尽力而为的清理/回滚：失败只会在磁盘上留孤儿文件，不改变用户可见结果",
+   "evidence": "except OSError: pass",
+   "lines": [
+    644
+   ]
+  },
+  {
+   "key": "pet_plugin_index.py|_ensure_dir|c55acc99f3",
+   "file": "pet_plugin_index.py",
+   "func": "_ensure_dir",
+   "shape": "c55acc99f3",
+   "count": 1,
+   "tier": "B",
+   "reason": "cleanup",
+   "why": "尽力而为的清理/回滚：失败只会在磁盘上留孤儿文件，不改变用户可见结果",
+   "evidence": "except Exception: return made",
+   "lines": [
+    659
+   ]
+  },
+  {
+   "key": "pet_plugin_index.py|_fetch_bytes|8cb5cefee5",
+   "file": "pet_plugin_index.py",
+   "func": "_fetch_bytes",
+   "shape": "8cb5cefee5",
+   "count": 1,
+   "tier": "B",
+   "reason": "reported",
+   "why": "失败已随返回值/哨兵上报调用方（调用方据此弹提示或降级），不需要再写一条日志",
+   "evidence": "except Exception as e: # 注入的取数自己抛了：折成一句人话 return None, \"取数失败：%r\" % (e,)",
+   "lines": [
+    687
+   ]
+  },
+  {
+   "key": "pet_plugin_index.py|_file_url_to_path|c55acc99f3",
+   "file": "pet_plugin_index.py",
+   "func": "_file_url_to_path",
+   "shape": "c55acc99f3",
+   "count": 1,
+   "tier": "B",
+   "reason": "fallback",
+   "why": "坏值回默认（反序列化/归一化/类型转换）：不改变用户可见结果",
+   "evidence": "except Exception: return tail",
+   "lines": [
+    112
+   ]
+  },
+  {
+   "key": "pet_plugin_index.py|cleanup|0d4b0e40a6",
+   "file": "pet_plugin_index.py",
+   "func": "cleanup",
+   "shape": "0d4b0e40a6",
+   "count": 1,
+   "tier": "C",
+   "reason": "cleanup",
+   "why": "尽力而为的清理/回滚：失败只会在磁盘上留孤儿文件，不改变用户可见结果",
+   "evidence": "except OSError: pass",
+   "lines": [
+    625
+   ]
+  },
+  {
+   "key": "pet_plugin_index.py|default_fetch|2cbdc8d672",
+   "file": "pet_plugin_index.py",
+   "func": "default_fetch",
+   "shape": "2cbdc8d672",
+   "count": 2,
+   "tier": "B",
+   "reason": "reported",
+   "why": "失败已随返回值/哨兵上报调用方（调用方据此弹提示或降级），不需要再写一条日志",
+   "evidence": "except Exception as e: # URLError / HTTPError / 超时 / SSL… return None, \"网络请求失败：%s\" % e",
+   "lines": [
+    211,
+    238
+   ]
+  },
+  {
+   "key": "pet_plugin_index.py|default_fetch|8b36bf6c9e",
+   "file": "pet_plugin_index.py",
+   "func": "default_fetch",
+   "shape": "8b36bf6c9e",
+   "count": 1,
+   "tier": "B",
+   "reason": "fallback",
+   "why": "坏值回默认（反序列化/归一化/类型转换）：不改变用户可见结果",
+   "evidence": "except (TypeError, ValueError): total = 0",
+   "lines": [
+    221
+   ]
+  },
+  {
+   "key": "pet_plugin_index.py|format_size|8a172e7f74",
+   "file": "pet_plugin_index.py",
+   "func": "format_size",
+   "shape": "8a172e7f74",
+   "count": 1,
+   "tier": "B",
+   "reason": "fallback",
+   "why": "坏值回默认（反序列化/归一化/类型转换）：不改变用户可见结果",
+   "evidence": "except (TypeError, ValueError): return \"-\"",
+   "lines": [
+    281
+   ]
+  },
+  {
+   "key": "pet_plugin_index.py|load_index|2cbdc8d672",
+   "file": "pet_plugin_index.py",
+   "func": "load_index",
+   "shape": "2cbdc8d672",
+   "count": 1,
+   "tier": "B",
+   "reason": "reported",
+   "why": "失败已随返回值/哨兵上报调用方（调用方据此弹提示或降级），不需要再写一条日志",
+   "evidence": "except Exception as e: return None, \"索引不是合法的 UTF-8 JSON：%s\" % e",
+   "lines": [
+    524
+   ]
+  },
+  {
+   "key": "pet_resources.py|_clamp01|91dfaff564",
+   "file": "pet_resources.py",
+   "func": "_clamp01",
+   "shape": "91dfaff564",
+   "count": 1,
+   "tier": "B",
+   "reason": "reported",
+   "why": "失败已随返回值/哨兵上报调用方（调用方据此弹提示或降级），不需要再写一条日志",
+   "evidence": "except (TypeError, ValueError): return default",
+   "lines": [
+    127
+   ]
+  },
+  {
+   "key": "pet_resources.py|_cleanup_files|0d4b0e40a6",
+   "file": "pet_resources.py",
+   "func": "_cleanup_files",
+   "shape": "0d4b0e40a6",
+   "count": 1,
+   "tier": "C",
+   "reason": "cleanup",
+   "why": "尽力而为的清理/回滚：失败只会在磁盘上留孤儿文件，不改变用户可见结果",
+   "evidence": "except Exception: pass",
+   "lines": [
+    624
+   ]
+  },
+  {
+   "key": "pet_resources.py|_inside_dir|ea239d3505",
+   "file": "pet_resources.py",
+   "func": "_inside_dir",
+   "shape": "ea239d3505",
+   "count": 1,
+   "tier": "B",
+   "reason": "fallback",
+   "why": "坏值回默认（反序列化/归一化/类型转换）：不改变用户可见结果",
+   "evidence": "except Exception: return False",
+   "lines": [
+    1185
+   ]
+  },
+  {
+   "key": "pet_resources.py|_norm_offset|df575adcaa",
+   "file": "pet_resources.py",
+   "func": "_norm_offset",
+   "shape": "df575adcaa",
+   "count": 1,
+   "tier": "B",
+   "reason": "fallback",
+   "why": "坏值回默认（反序列化/归一化/类型转换）：不改变用户可见结果",
+   "evidence": "except (TypeError, ValueError): out[k] = 0",
+   "lines": [
+    145
+   ]
+  },
+  {
+   "key": "pet_resources.py|_norm_procs|0df3277ee3",
+   "file": "pet_resources.py",
+   "func": "_norm_procs",
+   "shape": "0df3277ee3",
+   "count": 2,
+   "tier": "B",
+   "reason": "fallback",
+   "why": "坏值回默认（反序列化/归一化/类型转换）：不改变用户可见结果",
+   "evidence": "except (TypeError, ValueError): amp = d[\"amp\"]",
+   "lines": [
+    193,
+    197
+   ]
+  },
+  {
+   "key": "pet_resources.py|_probe_png|2cbdc8d672",
+   "file": "pet_resources.py",
+   "func": "_probe_png",
+   "shape": "2cbdc8d672",
+   "count": 1,
+   "tier": "B",
+   "reason": "reported",
+   "why": "失败已随返回值/哨兵上报调用方（调用方据此弹提示或降级），不需要再写一条日志",
+   "evidence": "except Exception as e: return False, \"无法读取：%s\" % e",
+   "lines": [
+    295
+   ]
+  },
+  {
+   "key": "pet_resources.py|_probe_wav_ok|ea239d3505",
+   "file": "pet_resources.py",
+   "func": "_probe_wav_ok",
+   "shape": "ea239d3505",
+   "count": 1,
+   "tier": "B",
+   "reason": "fallback",
+   "why": "坏值回默认（反序列化/归一化/类型转换）：不改变用户可见结果",
+   "evidence": "except Exception: return False",
+   "lines": [
+    310
+   ]
+  },
+  {
+   "key": "pet_resources.py|_wav_duration|0d4b0e40a6",
+   "file": "pet_resources.py",
+   "func": "_wav_duration",
+   "shape": "0d4b0e40a6",
+   "count": 1,
+   "tier": "C",
+   "reason": "optional",
+   "why": "可选能力降级（音效/动画/缩放/预览/悬停提示）：失败＝该能力缺席，不丢数据",
+   "evidence": "except Exception: pass",
+   "lines": [
+    321
+   ]
+  },
+  {
+   "key": "pet_resources.py|asset_path|ea239d3505",
+   "file": "pet_resources.py",
+   "func": "asset_path",
+   "shape": "ea239d3505",
+   "count": 1,
+   "tier": "B",
+   "reason": "probe",
+   "why": "能力/存在性探针：失败本身就是安全的假值（is_running=False / 没有这个能力）",
+   "evidence": "except Exception: return None",
+   "lines": [
+    1642
+   ]
+  },
+  {
+   "key": "pet_resources.py|delete|2cbdc8d672",
+   "file": "pet_resources.py",
+   "func": "delete",
+   "shape": "2cbdc8d672",
+   "count": 3,
+   "tier": "C",
+   "reason": "reported",
+   "why": "失败已随返回值/哨兵上报调用方（调用方据此弹提示或降级），不需要再写一条日志",
+   "evidence": "except Exception as e: return False, \"删除文件失败：%s\" % e",
+   "lines": [
+    1213,
+    1482,
+    1734
+   ]
+  },
+  {
+   "key": "pet_resources.py|form_animations|200161ca8f",
+   "file": "pet_resources.py",
+   "func": "form_animations",
+   "shape": "200161ca8f",
+   "count": 1,
+   "tier": "B",
+   "reason": "probe",
+   "why": "能力/存在性探针：失败本身就是安全的假值（is_running=False / 没有这个能力）",
+   "evidence": "except Exception: ok = False break",
+   "lines": [
+    747
+   ]
+  },
+  {
+   "key": "pet_resources.py|form_front_paths|0d4b0e40a6",
+   "file": "pet_resources.py",
+   "func": "form_front_paths",
+   "shape": "0d4b0e40a6",
+   "count": 1,
+   "tier": "C",
+   "reason": "probe",
+   "why": "能力/存在性探针：失败本身就是安全的假值（is_running=False / 没有这个能力）",
+   "evidence": "except Exception: pass",
+   "lines": [
+    843
+   ]
+  },
+  {
+   "key": "pet_resources.py|form_front_paths|f647be4c2b",
+   "file": "pet_resources.py",
+   "func": "form_front_paths",
+   "shape": "f647be4c2b",
+   "count": 1,
+   "tier": "B",
+   "reason": "probe",
+   "why": "能力/存在性探针：失败本身就是安全的假值（is_running=False / 没有这个能力）",
+   "evidence": "except Exception: out.append(None)",
+   "lines": [
+    849
+   ]
+  },
+  {
+   "key": "pet_resources.py|form_paths|f647be4c2b",
+   "file": "pet_resources.py",
+   "func": "form_paths",
+   "shape": "f647be4c2b",
+   "count": 1,
+   "tier": "B",
+   "reason": "probe",
+   "why": "能力/存在性探针：失败本身就是安全的假值（is_running=False / 没有这个能力）",
+   "evidence": "except Exception: out.append(None)",
+   "lines": [
+    703
+   ]
+  },
+  {
+   "key": "pet_resources.py|form_state_paths|0d4b0e40a6",
+   "file": "pet_resources.py",
+   "func": "form_state_paths",
+   "shape": "0d4b0e40a6",
+   "count": 1,
+   "tier": "C",
+   "reason": "probe",
+   "why": "能力/存在性探针：失败本身就是安全的假值（is_running=False / 没有这个能力）",
+   "evidence": "except Exception: pass",
+   "lines": [
+    822
+   ]
+  },
+  {
+   "key": "pet_resources.py|fragment_path|ea239d3505",
+   "file": "pet_resources.py",
+   "func": "fragment_path",
+   "shape": "ea239d3505",
+   "count": 1,
+   "tier": "B",
+   "reason": "probe",
+   "why": "能力/存在性探针：失败本身就是安全的假值（is_running=False / 没有这个能力）",
+   "evidence": "except Exception: return None",
+   "lines": [
+    1404
+   ]
+  },
+  {
+   "key": "pet_resources.py|import_file|0d4b0e40a6",
+   "file": "pet_resources.py",
+   "func": "import_file",
+   "shape": "0d4b0e40a6",
+   "count": 6,
+   "tier": "C",
+   "reason": "cleanup",
+   "why": "尽力而为的清理/回滚：失败只会在磁盘上留孤儿文件，不改变用户可见结果",
+   "evidence": "except Exception: pass",
+   "lines": [
+    926,
+    945,
+    1446,
+    1463,
+    1687,
+    1703
+   ]
+  },
+  {
+   "key": "pet_resources.py|import_file|159d4ac514",
+   "file": "pet_resources.py",
+   "func": "import_file",
+   "shape": "159d4ac514",
+   "count": 3,
+   "tier": "B",
+   "reason": "reported",
+   "why": "失败已随返回值/哨兵上报调用方（调用方据此弹提示或降级），不需要再写一条日志",
+   "evidence": "except Exception: # v2.4.1（B 区 · A 档静默 except 判定）：这里的静默是**安全**的—— # 复制失败**不是被吞掉**，下一行就把 \"复制文件失败\" 返回给调用方 # （导入向导/界面会当场告诉用户）；except ...",
+   "lines": [
+    918,
+    1440,
+    1681
+   ]
+  },
+  {
+   "key": "pet_resources.py|import_file|2cbdc8d672",
+   "file": "pet_resources.py",
+   "func": "import_file",
+   "shape": "2cbdc8d672",
+   "count": 6,
+   "tier": "B",
+   "reason": "reported",
+   "why": "失败已随返回值/哨兵上报调用方（调用方据此弹提示或降级），不需要再写一条日志",
+   "evidence": "except Exception as e: return None, \"导入失败：%s\" % e",
+   "lines": [
+    912,
+    950,
+    1434,
+    1468,
+    1675,
+    1708
+   ]
+  },
+  {
+   "key": "pet_resources.py|import_file|63eb142d38",
+   "file": "pet_resources.py",
+   "func": "import_file",
+   "shape": "63eb142d38",
+   "count": 3,
+   "tier": "B",
+   "reason": "reported",
+   "why": "失败已随返回值/哨兵上报调用方（调用方据此弹提示或降级），不需要再写一条日志",
+   "evidence": "except Exception: return None, \"无法读取文件大小\"",
+   "lines": [
+    902,
+    1418,
+    1659
+   ]
+  },
+  {
+   "key": "pet_resources.py|import_processed|0ab3c3108e",
+   "file": "pet_resources.py",
+   "func": "import_processed",
+   "shape": "0ab3c3108e",
+   "count": 1,
+   "tier": "B",
+   "reason": "reported",
+   "why": "失败已随返回值/哨兵上报调用方（调用方据此弹提示或降级），不需要再写一条日志",
+   "evidence": "except Exception: # v2.4.1（B 区 · A 档静默 except 判定）：不是吞掉——_cleanup_files 清掉 # 本次已复制的半成品（回滚），紧接着把 \"复制文件失败\" 返回调用方。 self._cleanup_files...",
+   "lines": [
+    1050
+   ]
+  },
+  {
+   "key": "pet_resources.py|import_processed|2cbdc8d672",
+   "file": "pet_resources.py",
+   "func": "import_processed",
+   "shape": "2cbdc8d672",
+   "count": 2,
+   "tier": "B",
+   "reason": "reported",
+   "why": "失败已随返回值/哨兵上报调用方（调用方据此弹提示或降级），不需要再写一条日志",
+   "evidence": "except Exception as e: return None, \"导入失败：%s\" % e",
+   "lines": [
+    1024,
+    1176
+   ]
+  },
+  {
+   "key": "pet_resources.py|import_processed|63eb142d38",
+   "file": "pet_resources.py",
+   "func": "import_processed",
+   "shape": "63eb142d38",
+   "count": 3,
+   "tier": "B",
+   "reason": "reported",
+   "why": "失败已随返回值/哨兵上报调用方（调用方据此弹提示或降级），不需要再写一条日志",
+   "evidence": "except Exception: return None, \"无法读取文件大小\"",
+   "lines": [
+    986,
+    1001,
+    1017
+   ]
+  },
+  {
+   "key": "pet_resources.py|import_processed|8b36bf6c9e",
+   "file": "pet_resources.py",
+   "func": "import_processed",
+   "shape": "8b36bf6c9e",
+   "count": 1,
+   "tier": "B",
+   "reason": "fallback",
+   "why": "坏值回默认（反序列化/归一化/类型转换）：不改变用户可见结果",
+   "evidence": "except (TypeError, ValueError): interval_ms = None",
+   "lines": [
+    1088
+   ]
+  },
+  {
+   "key": "pet_resources.py|import_processed|b783124fb3",
+   "file": "pet_resources.py",
+   "func": "import_processed",
+   "shape": "b783124fb3",
+   "count": 1,
+   "tier": "B",
+   "reason": "reported",
+   "why": "失败已随返回值/哨兵上报调用方（调用方据此弹提示或降级），不需要再写一条日志",
+   "evidence": "except Exception: # v2.4.1（B 区 · A 档静默 except 判定）：不是吞掉——先清掉本次复制的 # 半成品（回滚整个导入），紧接着把 \"复制状态图失败\" 返回调用方。 self._cleanup_files(dst_base,...",
+   "lines": [
+    1098
+   ]
+  },
+  {
+   "key": "pet_resources.py|path_for_full|ea239d3505",
+   "file": "pet_resources.py",
+   "func": "path_for_full",
+   "shape": "ea239d3505",
+   "count": 1,
+   "tier": "B",
+   "reason": "probe",
+   "why": "能力/存在性探针：失败本身就是安全的假值（is_running=False / 没有这个能力）",
+   "evidence": "except Exception: return None",
+   "lines": [
+    676
+   ]
+  },
+  {
+   "key": "pet_resources.py|path_for|ea239d3505",
+   "file": "pet_resources.py",
+   "func": "path_for",
+   "shape": "ea239d3505",
+   "count": 1,
+   "tier": "B",
+   "reason": "probe",
+   "why": "能力/存在性探针：失败本身就是安全的假值（is_running=False / 没有这个能力）",
+   "evidence": "except Exception: return None",
+   "lines": [
+    661
+   ]
+  },
+  {
+   "key": "pet_screen.py|screen_geometry_at|60c0ba5dbc",
+   "file": "pet_screen.py",
+   "func": "screen_geometry_at",
+   "shape": "60c0ba5dbc",
+   "count": 1,
+   "tier": "B",
+   "reason": "probe",
+   "why": "能力/存在性探针：失败本身就是安全的假值（is_running=False / 没有这个能力）",
+   "evidence": "except Exception: screens = []",
+   "lines": [
+    33
+   ]
+  },
+  {
+   "key": "pet_screen.py|screen_geometry_at|b6ba078cd7",
+   "file": "pet_screen.py",
+   "func": "screen_geometry_at",
+   "shape": "b6ba078cd7",
+   "count": 1,
+   "tier": "B",
+   "reason": "probe",
+   "why": "能力/存在性探针：失败本身就是安全的假值（is_running=False / 没有这个能力）",
+   "evidence": "except Exception: scr = None",
+   "lines": [
+    39
+   ]
+  },
+  {
+   "key": "pet_tools.py|_args_preview|8777245814",
+   "file": "pet_tools.py",
+   "func": "_args_preview",
+   "shape": "8777245814",
+   "count": 1,
+   "tier": "B",
+   "reason": "fallback",
+   "why": "坏值回默认（反序列化/归一化/类型转换）：不改变用户可见结果",
+   "evidence": "except Exception: text = str(args)",
+   "lines": [
+    411
+   ]
+  },
+  {
+   "key": "pet_tools.py|_as_finite_number|8a172e7f74",
+   "file": "pet_tools.py",
+   "func": "_as_finite_number",
+   "shape": "8a172e7f74",
+   "count": 1,
+   "tier": "B",
+   "reason": "fallback",
+   "why": "坏值回默认（反序列化/归一化/类型转换）：不改变用户可见结果",
+   "evidence": "except (TypeError, ValueError): return None",
+   "lines": [
+    327
+   ]
+  },
+  {
+   "key": "pet_tools.py|args_json|ea239d3505",
+   "file": "pet_tools.py",
+   "func": "args_json",
+   "shape": "ea239d3505",
+   "count": 1,
+   "tier": "B",
+   "reason": "reported",
+   "why": "失败已随返回值/哨兵上报调用方（调用方据此弹提示或降级），不需要再写一条日志",
+   "evidence": "except Exception: return \"{}\"",
+   "lines": [
+    286
+   ]
+  },
+  {
+   "key": "pet_tools.py|execute|24b4df1c3b",
+   "file": "pet_tools.py",
+   "func": "execute",
+   "shape": "24b4df1c3b",
+   "count": 1,
+   "tier": "B",
+   "reason": "reported",
+   "why": "失败已随返回值/哨兵上报调用方（调用方据此弹提示或降级），不需要再写一条日志",
+   "evidence": "except Exception as e: return {\"ok\": False, \"error\": \"工具执行失败：%r\" % (e,)}",
+   "lines": [
+    474
+   ]
+  },
+  {
+   "key": "pet_tools.py|parse_args|118fab05b0",
+   "file": "pet_tools.py",
+   "func": "parse_args",
+   "shape": "118fab05b0",
+   "count": 1,
+   "tier": "B",
+   "reason": "fallback",
+   "why": "坏值回默认（反序列化/归一化/类型转换）：不改变用户可见结果",
+   "evidence": "except Exception: return {}",
+   "lines": [
+    296
+   ]
+  },
+  {
+   "key": "pet_tools.py|parse_call|2533ee0a53",
+   "file": "pet_tools.py",
+   "func": "parse_call",
+   "shape": "2533ee0a53",
+   "count": 1,
+   "tier": "B",
+   "reason": "reported",
+   "why": "失败已随返回值/哨兵上报调用方（调用方据此弹提示或降级），不需要再写一条日志",
+   "evidence": "except Exception: return name, None, call_id",
+   "lines": [
+    276
+   ]
+  },
+  {
+   "key": "pet_tools.py|result_text|8777245814",
+   "file": "pet_tools.py",
+   "func": "result_text",
+   "shape": "8777245814",
+   "count": 1,
+   "tier": "B",
+   "reason": "reported",
+   "why": "失败已随返回值/哨兵上报调用方（调用方据此弹提示或降级），不需要再写一条日志",
+   "evidence": "except Exception: txt = str(result)",
+   "lines": [
+    305
+   ]
+  },
+  {
+   "key": "pet_voice.py|_audio_duration|ea239d3505",
+   "file": "pet_voice.py",
+   "func": "_audio_duration",
+   "shape": "ea239d3505",
+   "count": 1,
+   "tier": "B",
+   "reason": "fallback",
+   "why": "坏值回默认（反序列化/归一化/类型转换）：不改变用户可见结果",
+   "evidence": "except Exception: return 1.2",
+   "lines": [
+    567
+   ]
+  },
+  {
+   "key": "pet_voice.py|_cache_ok|ea239d3505",
+   "file": "pet_voice.py",
+   "func": "_cache_ok",
+   "shape": "ea239d3505",
+   "count": 1,
+   "tier": "B",
+   "reason": "probe",
+   "why": "能力/存在性探针：失败本身就是安全的假值（is_running=False / 没有这个能力）",
+   "evidence": "except Exception: return False",
+   "lines": [
+    1211
+   ]
+  },
+  {
+   "key": "pet_voice.py|_clear_state|0d4b0e40a6",
+   "file": "pet_voice.py",
+   "func": "_clear_state",
+   "shape": "0d4b0e40a6",
+   "count": 1,
+   "tier": "C",
+   "reason": "cleanup",
+   "why": "尽力而为的清理/回滚：失败只会在磁盘上留孤儿文件，不改变用户可见结果",
+   "evidence": "except Exception: pass",
+   "lines": [
+    697
+   ]
+  },
+  {
+   "key": "pet_voice.py|_close_log|0d4b0e40a6",
+   "file": "pet_voice.py",
+   "func": "_close_log",
+   "shape": "0d4b0e40a6",
+   "count": 1,
+   "tier": "C",
+   "reason": "self-logging",
+   "why": "日志设施自身的兜底：写日志失败无处可记（代码内已有 stderr 出口）",
+   "evidence": "except Exception: pass",
+   "lines": [
+    669
+   ]
+  },
+  {
+   "key": "pet_voice.py|_decode_json_audio|adca417acb",
+   "file": "pet_voice.py",
+   "func": "_decode_json_audio",
+   "shape": "adca417acb",
+   "count": 4,
+   "tier": "B",
+   "reason": "reported",
+   "why": "失败已随返回值/哨兵上报调用方（调用方据此弹提示或降级），不需要再写一条日志",
+   "evidence": "except Exception as e: return None, \"%s 返回内容无法解析：%s\" % (who, e)",
+   "lines": [
+    576,
+    590,
+    619,
+    625
+   ]
+  },
+  {
+   "key": "pet_voice.py|_decode_json_audio|b6ba078cd7",
+   "file": "pet_voice.py",
+   "func": "_decode_json_audio",
+   "shape": "b6ba078cd7",
+   "count": 1,
+   "tier": "B",
+   "reason": "fallback",
+   "why": "坏值回默认（反序列化/归一化/类型转换）：不改变用户可见结果",
+   "evidence": "except Exception: raw = None",
+   "lines": [
+    594
+   ]
+  },
+  {
+   "key": "pet_voice.py|_get|2cbdc8d672",
+   "file": "pet_voice.py",
+   "func": "_get",
+   "shape": "2cbdc8d672",
+   "count": 1,
+   "tier": "B",
+   "reason": "reported",
+   "why": "失败已随返回值/哨兵上报调用方（调用方据此弹提示或降级），不需要再写一条日志",
+   "evidence": "except Exception as e: return None, \"请求后端失败：%s\" % e",
+   "lines": [
+    139
+   ]
+  },
+  {
+   "key": "pet_voice.py|_get|63eb142d38",
+   "file": "pet_voice.py",
+   "func": "_get",
+   "shape": "63eb142d38",
+   "count": 2,
+   "tier": "B",
+   "reason": "reported",
+   "why": "失败已随返回值/哨兵上报调用方（调用方据此弹提示或降级），不需要再写一条日志",
+   "evidence": "except requests.exceptions.Timeout: return None, \"连接后端超时（服务没启动或响应太慢）\"",
+   "lines": [
+    135,
+    137
+   ]
+  },
+  {
+   "key": "pet_voice.py|_minimax_speak|2cbdc8d672",
+   "file": "pet_voice.py",
+   "func": "_minimax_speak",
+   "shape": "2cbdc8d672",
+   "count": 1,
+   "tier": "B",
+   "reason": "reported",
+   "why": "失败已随返回值/哨兵上报调用方（调用方据此弹提示或降级），不需要再写一条日志",
+   "evidence": "except Exception as e: return None, \"MiniMax 返回内容无法解析：%s\" % e",
+   "lines": [
+    368
+   ]
+  },
+  {
+   "key": "pet_voice.py|_post|2cbdc8d672",
+   "file": "pet_voice.py",
+   "func": "_post",
+   "shape": "2cbdc8d672",
+   "count": 1,
+   "tier": "B",
+   "reason": "reported",
+   "why": "失败已随返回值/哨兵上报调用方（调用方据此弹提示或降级），不需要再写一条日志",
+   "evidence": "except Exception as e: return None, \"请求后端失败：%s\" % e",
+   "lines": [
+    128
+   ]
+  },
+  {
+   "key": "pet_voice.py|_post|63eb142d38",
+   "file": "pet_voice.py",
+   "func": "_post",
+   "shape": "63eb142d38",
+   "count": 2,
+   "tier": "B",
+   "reason": "reported",
+   "why": "失败已随返回值/哨兵上报调用方（调用方据此弹提示或降级），不需要再写一条日志",
+   "evidence": "except requests.exceptions.Timeout: return None, \"连接后端超时（服务没启动或响应太慢）\"",
+   "lines": [
+    124,
+    126
+   ]
+  },
+  {
+   "key": "pet_voice.py|_prune_cache|0d4b0e40a6",
+   "file": "pet_voice.py",
+   "func": "_prune_cache",
+   "shape": "0d4b0e40a6",
+   "count": 1,
+   "tier": "C",
+   "reason": "cleanup",
+   "why": "尽力而为的清理/回滚：失败只会在磁盘上留孤儿文件，不改变用户可见结果",
+   "evidence": "except Exception: pass",
+   "lines": [
+    1260
+   ]
+  },
+  {
+   "key": "pet_voice.py|_prune_cache|8b36bf6c9e",
+   "file": "pet_voice.py",
+   "func": "_prune_cache",
+   "shape": "8b36bf6c9e",
+   "count": 1,
+   "tier": "B",
+   "reason": "fallback",
+   "why": "坏值回默认（反序列化/归一化/类型转换）：不改变用户可见结果",
+   "evidence": "except (TypeError, ValueError): cap = 400",
+   "lines": [
+    1249
+   ]
+  },
+  {
+   "key": "pet_voice.py|is_running|9aaf1e95bc",
+   "file": "pet_voice.py",
+   "func": "is_running",
+   "shape": "9aaf1e95bc",
+   "count": 1,
+   "tier": "B",
+   "reason": "probe",
+   "why": "能力/存在性探针：失败本身就是安全的假值（is_running=False / 没有这个能力）",
+   "evidence": "except Exception: try: os.kill(pid, 0) return True except Exception: return False",
+   "lines": [
+    726
+   ]
+  },
+  {
+   "key": "pet_voice.py|is_running|ea239d3505",
+   "file": "pet_voice.py",
+   "func": "is_running",
+   "shape": "ea239d3505",
+   "count": 2,
+   "tier": "B",
+   "reason": "probe",
+   "why": "能力/存在性探针：失败本身就是安全的假值（is_running=False / 没有这个能力）",
+   "evidence": "except Exception: return False",
+   "lines": [
+    723,
+    730
+   ]
+  },
+  {
+   "key": "pet_voice.py|normalize_voice|8b36bf6c9e",
+   "file": "pet_voice.py",
+   "func": "normalize_voice",
+   "shape": "8b36bf6c9e",
+   "count": 2,
+   "tier": "B",
+   "reason": "fallback",
+   "why": "坏值回默认（反序列化/归一化/类型转换）：不改变用户可见结果",
+   "evidence": "except (TypeError, ValueError): cache_max = 400",
+   "lines": [
+    1625,
+    1636
+   ]
+  },
+  {
+   "key": "pet_voice.py|pid|8a172e7f74",
+   "file": "pet_voice.py",
+   "func": "pid",
+   "shape": "8a172e7f74",
+   "count": 1,
+   "tier": "B",
+   "reason": "fallback",
+   "why": "坏值回默认（反序列化/归一化/类型转换）：不改变用户可见结果",
+   "evidence": "except (TypeError, ValueError): return 0",
+   "lines": [
+    703
+   ]
+  },
+  {
+   "key": "pet_voice.py|regenerate|0d4b0e40a6",
+   "file": "pet_voice.py",
+   "func": "regenerate",
+   "shape": "0d4b0e40a6",
+   "count": 1,
+   "tier": "C",
+   "reason": "cleanup",
+   "why": "尽力而为的清理/回滚：失败只会在磁盘上留孤儿文件，不改变用户可见结果",
+   "evidence": "except Exception: pass",
+   "lines": [
+    1280
+   ]
+  },
+  {
+   "key": "pet_voice.py|set_clip|0d4b0e40a6",
+   "file": "pet_voice.py",
+   "func": "set_clip",
+   "shape": "0d4b0e40a6",
+   "count": 2,
+   "tier": "C",
+   "reason": "cleanup",
+   "why": "尽力而为的清理/回滚：失败只会在磁盘上留孤儿文件，不改变用户可见结果",
+   "evidence": "except Exception: pass",
+   "lines": [
+    1018,
+    1041
+   ]
+  },
+  {
+   "key": "pet_voice.py|set_clip|2cbdc8d672",
+   "file": "pet_voice.py",
+   "func": "set_clip",
+   "shape": "2cbdc8d672",
+   "count": 2,
+   "tier": "B",
+   "reason": "reported",
+   "why": "失败已随返回值/哨兵上报调用方（调用方据此弹提示或降级），不需要再写一条日志",
+   "evidence": "except Exception as e: return False, \"语音目录创建失败：%s\" % e",
+   "lines": [
+    1008,
+    1044
+   ]
+  },
+  {
+   "key": "pet_voice.py|start|b6ba078cd7",
+   "file": "pet_voice.py",
+   "func": "start",
+   "shape": "b6ba078cd7",
+   "count": 1,
+   "tier": "B",
+   "reason": "probe",
+   "why": "能力/存在性探针：失败本身就是安全的假值（is_running=False / 没有这个能力）",
+   "evidence": "except Exception: _ct = None",
+   "lines": [
+    770
+   ]
+  },
+  {
+   "key": "pet_voice.py|stop|0d4b0e40a6",
+   "file": "pet_voice.py",
+   "func": "stop",
+   "shape": "0d4b0e40a6",
+   "count": 2,
+   "tier": "C",
+   "reason": "teardown",
+   "why": "关闭/退出/销毁路径：进程即将结束或对象即将销毁，记日志没有接收方",
+   "evidence": "except Exception: pass",
+   "lines": [
+    799,
+    805
+   ]
+  },
+  {
+   "key": "pet_voice.py|stop|60c0ba5dbc",
+   "file": "pet_voice.py",
+   "func": "stop",
+   "shape": "60c0ba5dbc",
+   "count": 1,
+   "tier": "B",
+   "reason": "cleanup",
+   "why": "尽力而为的清理/回滚：失败只会在磁盘上留孤儿文件，不改变用户可见结果",
+   "evidence": "except Exception: kids = []",
+   "lines": [
+    794
+   ]
+  },
+  {
+   "key": "pet_voice.py|synthesize|0d4b0e40a6",
+   "file": "pet_voice.py",
+   "func": "synthesize",
+   "shape": "0d4b0e40a6",
+   "count": 1,
+   "tier": "C",
+   "reason": "cleanup",
+   "why": "尽力而为的清理/回滚：失败只会在磁盘上留孤儿文件，不改变用户可见结果",
+   "evidence": "except Exception: pass",
+   "lines": [
+    504
+   ]
+  },
+  {
+   "key": "pet_voice.py|synthesize|2cbdc8d672",
+   "file": "pet_voice.py",
+   "func": "synthesize",
+   "shape": "2cbdc8d672",
+   "count": 6,
+   "tier": "B",
+   "reason": "reported",
+   "why": "失败已随返回值/哨兵上报调用方（调用方据此弹提示或降级），不需要再写一条日志",
+   "evidence": "except Exception as e: return None, \"读取参考音失败：%s\" % e",
+   "lines": [
+    218,
+    258,
+    307,
+    342,
+    406,
+    498
+   ]
+  },
+  {
+   "key": "pet_voice.py|synthesize|3d8e4713ff",
+   "file": "pet_voice.py",
+   "func": "synthesize",
+   "shape": "3d8e4713ff",
+   "count": 1,
+   "tier": "B",
+   "reason": "probe",
+   "why": "能力/存在性探针：失败本身就是安全的假值（is_running=False / 没有这个能力）",
+   "evidence": "except Exception: file_id, _br = None, {}",
+   "lines": [
+    317
+   ]
+  },
+  {
+   "key": "pet_voice.py|synthesize|63eb142d38",
+   "file": "pet_voice.py",
+   "func": "synthesize",
+   "shape": "63eb142d38",
+   "count": 2,
+   "tier": "B",
+   "reason": "reported",
+   "why": "失败已随返回值/哨兵上报调用方（调用方据此弹提示或降级），不需要再写一条日志",
+   "evidence": "except FileNotFoundError: return None, \"系统没有 PowerShell，本地语音不可用\"",
+   "lines": [
+    488,
+    490
+   ]
+  },
+  {
+   "key": "pet_voice.py|synthesize|b6ba078cd7",
+   "file": "pet_voice.py",
+   "func": "synthesize",
+   "shape": "b6ba078cd7",
+   "count": 1,
+   "tier": "B",
+   "reason": "fallback",
+   "why": "坏值回默认（反序列化/归一化/类型转换）：不改变用户可见结果",
+   "evidence": "except Exception: voice_id = None",
+   "lines": [
+    414
+   ]
+  },
+  {
+   "key": "pet_voice.py|test_backend|2cbdc8d672",
+   "file": "pet_voice.py",
+   "func": "test_backend",
+   "shape": "2cbdc8d672",
+   "count": 1,
+   "tier": "B",
+   "reason": "reported",
+   "why": "失败已随返回值/哨兵上报调用方（调用方据此弹提示或降级），不需要再写一条日志",
+   "evidence": "except Exception as e: return False, \"探测失败：%s\" % e",
+   "lines": [
+    1312
+   ]
+  },
+  {
+   "key": "pet_voice.py|test_backend|af10a25154",
+   "file": "pet_voice.py",
+   "func": "test_backend",
+   "shape": "af10a25154",
+   "count": 2,
+   "tier": "B",
+   "reason": "reported",
+   "why": "失败已随返回值/哨兵上报调用方（调用方据此弹提示或降级），不需要再写一条日志",
+   "evidence": "except requests.exceptions.Timeout: return False, \"服务无响应（超时）：确认已启动：%s\" % base",
+   "lines": [
+    1308,
+    1310
+   ]
+  },
+  {
+   "key": "pet_voice.py|wait_ready|4d84f2d1d1",
+   "file": "pet_voice.py",
+   "func": "wait_ready",
+   "shape": "4d84f2d1d1",
+   "count": 2,
+   "tier": "B",
+   "reason": "reported",
+   "why": "失败已随返回值/哨兵上报调用方（调用方据此弹提示或降级），不需要再写一条日志",
+   "evidence": "except requests.exceptions.ConnectionError: last = \"还连不上：%s\" % base",
+   "lines": [
+    834,
+    836
+   ]
+  },
+  {
+   "key": "pet_voice.py|wait_ready|8f399cbf74",
+   "file": "pet_voice.py",
+   "func": "wait_ready",
+   "shape": "8f399cbf74",
+   "count": 1,
+   "tier": "B",
+   "reason": "reported",
+   "why": "失败已随返回值/哨兵上报调用方（调用方据此弹提示或降级），不需要再写一条日志",
+   "evidence": "except Exception as e: last = \"探测失败：%s\" % e",
+   "lines": [
+    838
+   ]
+  },
+  {
+   "key": "pet_widgets.py|paintEvent|1f04262011",
+   "file": "pet_widgets.py",
+   "func": "paintEvent",
+   "shape": "1f04262011",
+   "count": 1,
+   "tier": "B",
+   "reason": "fallback",
+   "why": "坏值回默认（反序列化/归一化/类型转换）：不改变用户可见结果",
+   "evidence": "except Exception: border = QColor(\"#203170\") bg = QColor(\"#ffffff\") fg = QColor(\"#203170\") font_size = 10 radius = 16",
+   "lines": [
+    307
+   ]
+  },
+  {
+   "key": "pet_widgets.py|show_text|b6ba078cd7",
+   "file": "pet_widgets.py",
+   "func": "show_text",
+   "shape": "b6ba078cd7",
+   "count": 1,
+   "tier": "B",
+   "reason": "fallback",
+   "why": "坏值回默认（反序列化/归一化/类型转换）：不改变用户可见结果",
+   "evidence": "except Exception: font_size = 10",
+   "lines": [
+    272
+   ]
+  },
+  {
+   "key": "桌宠.py|__init__|0d4b0e40a6",
+   "file": "桌宠.py",
+   "func": "__init__",
+   "shape": "0d4b0e40a6",
+   "count": 4,
+   "tier": "C",
+   "reason": "probe",
+   "why": "能力/存在性探针：失败本身就是安全的假值（is_running=False / 没有这个能力）",
+   "evidence": "except Exception: pass",
+   "lines": [
+    851,
+    1088,
+    1101,
+    1138
+   ]
+  },
+  {
+   "key": "桌宠.py|__init__|6c04fa6b1a",
+   "file": "桌宠.py",
+   "func": "__init__",
+   "shape": "6c04fa6b1a",
+   "count": 1,
+   "tier": "B",
+   "reason": "fallback",
+   "why": "坏值回默认（反序列化/归一化/类型转换）：不改变用户可见结果",
+   "evidence": "except (TypeError, ValueError): pet_resources.FRAME_MAX = 24",
+   "lines": [
+    833
+   ]
+  },
+  {
+   "key": "桌宠.py|_anim_chunk_step|b6ba078cd7",
+   "file": "桌宠.py",
+   "func": "_anim_chunk_step",
+   "shape": "b6ba078cd7",
+   "count": 1,
+   "tier": "B",
+   "reason": "optional",
+   "why": "可选能力降级（音效/动画/缩放/预览/悬停提示）：失败＝该能力缺席，不丢数据",
+   "evidence": "except Exception: # noqa: BLE001 superseded = True",
+   "lines": [
+    2937
+   ]
+  },
+  {
+   "key": "桌宠.py|_build_sprites|0d4b0e40a6",
+   "file": "桌宠.py",
+   "func": "_build_sprites",
+   "shape": "0d4b0e40a6",
+   "count": 1,
+   "tier": "C",
+   "reason": "probe",
+   "why": "能力/存在性探针：失败本身就是安全的假值（is_running=False / 没有这个能力）",
+   "evidence": "except Exception: pass",
+   "lines": [
+    2615
+   ]
+  },
+  {
+   "key": "桌宠.py|_cancel_transform|0d4b0e40a6",
+   "file": "桌宠.py",
+   "func": "_cancel_transform",
+   "shape": "0d4b0e40a6",
+   "count": 1,
+   "tier": "C",
+   "reason": "teardown",
+   "why": "关闭/退出/销毁路径：进程即将结束或对象即将销毁，记日志没有接收方",
+   "evidence": "except RuntimeError: pass",
+   "lines": [
+    1572
+   ]
+  },
+  {
+   "key": "桌宠.py|_cap_role_pix|0d4b0e40a6",
+   "file": "桌宠.py",
+   "func": "_cap_role_pix",
+   "shape": "0d4b0e40a6",
+   "count": 1,
+   "tier": "C",
+   "reason": "fallback",
+   "why": "坏值回默认（反序列化/归一化/类型转换）：不改变用户可见结果",
+   "evidence": "except Exception: pass",
+   "lines": [
+    2660
+   ]
+  },
+  {
+   "key": "桌宠.py|_custom_state_pix|0d4b0e40a6",
+   "file": "桌宠.py",
+   "func": "_custom_state_pix",
+   "shape": "0d4b0e40a6",
+   "count": 1,
+   "tier": "C",
+   "reason": "probe",
+   "why": "能力/存在性探针：失败本身就是安全的假值（is_running=False / 没有这个能力）",
+   "evidence": "except Exception: pass",
+   "lines": [
+    3333
+   ]
+  },
+  {
+   "key": "桌宠.py|_data_dir|0d4b0e40a6",
+   "file": "桌宠.py",
+   "func": "_data_dir",
+   "shape": "0d4b0e40a6",
+   "count": 1,
+   "tier": "C",
+   "reason": "probe",
+   "why": "能力/存在性探针：失败本身就是安全的假值（is_running=False / 没有这个能力）",
+   "evidence": "except Exception: pass",
+   "lines": [
+    167
+   ]
+  },
+  {
+   "key": "桌宠.py|_data_dir|c55acc99f3",
+   "file": "桌宠.py",
+   "func": "_data_dir",
+   "shape": "c55acc99f3",
+   "count": 1,
+   "tier": "C",
+   "reason": "probe",
+   "why": "能力/存在性探针：失败本身就是安全的假值（is_running=False / 没有这个能力）",
+   "evidence": "except Exception: return d",
+   "lines": [
+    173
+   ]
+  },
+  {
+   "key": "桌宠.py|_digest|8b36bf6c9e",
+   "file": "桌宠.py",
+   "func": "_digest",
+   "shape": "8b36bf6c9e",
+   "count": 1,
+   "tier": "B",
+   "reason": "fallback",
+   "why": "坏值回默认（反序列化/归一化/类型转换）：不改变用户可见结果",
+   "evidence": "except (TypeError, ValueError): _after_delay = 0",
+   "lines": [
+    4020
+   ]
+  },
+  {
+   "key": "桌宠.py|_do_transform|6694f9074c",
+   "file": "桌宠.py",
+   "func": "_do_transform",
+   "shape": "6694f9074c",
+   "count": 1,
+   "tier": "B",
+   "reason": "fallback",
+   "why": "坏值回默认（反序列化/归一化/类型转换）：不改变用户可见结果",
+   "evidence": "except (TypeError, ValueError): _secs = _d_secs",
+   "lines": [
+    1611
+   ]
+  },
+  {
+   "key": "桌宠.py|_eat_done|0d4b0e40a6",
+   "file": "桌宠.py",
+   "func": "_eat_done",
+   "shape": "0d4b0e40a6",
+   "count": 1,
+   "tier": "C",
+   "reason": "teardown",
+   "why": "关闭/退出/销毁路径：进程即将结束或对象即将销毁，记日志没有接收方",
+   "evidence": "except RuntimeError: pass",
+   "lines": [
+    3178
+   ]
+  },
+  {
+   "key": "桌宠.py|_ensure_on_screen|0d4b0e40a6",
+   "file": "桌宠.py",
+   "func": "_ensure_on_screen",
+   "shape": "0d4b0e40a6",
+   "count": 1,
+   "tier": "C",
+   "reason": "probe",
+   "why": "能力/存在性探针：失败本身就是安全的假值（is_running=False / 没有这个能力）",
+   "evidence": "except Exception: pass",
+   "lines": [
+    3666
+   ]
+  },
+  {
+   "key": "桌宠.py|_excepthook|0d4b0e40a6",
+   "file": "桌宠.py",
+   "func": "_excepthook",
+   "shape": "0d4b0e40a6",
+   "count": 2,
+   "tier": "C",
+   "reason": "self-logging",
+   "why": "日志设施自身的兜底：写日志失败无处可记（代码内已有 stderr 出口）",
+   "evidence": "except Exception: pass",
+   "lines": [
+    5196,
+    5226
+   ]
+  },
+  {
+   "key": "桌宠.py|_fly_food|0d4b0e40a6",
+   "file": "桌宠.py",
+   "func": "_fly_food",
+   "shape": "0d4b0e40a6",
+   "count": 1,
+   "tier": "C",
+   "reason": "teardown",
+   "why": "关闭/退出/销毁路径：进程即将结束或对象即将销毁，记日志没有接收方",
+   "evidence": "except RuntimeError: pass",
+   "lines": [
+    3862
+   ]
+  },
+  {
+   "key": "桌宠.py|_frame_pix|ea239d3505",
+   "file": "桌宠.py",
+   "func": "_frame_pix",
+   "shape": "ea239d3505",
+   "count": 1,
+   "tier": "B",
+   "reason": "probe",
+   "why": "能力/存在性探针：失败本身就是安全的假值（is_running=False / 没有这个能力）",
+   "evidence": "except Exception: return None",
+   "lines": [
+    2729
+   ]
+  },
+  {
+   "key": "桌宠.py|_money_preload_step|7e0edba79a",
+   "file": "桌宠.py",
+   "func": "_money_preload_step",
+   "shape": "7e0edba79a",
+   "count": 1,
+   "tier": "B",
+   "reason": "fallback",
+   "why": "坏值回默认（反序列化/归一化/类型转换）：不改变用户可见结果",
+   "evidence": "except Exception: pix = QPixmap()",
+   "lines": [
+    1262
+   ]
+  },
+  {
+   "key": "桌宠.py|_mood_line|60c0ba5dbc",
+   "file": "桌宠.py",
+   "func": "_mood_line",
+   "shape": "60c0ba5dbc",
+   "count": 1,
+   "tier": "B",
+   "reason": "fallback",
+   "why": "坏值回默认（反序列化/归一化/类型转换）：不改变用户可见结果",
+   "evidence": "except Exception: texts = []",
+   "lines": [
+    4863
+   ]
+  },
+  {
+   "key": "桌宠.py|_mood_line|6dd81b916b",
+   "file": "桌宠.py",
+   "func": "_mood_line",
+   "shape": "6dd81b916b",
+   "count": 1,
+   "tier": "B",
+   "reason": "reported",
+   "why": "失败已随返回值/哨兵上报调用方（调用方据此弹提示或降级），不需要再写一条日志",
+   "evidence": "except Exception: return random.choice(fallback) if fallback else \"\"",
+   "lines": [
+    4870
+   ]
+  },
+  {
+   "key": "桌宠.py|_parse_schema_version|8a172e7f74",
+   "file": "桌宠.py",
+   "func": "_parse_schema_version",
+   "shape": "8a172e7f74",
+   "count": 1,
+   "tier": "B",
+   "reason": "fallback",
+   "why": "坏值回默认（反序列化/归一化/类型转换）：不改变用户可见结果",
+   "evidence": "except (TypeError, ValueError): return 1",
+   "lines": [
+    367
+   ]
+  },
+  {
+   "key": "桌宠.py|_path_sig|8f2452f6c3",
+   "file": "桌宠.py",
+   "func": "_path_sig",
+   "shape": "8f2452f6c3",
+   "count": 1,
+   "tier": "B",
+   "reason": "reported",
+   "why": "失败已随返回值/哨兵上报调用方（调用方据此弹提示或降级），不需要再写一条日志",
+   "evidence": "except (OSError, TypeError, ValueError): return (str(path), None, None)",
+   "lines": [
+    2692
+   ]
+  },
+  {
+   "key": "桌宠.py|_play_eat|0d4b0e40a6",
+   "file": "桌宠.py",
+   "func": "_play_eat",
+   "shape": "0d4b0e40a6",
+   "count": 1,
+   "tier": "C",
+   "reason": "teardown",
+   "why": "关闭/退出/销毁路径：进程即将结束或对象即将销毁，记日志没有接收方",
+   "evidence": "except RuntimeError: pass",
+   "lines": [
+    3157
+   ]
+  },
+  {
+   "key": "桌宠.py|_quit|0d4b0e40a6",
+   "file": "桌宠.py",
+   "func": "_quit",
+   "shape": "0d4b0e40a6",
+   "count": 7,
+   "tier": "C",
+   "reason": "teardown",
+   "why": "关闭/退出/销毁路径：进程即将结束或对象即将销毁，记日志没有接收方",
+   "evidence": "except Exception: pass",
+   "lines": [
+    5105,
+    5112,
+    5117,
+    5130,
+    5156,
+    5161,
+    5185
+   ]
+  },
+  {
+   "key": "桌宠.py|_refresh_lines|60c0ba5dbc",
+   "file": "桌宠.py",
+   "func": "_refresh_lines",
+   "shape": "60c0ba5dbc",
+   "count": 1,
+   "tier": "B",
+   "reason": "optional",
+   "why": "可选能力降级（音效/动画/缩放/预览/悬停提示）：失败＝该能力缺席，不丢数据",
+   "evidence": "except Exception: texts = []",
+   "lines": [
+    4850
+   ]
+  },
+  {
+   "key": "桌宠.py|_refresh_lines|b6ba078cd7",
+   "file": "桌宠.py",
+   "func": "_refresh_lines",
+   "shape": "b6ba078cd7",
+   "count": 1,
+   "tier": "B",
+   "reason": "optional",
+   "why": "可选能力降级（音效/动画/缩放/预览/悬停提示）：失败＝该能力缺席，不丢数据",
+   "evidence": "except Exception: _empty = True",
+   "lines": [
+    4845
+   ]
+  },
+  {
+   "key": "桌宠.py|_reload_sprites|0d4b0e40a6",
+   "file": "桌宠.py",
+   "func": "_reload_sprites",
+   "shape": "0d4b0e40a6",
+   "count": 1,
+   "tier": "C",
+   "reason": "optional",
+   "why": "可选能力降级（音效/动画/缩放/预览/悬停提示）：失败＝该能力缺席，不丢数据",
+   "evidence": "except Exception: pass",
+   "lines": [
+    3059
+   ]
+  },
+  {
+   "key": "桌宠.py|_remove_files|bdea2d3f89",
+   "file": "桌宠.py",
+   "func": "_remove_files",
+   "shape": "bdea2d3f89",
+   "count": 1,
+   "tier": "C",
+   "reason": "cleanup",
+   "why": "尽力而为的清理/回滚：失败只会在磁盘上留孤儿文件，不改变用户可见结果",
+   "evidence": "except Exception: # 有意忽略：清理本身尽力而为（幂等清理）；下面只登记\"没删掉\"供调用方提示 if failed is not None and p not in failed: failed.append(p)",
+   "lines": [
+    285
+   ]
+  },
+  {
+   "key": "桌宠.py|_reset_squash|0d4b0e40a6",
+   "file": "桌宠.py",
+   "func": "_reset_squash",
+   "shape": "0d4b0e40a6",
+   "count": 1,
+   "tier": "C",
+   "reason": "teardown",
+   "why": "关闭/退出/销毁路径：进程即将结束或对象即将销毁，记日志没有接收方",
+   "evidence": "except RuntimeError: pass",
+   "lines": [
+    3677
+   ]
+  },
+  {
+   "key": "桌宠.py|_role_no_feed|ea239d3505",
+   "file": "桌宠.py",
+   "func": "_role_no_feed",
+   "shape": "ea239d3505",
+   "count": 1,
+   "tier": "B",
+   "reason": "fallback",
+   "why": "坏值回默认（反序列化/归一化/类型转换）：不改变用户可见结果",
+   "evidence": "except ValueError: return False",
+   "lines": [
+    1552
+   ]
+  },
+  {
+   "key": "桌宠.py|_show_emote|0d4b0e40a6",
+   "file": "桌宠.py",
+   "func": "_show_emote",
+   "shape": "0d4b0e40a6",
+   "count": 1,
+   "tier": "C",
+   "reason": "teardown",
+   "why": "关闭/退出/销毁路径：进程即将结束或对象即将销毁，记日志没有接收方",
+   "evidence": "except RuntimeError: pass",
+   "lines": [
+    3552
+   ]
+  },
+  {
+   "key": "桌宠.py|_start_idle_hold|0d4b0e40a6",
+   "file": "桌宠.py",
+   "func": "_start_idle_hold",
+   "shape": "0d4b0e40a6",
+   "count": 1,
+   "tier": "C",
+   "reason": "teardown",
+   "why": "关闭/退出/销毁路径：进程即将结束或对象即将销毁，记日志没有接收方",
+   "evidence": "except RuntimeError: pass",
+   "lines": [
+    1748
+   ]
+  },
+  {
+   "key": "桌宠.py|_start_idle_hold|6694f9074c",
+   "file": "桌宠.py",
+   "func": "_start_idle_hold",
+   "shape": "6694f9074c",
+   "count": 1,
+   "tier": "B",
+   "reason": "fallback",
+   "why": "坏值回默认（反序列化/归一化/类型转换）：不改变用户可见结果",
+   "evidence": "except (TypeError, ValueError): _secs = IDLE_FORM_HOLD_SECS",
+   "lines": [
+    1742
+   ]
+  },
+  {
+   "key": "桌宠.py|_stop_idle_hold|0d4b0e40a6",
+   "file": "桌宠.py",
+   "func": "_stop_idle_hold",
+   "shape": "0d4b0e40a6",
+   "count": 1,
+   "tier": "C",
+   "reason": "teardown",
+   "why": "关闭/退出/销毁路径：进程即将结束或对象即将销毁，记日志没有接收方",
+   "evidence": "except RuntimeError: pass",
+   "lines": [
+    1734
+   ]
+  },
+  {
+   "key": "桌宠.py|_stop_tween|0d4b0e40a6",
+   "file": "桌宠.py",
+   "func": "_stop_tween",
+   "shape": "0d4b0e40a6",
+   "count": 1,
+   "tier": "C",
+   "reason": "teardown",
+   "why": "关闭/退出/销毁路径：进程即将结束或对象即将销毁，记日志没有接收方",
+   "evidence": "except RuntimeError: pass",
+   "lines": [
+    3944
+   ]
+  },
+  {
+   "key": "桌宠.py|_stop_voice_clip|0d4b0e40a6",
+   "file": "桌宠.py",
+   "func": "_stop_voice_clip",
+   "shape": "0d4b0e40a6",
+   "count": 2,
+   "tier": "C",
+   "reason": "cleanup",
+   "why": "尽力而为的清理/回滚：失败只会在磁盘上留孤儿文件，不改变用户可见结果",
+   "evidence": "except Exception: pass",
+   "lines": [
+    4640,
+    4645
+   ]
+  },
+  {
+   "key": "桌宠.py|_system_is_quitting|0d4b0e40a6",
+   "file": "桌宠.py",
+   "func": "_system_is_quitting",
+   "shape": "0d4b0e40a6",
+   "count": 1,
+   "tier": "C",
+   "reason": "probe",
+   "why": "能力/存在性探针：失败本身就是安全的假值（is_running=False / 没有这个能力）",
+   "evidence": "except Exception: pass",
+   "lines": [
+    3729
+   ]
+  },
+  {
+   "key": "桌宠.py|_tool_ledger_summary|ff1a5f1127",
+   "file": "桌宠.py",
+   "func": "_tool_ledger_summary",
+   "shape": "ff1a5f1127",
+   "count": 1,
+   "tier": "B",
+   "reason": "reported",
+   "why": "失败已随返回值/哨兵上报调用方（调用方据此弹提示或降级），不需要再写一条日志",
+   "evidence": "except (TypeError, ValueError) as e: return False, \"记账数据读不出来：%r\" % (e,)",
+   "lines": [
+    2055
+   ]
+  },
+  {
+   "key": "桌宠.py|_tool_set_timer|ddf7765cf3",
+   "file": "桌宠.py",
+   "func": "_tool_set_timer",
+   "shape": "ddf7765cf3",
+   "count": 1,
+   "tier": "B",
+   "reason": "reported",
+   "why": "失败已随返回值/哨兵上报调用方（调用方据此弹提示或降级），不需要再写一条日志",
+   "evidence": "except (TypeError, ValueError): return {\"ok\": False, \"error\": \"minutes 得是数字\"}",
+   "lines": [
+    2163
+   ]
+  },
+  {
+   "key": "桌宠.py|_wait_voice_backend|4e37180a20",
+   "file": "桌宠.py",
+   "func": "_wait_voice_backend",
+   "shape": "4e37180a20",
+   "count": 1,
+   "tier": "B",
+   "reason": "reported",
+   "why": "失败已随返回值/哨兵上报调用方（调用方据此弹提示或降级），不需要再写一条日志",
+   "evidence": "except Exception as e: ok, msg = False, \"等待后端就绪出错：%s\" % e",
+   "lines": [
+    4614
+   ]
+  },
+  {
+   "key": "桌宠.py|apply_bubble_style|49f751de88",
+   "file": "桌宠.py",
+   "func": "apply_bubble_style",
+   "shape": "49f751de88",
+   "count": 1,
+   "tier": "C",
+   "reason": "fallback",
+   "why": "坏值回默认（反序列化/归一化/类型转换）：不改变用户可见结果",
+   "evidence": "except (TypeError, ValueError): pass",
+   "lines": [
+    4803
+   ]
+  },
+  {
+   "key": "桌宠.py|closeEvent|0d4b0e40a6",
+   "file": "桌宠.py",
+   "func": "closeEvent",
+   "shape": "0d4b0e40a6",
+   "count": 2,
+   "tier": "C",
+   "reason": "teardown",
+   "why": "关闭/退出/销毁路径：进程即将结束或对象即将销毁，记日志没有接收方",
+   "evidence": "except Exception: pass",
+   "lines": [
+    3753,
+    3762
+   ]
+  },
+  {
+   "key": "桌宠.py|closeEvent|b6ba078cd7",
+   "file": "桌宠.py",
+   "func": "closeEvent",
+   "shape": "b6ba078cd7",
+   "count": 1,
+   "tier": "B",
+   "reason": "fallback",
+   "why": "坏值回默认（反序列化/归一化/类型转换）：不改变用户可见结果",
+   "evidence": "except Exception: _quit_now = False",
+   "lines": [
+    3748
+   ]
+  },
+  {
+   "key": "桌宠.py|feed|0d4b0e40a6",
+   "file": "桌宠.py",
+   "func": "feed",
+   "shape": "0d4b0e40a6",
+   "count": 1,
+   "tier": "C",
+   "reason": "teardown",
+   "why": "关闭/退出/销毁路径：进程即将结束或对象即将销毁，记日志没有接收方",
+   "evidence": "except RuntimeError: pass",
+   "lines": [
+    4110
+   ]
+  },
+  {
+   "key": "桌宠.py|is_autostart_enabled|ea239d3505",
+   "file": "桌宠.py",
+   "func": "is_autostart_enabled",
+   "shape": "ea239d3505",
+   "count": 1,
+   "tier": "B",
+   "reason": "fallback",
+   "why": "坏值回默认（反序列化/归一化/类型转换）：不改变用户可见结果",
+   "evidence": "except Exception: return False",
+   "lines": [
+    5245
+   ]
+  },
+  {
+   "key": "桌宠.py|load_config|f647be4c2b",
+   "file": "桌宠.py",
+   "func": "load_config",
+   "shape": "f647be4c2b",
+   "count": 1,
+   "tier": "B",
+   "reason": "fallback",
+   "why": "坏值回默认（反序列化/归一化/类型转换）：不改变用户可见结果",
+   "evidence": "except FileNotFoundError: # 兼容审查 L4：**首次运行**（还没有 config.json）不是错误，不该往 error.log 里写 # 吓人的\"读取失败\"。与 pet_resources._read_json 的\"首次无文件=...",
+   "lines": [
+    412
+   ]
+  },
+  {
+   "key": "桌宠.py|maybe_idle_behavior|8b36bf6c9e",
+   "file": "桌宠.py",
+   "func": "maybe_idle_behavior",
+   "shape": "8b36bf6c9e",
+   "count": 1,
+   "tier": "B",
+   "reason": "fallback",
+   "why": "坏值回默认（反序列化/归一化/类型转换）：不改变用户可见结果",
+   "evidence": "except (TypeError, ValueError): delay = 0",
+   "lines": [
+    1682
+   ]
+  },
+  {
+   "key": "桌宠.py|nativeEvent|0d4b0e40a6",
+   "file": "桌宠.py",
+   "func": "nativeEvent",
+   "shape": "0d4b0e40a6",
+   "count": 1,
+   "tier": "C",
+   "reason": "optional",
+   "why": "可选能力降级（音效/动画/缩放/预览/悬停提示）：失败＝该能力缺席，不丢数据",
+   "evidence": "except Exception: pass",
+   "lines": [
+    4539
+   ]
+  },
+  {
+   "key": "桌宠.py|persona_file_ids|0d4b0e40a6",
+   "file": "桌宠.py",
+   "func": "persona_file_ids",
+   "shape": "0d4b0e40a6",
+   "count": 1,
+   "tier": "C",
+   "reason": "probe",
+   "why": "能力/存在性探针：失败本身就是安全的假值（is_running=False / 没有这个能力）",
+   "evidence": "except Exception: pass",
+   "lines": [
+    543
+   ]
+  },
+  {
+   "key": "桌宠.py|set_autostart|0d4b0e40a6",
+   "file": "桌宠.py",
+   "func": "set_autostart",
+   "shape": "0d4b0e40a6",
+   "count": 1,
+   "tier": "C",
+   "reason": "cleanup",
+   "why": "尽力而为的清理/回滚：失败只会在磁盘上留孤儿文件，不改变用户可见结果",
+   "evidence": "except FileNotFoundError: pass",
+   "lines": [
+    5264
+   ]
+  },
+  {
+   "key": "桌宠.py|set_autostart|31e3cb6300",
+   "file": "桌宠.py",
+   "func": "set_autostart",
+   "shape": "31e3cb6300",
+   "count": 1,
+   "tier": "B",
+   "reason": "fallback",
+   "why": "坏值回默认（反序列化/归一化/类型转换）：不改变用户可见结果",
+   "evidence": "except FileNotFoundError: # 目标键不存在（个别环境 Run 键缺失）：创建后写入，不把环境差异当错误 key = winreg.CreateKeyEx(winreg.HKEY_CURRENT_USER, AUTOSTART_KEY,...",
+   "lines": [
+    5255
+   ]
+  },
+  {
+   "key": "桌宠.py|set_autostart|d6a593f552",
+   "file": "桌宠.py",
+   "func": "set_autostart",
+   "shape": "d6a593f552",
+   "count": 1,
+   "tier": "B",
+   "reason": "reported",
+   "why": "失败已随返回值/哨兵上报调用方（调用方据此弹提示或降级），不需要再写一条日志",
+   "evidence": "except Exception as e: return False, str(e)",
+   "lines": [
+    5268
+   ]
+  },
+  {
+   "key": "桌宠.py|tick|0d4b0e40a6",
+   "file": "桌宠.py",
+   "func": "tick",
+   "shape": "0d4b0e40a6",
+   "count": 1,
+   "tier": "C",
+   "reason": "teardown",
+   "why": "关闭/退出/销毁路径：进程即将结束或对象即将销毁，记日志没有接收方",
+   "evidence": "except RuntimeError: pass",
+   "lines": [
+    3847
+   ]
+  },
+  {
+   "key": "生成占位角色.py|<module>|a451e28804",
+   "file": "生成占位角色.py",
+   "func": "<module>",
+   "shape": "a451e28804",
+   "count": 1,
+   "tier": "B",
+   "reason": "fallback",
+   "why": "坏值回默认（反序列化/归一化/类型转换）：不改变用户可见结果",
+   "evidence": "except AttributeError: RESAMPLE = Image.LANCZOS",
+   "lines": [
+    12
+   ]
+  }
+ ]
+}

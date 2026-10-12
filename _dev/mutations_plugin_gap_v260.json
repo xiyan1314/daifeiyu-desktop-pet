@@ -1,0 +1,238 @@
+{
+  "mutations": [
+    {
+      "id": "M-G1",
+      "why": "判据 4（v2.6.0 代理C）：Windows 非法字符 <>:\"|?* 必须拒 —— payload/a:b.png 此前过校验器、安装器解包才拒（第一处口径差）",
+      "file": "pet_plugin.py",
+      "old": "    for ch in WIN_ILLEGAL_CHARS:\n        if ch in name:",
+      "new": "    for ch in \"\":\n        if ch in name:",
+      "tests": [
+        "tests/test_plugin_v251.py::test_条目名含windows非法字符拒",
+        "tests/test_plugin_v251.py::test_口径差_校验器先拒_安装器不留残余"
+      ],
+      "expect_fail": [
+        "tests/test_plugin_v251.py::test_条目名含windows非法字符拒",
+        "tests/test_plugin_v251.py::test_口径差_校验器先拒_安装器不留残余"
+      ]
+    },
+    {
+      "id": "M-G2",
+      "why": "判据 4（v2.6.0 代理C）：Windows 保留设备名（con.png / nul / aux 段…）必须拒｜v2.6.0 第 4 轮（C-1 残留）：判据补了 strip(\" .\")，锚点跟着更新（保留名 + 空格 + 扩展名现在也拒）",
+      "file": "pet_plugin.py",
+      "old": "        if seg.rstrip(\" .\").split(\".\")[0].strip(\" .\").lower() in WIN_RESERVED_NAMES:",
+      "new": "        if False:",
+      "tests": [
+        "tests/test_plugin_v251.py::test_条目名含windows保留设备名拒"
+      ],
+      "expect_fail": [
+        "tests/test_plugin_v251.py::test_条目名含windows保留设备名拒"
+      ]
+    },
+    {
+      "id": "M-G3",
+      "why": "判据 10（v2.6.0 代理C）：files: []（空 payload）必须拒 —— 此前过校验器、安装器才以「没有 payload 目录」拒（第二处口径差）",
+      "file": "pet_plugin.py",
+      "old": "    if not files and not payload_files:",
+      "new": "    if False:",
+      "tests": [
+        "tests/test_plugin_v251.py::test_files清单为空即拒",
+        "tests/test_plugin_v251.py::test_口径差_校验器先拒_安装器不留残余"
+      ],
+      "expect_fail": [
+        "tests/test_plugin_v251.py::test_files清单为空即拒",
+        "tests/test_plugin_v251.py::test_口径差_校验器先拒_安装器不留残余"
+      ]
+    },
+    {
+      "id": "M-G4",
+      "why": "发布门（v2.6.0 代理C）：「这份证据缺这些键」必须出声（缺键 = 改那几个模块不会有任何提示）",
+      "file": "_check_release.py",
+      "old": "        miss = missing_fingerprint_keys(rec, cur)\n        if miss:\n            gaps.append((name, miss))",
+      "new": "        miss = missing_fingerprint_keys(rec, cur)\n        if False:\n            gaps.append((name, miss))",
+      "tests": [
+        "tests/test_release_check.py::test_mutation_evidence_notes_flags_evidence_missing_keys"
+      ],
+      "expect_fail": [
+        "tests/test_release_check.py::test_mutation_evidence_notes_flags_evidence_missing_keys"
+      ]
+    },
+    {
+      "id": "M-G5",
+      "why": "发布门（v2.6.0 代理C）：缺键纯函数本身（只点名「当前树里有、记录里没记」的键）",
+      "file": "_check_release.py",
+      "old": "    return sorted(rel for rel in (current or {}) if rel not in recorded)",
+      "new": "    return []",
+      "tests": [
+        "tests/test_release_check.py::test_missing_fingerprint_keys_is_pure_and_ignores_absent_files",
+        "tests/test_release_check.py::test_mutation_evidence_notes_flags_evidence_missing_keys"
+      ],
+      "expect_fail": [
+        "tests/test_release_check.py::test_missing_fingerprint_keys_is_pure_and_ignores_absent_files",
+        "tests/test_release_check.py::test_mutation_evidence_notes_flags_evidence_missing_keys"
+      ]
+    },
+    {
+      "id": "M-G6",
+      "why": "文档同步（v2.6.0 代理C）：非法字符那一串在多处/文档里漂一个字，文档契约用例必须红（常量→文档方向）",
+      "file": "_dev/plugin_format_v251.md",
+      "old": "`<>:\"|?*`",
+      "new": "`<>:\"|?`",
+      "tests": [
+        "tests/test_plugin_v251.py::test_windows名字判据与文档同时写死"
+      ],
+      "expect_fail": [
+        "tests/test_plugin_v251.py::test_windows名字判据与文档同时写死"
+      ]
+    },
+    {
+      "id": "M-G7",
+      "why": "文档同步（v2.6.0 代理C）：文档里多写一个常量里没有的保留设备名（com10）也要红（文档→常量方向）",
+      "file": "_dev/plugin_format_v251.md",
+      "old": "`com9` `lpt1`",
+      "new": "`com9` `com10` `lpt1`",
+      "tests": [
+        "tests/test_plugin_v251.py::test_windows名字判据与文档同时写死"
+      ],
+      "expect_fail": [
+        "tests/test_plugin_v251.py::test_windows名字判据与文档同时写死"
+      ]
+    },
+    {
+      "id": "M-G8",
+      "why": "契约双向覆盖（v2.6.0 代理C）：安装器不再把校验器那句原因交出来（唯一真源断链）→ 跨口径用例必须红",
+      "file": "pet_plugin_host.py",
+      "old": "        if manifest is None:\n            return False, \"插件校验未通过：%s\" % str(err or \"原因未知\").strip()",
+      "new": "        if False:\n            return False, \"插件校验未通过：%s\" % str(err or \"原因未知\").strip()",
+      "tests": [
+        "tests/test_plugin_v251.py::test_口径差_校验器先拒_安装器不留残余"
+      ],
+      "expect_fail": [
+        "tests/test_plugin_v251.py::test_口径差_校验器先拒_安装器不留残余"
+      ]
+    }
+  ],
+  "results": {
+    "title": "变异验证 spec：mutations_plugin_gap_v260.json",
+    "checked_at": "2026-10-12 12:02:25",
+    "total": 8,
+    "caught": 8,
+    "not_caught": 0,
+    "blocked": 0,
+    "items": [
+      {
+        "id": "M-G1",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "8 failed in 0.80s",
+        "failed": [
+          "test_条目名含windows非法字符拒[<]",
+          "test_条目名含windows非法字符拒[>]",
+          "test_条目名含windows非法字符拒[:]",
+          "test_条目名含windows非法字符拒[\"]",
+          "test_条目名含windows非法字符拒[|]",
+          "test_条目名含windows非法字符拒[?]",
+          "test_条目名含windows非法字符拒[*]",
+          "test_口径差_校验器先拒_安装器不留残余"
+        ]
+      },
+      {
+        "id": "M-G2",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "9 failed in 0.72s",
+        "failed": [
+          "test_条目名含windows保留设备名拒[payload/con.png]",
+          "test_条目名含windows保留设备名拒[payload/CON.txt]",
+          "test_条目名含windows保留设备名拒[payload/nul]",
+          "test_条目名含windows保留设备名拒[payload/com1.json]",
+          "test_条目名含windows保留设备名拒[payload/lpt9.md]",
+          "test_条目名含windows保留设备名拒[payload/aux/inner.png]",
+          "test_条目名含windows保留设备名拒[payload/sub/prn.json]",
+          "test_条目名含windows保留设备名拒[payload/nul",
+          "test_条目名含windows保留设备名拒[payload/con"
+        ]
+      },
+      {
+        "id": "M-G3",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "2 failed in 0.54s",
+        "failed": [
+          "test_files清单为空即拒",
+          "test_口径差_校验器先拒_安装器不留残余"
+        ]
+      },
+      {
+        "id": "M-G4",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 0.49s",
+        "failed": [
+          "test_mutation_evidence_notes_flags_evidence_missing_keys"
+        ]
+      },
+      {
+        "id": "M-G5",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "2 failed in 0.50s",
+        "failed": [
+          "test_missing_fingerprint_keys_is_pure_and_ignores_absent_files",
+          "test_mutation_evidence_notes_flags_evidence_missing_keys"
+        ]
+      },
+      {
+        "id": "M-G6",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 0.46s",
+        "failed": [
+          "test_windows名字判据与文档同时写死"
+        ]
+      },
+      {
+        "id": "M-G7",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 0.42s",
+        "failed": [
+          "test_windows名字判据与文档同时写死"
+        ]
+      },
+      {
+        "id": "M-G8",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 0.48s",
+        "failed": [
+          "test_口径差_校验器先拒_安装器不留残余"
+        ]
+      }
+    ],
+    "spec": "mutations_plugin_gap_v260.json",
+    "tests": [
+      "tests/test_plugin_v251.py::test_files清单为空即拒",
+      "tests/test_plugin_v251.py::test_windows名字判据与文档同时写死",
+      "tests/test_plugin_v251.py::test_口径差_校验器先拒_安装器不留残余",
+      "tests/test_plugin_v251.py::test_条目名含windows保留设备名拒",
+      "tests/test_plugin_v251.py::test_条目名含windows非法字符拒",
+      "tests/test_release_check.py::test_missing_fingerprint_keys_is_pure_and_ignores_absent_files",
+      "tests/test_release_check.py::test_mutation_evidence_notes_flags_evidence_missing_keys"
+    ],
+    "note": "变异只在 %TEMP% 影子副本里做，真实仓库只读（只写 _dev/.mutation.lock）",
+    "repo_fingerprint": {
+      "桌宠.py": "99e2abf3e7fb",
+      "pet_export.py": "c01e1593efd2",
+      "pet_lines.py": "5332f60b5f26",
+      "pet_alarm.py": "1149e94deee3",
+      "pet_behaviors.py": "8f57255144f6",
+      "_check_release.py": "e0abfe805849",
+      "pet_balance.py": "2828b2ebc0c9",
+      "pet_plugin.py": "2f7853298fc3",
+      "pet_plugin_host.py": "e41ee09707ba",
+      "pet_dialogs.py": "48f300e4fc50",
+      "pet_menu.py": "920daac1b835",
+      "pet_plugin_index.py": "439340b16523"
+    }
+  }
+}

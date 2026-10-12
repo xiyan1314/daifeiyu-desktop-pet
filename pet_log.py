@@ -17,6 +17,7 @@ import os
 import re
 import sys
 import threading
+import time
 
 # ---------------- 模块级状态 ----------------
 _data_dir = None      # 日志目录（桌宠.set_data_dir 同步；未同步时按 _default_dir 规则取）
@@ -31,6 +32,13 @@ DEBUG = os.environ.get("DFY_DEBUG") == "1"
 # v2.4（技术债收口 C）：单文件体积上限（超过即轮转）与坏文件隔离后缀
 MAX_BYTES = 512 * 1024
 BAD_SUFFIX = ".bad"
+
+# v2.6.0（D7-B）：限流日志表 {key: 上次落盘时间(monotonic)}。全仓**唯一**的"同名 60s 一条"
+# 实现：guard_slot（定时器槽）与桌宠._log_slot_error 都收敛到这里，避免第三、第四份复制品
+# 各自漂移（历史上 _SLOT_SEEN / _SLOT_ERR_SEEN / _SOURCE_FAIL_SEEN 就是三份同口径的表）。
+_THROTTLE_SEEN = {}
+THROTTLE_GAP_S = 60.0
+_THROTTLE_MAX_KEYS = 256   # 表上限：超出整表重来（只影响限流精度，不丢日志）
 
 
 def _to_stderr(text):
@@ -103,18 +111,46 @@ def guard_slot(name, fn):
             return fn(*args, **kwargs)
         except Exception as e:  # noqa: BLE001
             try:
-                import time as _t
                 import traceback
-                _seen = globals().setdefault("_SLOT_SEEN", {})
-                _now = _t.monotonic()
-                if _now - float(_seen.get(name, 0.0)) >= 60:  # 限流：同一槽 60s 一条
-                    _seen[name] = _now
-                    log_error("timer slot %s failed: %r\n%s" % (name, e, traceback.format_exc()))
+                # v2.6.0（D7-B）：限流口径收敛到 log_throttled 一处实现（行为逐位不变：
+                # 同一个槽名 60s 只记一条，文案与 traceback 与旧实现相同）。
+                log_throttled("timer slot %s" % name,
+                              "timer slot %s failed: %r\n%s" % (name, e, traceback.format_exc()))
             except Exception:
                 pass  # 有意忽略：日志自身失败无处可记
             return None
 
     return _run
+
+
+def log_throttled(key, msg, gap=THROTTLE_GAP_S, now=None, **log_kw):
+    """限流日志：**同一个 key** 在 gap 秒内只落一条（口径与 guard_slot 的槽限流一致）。
+
+    为什么要它：v2.6.0（D7-B）逐条判定静默 except 时，"该补日志"的位置几乎都同时需要
+    "别刷屏"——高频路径（定时器槽、每次试听、每次导入）上直接 log_error 会把 error.log
+    刷满同一句话，反而把真正的线索挤掉。这里把限流写成**唯一实现**，调用方只给一个
+    稳定的 key（如 "角色 id"、"文件路径"、"槽名"）。
+
+    参数：
+      key  限流键（可读字符串；不同 key 各记各的——别用常量把"按对象限流"写成"全进程一条"）
+      msg  日志正文（走 log_error，脱敏/轮转/重入守卫全部照旧）
+      gap  窗口秒数，默认 60s（全仓统一口径）
+      now  注入时钟（默认 time.monotonic()）——测试注入固定序列，断言不依赖机器速度
+      **log_kw 透传给 log_error（如 data_dir=DATA_DIR）
+
+    返回 True＝这条真的落盘了；False＝被限流窗口挡下（**不是**失败，只是没写）。
+    调用方据此可在测试里断言"第一条落、窗口内第二条不落"，无需 sleep。
+    """
+    t = time.monotonic() if now is None else float(now)
+    k = str(key)
+    last = _THROTTLE_SEEN.get(k)
+    if last is not None and (t - float(last)) < gap:
+        return False
+    if last is None and len(_THROTTLE_SEEN) >= _THROTTLE_MAX_KEYS:
+        _THROTTLE_SEEN.clear()   # 极端情况只影响限流精度：下一条失败照样写
+    _THROTTLE_SEEN[k] = t
+    log_error(msg, **log_kw)
+    return True
 
 
 def _default_dir():

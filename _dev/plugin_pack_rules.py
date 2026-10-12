@@ -14,13 +14,14 @@
  2  manifest.json 存在、UTF-8 **无 BOM**、可解析为 dict；有 plugin 段
  3  format == "dfypet-plugin"；version 是 int 且 <= 宿主支持的格式版本
  4  全量 namelist 路径安全：== "manifest.json" 或 startswith("payload/")；无 .. / 不以斜杠或盘符
-    开头 / 无反斜杠 / 无 NUL
+    开头 / 无反斜杠 / 无 NUL；**无 Windows 非法字符 <>:"|?*、无保留设备名（v2.6.0）**
  5  外部属性：external_attr >> 16 不得带执行位（0o111）；符号链接（0o120000）一律拒
  6  扩展名白名单：.png .jpg .jpeg .wav .mp3 .txt .json .md；其余**点名文件**拒绝
  7  code 一致性：kind == "data" 则 code is False；kind != "data" 则 code is True
  8  capabilities 必须是宿主白名单的子集
  9  双版本门：min_host_version <= 宿主 VERSION（四段整数比较）；api_version 在 API_VERSIONS 里
-10  校验和：files 必须覆盖 payload 下**每一个**条目（多一个少一个都拒）；逐条核对 sha256 与 bytes
+10  校验和：files 必须覆盖 payload 下**每一个**条目（多一个少一个都拒）；逐条核对 sha256 与 bytes；
+    **files 为空表一律拒（v2.6.0）**——空 payload 的包宿主安装器必拒
 11  kind == "data" 则 data_kind 必须在 DATA_KINDS 里
 12  kind == "ui" 则无条件拒绝（"本版本不支持 UI 插件"）
 
@@ -72,11 +73,14 @@ MAX_ENTRIES = pet_export.EXPORT_MAX_ENTRIES
 MAX_BYTES = pet_export.EXPORT_MAX_BYTES
 
 # plugin.id 会被宿主当**目录名**用（<DATA_DIR>/plugins/<id>/），字符集必须收紧
-# （与 pet_plugin._ID_RE / _WIN_RESERVED 同口径）
+# （与 pet_plugin._ID_RE / WIN_RESERVED_NAMES 同口径）
 _ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
-_WIN_RESERVED = frozenset(("con", "prn", "aux", "nul")
-                          + tuple("com%d" % i for i in range(1, 10))
-                          + tuple("lpt%d" % i for i in range(1, 10)))
+# v2.6.0（代理C）：与 pet_plugin 同步的两条 Windows 名字判据——非法字符与保留设备名。
+# 这份参照实现是**独立**写的，但判据必须与真校验器一致（两个引擎对同一个包给同一结论）。
+WIN_ILLEGAL_CHARS = '<>:"|?*'
+WIN_RESERVED_NAMES = frozenset(("con", "prn", "aux", "nul")
+                               + tuple("com%d" % i for i in range(1, 10))
+                               + tuple("lpt%d" % i for i in range(1, 10)))
 
 
 def id_problem(pid):
@@ -87,7 +91,7 @@ def id_problem(pid):
         return "plugin.id 不合法（只允许字母数字与 . _ -，字母数字开头，最长 64）：%r" % (pid,)
     if pid.endswith(".") or ".." in pid:
         return "plugin.id 不能以点结尾、也不能含 \"..\"：%r" % (pid,)
-    if pid.split(".")[0].lower() in _WIN_RESERVED:
+    if pid.split(".")[0].lower() in WIN_RESERVED_NAMES:
         return "plugin.id 是 Windows 保留名：%r" % (pid,)
     return ""
 
@@ -183,19 +187,29 @@ def validate(path, host_ver=None, engine="auto"):
 # ---------------- 参照实现：12 条判据 ----------------
 
 def _path_problem(name):
-    """条目名不安全的原因（""=安全）。"""
+    """条目名不安全的原因（""=安全）。
+
+    v2.6.0（代理C）：补两条 Windows 名字判据（与 pet_plugin._unsafe_name_reason 同结论）——
+    非法字符 <>:"|?* 与保留设备名（带扩展名一样算：con.png == con；路径里任意一段都算）。
+    """
     if not name:
         return "条目名为空"
     if "\x00" in name:
         return "含 NUL"
     if "\\" in name:
         return "含反斜杠"
+    for ch in WIN_ILLEGAL_CHARS:
+        if ch in name:
+            return "含 Windows 非法字符 %r" % ch
     if name.startswith("/"):
         return "以斜杠开头"
     if re.match(r"^[A-Za-z]:", name):
         return "以盘符开头"
     if ".." in name.split("/"):
         return "含 .."
+    for seg in name.rstrip("/").split("/"):
+        if seg.rstrip(" .").split(".")[0].lower() in WIN_RESERVED_NAMES:
+            return "含 Windows 保留设备名：%r" % seg
     return ""
 
 
@@ -340,6 +354,11 @@ def validate_reference(path, host_version_str=None):
         if missing:
             return None, "files 里的条目在包里不存在（多 %d 条）：%s" % (
                 len(missing), "、".join(sorted(missing)[:5]))
+        if not listed and not payload:
+            # v2.6.0（代理C）：空表不是"没有校验和"而是"包里没有 payload 文件"，宿主安装器
+            # 必拒（解包后没有 payload 目录）——校验器放行就是两处口径差。放在覆盖判据之后：
+            # payload 里有文件而 files 是空表时，上面那句"没进 files 清单"更准确。
+            return None, "files 清单是空的：包里一个 payload 文件都没有"
         for p in payload:
             f = table[p]
             data = zf.read(p)

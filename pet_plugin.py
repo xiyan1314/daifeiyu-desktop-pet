@@ -42,7 +42,9 @@ manifest.json 口径（v1，**单一真源：顶层只放包级字段，插件�
   3  顶层 format == PLUGIN_FORMAT；顶层 version 是 int 且 ≤ PLUGIN_FORMAT_VERSION；
      存在 plugin 段（dict）
   4  全量 namelist 路径安全：每条 == "manifest.json" 或以 payload_root 开头；不含 ".."、
-     不以 "/" 或盘符开头、不含反斜杠、不含 NUL、无空路径段
+     不以 "/" 或盘符开头、不含反斜杠、不含 NUL、无空路径段；**不含 Windows 非法字符
+     <>:"|?*（v2.6.0）**、**不含 Windows 保留设备名（con/prn/aux/nul/com1-9/lpt1-9；
+     带扩展名一样保留：con.png == con）（v2.6.0）**
   5  zip 外部属性：不得带执行位（mode & 0o111）；符号链接（0o120000）一律拒
   6  扩展名白名单 ALLOWED_EXTS；FORBIDDEN_EXTS（可执行/脚本 + 嵌套压缩包）**点名文件**拒
   7  code 一致性：kind == "data" ⇒ code is False；kind != "data" ⇒ code is True
@@ -50,7 +52,8 @@ manifest.json 口径（v1，**单一真源：顶层只放包级字段，插件�
   9  双版本门硬拒：min_host_version ≤ host_version（四段整数比较，与发布门同款）；
      api_version ∉ API_VERSIONS 也拒
   10 校验和：files 逐条核对 path / sha256 / bytes，且必须**不多不少**覆盖 payload_root 下
-     的每一个文件条目（目录条目与 manifest.json 都不算）
+     的每一个文件条目（目录条目与 manifest.json 都不算）；**files 为空表一律拒（v2.6.0）**
+     ——空 payload 的包安装器必拒（解包后没有 payload 目录），校验器放行就是两处口径差
   11 kind == "data" ⇒ data_kind ∈ DATA_KINDS
   12 kind == "ui" ⇒ 无条件拒绝（本版本不支持 UI 插件）
 
@@ -117,9 +120,15 @@ def is_reserved_plugin_name(name):
 # id 会被宿主当**目录名**用（<DATA_DIR>/plugins/<id>/），所以字符集必须收紧：
 # 字母数字开头，只允许字母数字与 . _ -，且不许以点结尾、不许出现 ".."、不许是保留名。
 _ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
-_WIN_RESERVED = frozenset(("con", "prn", "aux", "nul")
-                          + tuple("com%d" % i for i in range(1, 10))
-                          + tuple("lpt%d" % i for i in range(1, 10)))
+# Windows **保留设备名**（大小写不敏感；带扩展名一样保留：con.png 与 con 是同一个设备）。
+# 两处判据共用这一份：① plugin.id（当目录名用）② payload 条目名的每一段（解包时落盘用）。
+WIN_RESERVED_NAMES = frozenset(("con", "prn", "aux", "nul")
+                               + tuple("com%d" % i for i in range(1, 10))
+                               + tuple("lpt%d" % i for i in range(1, 10)))
+# Windows 文件系统**非法字符**：条目名里出现任何一个，解包那一刻就写不出文件。
+# v2.6.0 收口前没有这条判据——payload 里带冒号的条目能过校验器，却在安装器 _extract_zip 里被
+# ntpath 当成盘符成分、算出"解包后越界"（校验器放行、安装器才拒 = 两处口径差）。
+WIN_ILLEGAL_CHARS = '<>:"|?*'
 _DRIVE_RE = re.compile(r"^[A-Za-z]:")
 
 
@@ -156,6 +165,9 @@ def _unsafe_name_reason(name):
         return "条目名含 NUL"
     if "\\" in name:
         return "条目名含反斜杠"
+    for ch in WIN_ILLEGAL_CHARS:
+        if ch in name:
+            return "条目名含 Windows 非法字符 %r" % ch
     if name.startswith("/"):
         return "条目名是绝对路径（以 / 开头）"
     if _DRIVE_RE.match(name):
@@ -170,6 +182,14 @@ def _unsafe_name_reason(name):
             return "条目名含 \".\" 段"
         if seg == "..":
             return "条目名含 \"..\" 段（路径穿越）"
+        # Windows 保留设备名比的是**第一个点之前**那一段（con / con.png / NUL / LPT9.tar 都算）；
+        # 尾部的点与空格在 Win32 里本来就会被吃掉，先归一掉再比。
+        # v2.6.0 第 4 轮（找茬审查 C-1 残留）：归一化此前只做了 rstrip(" .")，于是
+        # "nul .txt" / "con .png"（保留名 + 空格 + 扩展名）那一跳判不出来——实测解包正常、
+        # 不构成口径差，但**判据覆盖不如这里的文档口径**（文档说的是"第一个点之前那一段"，
+        # 而 "nul " 与 "nul" 在 Win32 眼里是同一个设备）。补一次 strip(" .") 对齐文档。
+        if seg.rstrip(" .").split(".")[0].strip(" .").lower() in WIN_RESERVED_NAMES:
+            return "条目名含 Windows 保留设备名：%r" % seg
     return ""
 
 
@@ -208,7 +228,7 @@ def _id_problem(pid):
         return "plugin.id 不合法（只允许字母数字与 . _ -，字母数字开头，最长 64）：%r" % (pid,)
     if pid.endswith(".") or ".." in pid:
         return "plugin.id 不能以点结尾、也不能含 \"..\"：%r" % (pid,)
-    if pid.split(".")[0].lower() in _WIN_RESERVED:
+    if pid.split(".")[0].lower() in WIN_RESERVED_NAMES:
         return "plugin.id 是 Windows 保留名：%r" % (pid,)
     if is_reserved_plugin_name(pid):
         # v2.5.1（兼容审查 P1-1）：packs / index.json / README.md 的字符集本身合法，但它们在
@@ -262,6 +282,13 @@ def _files_problems(files, payload_files, digests):
         bad.append("files 多列了包外/非 payload 条目：%s" % "、".join(extra[:5]))
     if lack:
         bad.append("payload 下有文件没进 files 清单：%s" % "、".join(lack[:5]))
+    if not files and not payload_files:
+        # v2.6.0 收口：空表不是"没有校验和"，而是"包里一个 payload 文件都没有"——那种包
+        # 安装器必拒（解包后没有 payload 目录），校验器放行就是两处口径差（v2.5.1 审查实测）。
+        # 有意放在覆盖判据**之后**：payload 里有文件、files 却是空表时，上面那句"没进 files
+        # 清单"更准确（_dev/verify_plugin_packs_v251.py 的反向变异就是按它断言的）。
+        bad.append("files 清单是空的：包里一个 payload 文件都没有（安装器会以"
+                   "「没有 payload 目录」拒装，校验器不该放行）")
     return bad
 
 

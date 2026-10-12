@@ -23,9 +23,12 @@
   play_action        → pet_actions.ActionService.play_action()
 """
 import json
+import math
 import threading
 import uuid
 from typing import Any, Callable, Iterable
+
+import pet_log  # v2.6.0（D7-B ②）：确认文案生成失败要留痕（pet_log 无依赖，不成环）
 
 # 一次对话最多几轮工具调用（防"模型自己跟自己聊"死循环）
 MAX_TOOL_ROUNDS = 2
@@ -311,42 +314,104 @@ def summarize(result: Any) -> str:
     return str(result.get("summary") or "")[:60]
 
 
-def _fmt_money(v: Any) -> str:
+def _as_finite_number(v: Any) -> float | None:
+    """v → float（有限数）；不是数值 / 是 bool / 是 nan|inf → None。
+
+    v2.6.0（找茬审查 P2-d）：bool 是 int 的子类（float(True) == 1.0），"nan" / "inf"
+    也能 float() 成功——它们都不是"用户要设的金额 / 分钟数"，与"根本格式化不出来"同样处理。
+    """
+    if isinstance(v, bool) or v is None:
+        return None
     try:
-        return "¥%.2f" % float(v)
+        num = float(v)
     except (TypeError, ValueError):
-        return "一笔账"
+        return None
+    return num if math.isfinite(num) else None
 
 
-def _describe_manual(args: dict | None) -> str:
+def _fmt_money(v: Any) -> str | None:
+    """金额 → "¥12.00"；**格式化不出来 → None**（不是字面量"一笔账"）。
+
+    v2.6.0（找茬审查 P2-d）：旧行为是失败时返回字面量"一笔账"，于是确认框正文会写成
+    「想把今日预算设成一笔账，可以吗？」——**金额看不见**，而且这条路上不写日志
+    （只有 describe_call 的 except 分支才写）。而 validate_args 只查"必填有没有 / 空不空"，
+    {"amount": "abc"} 能一路通过校验走到这里。钱相关文案绝不许静默降级成一句看不懂的话：
+    返回 None = "这条拼不出来"，由 describe_call 退回**带参数**的保守文案并留痕。
+    """
+    num = _as_finite_number(v)
+    return None if num is None else "¥%.2f" % num
+
+
+def _describe_manual(args: dict | None) -> str | None:
     note = str((args or {}).get("note") or "").strip()
-    return "在账本里记一笔 %s%s" % (_fmt_money((args or {}).get("amount")),
-                                ("（%s）" % note[:20]) if note else "")
+    money = _fmt_money((args or {}).get("amount"))
+    if money is None:
+        return None
+    return "在账本里记一笔 %s%s" % (money, ("（%s）" % note[:20]) if note else "")
 
 
-def _describe_budget(args: dict | None) -> str:
-    return "把今日预算设成 %s" % _fmt_money((args or {}).get("amount"))
+def _describe_budget(args: dict | None) -> str | None:
+    money = _fmt_money((args or {}).get("amount"))
+    return None if money is None else "把今日预算设成 %s" % money
 
 
-def _describe_alarm(args: dict | None) -> str:
-    t = str((args or {}).get("time") or "").strip()
+def _describe_alarm(args: dict | None) -> str | None:
+    """闹钟时间：**给了值就必须是字符串**，否则 None（关键值没格式化成功，见 P2-d）。
+
+    值为 None / 缺失照旧显示"？"——那种情况 validate_args 已经拦掉了（"缺少参数 time"），
+    这里保留一个看得懂的占位符，不为它多写一条日志。但 {"time": 800} 这种"给了个不是
+    字符串的东西"必须退回带参数的保守文案：旧行为 str(800) 硬转后照念「设一个 800 的闹钟」，
+    读起来像个正常时间，实际是模型给错了类型。
+    """
     label = str((args or {}).get("label") or "").strip()
-    return "设一个 %s 的闹钟%s" % (t or "？", ("（%s）" % label[:20]) if label else "")
+    tail = ("（%s）" % label[:20]) if label else ""
+    raw_time = (args or {}).get("time")
+    if raw_time is None:
+        return "设一个 ？ 的闹钟%s" % tail
+    if not isinstance(raw_time, str):
+        return None
+    return "设一个 %s 的闹钟%s" % (raw_time.strip() or "？", tail)
 
 
-def _describe_timer(args: dict | None) -> str:
+def _describe_timer(args: dict | None) -> str | None:
+    """时长：**给了值就必须是有限数**，否则 None（见 P2-d）。
+
+    口径与 _describe_alarm 一致：值为 None / 缺失照旧给占位符"一会儿"（validate_args
+    已经拦掉），{"minutes": "abc"} / True / nan 这种"给了个不是数字的东西"才退回
+    带参数的保守文案——旧行为写死"一会儿"，读起来像个正常时长，把参数畸形藏起来了。
+    """
     label = str((args or {}).get("label") or "").strip()
-    minutes = (args or {}).get("minutes")
-    try:
-        span = "%g 分钟" % float(minutes)
-    except (TypeError, ValueError):
-        span = "一会儿"
-    return "设一个 %s 后的提醒%s" % (span, ("（%s）" % label[:20]) if label else "")
+    tail = ("（%s）" % label[:20]) if label else ""
+    raw = (args or {}).get("minutes")
+    if raw is None:
+        return "设一个 一会儿 后的提醒%s" % tail
+    num = _as_finite_number(raw)
+    if num is None:
+        return None
+    return "设一个 %g 分钟后的提醒%s" % (num, tail)
 
 
-_DESCRIBE: dict[str, Callable[[dict | None], str]] = {
+_DESCRIBE: dict[str, Callable[[dict | None], str | None]] = {
     "add_manual_record": _describe_manual, "set_budget": _describe_budget,
     "set_alarm": _describe_alarm, "set_timer": _describe_timer}
+
+
+def _args_preview(args: Any, limit: int = 80) -> str:
+    """确认文案的兜底参数摘要（只给用户看）：单行化 + 截断。
+
+    用 json.dumps(default=str) 优先（可读），它自己也会抛（循环引用 / 怪对象），
+    所以再退一层 str()。
+    v2.6.0（找茬审查 P2-d）：docstring 此前写的是"再退 str()——两条路径都不吞异常"，
+    但代码里**只有 json.dumps 一条路**（文案与实现不符）。而且它现在不只被 except 分支
+    调用：describe_call 在"关键值没格式化成功"时也走这里——那条路不在异常处理里，
+    再抛出去就等于确认框整个打不开。所以真补上这层兜底（宁可摘要难看，不可弹不出框）。
+    """
+    try:
+        text = json.dumps(args if isinstance(args, dict) else {}, ensure_ascii=False, default=str)
+    except Exception:
+        text = str(args)
+    one = " ".join(text.split())
+    return one[:limit] + ("…" if len(one) > limit else "")
 
 
 def describe_call(name: str, args: Any) -> str:
@@ -358,8 +423,25 @@ def describe_call(name: str, args: Any) -> str:
     if fn is not None:
         try:
             detail = fn(args if isinstance(args, dict) else {})
-        except Exception:
-            detail = ""  # 有意忽略：文案拼不出来就退回通用问法
+        except Exception as e:
+            # v2.6.0（D7-B ② 改逻辑）：这个函数喂的是**写入前最后一道闸**——桌宠._ask_tool_confirm
+            # 拿它当确认框正文（AI 要记账/改预算/设闹钟时先问用户）。旧行为是文案拼不出来就
+            # 退回通用问法"想调用「记一笔」，可以吗？"：**用户看不到 AI 到底要写什么**就点了
+            # 确认，等于把闸门关掉（而"文案拼不出来"恰恰最容易发生在参数畸形的时候）。
+            # 现在退回**带参数的保守文案**（宁可难看，不可看不见），并补一条限流日志。
+            pet_log.log_throttled("tools.describe_call",
+                                  "确认文案生成失败（已退回带参数的兜底文案）：%r" % (e,))
+            detail = "「%s」（%s）" % (label, _args_preview(args))
+        if not detail:
+            # v2.6.0（找茬审查 P2-d）：**正常路径**也会拼不出关键值——validate_args 只查
+            # "必填有没有 / 空不空"，{"amount": "abc"} / {"time": 800} 都能一路通过校验，
+            # 走到 _describe_* 才发现格式化不出来。_describe_* 这时返回 None（不再返回
+            # "一笔账" / "一会儿"这种"看得见但看不懂"的字面量），这里与异常路径**同一口径**：
+            # 退回带参数的保守文案 + 补一条限流日志。宁可难看，不可看不见。
+            pet_log.log_throttled("tools.describe_call",
+                                  "确认文案里的关键值没格式化成功（已退回带参数的兜底文案）："
+                                  "%s %s" % (name, _args_preview(args)))
+            detail = "「%s」（%s）" % (label, _args_preview(args))
     return "想%s，可以吗？" % detail if detail else "想调用「%s」，可以吗？" % label
 
 

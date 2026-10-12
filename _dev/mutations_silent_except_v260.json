@@ -1,0 +1,468 @@
+{
+  "title": "v2.6.0 D7-B 静默 except 收口（含第 4 轮 P1/P2/P3 修复）变异验证",
+  "note": "由 _dev/silent_except_mutate.py 的原地变异迁移而来（影子副本 + 运行锁 + expect_fail 判定 + 结果 JSON 带 repo_fingerprint）；驱动 _dev/mutate_check.py。M-S1..M-S12 = 原脚本的 12 条，M-S13..M-S19 = 第 4 轮新修的 7 条。",
+  "mutations": [
+    {
+      "id": "M-S1",
+      "file": "pet_config.py",
+      "why": "pet_config.decrypt_secret 还原成静默（DPAPI 解密失败不留痕）",
+      "old": "            pet_log.log_throttled(\"config.decrypt_secret\",\n                                  \"API Key 解密失败（按未设置处理）：%r\" % (e,))\n",
+      "new": "",
+      "tests": [
+        "tests/test_silent_except_v252.py::test_decrypt_secret_failure_is_logged"
+      ],
+      "expect_fail": [
+        "tests/test_silent_except_v252.py::test_decrypt_secret_failure_is_logged"
+      ]
+    },
+    {
+      "id": "M-S2",
+      "file": "pet_resources.py",
+      "why": "pet_resources.stage_file 还原成静默（角色素材暂存失败不留痕）",
+      "old": "            pet_log.log_throttled(\"role.stage_file\",\n                                  \"角色素材暂存失败（返回 None，调用方按失败处理）：%r <- %s\"\n                                  % (e, src))\n",
+      "new": "",
+      "tests": [
+        "tests/test_silent_except_v252.py::test_role_stage_file_failure_is_logged"
+      ],
+      "expect_fail": [
+        "tests/test_silent_except_v252.py::test_role_stage_file_failure_is_logged"
+      ]
+    },
+    {
+      "id": "M-S3",
+      "file": "pet_audio.py",
+      "why": "pet_audio.preview_file 还原成静默（试听失败没声音也没线索）",
+      "old": "        pet_log.log_throttled(\"audio.preview_file\", \"试听失败（%r）：%s\" % (e, path))\n",
+      "new": "",
+      "tests": [
+        "tests/test_silent_except_v252.py::test_audio_preview_failure_is_logged"
+      ],
+      "expect_fail": [
+        "tests/test_silent_except_v252.py::test_audio_preview_failure_is_logged"
+      ]
+    },
+    {
+      "id": "M-S4",
+      "file": "桌宠.py",
+      "why": "桌宠.preview_audio 还原成静默（两条播放链路都失败时不留痕）",
+      "old": "            pet_log.log_throttled(\"preview_audio:\" + str(path),\n                                  \"试听失败（winsound 与 QMediaPlayer 都不可用）：%r <- %s\"\n                                  % (e, path), data_dir=DATA_DIR)\n",
+      "new": "",
+      "tests": [
+        "tests/test_silent_except_v252.py::test_window_preview_audio_failure_is_logged"
+      ],
+      "expect_fail": [
+        "tests/test_silent_except_v252.py::test_window_preview_audio_failure_is_logged"
+      ]
+    },
+    {
+      "id": "M-S5",
+      "file": "桌宠.py",
+      "why": "桌宠._persona_file_text 还原成静默（自建人设读不出来悄悄回退内置）",
+      "old": "        if pid.startswith(\"file:\"):\n            pet_log.log_throttled(\"persona_file_text:\" + pid,\n                                  \"自建人设文件读取失败（回退内置人设）：%r <- %s\" % (e, _p))\n",
+      "new": "",
+      "tests": [
+        "tests/test_silent_except_v252.py::test_persona_file_text_logs_only_for_custom_personas"
+      ],
+      "expect_fail": [
+        "tests/test_silent_except_v252.py::test_persona_file_text_logs_only_for_custom_personas"
+      ]
+    },
+    {
+      "id": "M-S6",
+      "file": "pet_tools.py",
+      "why": "pet_tools.describe_call 还原成「丢参数的通用问法」（确认框看不见 AI 要写什么）",
+      "old": "            pet_log.log_throttled(\"tools.describe_call\",\n                                  \"确认文案生成失败（已退回带参数的兜底文案）：%r\" % (e,))\n            detail = \"「%s」（%s）\" % (label, _args_preview(args))",
+      "new": "            detail = \"\"",
+      "tests": [
+        "tests/test_silent_except_v252.py::test_describe_call_keeps_args_when_describe_raises"
+      ],
+      "expect_fail": [
+        "tests/test_silent_except_v252.py::test_describe_call_keeps_args_when_describe_raises"
+      ]
+    },
+    {
+      "id": "M-S7",
+      "file": "pet_log.py",
+      "why": "pet_log.log_throttled 的窗口判据弄坏（永不限流）",
+      "old": "    if last is not None and (t - float(last)) < gap:",
+      "new": "    if False:",
+      "tests": [
+        "tests/test_silent_except_v252.py::test_log_throttled_window_uses_injected_clock"
+      ],
+      "expect_fail": [
+        "tests/test_silent_except_v252.py::test_log_throttled_window_uses_injected_clock"
+      ]
+    },
+    {
+      "id": "M-S8",
+      "file": "pet_log.py",
+      "why": "guard_slot 不再走 log_throttled（限流口径的单一实现被绕开）",
+      "old": "                log_throttled(\"timer slot %s\" % name,\n                              \"timer slot %s failed: %r\\n%s\" % (name, e, traceback.format_exc()))",
+      "new": "                log_error(\"timer slot %s failed: %r\\n%s\" % (name, e, traceback.format_exc()))",
+      "tests": [
+        "tests/test_silent_except_v252.py::test_guard_slot_still_throttles_after_refactor"
+      ],
+      "expect_fail": [
+        "tests/test_silent_except_v252.py::test_guard_slot_still_throttles_after_refactor"
+      ]
+    },
+    {
+      "id": "M-S9",
+      "file": "_dev/silent_except_whitelist.py",
+      "why": "白名单少一条（模拟「新增静默 except 没登记」）",
+      "old": "        return json.load(fh)",
+      "new": "        d = json.load(fh)\n        d[\"entries\"] = d[\"entries\"][1:]\n        return d",
+      "tests": [
+        "tests/test_silent_except_v252.py::test_every_silent_except_has_an_owner"
+      ],
+      "expect_fail": [
+        "tests/test_silent_except_v252.py::test_every_silent_except_has_an_owner"
+      ]
+    },
+    {
+      "id": "M-S10",
+      "file": "_dev/silent_except_whitelist.py",
+      "why": "白名单多一条失效条目（代码里已经没有它了）",
+      "old": "        return json.load(fh)",
+      "new": "        d = json.load(fh)\n        d[\"entries\"].append(dict(key=\"gone.py|f|deadbeef00\", file=\"gone.py\", func=\"f\",\n                                 shape=\"deadbeef00\", count=1, tier=\"C\", reason=\"cleanup\",\n                                 evidence=\"except Exception: pass\", lines=[1]))\n        return d",
+      "tests": [
+        "tests/test_silent_except_v252.py::test_every_silent_except_has_an_owner"
+      ],
+      "expect_fail": [
+        "tests/test_silent_except_v252.py::test_every_silent_except_has_an_owner"
+      ]
+    },
+    {
+      "id": "M-S11",
+      "file": "_dev/silent_except_whitelist.py",
+      "why": "白名单某条理由码换成 unreviewed 占位（白名单不许自动扩容）",
+      "old": "        return json.load(fh)",
+      "new": "        d = json.load(fh)\n        d[\"entries\"][0][\"reason\"] = \"unreviewed\"\n        return d",
+      "tests": [
+        "tests/test_silent_except_v252.py::test_every_silent_except_has_an_owner"
+      ],
+      "expect_fail": [
+        "tests/test_silent_except_v252.py::test_every_silent_except_has_an_owner"
+      ]
+    },
+    {
+      "id": "M-S12",
+      "file": "_dev/silent_except_whitelist.py",
+      "why": "白名单某条 count 改错（条数对不上 = 代码里多了一条没人管的静默 except）",
+      "old": "        return json.load(fh)",
+      "new": "        d = json.load(fh)\n        d[\"entries\"][0][\"count\"] = int(d[\"entries\"][0][\"count\"]) + 1\n        return d",
+      "tests": [
+        "tests/test_silent_except_v252.py::test_every_silent_except_has_an_owner"
+      ],
+      "expect_fail": [
+        "tests/test_silent_except_v252.py::test_every_silent_except_has_an_owner"
+      ]
+    },
+    {
+      "id": "M-S13",
+      "file": "pet_plugin_index.py",
+      "why": "明文 http 照收（P2-a：索引与包同源，明文链路上 sha256 拦不住中间人）",
+      "old": "def insecure_reason(target):",
+      "new": "def insecure_reason(target):\n    return \"\"      # 变异：http 一律放行",
+      "tests": [
+        "tests/test_plugin_market_v252.py::test_明文http一律拒_只收https"
+      ],
+      "expect_fail": [
+        "tests/test_plugin_market_v252.py::test_明文http一律拒_只收https"
+      ]
+    },
+    {
+      "id": "M-S14",
+      "file": "pet_plugin_index.py",
+      "why": "远端索引可以指向本地路径（P2-b：跨信任域）",
+      "old": "    if url.lower().startswith(\"file://\") or _DRIVE_RE.match(url) or os.path.isabs(url):",
+      "new": "    if False:      # 变异：不区分索引来源，本地路径一律照收",
+      "tests": [
+        "tests/test_plugin_market_v252.py::test_远端索引不许指向本地路径_随包索引不受限"
+      ],
+      "expect_fail": [
+        "tests/test_plugin_market_v252.py::test_远端索引不许指向本地路径_随包索引不受限"
+      ]
+    },
+    {
+      "id": "M-S15",
+      "file": "pet_plugin_index.py",
+      "why": "相对地址不查 .. / 空段 / 保留名（P3-2：路径穿越）",
+      "old": "    why = _rel_url_reason(url)",
+      "new": "    why = \"\"       # 变异：不查相对地址的段",
+      "tests": [
+        "tests/test_plugin_market_v252.py::test_相对地址拒路径穿越与空段"
+      ],
+      "expect_fail": [
+        "tests/test_plugin_market_v252.py::test_相对地址拒路径穿越与空段"
+      ]
+    },
+    {
+      "id": "M-S16",
+      "file": "pet_plugin_index.py",
+      "why": "file:// 退回裸 url[7:]（P3-3：/C:/x 在 Windows 上不是合法绝对路径）",
+      "old": "        return urllib.request.url2pathname(tail) or tail",
+      "new": "        return tail    # 变异：退回裸 url[7:]",
+      "tests": [
+        "tests/test_plugin_market_v252.py::test_file_url折成本机路径"
+      ],
+      "expect_fail": [
+        "tests/test_plugin_market_v252.py::test_file_url折成本机路径"
+      ]
+    },
+    {
+      "id": "M-S17",
+      "file": "pet_tools.py",
+      "why": "金额格式化失败退回字面量「一笔账」（P2-d：确认框里金额看不见、也不留痕）",
+      "old": "    return None if num is None else \"¥%.2f\" % num",
+      "new": "    return \"一笔账\" if num is None else \"¥%.2f\" % num",
+      "tests": [
+        "tests/test_silent_except_v252.py::test_describe_call_amount_not_a_number_stays_visible"
+      ],
+      "expect_fail": [
+        "tests/test_silent_except_v252.py::test_describe_call_amount_not_a_number_stays_visible"
+      ]
+    },
+    {
+      "id": "M-S18",
+      "file": "pet_plugin_host.py",
+      "why": "prompt 更新不再按内容指纹放行（P2-1①：新版改自己落地的同名文件 → 整包失败）",
+      "old": "                if _fp_named_file(name, dst) not in mine:",
+      "new": "                if True:        # 变异：不再按指纹区分，一律当成用户文件",
+      "tests": [
+        "tests/test_plugin_host_v251.py::test_prompt插件更新_用户没改过就允许覆盖新版内容"
+      ],
+      "expect_fail": [
+        "tests/test_plugin_host_v251.py::test_prompt插件更新_用户没改过就允许覆盖新版内容"
+      ]
+    },
+    {
+      "id": "M-S19",
+      "file": "pet_dialogs.py",
+      "why": "本地包安装入口的 clicked 不接线（P1-1：按钮在、点了什么也不发生）",
+      "old": "        self._btn_install_file.clicked.connect(lambda checked=False: self._install())",
+      "new": "        self._btn_install_file.clicked.connect(lambda checked=False: None)",
+      "tests": [
+        "tests/test_plugin_market_v252.py::test_底排必须有本地包安装入口_而且真的能装"
+      ],
+      "expect_fail": [
+        "tests/test_plugin_market_v252.py::test_底排必须有本地包安装入口_而且真的能装"
+      ]
+    }
+  ],
+  "results": {
+    "title": "变异验证 spec：mutations_silent_except_v260.json",
+    "checked_at": "2026-10-12 12:07:46",
+    "total": 19,
+    "caught": 19,
+    "not_caught": 0,
+    "blocked": 0,
+    "items": [
+      {
+        "id": "M-S1",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 0.51s",
+        "failed": [
+          "test_decrypt_secret_failure_is_logged"
+        ]
+      },
+      {
+        "id": "M-S2",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 0.43s",
+        "failed": [
+          "test_role_stage_file_failure_is_logged"
+        ]
+      },
+      {
+        "id": "M-S3",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 0.44s",
+        "failed": [
+          "test_audio_preview_failure_is_logged"
+        ]
+      },
+      {
+        "id": "M-S4",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 0.82s",
+        "failed": [
+          "test_window_preview_audio_failure_is_logged"
+        ]
+      },
+      {
+        "id": "M-S5",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 0.58s",
+        "failed": [
+          "test_persona_file_text_logs_only_for_custom_personas"
+        ]
+      },
+      {
+        "id": "M-S6",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 0.42s",
+        "failed": [
+          "test_describe_call_keeps_args_when_describe_raises"
+        ]
+      },
+      {
+        "id": "M-S7",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 0.40s",
+        "failed": [
+          "test_log_throttled_window_uses_injected_clock"
+        ]
+      },
+      {
+        "id": "M-S8",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 0.40s",
+        "failed": [
+          "test_guard_slot_still_throttles_after_refactor"
+        ]
+      },
+      {
+        "id": "M-S9",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed, 6 warnings in 18.00s",
+        "failed": [
+          "test_every_silent_except_has_an_owner"
+        ]
+      },
+      {
+        "id": "M-S10",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed, 6 warnings in 17.85s",
+        "failed": [
+          "test_every_silent_except_has_an_owner"
+        ]
+      },
+      {
+        "id": "M-S11",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed, 6 warnings in 17.93s",
+        "failed": [
+          "test_every_silent_except_has_an_owner"
+        ]
+      },
+      {
+        "id": "M-S12",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed, 6 warnings in 17.88s",
+        "failed": [
+          "test_every_silent_except_has_an_owner"
+        ]
+      },
+      {
+        "id": "M-S13",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 0.53s",
+        "failed": [
+          "test_明文http一律拒_只收https"
+        ]
+      },
+      {
+        "id": "M-S14",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 0.54s",
+        "failed": [
+          "test_远端索引不许指向本地路径_随包索引不受限"
+        ]
+      },
+      {
+        "id": "M-S15",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 0.50s",
+        "failed": [
+          "test_相对地址拒路径穿越与空段"
+        ]
+      },
+      {
+        "id": "M-S16",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 0.50s",
+        "failed": [
+          "test_file_url折成本机路径"
+        ]
+      },
+      {
+        "id": "M-S17",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 0.43s",
+        "failed": [
+          "test_describe_call_amount_not_a_number_stays_visible"
+        ]
+      },
+      {
+        "id": "M-S18",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 0.63s",
+        "failed": [
+          "test_prompt插件更新_用户没改过就允许覆盖新版内容"
+        ]
+      },
+      {
+        "id": "M-S19",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 0.63s",
+        "failed": [
+          "test_底排必须有本地包安装入口_而且真的能装"
+        ]
+      }
+    ],
+    "spec": "mutations_silent_except_v260.json",
+    "tests": [
+      "tests/test_plugin_host_v251.py::test_prompt插件更新_用户没改过就允许覆盖新版内容",
+      "tests/test_plugin_market_v252.py::test_file_url折成本机路径",
+      "tests/test_plugin_market_v252.py::test_底排必须有本地包安装入口_而且真的能装",
+      "tests/test_plugin_market_v252.py::test_明文http一律拒_只收https",
+      "tests/test_plugin_market_v252.py::test_相对地址拒路径穿越与空段",
+      "tests/test_plugin_market_v252.py::test_远端索引不许指向本地路径_随包索引不受限",
+      "tests/test_silent_except_v252.py::test_audio_preview_failure_is_logged",
+      "tests/test_silent_except_v252.py::test_decrypt_secret_failure_is_logged",
+      "tests/test_silent_except_v252.py::test_describe_call_amount_not_a_number_stays_visible",
+      "tests/test_silent_except_v252.py::test_describe_call_keeps_args_when_describe_raises",
+      "tests/test_silent_except_v252.py::test_every_silent_except_has_an_owner",
+      "tests/test_silent_except_v252.py::test_guard_slot_still_throttles_after_refactor",
+      "tests/test_silent_except_v252.py::test_log_throttled_window_uses_injected_clock",
+      "tests/test_silent_except_v252.py::test_persona_file_text_logs_only_for_custom_personas",
+      "tests/test_silent_except_v252.py::test_role_stage_file_failure_is_logged",
+      "tests/test_silent_except_v252.py::test_window_preview_audio_failure_is_logged"
+    ],
+    "note": "变异只在 %TEMP% 影子副本里做，真实仓库只读（只写 _dev/.mutation.lock）",
+    "repo_fingerprint": {
+      "桌宠.py": "99e2abf3e7fb",
+      "pet_export.py": "c01e1593efd2",
+      "pet_lines.py": "5332f60b5f26",
+      "pet_alarm.py": "1149e94deee3",
+      "pet_behaviors.py": "8f57255144f6",
+      "_check_release.py": "e0abfe805849",
+      "pet_balance.py": "2828b2ebc0c9",
+      "pet_plugin.py": "2f7853298fc3",
+      "pet_plugin_host.py": "e41ee09707ba",
+      "pet_dialogs.py": "48f300e4fc50",
+      "pet_menu.py": "920daac1b835",
+      "pet_plugin_index.py": "439340b16523"
+    }
+  }
+}

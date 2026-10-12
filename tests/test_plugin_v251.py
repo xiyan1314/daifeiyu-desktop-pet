@@ -18,6 +18,7 @@ import hashlib
 import io
 import json
 import os
+import re
 import sys
 import zipfile
 
@@ -708,4 +709,155 @@ def test_保留名不许当插件id(tmp_path, pid):
     """
     err = _err(_pack(tmp_path, meta=_meta(id=pid)))
     assert "保留名" in err, err
+
+
+# ---------------- 21. v2.6.0 代理C：校验器与安装器两处口径差收口 ----------------
+# v2.5.1 审查实测的两处口径差（"校验器放行、安装器才拒"）：
+#   ① payload/a:b.png：过校验器，却在安装器 _extract_zip 里被 ntpath 算出"解包后越界"；
+#   ② files: []（空 payload）：过校验器，安装器才以"没有 payload 目录"拒。
+# 现在**校验器先拒**（它是唯一真源）：判据 4 收 Windows 非法字符与保留设备名，
+# 判据 10 收空 files。下面每条都能真失败，且最后一节把**两侧**都钉住（双向覆盖）。
+
+@pytest.mark.parametrize("ch", list(pet_plugin.WIN_ILLEGAL_CHARS))
+def test_条目名含windows非法字符拒(tmp_path, ch):
+    """判据 4（v2.6.0）：`<>:"|?*` 任意一个出现在条目名里 → 拒并点名那个条目。
+
+    能真失败：去掉 _unsafe_name_reason 里的 WIN_ILLEGAL_CHARS 那一跳 → 这些包全过，红
+    （v2.5.1 实测：payload/a:b.png 校验器放行，一直到安装器解包才报"条目解包后越界"）。
+    """
+    entry = "payload/a%sb.png" % ch
+    entries = {entry: b"x"}
+    p = _write_zip(str(tmp_path / "ill.dfypet-plugin"), entries, _manifest(entries))
+    err = _err(p)
+    assert "非法字符" in err, err
+    assert entry in err, "要点名那个条目：%s" % err
+
+
+def test_条目名含windows非法字符_看着可疑但合法的名字照旧通过(tmp_path):
+    """控制组：把上面那跳写成"名字里带标点就拒"会误伤正常包——这些必须仍然通过。"""
+    entries = {"payload/a-b_c.txt": b"x", "payload/中文 名.txt": b"y",
+               "payload/v1.0.2.json": b"{}"}
+    assert _ok(_write_zip(str(tmp_path / "okname.dfypet-plugin"), entries,
+                          _manifest(entries))) is not None
+
+
+@pytest.mark.parametrize("entry", ["payload/con.png", "payload/CON.txt", "payload/nul",
+                                   "payload/com1.json", "payload/lpt9.md",
+                                   "payload/aux/inner.png", "payload/sub/prn.json",
+                                   # v2.6.0 第 4 轮（找茬审查 C-1 残留）：保留名 + 空格 + 扩展名。
+                                   # 归一化此前只 rstrip(" .")，"nul " != "nul" 于是漏判。
+                                   "payload/nul .txt", "payload/con .png"])
+def test_条目名含windows保留设备名拒(tmp_path, entry):
+    """判据 4（v2.6.0）：Windows 保留设备名（**带扩展名一样算**、大小写不敏感、路径里任意
+    一段都算）不许出现在条目名里——它们不是文件名，写下去会打到设备上或直接失败。
+
+    能真失败：去掉 _unsafe_name_reason 里那段保留设备名判断 → 这些包全过，红。
+    """
+    entries = {entry: b"x"}
+    p = _write_zip(str(tmp_path / "dev.dfypet-plugin"), entries, _manifest(entries))
+    err = _err(p)
+    assert "保留设备名" in err, err
+    assert entry in err, "要点名那个条目：%s" % err
+
+
+@pytest.mark.parametrize("entry", ["payload/console.png", "payload/com10.txt",
+                                   "payload/prn1.txt", "payload/nulify.txt",
+                                   "payload/my.con.png", "payload/aux2/x.png"])
+def test_保留设备名的近似名字不误伤(tmp_path, entry):
+    """控制组：只有"第一个点之前那一段**恰好**是设备名"才拒——console / com10 / prn1 /
+    nulify / my.con.png 都是正常文件（拿设备名当前缀不算）。
+
+    能真失败：把判断写成"名字里含 con 就拒" → 这些包被误拒，红。
+    """
+    entries = {entry: b"x"}
+    assert _ok(_write_zip(str(tmp_path / "notdev.dfypet-plugin"), entries,
+                          _manifest(entries))) is not None
+
+
+def test_files清单为空即拒(tmp_path):
+    """判据 10（v2.6.0）：`files: []` 不是"没有校验和"，而是"包里一个 payload 文件都没有"
+    ——安装器必拒（解包后没有 payload 目录），校验器此前却放行（第二处口径差）。
+
+    能真失败：去掉 _files_problems 里的空表那一跳 → 下面两种形状都过，红。
+    """
+    empty = {}
+    m = _manifest(empty)
+    assert m["files"] == []
+    # 形状一：连 payload/ 目录条目都没有
+    p1 = _write_zip(str(tmp_path / "empty1.dfypet-plugin"), empty, m)
+    assert "空的" in _err(p1)
+    # 形状二：带 payload/ 目录条目（安装器读到的同样是"没有 payload 目录"）
+    p2 = str(tmp_path / "empty2.dfypet-plugin")
+    with zipfile.ZipFile(p2, "w") as z:
+        z.writestr(pet_plugin.MANIFEST_NAME, json.dumps(m, ensure_ascii=False).encode("utf-8"))
+        z.writestr("payload/", b"")
+    assert "空的" in _err(p2)
+    # 控制组：有一个 payload 文件的包照旧通过
+    one = {"payload/a.txt": b"x"}
+    assert _ok(_write_zip(str(tmp_path / "one.dfypet-plugin"), one,
+                          _manifest(one))) is not None
+
+
+@pytest.mark.parametrize("root", ["pay:load/", "payload?x/", "con/", "payload/aux/"])
+def test_payload_root含非法字符或保留设备名也拒(tmp_path, root):
+    """判据 4（v2.6.0）：payload_root 是**解包时的根前缀**，它自己也要过同一套名字判据
+    （此前只查 .. / 绝对路径 / 反斜杠）。
+
+    能真失败：把 _unsafe_name_reason(payload_root + "x") 那跳换成只查 ".." → 这些包过，红。
+    """
+    entry = root + "a.txt"
+    entries = {entry: b"x"}
+    m = _manifest(entries, payload_root=root)
+    p = _write_zip(str(tmp_path / "badroot2.dfypet-plugin"), entries, m)
+    err = _err(p)
+    assert "payload_root" in err, err
+
+
+def test_口径差_校验器先拒_安装器不留残余(tmp_path):
+    """**契约双向覆盖**（v2.6.0 铁律）：同一批包，校验器与安装器必须给同一结论。
+
+    v2.5.1 的两处口径差就是**单向覆盖**的产物——"拒"只在安装器一侧有用例、校验器那侧没有，
+    于是两处漂移了很久没人发现。这条把两侧一起钉：
+      · 校验器：validate_plugin_zip 必须 (None, 非空原因)；
+      · 安装器：PluginHost.install_zip 必须 ok=False，且拒绝理由是**校验器那句**（唯一真源），
+        plugins/ 下不留任何东西（连空目录都不该出现：校验先于建目录）。
+    能真失败：任何一处把这两类包放行 → 对应断言红。
+    """
+    import pet_plugin_host          # 本文件只有这一条跨口径用例用到安装器
+    cases = {"colon.dfypet-plugin": {"payload/a:b.png": b"x"},
+             "device.dfypet-plugin": {"payload/con.png": b"x"}}
+    data_dir = tmp_path / "data"
+    host = pet_plugin_host.PluginHost(str(data_dir), host_version=HOST)
+    for i, (name, payload) in enumerate(sorted(cases.items())):
+        p = _pack(tmp_path, name=name, payload=payload, meta=_meta(id="gap-case-%d" % i))
+        err = _err(p)                                   # 校验器一侧
+        ok, msg = host.install_zip(p)                   # 安装器一侧
+        assert ok is False, "安装器放行了本该拒的包：%r" % (msg,)
+        assert err and err in msg, ("安装器拒绝的理由不是校验器那句（两处口径又分家了）"
+                                    "：err=%r msg=%r" % (err, msg))
+    # files: []（空 payload）同样两侧一致
+    p = _pack(tmp_path, name="empty.dfypet-plugin", payload={}, meta=_meta(id="gap-case-empty"))
+    err = _err(p)
+    ok, msg = host.install_zip(p)
+    assert ok is False and "空的" in err and "空的" in msg, (err, msg)
+    assert not (data_dir / "plugins").exists(), "校验不通过却落了东西：%r" % (
+        sorted((data_dir / "plugins").iterdir()) if (data_dir / "plugins").exists() else [],)
+
+
+def test_windows名字判据与文档同时写死():
+    """v2.6.0：Windows 名字判据（非法字符 + 保留设备名）在**两处**同时写死，且**双向**都钉：
+      · 常量 → 文档：非法字符那一串要逐字出现；43 个保留设备名一个都不能漏；
+      · 文档 → 常量：文档里写了常量里没有的设备名（例如 com10）也要红。
+    能真失败：往 WIN_RESERVED_NAMES 加一个名字而不改文档（或反过来）→ 红。
+    """
+    doc = io.open(os.path.join(ROOT, "_dev", "plugin_format_v251.md"), encoding="utf-8").read()
+    assert pet_plugin.WIN_ILLEGAL_CHARS in doc, ("非法字符那一串必须逐字写进 "
+        "_dev/plugin_format_v251.md：%r" % (pet_plugin.WIN_ILLEGAL_CHARS,))
+    tokens = set(re.findall(r"`([a-z][a-z0-9]*)`", doc))
+    missing = sorted(set(pet_plugin.WIN_RESERVED_NAMES) - tokens)
+    assert missing == [], "这些保留设备名没写进文档：%r" % (missing,)
+    stray = sorted(t for t in tokens
+                   if re.fullmatch(r"(?:con|prn|aux|nul|com\d+|lpt\d+)", t)
+                   and t not in pet_plugin.WIN_RESERVED_NAMES)
+    assert stray == [], "文档写了常量里没有的保留设备名：%r" % (stray,)
 

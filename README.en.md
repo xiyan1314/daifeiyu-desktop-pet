@@ -174,12 +174,12 @@ AST, counting return annotations per module):
 
 | Module | Annotated | Note |
 |---|---|---|
-| `pet_tools.py` | ✅ 39/39 | 39 of the "82 functions" shipped in v2.4.1 |
+| `pet_tools.py` | ✅ 41/41 | 39 of the "82 functions" shipped in v2.4.1; v2.6.0 round 4 added `_as_finite_number` (single source for the amount/duration numeric check) |
 | `pet_lines.py` | ✅ 51/51 | 43 functions back then; later additions kept full coverage |
 | `pet_io.py` | ✅ 25/28 | every public API and pure function; the 3 missing are `_MergeGuard.__init__/__enter__/__exit__` |
 | `pet_book.py` | ⚠️ 25/34 | missing: 8 private helpers (`_load`/`_save_all`/`_archive_day`…) plus module-level `esc` |
 | `pet_chat.py` / `pet_balance.py` / `pet_widgets.py` / `pet_export.py` / `pet_config.py` / `pet_alarm.py` / `pet_behaviors.py` | ❌ 0 | unchanged this round |
-| `桌宠.py` (254 funcs) / `pet_dialogs.py` (272) / `pet_voice.py` (87) / `pet_resources.py` (80) / `pet_anim.py` (9) / `pet_actions.py` (7) | ❌ 0 | **tracked separately**, outside the "82/82" claim |
+| `桌宠.py` (254 funcs) / `pet_dialogs.py` (304) / `pet_voice.py` (87) / `pet_resources.py` (80) / `pet_anim.py` (9) / `pet_actions.py` (7) | ❌ 0 | **tracked separately**, outside the "82/82" claim |
 
 So: annotations exist for the Qt-free modules `pet_tools` / `pet_lines` / `pet_io` / `pet_book`
 (fully for the first two); the three core files and the other GUI modules still have none.

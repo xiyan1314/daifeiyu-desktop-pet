@@ -330,8 +330,10 @@ _DESIGN_SIZES = {
     "VoiceDialog": (700, 640),
     "IdleDialog": (660, 560),
     "_VoicePickDialog": (460, 380),
-    # v2.5.1 A（代 B 登记）：B 的插件管理对话框，设计尺寸 = 源码里那行 clamp_dialog(self, 760, 520)
-    "PluginManagerDialog": (760, 520),
+    # v2.6.0 A（Phase 2）：插件管理加了「可安装」页签（7 列）与回滚/更新按钮 →
+    # 设计尺寸 760x520 → 860x560（源码里那行 clamp_dialog(self, 860, 560)；
+    # 三处必须同步：源码字面量 / 本表 / _dev/dialog_size_report.md 第 3.1 节）
+    "PluginManagerDialog": (860, 560),
 }
 
 # 没有写死 clamp 的两个类：设计尺寸 = 内容天然尺寸（有 clamp 反而是过度约束）。

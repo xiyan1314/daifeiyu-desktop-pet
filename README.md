@@ -241,12 +241,12 @@ v2.4.1 的发布说明里有一句「**pet_tools + pet_lines 82 个函数补全�
 
 | 模块 | 函数注解 | 说明 |
 |---|---|---|
-| `pet_tools.py` | ✅ 39/39 | v2.4.1 交付的「82 个函数」中的 39 个 |
+| `pet_tools.py` | ✅ 41/41 | v2.4.1 交付的「82 个函数」中的 39 个；v2.6.0 第 4 轮新增 `_as_finite_number`（金额/时长的数值判据单一实现） |
 | `pet_lines.py` | ✅ 51/51 | v2.4.1 交付时是 43 个函数，后续版本增量也保持了全注解 |
 | `pet_io.py` | ✅ 25/28 | 公开 API 与纯函数全覆盖；未标的 3 个是 `_MergeGuard` 的 `__init__/__enter__/__exit__` |
 | `pet_book.py` | ⚠️ 25/34 | 未标的是 8 个私有辅助（`_load`/`_save_all`/`_archive_day`…）与模块级 `esc` |
 | `pet_chat.py` / `pet_balance.py` / `pet_widgets.py` / `pet_export.py` / `pet_config.py` / `pet_alarm.py` / `pet_behaviors.py` | ❌ 0 | 本轮只澄清口径，未新增注解 |
-| `桌宠.py`（254 函数）/ `pet_dialogs.py`（272）/ `pet_voice.py`（87）/ `pet_resources.py`（80）/ `pet_anim.py`（9）/ `pet_actions.py`（7） | ❌ 0 | **单独立项**，不在 v2.4.1 那句「82/82」的口径内 |
+| `桌宠.py`（254 函数）/ `pet_dialogs.py`（304）/ `pet_voice.py`（87）/ `pet_resources.py`（80）/ `pet_anim.py`（9）/ `pet_actions.py`（7） | ❌ 0 | **单独立项**，不在 v2.4.1 那句「82/82」的口径内 |
 
 也就是说：**已经补注解的是 `pet_tools` / `pet_lines` / `pet_io` / `pet_book` 这几个
 Qt-free 模块（其中前两个是全量），三大核心文件与其余 GUI 模块仍是零注解**。评估注解覆盖率

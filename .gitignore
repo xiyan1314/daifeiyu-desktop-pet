@@ -49,6 +49,15 @@ dist/
 # 不能跟用户导出的 *.zip 一起被忽略——忽略掉就变成"仓库里根本没有这些包"，
 # 而发布门 check_clean_tree 要求工作树无未跟踪文件（两边都过不去）。
 !plugins/packs/*.zip
+# v2.6.0 第 4 轮（兼容审查 P2-3）：插件分发的**运行时刻产物**。
+# 本仓的开发方式就是"直接在仓库里跑桌宠"（仓库目录同时是数据目录）→ 手测一次"更新"
+# 就会在 plugins/ 下留下 .prev-<id>/（manifest.json + payload）与 _download/，它们此前
+# 一条忽略规则都没有 → 发布门 check_clean_tree 判"未跟踪文件"直接红。
+# 注意**不能**图省事写成 plugins/* ：那会把 plugins/index.json / plugins/README.md
+# 一起吞掉（那两份要随包发货、要入库）。这里只忽略"目录"形态，再把 packs/ 显式放回来
+# （上面那条 !plugins/packs/*.zip 才继续有效）。
+plugins/*/
+!plugins/packs/
 # v2.4.3（第三轮找茬收口）：_dev/ 只入库**脚本与报告**——探针的原始逐轮数据复跑即得
 # （本轮 _dev 从 14 涨到 44 个文件、含 ~300KB 原始 JSON，git diff 全是噪音）。
 # 入库的是摘要（*_summary.json）、变异验证（mutations_*.json 的 results 段 /

@@ -185,16 +185,19 @@ def _func_paths(src):
     return out
 
 
-# 本轮加了注解的函数全量清单（pet_tools 39 个 + pet_lines 43 个 = 82）。
+# 本轮加了注解的函数全量清单（pet_tools 40 个 + pet_lines 43 个 = 83）。
+# v2.6.0 第 4 轮（找茬审查 P2-d）：pet_tools 新增 _as_finite_number（金额 / 时长的数值判据
+# 单一实现）→ 这里必须同步登记，否则 test_pinned_annotations_are_complete 红。
 # pet_lines.LineService.dirty_read 是 @property → 断言时取 getter。
 _PINNED = {
     pet_tools: ["build_registry", "get_tool", "openai_tools", "tool_names", "validate_args",
                 "parse_call", "args_json", "parse_args", "result_text", "summarize",
-                "describe_call", "execute", "_schema", "_provider", "_ui",
+                "describe_call", "_args_preview", "execute", "_schema", "_provider", "_ui",
                 "ToolSpec.__init__", "ToolSpec.to_openai",
                 "_h_check_balance", "_h_check_weather", "_h_ledger_summary", "_h_open_ledger",
                 "_h_add_manual_record", "_h_set_budget", "_h_set_alarm", "_h_set_timer",
                 "_h_show_emote", "_h_play_action",
+                "_as_finite_number",
                 "_fmt_money", "_describe_manual", "_describe_budget", "_describe_alarm",
                 "_describe_timer",
                 "MainThreadCall.__init__", "MainThreadCall.resolve", "MainThreadCall.wait",

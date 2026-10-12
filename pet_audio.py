@@ -40,6 +40,8 @@ import struct
 import time
 import wave
 
+import pet_log  # v2.6.0（D7-B）：试听失败补限流日志（pet_log 无依赖，不成环）
+
 try:
     import winsound  # 仅 Windows 提供；非 Windows 导入失败时置 None
 except ImportError:
@@ -291,7 +293,11 @@ def preview_file(path):
             winsound.SND_FILENAME | winsound.SND_ASYNC | winsound.SND_NODEFAULT | winsound.SND_NOWAIT,
         )
         return True
-    except Exception:
+    except Exception as e:
+        # v2.6.0（D7-B ①）：试听是**用户点了按钮**的动作，"点了没声音"此前在界面上与
+        # error.log 里都没有任何线索（上层还会再降级到 QMediaPlayer，见 桌宠.preview_audio）。
+        # 补限流日志（同名 60s 一条）；返回值口径不变（False＝交给调用方降级）。
+        pet_log.log_throttled("audio.preview_file", "试听失败（%r）：%s" % (e, path))
         return False
 
 

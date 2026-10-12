@@ -1364,26 +1364,39 @@ def test_S1_c_手工拷进来的插件目录_装同id的真包必须真的落地
     assert reg["enabled"] is False, "用户禁用过的状态该沿用"
 
 
-def test_S1_c_包内容变了必须说清楚不会导入新内容(tmp_path):
-    """S1-c 的另一半：同 id 的新包（内容变了）走覆盖更新时**不会**导入新增内容——这是产品
-    口径（重复安装不重复导入），但文案必须说清楚，不许让用户以为新内容进来了。
+def test_更新时间_新版新增内容真的进库_旧内容不重复落(tmp_path):
+    """v2.6.0（Phase 2）把这条口径**反过来**：同 id 的新包走覆盖更新时，新版**新增**的内容
+    真的并进宿主库；与上一版内容相同的那些按**内容指纹**跳过（不重复落地）。
 
-    能真失败：去掉 install_zip 里那句 same_zip 判断 → 新包被静默当"已更新"，红。
+    （v2.5.1 的旧口径是"覆盖更新只换插件目录，新增内容永远进不来、要重新导入请先卸载再装"。
+    本用例从"包内容变了不导入"改成"包内容变了要导入且不许重复"，断言**没有放宽**：
+    新增数、总数、旧内容只出现一次，三条一起钉。）
+    能真失败：① 更新分支回到"整包跳过"（added 恒为 0）→ 第一条红；
+             ② 指纹去重拿掉（新版连旧台词一起落）→ "只出现一次"红。
     """
     lines_lib = pet_lines.LineService(str(tmp_path))
     host = pet_plugin_host.PluginHost(str(tmp_path), HOST_VERSION, lines_lib=lines_lib)
-    v1 = {"lines.json": json.dumps({"lines": [{"text": "第一版"}]},
+    v1 = {"lines.json": json.dumps({"lines": [{"text": "第一版就有的", "category": "idle"}]},
                                    ensure_ascii=False).encode("utf-8")}
-    v2 = {"lines.json": json.dumps({"lines": [{"text": "第二版新增的"}]},
-                                   ensure_ascii=False).encode("utf-8")}
+    v2 = {"lines.json": json.dumps(
+        {"lines": [{"text": "第一版就有的", "category": "idle"},
+                   {"text": "第二版新增的", "category": "happy"}]},
+        ensure_ascii=False).encode("utf-8")}
     assert host.install_zip(_plugin_zip(str(tmp_path / "v1.zip"), v1,
                                         pid="upd", data_kind="lines"))[0] is True
     n = len(lines_lib.lines())
     ok, msg = host.install_zip(_plugin_zip(str(tmp_path / "v2.zip"), v2,
                                            pid="upd", data_kind="lines"))
-    assert ok is True and "覆盖" in msg, msg
-    assert "不是同一个文件" in msg, "包变了却没提醒新内容不会导入：%r" % (msg,)
-    assert len(lines_lib.lines()) == n, "覆盖更新不该重复落地"
+    assert ok is True and "覆盖" in msg and "新增的 1 项" in msg, msg
+    texts = [x["text"] for x in lines_lib.lines()]
+    assert len(texts) == n + 1, "新版新增的台词没有进库：%r" % (msg,)
+    assert "第二版新增的" in texts
+    assert texts.count("第一版就有的") == 1, "上一版就有的台词被重复落了一遍"
+    # 第三次装**同一个 v2**：内容与已落地的完全一致 → 一条都不许再落
+    ok, msg = host.install_zip(_plugin_zip(str(tmp_path / "v2b.zip"), v2,
+                                           pid="upd", data_kind="lines"))
+    assert ok is True and "完全一致" in msg, msg
+    assert len(lines_lib.lines()) == n + 1, "内容没变却又落了一遍"
 
 
 # ---------------- P3-2 / S1-b：提交失败不留半截目录、不留临时目录 ----------------
@@ -1496,3 +1509,135 @@ def test_S3_2_safe_id不接受空白与保留名(tmp_path):
     assert pet_plugin_host._safe_id(" x") == "" and pet_plugin_host._safe_id("x ") == ""
     assert pet_plugin_host._safe_id("ok-id") == "ok-id"
 
+
+def test_prompt插件更新_用户没改过就允许覆盖新版内容(tmp_path):
+    """P2-1①：新版改了自己上次落地的同名文件内容 → 更新成功，内容真的变了。
+
+    旧行为：目标文件存在就整包失败（"人设文件已存在，插件不许覆盖"）→ 插件作者改一版
+    自己的文案，用户就永远更新不了（实测 v1→v2 只改这一份 → 拒装、快照 0 变化）。
+    能真失败：把 _land_prompt 里"盘上指纹在本插件落账里 → 允许覆盖"那条判断去掉
+    （退回一律"已存在即拒"）→ ok 变 False，红。
+    """
+    host = pet_plugin_host.PluginHost(str(tmp_path), HOST_VERSION)
+    v1 = _plugin_zip(str(tmp_path / "v1.zip"),
+                     {"prompts/毛茸茸.txt": "版本一".encode("utf-8")},
+                     pid="p-upd", data_kind="prompt", plugin_version="1.0.0")
+    ok, msg = host.install_zip(v1)
+    assert ok is True, msg
+    dst = tmp_path / "prompts" / "custom" / "毛茸茸.txt"
+    assert dst.read_text(encoding="utf-8") == "版本一"
+    v2 = _plugin_zip(str(tmp_path / "v2.zip"),
+                     {"prompts/毛茸茸.txt": "版本二".encode("utf-8")},
+                     pid="p-upd", data_kind="prompt", plugin_version="1.1.0")
+    ok, msg = host.install_zip(v2)
+    assert ok is True, msg
+    assert dst.read_text(encoding="utf-8") == "版本二",         "新版内容没落地（用户一个字没改，却被当成改过）"
+
+
+def test_prompt插件更新_用户改过就跳过该文件_其余照常落地(tmp_path):
+    """P2-1②：用户改过那份 → 保住用户内容 + 人话警告，**其余内容照常落地**（不整包失败）。
+
+    能真失败：把"用户改过就跳过"改回"整包失败" → ok 变 False、新文件也落不了地，红。
+    """
+    host = pet_plugin_host.PluginHost(str(tmp_path), HOST_VERSION)
+    v1 = _plugin_zip(str(tmp_path / "v1.zip"),
+                     {"prompts/毛茸茸.txt": "版本一".encode("utf-8")},
+                     pid="p-upd", data_kind="prompt", plugin_version="1.0.0")
+    assert host.install_zip(v1)[0] is True
+    dst = tmp_path / "prompts" / "custom" / "毛茸茸.txt"
+    dst.write_text("我自己改的", encoding="utf-8")
+    v2 = _plugin_zip(str(tmp_path / "v2.zip"),
+                     {"prompts/毛茸茸.txt": "版本二".encode("utf-8"),
+                      "prompts/新的.txt": "新来的人设".encode("utf-8")},
+                     pid="p-upd", data_kind="prompt", plugin_version="1.1.0")
+    ok, msg = host.install_zip(v2)
+    assert ok is True, msg
+    assert dst.read_text(encoding="utf-8") == "我自己改的", "用户改过的人设被插件覆盖了"
+    assert (tmp_path / "prompts" / "custom" / "新的.txt").read_text(
+        encoding="utf-8") == "新来的人设", "其余内容没照常落地（被一份用户文件顶掉了整包）"
+    assert "没有覆盖" in msg or "你自己改过" in msg, "警告没出现在结果文案里：%r" % msg
+
+
+# ============ v2.6.0 第 4 轮（找茬审查 A-3 / A-4 / A-5）：补三条"docstring 说了但没钉"的 ============
+
+def test_上一版目录读不出来时_用新包指纹补账并如实告知(tmp_path):
+    """A-3：_legacy_ledger 的**兜底分支**（上一版目录也读不出来）——补账 + 那句警告。
+
+    v2.5.1 的老登记只有 landed、没有内容指纹；正常路径用上一版目录补账。上一版目录**也**
+    没了（用户手删过插件目录）时只剩一条退路：把**新版**的指纹全部当成已落地（宁可这次
+    不合并新内容，也不给用户多一份重复内容），并如实告诉用户。
+    能真失败：让 if old_payload: 那个分支永远成立（兜底分支摘掉 / 警告不返回）→ 红。
+    """
+    lib = pet_lines.LineService(str(tmp_path))
+    host = pet_plugin_host.PluginHost(str(tmp_path), HOST_VERSION, lines_lib=lib)
+
+    def _pack(path, texts, version):
+        payload = {"lines.json": json.dumps(
+            {"lines": [{"text": t, "category": "idle"} for t in texts]},
+            ensure_ascii=False).encode("utf-8")}
+        return _plugin_zip(str(path), payload, pid="upd", data_kind="lines",
+                           plugin_version=version)
+
+    assert host.install_zip(_pack(tmp_path / "v1.zip", ["甲"], "1.0.0"))[0] is True
+    # 把登记退化成 v2.5.1 的形状（没有内容指纹账），再把插件目录手工删掉 → 走兜底分支
+    reg_path = tmp_path / "plugins" / "_installed.json"
+    reg = json.loads(reg_path.read_text(encoding="utf-8"))
+    rec = reg["plugins"]["upd"]
+    rec.pop("landed_fingerprints", None)
+    reg_path.write_text(json.dumps(reg, ensure_ascii=False), encoding="utf-8")
+    import shutil
+    shutil.rmtree(str(tmp_path / "plugins" / "upd"))
+    ok, msg = host.install_zip(_pack(tmp_path / "v2.zip", ["甲", "乙"], "1.1.0"))
+    assert ok is True, msg
+    assert "上一版目录也读不出来" in msg, "兜底分支没有如实告知用户：%r" % msg
+    # 文案与行为必须**对得上**（A-3 之前正是这里对不上：说"没有合并新版内容"，实际会合并
+    # 库里还缺的那些）。文案现在说的是"已经有的不重复落、还缺的照常补回来"。
+    assert "不会重复落" in msg and "还缺的照常补回来" in msg, msg
+    texts = [x["text"] for x in lib.lines()]
+    assert texts.count("甲") == 1, "补账失败：旧内容被重复落了一份：%r" % (texts,)
+    assert "乙" in texts, ("库里还缺的那条（乙）本该照常补回来——文案就是这么写的：%r" % (msg,))
+
+
+def test_role指纹覆盖素材字节(tmp_path):
+    """A-4：_role_fingerprint 的 docstring 宣称"指纹覆盖角色内容 **+ 它引用的素材内容**"。
+
+    此前没有用例钉它：只改一张 png（role.json 一个字不动）必须算**新内容**，否则更新时
+    会被当成"装过了"整包跳过——用户换了角色图却看不到任何变化。
+    能真失败：把 _role_fingerprint 里那段遍历素材、拼 _fp_file 的循环删掉（只指纹 role.json）
+    → 第一条断言红。
+    """
+    role = {"id": "demo", "name": "插件角色", "file": "demo.png", "form": "single",
+            "frames": ["demo.png"], "added": ""}
+    d1 = tmp_path / "p1"
+    d2 = tmp_path / "p2"
+    d3 = tmp_path / "p3"
+    for d, png in ((d1, PNG_1PX), (d2, PNG_1PX + b"\x00"), (d3, PNG_1PX)):
+        d.mkdir()
+        (d / "role.json").write_text(json.dumps(role, ensure_ascii=False), encoding="utf-8")
+        (d / "demo.png").write_bytes(png)
+    fp1, mode1 = pet_plugin_host._role_fingerprint(str(d1))
+    fp2, _m2 = pet_plugin_host._role_fingerprint(str(d2))
+    fp3, _m3 = pet_plugin_host._role_fingerprint(str(d3))
+    assert mode1 == "dict", mode1
+    assert fp1 and fp2 and fp3, (fp1, fp2, fp3)
+    assert fp1 != fp2, "只改了一张 png，指纹却没变（素材字节没进指纹）"
+    assert fp1 == fp3, "内容逐字节相同，指纹却不稳定"
+
+
+def test_prompt指纹带文件名_文件名就是预设名(tmp_path):
+    """A-5：_plan_prompts 的 docstring 宣称"指纹带文件名（文件名 = 预设名）"。
+
+    内容一模一样、只有文件名不同时**必须**算两件东西（同名才去重）：custom/<文件名>.txt
+    就是 AI 设置里那个预设名，改名 = 另一个预设。
+    能真失败：把 _fp_named 换成 _fp_bytes（只指纹内容）→ 第一条断言红。
+    """
+    same = "同样的话".encode("utf-8")
+    assert pet_plugin_host._fp_named("甲.txt", same) != \
+        pet_plugin_host._fp_named("乙.txt", same), "文件名没进指纹（改名会被当成同一件东西）"
+    assert pet_plugin_host._fp_named("甲.txt", same) == pet_plugin_host._fp_named("甲.txt", same)
+    d = tmp_path / "payload"
+    d.mkdir()
+    (d / "甲.txt").write_bytes("同样的话".encode("utf-8"))
+    items, err = pet_plugin_host._plan_prompts(str(d))
+    assert err == "" and len(items) == 1, (items, err)
+    assert items[0]["fp"] == pet_plugin_host._fp_named("甲.txt", "同样的话".encode("utf-8")), items

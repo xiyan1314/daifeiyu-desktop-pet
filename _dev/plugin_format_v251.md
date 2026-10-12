@@ -16,6 +16,14 @@ x.dfypet-plugin            # 就是一个 zip（扩展名随意，内容必须�
 
 * 条目名必须 `== "manifest.json"` 或以 `payload_root` 开头；不含 `..`、不以 `/` 或盘符开头、
   不含反斜杠、不含 NUL、无空路径段。
+* **Windows 名字判据（v2.6.0 收口）**：条目名的**任意一段**都不许含 Windows 非法字符
+  `<>:"|?*`——NTFS/Win32 直接不接受，解包那一刻就写不出文件；`payload/a:b.png` 更糟
+  （`a:` 会被 ntpath 当盘符成分，abspath 算出来的路径不在解包根下 → 安装器判"解包后越界"）。
+  这一段同时由 payload_root 自己走一遍（它是解包时的根前缀）。
+* **Windows 保留设备名（v2.6.0 收口）**：大小写不敏感、**带扩展名一样算**（`con.png` 与
+  `con` 是同一个设备）、路径里**任意一段**都算（例如 `payload/aux/inner.png`）。
+  完整清单与校验器常量 `WIN_RESERVED_NAMES` 逐项一致：
+  `con` `prn` `aux` `nul` `com1` `com2` `com3` `com4` `com5` `com6` `com7` `com8` `com9` `lpt1` `lpt2` `lpt3` `lpt4` `lpt5` `lpt6` `lpt7` `lpt8` `lpt9`
 * 写包工具带的**目录条目**（`payload/`）允许，且不参与 `files` 覆盖计数。
 * `external_attr >> 16` 不许带执行位（`mode & 0o111`）；符号链接（`0o120000`）一律拒。
 
@@ -116,6 +124,15 @@ payload 里出现下面任何一类，整包拒绝并**点名该文件**：
     payload 实测峰值 141 MB，按上限外推 >1 GB）。
 * `files` 必须**不多不少**覆盖 `payload` 下每一个文件条目：多一条（含把 `manifest.json` 也列进去）
   或漏一条都拒；每条都要对得上真实 `sha256` 与 `bytes`（sha256 是**边读边算**的，不靠整份内容驻留内存）。
+* **`files: []`（空表）一律拒（v2.6.0 收口）**：它不是"没有校验和"，而是"包里一个 payload
+  文件都没有"——安装器解包后找不到 payload 目录必拒（"插件包里没有 payload 目录"），
+  校验器放行就是两处口径差。
+
+**校验器是唯一真源（v2.6.0）**：上面这两条（Windows 名字 / 空 files）在 v2.5.1 都只有安装器
+一侧在拒——`payload/a:b.png` 与 `files: []` 能过校验器、走到安装器才被拒。现在校验器**先拒**
+（判据 4 / 判据 10），安装器那侧的两道自保（`_extract_zip` 的越界判断、payload 目录判断）仍然
+保留——但它们只该是"写入方自保"，不再是第一道判据。契约**双向覆盖**：
+`tests/test_plugin_v251.py::test_口径差_校验器先拒_安装器不留残余` 把两侧一起钉。
 
 ## 6. 宿主安装目录口径（与 `_check_release` 对齐）
 

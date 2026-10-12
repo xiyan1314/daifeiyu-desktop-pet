@@ -154,7 +154,7 @@ $env:QT_SCALE_FACTOR="1.5";  python -B tests\_probe_dialog_sizes.py     # 逻辑
 **设计尺寸一个都没改**，改的只是"装不下时不许超屏"。（v2.5.0 的事实；v2.5.1 改了**一个**，
 见下面 3.1。）
 
-### 3.1 设计尺寸表（14 个对话框；v2.5.1 代理A：RoleEditDialog 600 → 620）
+### 3.1 设计尺寸表（**15 个**对话框；v2.5.1 代理A：RoleEditDialog 600 → 620；v2.6.0 代理A：PluginManagerDialog 760x520 → 860x560）
 
 | 对话框 | 设计尺寸 | 对话框 | 设计尺寸 |
 |---|---|---|---|
@@ -165,6 +165,7 @@ $env:QT_SCALE_FACTOR="1.5";  python -B tests\_probe_dialog_sizes.py     # 逻辑
 | AISettingsDialog | 560x560 | _VoicePickDialog | 460x380 |
 | ResourceManagerDialog | 700x560 | AmountNoteDialog | 286x113（内容天然尺寸） |
 | LedgerDialog | 680x540 | BubbleStyleDialog | 282x302（内容天然尺寸） |
+| **PluginManagerDialog** | **860x560**（v2.6.0 代理A：加「可安装」页签与更新/回滚按钮后 760x520 → 860x560） | — | — |
 
 **为什么改**（v2.5.0 遗留 L5，实测）：RoleEditDialog 的设计宽 600 比"内容最小宽"小一档——
 2000x1200 屏上打开时内容区最小宽 **588** > 滚动视口 **568** → 横向滚动条 hmax = **20**
@@ -172,7 +173,9 @@ $env:QT_SCALE_FACTOR="1.5";  python -B tests\_probe_dialog_sizes.py     # 逻辑
 脚本 [`_dev/probe_l5_v251.py`](probe_l5_v251.py) 可复跑）。
 
 **三处必须同步**（少改一处，设计尺寸契约用例就红）：① `pet_dialogs.py` 里那一行 clamp 字面量
-② `tests/test_dialog_fit_v250.py` 的 `_DESIGN_SIZES["RoleEditDialog"]` ③ 上面这张表。
+② `tests/test_dialog_fit_v250.py` 的 `_DESIGN_SIZES[<类名>]` ③ 上面这张表。
+（v2.6.0 实操：代理 A 改 `PluginManagerDialog` 760x520 → 860x560，①②两处在 A 的领地里同步，
+③ 就是本节补的这一行——**`.md` 归代理 C**，所以由 C 收口。）
 
 ## 4. 修法（一套模式，19 个窗口共用）
 

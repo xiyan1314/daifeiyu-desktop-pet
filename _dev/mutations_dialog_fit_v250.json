@@ -250,17 +250,17 @@
   ],
   "results": {
     "title": "变异验证 spec：mutations_dialog_fit_v250.json",
-    "checked_at": "2026-10-11 15:00:38",
+    "checked_at": "2026-10-12 12:01:46",
     "total": 17,
-    "caught": 17,
-    "not_caught": 0,
+    "caught": 16,
+    "not_caught": 1,
     "blocked": 0,
     "items": [
       {
         "id": "M-D01",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "2 failed, 13 passed in 1.85s",
+        "tail": "2 failed, 14 passed in 1.32s",
         "failed": [
           "test_每个对话框的设计尺寸就是它自己的契约[AISettingsDialog]",
           "test_每个对话框的设计尺寸都写在源码里"
@@ -270,7 +270,7 @@
         "id": "M-D02",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "2 failed, 13 passed in 1.91s",
+        "tail": "2 failed, 14 passed in 1.25s",
         "failed": [
           "test_每个对话框的设计尺寸就是它自己的契约[AlarmDialog]",
           "test_每个对话框的设计尺寸都写在源码里"
@@ -280,7 +280,7 @@
         "id": "M-D03",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "2 failed, 13 passed in 1.51s",
+        "tail": "2 failed, 14 passed in 1.36s",
         "failed": [
           "test_每个对话框的设计尺寸就是它自己的契约[BehaviorDialog]",
           "test_每个对话框的设计尺寸都写在源码里"
@@ -290,7 +290,7 @@
         "id": "M-D04",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "2 failed, 13 passed in 1.55s",
+        "tail": "2 failed, 14 passed in 2.09s",
         "failed": [
           "test_每个对话框的设计尺寸就是它自己的契约[IdleDialog]",
           "test_每个对话框的设计尺寸都写在源码里"
@@ -300,7 +300,7 @@
         "id": "M-D05",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "2 failed, 13 passed in 1.37s",
+        "tail": "2 failed, 14 passed in 1.36s",
         "failed": [
           "test_每个对话框的设计尺寸就是它自己的契约[LedgerDialog]",
           "test_每个对话框的设计尺寸都写在源码里"
@@ -310,7 +310,7 @@
         "id": "M-D06",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "2 failed, 13 passed in 1.41s",
+        "tail": "2 failed, 14 passed in 1.21s",
         "failed": [
           "test_每个对话框的设计尺寸就是它自己的契约[LinesDialog]",
           "test_每个对话框的设计尺寸都写在源码里"
@@ -320,7 +320,7 @@
         "id": "M-D07",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "2 failed, 13 passed in 1.72s",
+        "tail": "2 failed, 14 passed in 1.23s",
         "failed": [
           "test_每个对话框的设计尺寸就是它自己的契约[PhysicsDialog]",
           "test_每个对话框的设计尺寸都写在源码里"
@@ -330,7 +330,7 @@
         "id": "M-D08",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "2 failed, 13 passed in 1.87s",
+        "tail": "2 failed, 14 passed in 1.19s",
         "failed": [
           "test_每个对话框的设计尺寸就是它自己的契约[ResourceManagerDialog]",
           "test_每个对话框的设计尺寸都写在源码里"
@@ -338,19 +338,16 @@
       },
       {
         "id": "M-D09",
-        "verdict": "CAUGHT",
-        "rc": 1,
-        "tail": "2 failed, 13 passed in 1.71s",
-        "failed": [
-          "test_每个对话框的设计尺寸就是它自己的契约[RoleEditDialog]",
-          "test_每个对话框的设计尺寸都写在源码里"
-        ]
+        "verdict": "SPEC-BAD",
+        "rc": 0,
+        "tail": "锚点匹配 0 次",
+        "failed": []
       },
       {
         "id": "M-D10",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "2 failed, 13 passed in 1.73s",
+        "tail": "2 failed, 14 passed in 1.29s",
         "failed": [
           "test_每个对话框的设计尺寸就是它自己的契约[RoleImportDialog]",
           "test_每个对话框的设计尺寸都写在源码里"
@@ -360,7 +357,7 @@
         "id": "M-D11",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "2 failed, 13 passed in 1.80s",
+        "tail": "2 failed, 14 passed in 1.32s",
         "failed": [
           "test_每个对话框的设计尺寸就是它自己的契约[VoiceDialog]",
           "test_每个对话框的设计尺寸都写在源码里"
@@ -370,7 +367,7 @@
         "id": "M-D12",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "2 failed, 13 passed in 1.77s",
+        "tail": "2 failed, 14 passed in 1.23s",
         "failed": [
           "test_每个对话框的设计尺寸就是它自己的契约[_VoicePickDialog]",
           "test_每个对话框的设计尺寸都写在源码里"
@@ -380,7 +377,7 @@
         "id": "M-D13",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 1.24s",
+        "tail": "1 failed in 0.85s",
         "failed": [
           "test_上限就是85百分比而不是写死像素"
         ]
@@ -389,7 +386,7 @@
         "id": "M-D14",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.93s",
+        "tail": "1 failed in 0.57s",
         "failed": [
           "test_所有对话框都继承同一个可钳制基类"
         ]
@@ -398,7 +395,7 @@
         "id": "M-D15",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 1.36s",
+        "tail": "1 failed in 1.01s",
         "failed": [
           "test_本来就小的框不被撑大"
         ]
@@ -407,7 +404,7 @@
         "id": "M-D16",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "19 failed in 1.89s",
+        "tail": "20 failed in 1.39s",
         "failed": [
           "test_每个窗口都不超屏_能滚到底_按钮可见[RoleImportDialog]",
           "test_每个窗口都不超屏_能滚到底_按钮可见[RoleEditDialog]",
@@ -427,6 +424,7 @@
           "test_每个窗口都不超屏_能滚到底_按钮可见[VoiceDialog]",
           "test_每个窗口都不超屏_能滚到底_按钮可见[IdleDialog]",
           "test_每个窗口都不超屏_能滚到底_按钮可见[_VoicePickDialog]",
+          "test_每个窗口都不超屏_能滚到底_按钮可见[PluginManagerDialog]",
           "test_每个窗口都不超屏_能滚到底_按钮可见[build_role_meta_dialog]"
         ]
       },
@@ -434,7 +432,7 @@
         "id": "M-D17",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "16 failed, 3 passed in 1.92s",
+        "tail": "17 failed, 3 passed in 1.45s",
         "failed": [
           "test_每个窗口都不超屏_能滚到底_按钮可见[RoleImportDialog]",
           "test_每个窗口都不超屏_能滚到底_按钮可见[RoleEditDialog]",
@@ -451,6 +449,7 @@
           "test_每个窗口都不超屏_能滚到底_按钮可见[VoiceDialog]",
           "test_每个窗口都不超屏_能滚到底_按钮可见[IdleDialog]",
           "test_每个窗口都不超屏_能滚到底_按钮可见[_VoicePickDialog]",
+          "test_每个窗口都不超屏_能滚到底_按钮可见[PluginManagerDialog]",
           "test_每个窗口都不超屏_能滚到底_按钮可见[build_role_meta_dialog]"
         ]
       }
@@ -466,13 +465,18 @@
     ],
     "note": "变异只在 %TEMP% 影子副本里做，真实仓库只读（只写 _dev/.mutation.lock）",
     "repo_fingerprint": {
-      "桌宠.py": "e1df5d7bcff1",
-      "pet_export.py": "2fe39233056b",
+      "桌宠.py": "99e2abf3e7fb",
+      "pet_export.py": "c01e1593efd2",
       "pet_lines.py": "5332f60b5f26",
       "pet_alarm.py": "1149e94deee3",
       "pet_behaviors.py": "8f57255144f6",
-      "_check_release.py": "737ea59c1cae",
-      "pet_balance.py": "2828b2ebc0c9"
+      "_check_release.py": "e0abfe805849",
+      "pet_balance.py": "2828b2ebc0c9",
+      "pet_plugin.py": "2f7853298fc3",
+      "pet_plugin_host.py": "e41ee09707ba",
+      "pet_dialogs.py": "48f300e4fc50",
+      "pet_menu.py": "920daac1b835",
+      "pet_plugin_index.py": "439340b16523"
     }
   }
 }

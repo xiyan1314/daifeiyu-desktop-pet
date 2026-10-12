@@ -414,6 +414,40 @@ def check_negatives(host_ver, tmp):
           "pet_plugin=%r / reference=%r" % (_pp._unsafe_name_reason(probe),
                                             rules._path_problem(probe)))
 
+    # ---- 判据 4 / 10（v2.6.0 代理C）：Windows 名字判据与空 files ----
+    # 真 zip 反向一：把 payload/lines.json 改名成带冒号的条目（files 同步改）——两个引擎都必须拒
+    victim = _payload_names(base)[0]
+    colon_name = victim.rsplit("/", 1)[0] + "/a:b" + victim[victim.rfind("."):]
+    m_colon = copy.deepcopy(mf0)
+    for f in m_colon.get("files") or []:
+        if f.get("path") == victim:
+            f["path"] = colon_name
+    colon = out("colon_name.zip")
+    renamed = [(colon_name if n == victim else n, d, mode_v) for n, d, mode_v in _load_entries(base)]
+    renamed = [(n, rules.dump_json_bytes(m_colon) if n == rules.MANIFEST_NAME else d, mode_v)
+               for n, d, mode_v in renamed]
+    rules.write_zip(colon, renamed)
+    expect("条目名含 Windows 非法字符（真 zip：%s）" % colon_name, colon, "非法字符")
+
+    # 真 zip 反向二：files: []（空 payload）——两个引擎都必须拒
+    m_empty = copy.deepcopy(mf0)
+    m_empty["files"] = []
+    emptyf = out("empty_files.zip")
+    rules.write_zip(emptyf, [(rules.MANIFEST_NAME, rules.dump_json_bytes(m_empty), rules.ZIP_MODE)])
+    expect("files: []（空 payload，真 zip）", emptyf, "空的")
+
+    # 单元级交叉核对：两个引擎对同一批名字必须给同一结论（保留设备名 + 近似名字不误伤）
+    for probe in ("payload/con.png", "payload/NUL.txt", "payload/aux/inner.png"):
+        check("判据 4 保留设备名（单元级，v2.6.0）：两个实现都判不安全：%s" % probe,
+              bool(_pp._unsafe_name_reason(probe)) and bool(rules._path_problem(probe)),
+              "pet_plugin=%r / reference=%r" % (_pp._unsafe_name_reason(probe),
+                                                rules._path_problem(probe)))
+    for probe in ("payload/console.png", "payload/com10.txt", "payload/my.con.png"):
+        check("判据 4 近似名字不误伤（单元级，v2.6.0）：两个实现都判安全：%s" % probe,
+              not _pp._unsafe_name_reason(probe) and not rules._path_problem(probe),
+              "pet_plugin=%r / reference=%r" % (_pp._unsafe_name_reason(probe),
+                                                rules._path_problem(probe)))
+
     # ---- 判据 2：manifest.json 本身 ----
     expect("manifest.json 带 BOM",
            _repack(base, out("bom.zip"), manifest=b"\xef\xbb\xbf" + rules.dump_json_bytes(mf0)),

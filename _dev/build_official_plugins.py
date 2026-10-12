@@ -19,9 +19,13 @@
   固定 → 复跑产物逐字节相同（幂等判据的落点）。
 * **打包即过门**：每个包构建完立刻用代理 A 的 pet_plugin.validate_plugin_zip 验一遍，不过就
   非零退出并打印原因——打包工具自己就是一道门，不靠人记得跑校验。
-* **素材现取**：payload 目录结构镜像宿主的存放结构（audio/ roles/ 等），落地时能直接对上；
-  role 包的 payload 就是一份标准 dfypet-role 角色包内容（manifest.json + roles/），
-  宿主可以直接走 pet_export.import_bundle 落地，零新代码。
+* **素材现取**：每个包的 payload 形状**就是宿主安装器的落地口径**（`pet_plugin_host._land_*`
+  那一套，v2.5.1 起六类 data_kind 全接）：audio → `payload/audio/*.wav`（可选 pack.json 建议
+  显示名）· lines → `payload/lines.json` · role → `payload/role.json` + 素材 png **平铺在
+  payload 根**（不走 dfypet-role 角色包的 roles/ 那套，见 `_role_dict()`）· behaviors →
+  `payload/behaviors/*.json` · prompt → `payload/prompts/*.txt`。
+  （v2.5.1 的 docstring 在这里写过"role 包的 payload 就是标准 dfypet-role 角色包内容"——
+  那与最终落地口径不符，v2.6.0 按代码改正。）
 * 内容里**没有代码**：kind=data / code=false / capabilities=[] 三件套对每个包都成立。
 """
 import argparse

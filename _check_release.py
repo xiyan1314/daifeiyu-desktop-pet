@@ -11,7 +11,9 @@
   check_imported_modules_shipped() 反向：被 import 的运行时模块（白名单之外）必须都在 SYNC_FILES 里（v2.5.1 A2/S3③）
   plugin_user_data_hits() 发布包里的用户插件数据（plugins/<id>/、plugins/_download/）必须点名（v2.5.1 A3）
   mutation_lock_problems() 变异验证进行中 → 结果不可信，拒绝判定（v2.4.3）
-  mutation_evidence_notes() 变异结果 JSON 的源码指纹过期 → 提示"该证据需复跑"（v2.4.3）
+  mutation_evidence_notes() 变异结果 JSON 的源码指纹过期 → 提示"该证据需复跑"（v2.4.3）；
+                            另外点名**缺关键键**的证据（v2.6.0：老证据里没有后来补进清单的模块，
+                            只比"记录里存在的键"的话，改那些模块一条提示都不会有）
   mutation_verdict_notes() 变异结果 JSON 里有没通过的判定（SPEC-BAD/WRONG TEST…）→ 提示（v2.4.4）
   asset_manifest_notes() 素材清单判据没生效（无 git / 素材未入库）→ 提示（v2.4.3）
 
@@ -41,6 +43,7 @@ SYNC_FILES = ["桌宠.py", "main.py", "pet_actions.py", "pet_ai.py", "pet_alarm.
               "pet_log.py", "pet_main.py", "pet_menu.py", "pet_mood.py", "pet_physics.py",
               "pet_plugin.py",   # v2.5.1（A）：插件包校验器（宿主安装管线调它，漏了必 ImportError）
               "pet_plugin_host.py",   # v2.5.1（B）：插件安装/卸载（菜单入口调它，漏了必 ImportError）
+              "pet_plugin_index.py",   # v2.6.0（A）：索引读取与下载（市场页调它，漏了必 ImportError）
               # v2.5.1（A3）：官方插件资产（索引/说明/官方内容包）随绿色版与发布包出货——
               # 用户侧"下载官方内容"这条链靠它们。用户装的 plugins/<id>/ 与 plugins/_download/
               # 是**用户数据**，由 plugin_user_data_hits() 在发布包里点名（不在本清单里）。
@@ -56,7 +59,13 @@ USER_DATA_NAMES = {"config.json", "roles.json", "audio.json", "voice.json", "voi
                    "voice_backend.json", "voice_backend.log", "alarms.json", "behaviors.json",
                    "lines.json", "ledger.json", "ledger_archive.json", "error.log",
                    "memory.log", "usage.json", "memory.json"}
-USER_DATA_DIRS = ("roles", "voice", "voice_ref", "audio", "alarms", "__pycache__")
+# v2.6.0 第 4 轮（兼容审查 P2-2）：补进 "prompts/custom" —— 它是**用户自建人设**的家
+# （插件落地的 prompt 类内容也落在这里，见 pet_plugin_host.PROMPTS_CUSTOM_DIRNAME）。
+# 此前它既不在 SYNC_FILES 也不在 USER_DATA_DIRS：把绿色版目录整体打包时，用户自己的人设
+# 会随包发出去——与 plugins/<id>/ 有白名单判据的处理完全不对称。只加 custom/，不动
+# prompts/*.txt：那三份内置预设是**要随包发货**的（首启从内置常量生成），不能一起挡掉。
+USER_DATA_DIRS = ("roles", "voice", "voice_ref", "audio", "alarms", "__pycache__",
+                  "prompts/custom")
 
 # ---------------- v2.5.1（A3）：plugins/ 的分包口径 ----------------
 # plugins/ 目录**要出货**（官方索引/说明/官方内容包），但**用户装的插件目录**与**临时下载目录**
@@ -716,10 +725,14 @@ def mutation_lock_problems(root=None, now=None):
 # v2.5.1（找茬审查 P3-1）：补进本轮新模块——12 条 M-P*/M-L1 变异锚在 pet_plugin.py 与
 # pet_dialogs.py 上，pet_plugin_host.py 是插件安装/卸载的全部实现，pet_menu.py 是入口；
 # 少了它们，改这些文件不会有**任何**"证据过期"提示（v2.4.4 给 pet_balance.py 补过的同一个盲区）。
+# v2.6.0（找茬审查 C-5）：**同一个盲区第三次**——pet_plugin_index.py 是本轮全新模块，A 的
+# M-A01~M-A04 四条变异锚全在它上面，而它在清单里缺席。缺了它，改索引模块（含那四条锚点）
+# 不会有任何"证据过期"提示，且 C 新加的 missing_fingerprint_keys 也点不到它
+# （那个函数只比"树里有、记录里没有"的键，树里没收录的键它无从谈起）。
 MUTATION_FINGERPRINT_FILES = ("桌宠.py", "pet_export.py", "pet_lines.py", "pet_alarm.py",
                               "pet_behaviors.py", "_check_release.py", "pet_balance.py",
                               "pet_plugin.py", "pet_plugin_host.py", "pet_dialogs.py",
-                              "pet_menu.py")
+                              "pet_menu.py", "pet_plugin_index.py")
 
 
 def file_fingerprint(path):
@@ -753,6 +766,23 @@ def stale_fingerprints(recorded, current):
         if got and want and got != want:
             out.append("%s: %s→%s" % (rel, got, want))
     return out
+
+
+def missing_fingerprint_keys(recorded, current):
+    """记录里**没记**的关键文件 → 排序后的键名列表（recorded 为空/非 dict → []）。
+
+    v2.6.0（代理 C）：stale_fingerprints 只比对"记录里存在的键"，所以清单里后来补进去的文件
+    在**老证据**里等于不存在——v2.5.1 给清单补的四个模块（pet_plugin.py / pet_plugin_host.py /
+    pet_dialogs.py / pet_menu.py）在之前 14 份 _dev/*.json 里一个都没有，改这四个文件发布门
+    一条提示都不会有（v2.4.4 给 pet_balance.py 补键时踩过的同一个盲区，那次只是把清单补上了，
+    补不了**已经在盘上的证据**）。这里专门给"这份证据缺这些键"出声。
+
+    判据只认**当前树里真的存在**的文件：树里没有的文件本来就算不出指纹，点名它没有意义
+    （也就不会因为"清单里加了一个尚不存在的文件"而误报）。
+    """
+    if not isinstance(recorded, dict) or not recorded:
+        return []
+    return sorted(rel for rel in (current or {}) if rel not in recorded)
 
 
 def _iter_dev_results(root=None):
@@ -796,6 +826,7 @@ def mutation_evidence_notes(root=None, current=None):
     base = os.path.abspath(root or ROOT)
     cur = current if current is not None else tree_fingerprint(base)
     notes = []
+    gaps = []                                   # [(证据文件名, 缺的键)]，见 missing_fingerprint_keys
     for name, data in _iter_dev_results(base):
         rec = data.get("repo_fingerprint") if isinstance(data, dict) else None
         if not isinstance(rec, dict) and isinstance(data, dict):
@@ -805,6 +836,21 @@ def mutation_evidence_notes(root=None, current=None):
         if stale:
             notes.append("变异证据 %s 的源码指纹已过期（不是对着当前树测的，复核前请重跑"
                          "对应 spec）：%s" % (name, "；".join(stale)))
+        miss = missing_fingerprint_keys(rec, cur)
+        if miss:
+            gaps.append((name, miss))
+    if gaps:
+        # v2.6.0（代理 C）：只比对"记录里存在的键"会让后来补进清单的模块在**老证据**里永远
+        # 隐身（改它们没有任何提示）。这里**汇总成一句**提示——一份证据一行会把门禁刷成 15 行
+        # 噪音，而结论完全一样：这批证据看不见这几个模块。仍然**只提示、不挡发布**。
+        keys = sorted({k for _n, miss in gaps for k in miss})
+        shown = "、".join(n for n, _m in gaps[:5])
+        more = "…（共 %d 份）" % len(gaps) if len(gaps) > 5 else ""
+        notes.append("有 %d 份变异证据**缺关键文件的指纹**（那几份 JSON 落盘时清单里还没有这些"
+                     "文件，记录里根本没有这些键——改它们不会有任何「指纹过期」提示，发布门在"
+                     "这几个文件上是瞎的）：%s%s；缺的键：%s。取舍：**只提示、不挡发布**；要消掉"
+                     "这条就重跑对应 spec 让指纹补齐，或在报告里点名「这份证据不覆盖这几个模块」。"
+                     % (len(gaps), shown, more, " / ".join(keys)))
     return notes
 
 

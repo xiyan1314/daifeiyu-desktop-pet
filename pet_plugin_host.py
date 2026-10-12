@@ -32,16 +32,32 @@ _installed.json / _download 是出货布局里的官方内容仓库与宿主自�
 第二道保险：目标目录存在却**既没有 manifest.json、又不在登记表里** → 拒绝覆盖（那不是
 我们装的插件，多半是用户的文件）。
 
-重复安装同一个 id = **覆盖更新**：目录整体替换、登记表仍只有一条、enabled 沿用旧值、
-内容**不重复落地**（首次安装时已经并进宿主库了，重复落地会多出一份角色/台词）。
-**"已装"以安装登记为准**（P2-4 / S1-c）：登记里没有这条、或这条的 landed 是空的
+重复安装同一个 id = **覆盖更新**：目录整体替换、登记表仍只有一条、enabled 沿用旧值。
+**v2.6.0（Phase 2）起，更新会把新版新增的内容真正并进宿主库**：每个已落地条目都按
+**内容指纹**记账（landed_fingerprints），更新时"只落新的、不重复落旧的"——同一个包再装
+一次不会多出一份角色/台词，而新版里新增的条目会真的进库（旧口径是整包跳过）。
+**"已装"以安装登记为准**（P2-4 / S1-c）：登记里没有这条、或这条的 landed / 指纹都是空的
 （内容从来没落地过，例如手工拷进来的目录），就按**新装**处理——照常落地内容，绝不
 报一句"内容已落地"了事。同 id 换 data_kind 是另一个插件 → 明确拒绝（P2-3），不把两套
 内容装串。
+**v2.5.1 时代的旧登记没有指纹**（只有 landed）：更新时用**上一版目录**里的 payload 补一次账
+（_legacy_ledger），照样不会重复落地；补不出来才退回"这一版不合并新内容"的老口径，并在
+结果文案里说明。
 
-landed 里存的是**各宿主库自己的 id**（prompt 类是文件名）——回滚（_unland）与将来的
-更新都要靠它；warnings 是包内**没有落地**的内容（台词/参考音/闹钟…），必须出现在给用户
-看的成功文案里（P2-1），不许只躺在 _installed.json 里。
+landed 里存的是**各宿主库自己的 id**（prompt 类是文件名）——回滚（_unland / rollback）与
+更新都要靠它；landed_fingerprints 是**内容**的账（按 key 与 landed 平行）；warnings 是包内
+**没有落地**的内容（台词/参考音/闹钟…），必须出现在给用户看的成功文案里（P2-1），
+不许只躺在 _installed.json 里。
+
+**更新 / 回滚的目录账**（v2.6.0 Phase 2）
+----------------------------------------
+· 更新前把当前插件目录整棵挪到 `plugins/.prev-<id>/`（同盘 os.replace，原子），再把新目录
+  换上去——所以"上一个版本的 payload"是**真的留着**的，不是靠记忆重放；登记里同时留一份
+  上一版记录（history，深度 1），里面有它自己的 landed / 指纹；
+· `rollback(pid)` = 撤销**这一版新落地**的条目（当前 landed 减去上一版 landed，用户自己的
+  内容一件都不动）+ 把 .prev-<id> 换回 <id>/ + 登记回到上一版那条。回滚后**再更新一次**
+  仍然正确：指纹账随记录一起退回上一版，新版内容会被重新落地。
+· .prev-* 以 "." 开头 → 读取侧（pet_plugin._SKIP_PREFIX）当它不存在；卸载会一起删掉。
 
 安装登记 plugins/_installed.json 的形状（**写入方与读取方共用的契约**；读取方是
 pet_plugin.read_installed，它按 <id> 查这张表）::
@@ -97,6 +113,11 @@ ROLE_PAYLOAD = "role.json"
 LINES_PAYLOAD = "lines.json"
 BEHAVIORS_PAYLOAD = "behaviors.json"
 DEFAULT_PAYLOAD_ROOT = "payload/"
+
+# v2.6.0（Phase 2）：内容指纹账（更新时"只落新的、不重复落旧的"）与上一版目录（回滚要用）。
+# 指纹键与 landed 键**平行**（roles / lines / dialogues / audio / voice_ref / behaviors / prompts）。
+FINGERPRINT_KEY = "landed_fingerprints"
+PREVIOUS_PREFIX = ".prev-"
 
 # 保留名（与读取侧**同一份**，见 pet_plugin.RESERVED_PLUGIN_NAMES）：packs / index.json /
 # README.md / _installed.json / _download —— 它们在 plugins/ 下有别的用途，绝不是插件 id。
@@ -415,16 +436,22 @@ def _landed_text(landed: Any) -> str:
     return "、".join(parts)
 
 
-def _has_landed(landed: Any) -> bool:
-    """登记里的 landed 是否**真的记下了落地内容**（P2-4 / S1-c）。
+def _has_landed(landed: Any, fingerprints: Any = None) -> bool:
+    """登记里的 landed（或 v2.6.0 的内容指纹账）是否**真的记下了落地内容**（P2-4 / S1-c）。
 
     空表（或只有 warnings）说明内容从来没并进宿主库——手工拷进来的插件目录、登记被抹掉
     之后补的占位记录都是这种形状。这种"已装"是假的：必须照常落地，也不许对用户说
     "内容已落地"。
+    v2.6.0：指纹账也算数——包的每一条内容都与已落地的一致时，landed 可能是空的，
+    但那次安装**确实**把内容并进了库（指纹就是证据），不该被当成"没装过"。
     """
-    if not isinstance(landed, dict):
-        return False
-    return any(isinstance(landed.get(k), list) and landed.get(k) for k, _unit in _LANDED_LABELS)
+    if isinstance(landed, dict):
+        if any(isinstance(landed.get(k), list) and landed.get(k)
+               for k, _unit in _LANDED_LABELS):
+            return True
+    if isinstance(fingerprints, dict):
+        return any(isinstance(v, list) and v for v in fingerprints.values())
+    return False
 
 
 def _landed_warnings(landed: Any) -> list:
@@ -446,6 +473,276 @@ def _warn_tail(warnings: Any) -> str:
     head = "；".join(items[:5])
     more = "；…（共 %d 项）" % len(items) if len(items) > 5 else ""
     return "\n\n⚠ 有 %d 项内容没有导入：%s%s" % (len(items), head, more)
+
+
+# ---------------- v2.6.0（Phase 2）：内容指纹 / 落地账 / 包内计划 ----------------
+# 一条已落地内容 → 一个**内容指纹**（sha256）。更新的语义就靠它："指纹见过的条目不再落，
+# 没见过的（= 新版新增 / 改动过的）真并进宿主库"。指纹一律取**内容**（不是包内路径、不是
+# 随机 id）：同一个包重装 → 指纹一模一样 → 一条都不重复落。
+def _fp_text(text):
+    """字符串 → 指纹。"""
+    return hashlib.sha256(str(text).encode("utf-8")).hexdigest()
+
+
+def _fp_json(obj):
+    """结构化内容 → 指纹（键序无关：sort_keys；中文不转义：与落盘口径一致）。"""
+    try:
+        text = json.dumps(obj, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    except Exception:
+        text = repr(obj)        # 有意忽略：拿不到规范形就退化用 repr（同一条内容仍然稳定）
+    return _fp_text(text)
+
+
+def _fp_bytes(data):
+    """bytes → 指纹。"""
+    return hashlib.sha256(bytes(data or b"")).hexdigest()
+
+
+def _fp_file(path):
+    """文件内容 → 指纹（分块读）；读不出来返回 ""（调用方按"没有指纹"处理＝照常落地）。"""
+    h = hashlib.sha256()
+    try:
+        with open(path, "rb") as f:
+            for chunk in iter(lambda: f.read(1024 * 1024), b""):
+                h.update(chunk)
+    except Exception:
+        return ""
+    return h.hexdigest()
+
+
+def _fp_named(name, data):
+    """带名字的内容指纹（人设类：文件名就是用户看到的预设名，改名＝另一件东西）。"""
+    return hashlib.sha256(str(name).encode("utf-8") + b"\x00"
+                          + bytes(data or b"")).hexdigest()
+
+
+def _fp_named_file(name, path):
+    """盘上文件按"带名字的内容指纹"算一份；读不出来 → ""（调用方按"不是本插件落的"处理）。
+
+    v2.6.0 第 4 轮（兼容审查 P2-1）：判断"用户改过没有人设文件"要拿**盘上现在这份**的
+    指纹跟落账比——"读不出来"必须走最保守的那条（当成用户的东西，不动它），所以返回 ""
+    而不是抛。空串永远不会出现在落账里（指纹是 sha256 hex），不会被误判成"是本插件落的"。
+    """
+    try:
+        with open(path, "rb") as f:
+            data = f.read()
+    except Exception:
+        return ""
+    return _fp_named(name, data)
+
+
+def _ledger_sets(raw):
+    """指纹账 → 可变的 {key: set(fp)}（键集与 landed 平行）。
+
+    两种形状都认：登记里的是 list（JSON），内部流转的是 set——_land 会把**已经**是 set 的
+    账再走一遍本函数（"接口两边都能收"），所以这里必须同时吃 list 与 set。
+    """
+    out = {}
+    if isinstance(raw, dict):
+        for key, _unit in _LANDED_LABELS:
+            vals = raw.get(key)
+            if isinstance(vals, (list, tuple, set, frozenset)):
+                out[key] = {str(x) for x in vals if str(x)}
+    return out
+
+
+def _ledger_json(ledger):
+    """{key: set(fp)} → 登记里的形状（排序稳定：同一份账写出同样的字节）。"""
+    out = {}
+    for key, _unit in _LANDED_LABELS:
+        vals = sorted({str(x) for x in (ledger or {}).get(key) or set() if str(x)})
+        if vals:
+            out[key] = vals
+    return out
+
+
+def _ledger_live(ledger):
+    """把账变成**调用方也能看见改动**的可变形状（{key: set}）。
+
+    已经是 {key: set} 的原样返回**同一个对象**——install_zip 要靠它在落地之后写回登记；
+    JSON 形状（{key: [fp…]}）才转一份新的（那是登记边界，调用方本来就只看返回值）。
+    """
+    if isinstance(ledger, dict) and all(isinstance(v, set) for v in ledger.values()):
+        return ledger
+    return _ledger_sets(ledger)
+
+
+def _fresh(items, key, ledger, still_there=None):
+    """计划条目 → **还没落地过**的那些（顺带把所有条目的指纹记进账，幂等）。
+
+    still_there：可选的"这一条真的还在库里吗"判据。用户手动删掉落地内容之后再更新，
+    按指纹会被跳过（那是"不重复落旧的"的直接后果）——这几类给了判据就能自动补回来
+    （prompt 看文件在不在、lines 看台词文本还在不在）。
+    """
+    seen = ledger.setdefault(key, set())
+    out = []
+    for it in items or []:
+        if not isinstance(it, dict):
+            continue
+        fp = str(it.get("fp") or "")
+        if fp and fp in seen and (still_there is None or still_there(it)):
+            continue
+        if fp:
+            seen.add(fp)
+        out.append(it)
+    return out
+
+
+def _landed_count(landed):
+    """一次落地**新并进宿主库**的条目数（不含 warnings / skipped）。"""
+    if not isinstance(landed, dict):
+        return 0
+    return sum(len(landed.get(k) or []) for k, _unit in _LANDED_LABELS
+               if isinstance(landed.get(k), list))
+
+
+def _merge_landed(old, new):
+    """上一版 landed + 本次新落地的 landed → 累积账（按 key 去重、保持先来后到）。
+
+    "累积"是回滚判据的前提：rollback = 当前 landed − 上一版 landed，所以 landed 必须记
+    **这个插件历次落地过的全部 id**，而不是只有最后一次的。
+    """
+    out = {}
+    for key, _unit in _LANDED_LABELS:
+        vals = []
+        for src in (old, new):
+            for x in ((src or {}).get(key) or []) if isinstance(src, dict) else []:
+                s = str(x)
+                if s and s not in vals:
+                    vals.append(s)
+        if vals:
+            out[key] = vals
+    warns = [str(x) for x in ((new or {}).get("warnings") or []) if str(x).strip()]
+    if warns:
+        out["warnings"] = warns
+    out["skipped"] = int((new or {}).get("skipped") or 0)
+    return out
+
+
+def _landed_diff(cur, prev):
+    """当前 landed − 上一版 landed：**这一版新落地**的条目（回滚要撤销的就是它）。"""
+    out = {}
+    for key, _unit in _LANDED_LABELS:
+        before = {str(x) for x in ((prev or {}).get(key) or []) if str(x)}
+        new = [str(x) for x in ((cur or {}).get(key) or []) if str(x) and str(x) not in before]
+        if new:
+            out[key] = new
+    return out
+
+
+def _plan_lines(payload_dir):
+    """lines payload → (台词计划, 对白计划, 原因)；形状不对 → (None, None, 原因)。"""
+    data, rerr = _read_json_file(os.path.join(payload_dir, LINES_PAYLOAD), None)
+    if data is None:
+        return None, None, "lines 插件缺少 %s：%s" % (LINES_PAYLOAD, rerr)
+    items, dialogues = _lines_items(data)
+    if not items and not dialogues:
+        return None, None, "%s 里没有任何台词（空表或格式不对）" % LINES_PAYLOAD
+    texts = {}
+    for item in items:
+        for key in item["keys"]:            # keys = [声明的 key, 文本本身]：两种引用都认
+            texts.setdefault(key, item["text"])
+    plan_lines = [{"fp": _fp_json([it["text"], it["category"], it["role_slot"],
+                                   it["voice_slot"]]), "item": it} for it in items]
+    plan_dialogues = [{"fp": _fp_json([d["name"], [texts.get(r) for r in d["refs"]]]),
+                       "dialogue": d, "texts": [texts.get(r) for r in d["refs"]]}
+                      for d in dialogues]
+    return plan_lines, plan_dialogues, ""
+
+
+def _plan_media(payload_dir, label):
+    """音频类 payload → ([{指纹, 相对路径}], 原因)。"""
+    files = _iter_files(payload_dir, MEDIA_EXTS)
+    if not files:
+        return None, "%s插件里没有任何 .wav / .mp3 文件" % label
+    return [{"fp": _fp_file(os.path.join(payload_dir, *rel.split("/"))), "rel": rel}
+            for rel in files], ""
+
+
+def _plan_behaviors(payload_dir):
+    """行为类 payload → ([{指纹, 来源, 行为 dict}], 原因)。"""
+    records = _behavior_records(payload_dir)
+    if not records:
+        return None, ("behaviors 插件里没有任何行为（缺 %s，也没有认出 name+steps 的 JSON）"
+                      % BEHAVIORS_PAYLOAD)
+    return [{"fp": _fp_json(record), "src": src, "record": record}
+            for src, record in records], ""
+
+
+def _plan_prompts(payload_dir):
+    """人设类 payload → ([{指纹, 相对路径}], 原因)。指纹带文件名（文件名 = 预设名）。"""
+    files = _iter_files(payload_dir, (".txt",))
+    if not files:
+        return None, "prompt 插件里没有任何 .txt 人设文件"
+    out = []
+    for rel in files:
+        full = os.path.join(payload_dir, *rel.split("/"))
+        try:
+            with open(full, "rb") as f:
+                data = f.read()
+        except Exception:
+            data = b""             # 有意忽略：读不出来就按"没有指纹"处理（照常落地）
+        out.append({"fp": _fp_named(os.path.basename(rel), data), "rel": rel})
+    return out, ""
+
+
+def _role_fingerprint(payload_dir):
+    """role payload（标准角色包 / role.json 两种形态）→ (指纹, 形态)；算不出来 → ("", 形态)。
+
+    指纹覆盖**角色内容 + 它引用的素材内容**：只改了一张 png 也算新内容（该重新落地）。
+    """
+    if os.path.isfile(os.path.join(payload_dir, MANIFEST_NAME)):
+        manifest, _err = _read_json_file(os.path.join(payload_dir, MANIFEST_NAME), dict)
+        if not isinstance(manifest, dict):
+            return "", "bundle"
+        parts = [_fp_json(manifest.get("role") or {})]
+        for rel in _iter_files(payload_dir, pet_plugin.ALLOWED_EXTS):
+            parts.append("%s:%s" % (rel, _fp_file(os.path.join(payload_dir, *rel.split("/")))))
+        return _fp_json(parts), "bundle"
+    role, _err = _read_json_file(os.path.join(payload_dir, ROLE_PAYLOAD), dict)
+    if not isinstance(role, dict):
+        return "", "dict"
+    parts = [_fp_json(role)]
+    for ref in sorted(pet_export._role_file_refs(role) or []):
+        srcp = _resolve_inside(payload_dir, ref)
+        parts.append("%s:%s" % (ref, _fp_file(srcp) if srcp else ""))
+    return _fp_json(parts), "dict"
+
+
+def _package_fingerprints(data_kind, payload_dir):
+    """（尽力而为）一个 payload 里**全部**条目的指纹 → {账本键: [指纹]}。
+
+    只给 _legacy_ledger 用：v2.5.1 的登记没有指纹，用上一版目录里的内容把账补上。
+    任何一类读不出来就跳过它（返回能读到的部分），绝不让"补账"变成新的失败路径。
+    """
+    out = {}
+    if data_kind == "lines":
+        items, dialogues, err = _plan_lines(payload_dir)
+        if not err:
+            out["lines"] = [it["fp"] for it in items]
+            out["dialogues"] = [it["fp"] for it in dialogues]
+        return out
+    if data_kind in ("audio", "voice_ref"):
+        items, err = _plan_media(payload_dir, "音效")
+        if not err:
+            out[data_kind] = [it["fp"] for it in items]
+        return out
+    if data_kind == "behaviors":
+        items, err = _plan_behaviors(payload_dir)
+        if not err:
+            out["behaviors"] = [it["fp"] for it in items]
+        return out
+    if data_kind == "prompt":
+        items, err = _plan_prompts(payload_dir)
+        if not err:
+            out["prompts"] = [it["fp"] for it in items]
+        return out
+    if data_kind == "role":
+        fp, _mode = _role_fingerprint(payload_dir)
+        if fp:
+            out["roles"] = [fp]
+        return out
+    return out
 
 
 class _NoBehaviors(object):
@@ -488,10 +785,26 @@ class PluginHost(object):
         return self._plugins_dir
 
     @property
+    def host_version(self) -> str:
+        """宿主版本字符串（校验器与索引都用它判兼容性；只读）。"""
+        return self._host_version
+
+    @property
     def installed_path(self) -> str:
         """安装登记文件路径（<数据目录>/plugins/_installed.json）。"""
         return (os.path.join(self._plugins_dir, INSTALLED_RECORD)
                 if self._plugins_dir else "")
+
+    def previous_dir(self, pid: Any) -> str:
+        """**上一版**插件目录（<plugins>/.prev-<id>）；没有上一版时它不存在。
+
+        以 "." 开头 → 读取侧（pet_plugin._SKIP_PREFIX）不会把它当插件目录；id 已经过
+        _safe_id（不许以 "." 开头），所以插件自己的目录永远撞不到这个前缀。
+        """
+        safe = _safe_id(pid)
+        if not safe or not self._plugins_dir:
+            return ""
+        return os.path.join(self._plugins_dir, PREVIOUS_PREFIX + safe)
 
     def _lib(self, name: str) -> Any:
         """宿主库：显式注入优先，其次从宿主窗口惰性取（构造期还没有也不怕）。"""
@@ -554,7 +867,7 @@ class PluginHost(object):
         # 了内容，才算"内容已经落地过"（重复安装才不重复导入）；登记没了 / landed 是空表，
         # 就按新装落地——绝不出现"报已更新、内容一条不进"的空壳。
         already = (known is not None and known_kind == data_kind
-                   and _has_landed(known.get("landed")))
+                   and _has_landed(known.get("landed"), known.get(FINGERPRINT_KEY)))
         # P1-1 第二道保险：目标存在却不是插件目录（没有 manifest.json）、登记里也没这条 →
         # 那是官方内容仓库（packs/）或用户自己的文件，绝不覆盖。
         if not already and os.path.exists(target) \
@@ -585,26 +898,58 @@ class PluginHost(object):
             if not os.path.isdir(payload_dir):
                 return False, ("插件包里没有 payload 目录（payload_root=%r）"
                                % _payload_root(manifest))
-            if already:
-                # 覆盖更新：内容首次安装时已经并进宿主库，重复落地会多出一份角色/台词
-                landed = dict(known.get("landed") or {})
-            else:
-                landed, lerr = self._land(data_kind, payload_dir)
-                if lerr:
-                    return False, lerr
+            # v2.6.0（Phase 2）：更新 = **按内容指纹去重后合并**——新版新增的条目真的进库，
+            # 与已落地内容相同的一条都不重复落（旧口径是整包跳过，新版内容永远进不来）。
+            ledger = _ledger_sets((known or {}).get(FINGERPRINT_KEY))
+            ledger_note = ""
+            if already and not _ledger_json(ledger):
+                # v2.5.1 的旧登记只有 landed、没有指纹：用**上一版目录**里的 payload 补一次账
+                ledger, ledger_note = self._legacy_ledger(data_kind, target, payload_dir, ledger)
+            landed, lerr = self._land(data_kind, payload_dir, ledger)
+            if lerr:
+                return False, lerr
+            # 覆盖更新：先把当前目录整棵挪到 .prev-<id>/（回滚要用**真的上一版 payload**，
+            # 不靠记忆重放），再把新目录换上去。两处都是同盘 os.replace（原子）。
+            # 例外：**完全同一个版本的重复安装**（版本没变、内容一条不新）不换目录、也不轮换
+            # 回滚点——否则用户再点一次「更新」就把上一版的备份顶掉了（_dev/probe_plugin_market_v260.py
+            # 实测踩到：v1 → v2 → v2 之后回滚到的是 v2，"能回到 v1"这件事被悄悄弄丢了）。
+            added = _landed_count(landed)
+            skipped = int(landed.get("skipped") or 0)
+            same_version = (str(meta.get("version") if meta.get("version") is not None else "")
+                            == str((known or {}).get("version") or ""))
+            repeat = bool(already and added == 0 and skipped > 0 and same_version)
+            previous = self.previous_dir(pid)
+            moved_prev = False
             try:
-                if os.path.isdir(target):
-                    shutil.rmtree(target)
-                os.replace(tmp, target)
-                tmp = ""                    # 已经搬走：finally 不必再删
+                if repeat and os.path.isdir(target):
+                    # 目录原样留着（它里面就是这一版的内容）；tmp 由 finally 清掉。
+                    moved_prev = False
+                else:
+                    if already and os.path.isdir(target):
+                        if os.path.isdir(previous):
+                            shutil.rmtree(previous, ignore_errors=True)
+                        os.replace(target, previous)
+                        moved_prev = True
+                    elif os.path.isdir(target):
+                        shutil.rmtree(target)
+                    os.replace(tmp, target)
+                    tmp = ""                # 已经搬走：finally 不必再删
             except Exception as e:
-                # S1-b：失败不留半截插件目录；已经并进宿主库的这一份也要撤掉（否则库里
-                # 永久留一份用户看不见的插件内容，重装还会再来一份）
+                # S1-b：失败不留半截插件目录；**本次**新并进宿主库的那几条也要撤掉（否则库里
+                # 永久留一份用户看不见的插件内容，重装还会再来一份）。上一版的目录要挪回去：
+                # 这次更新没成立，用户该继续用原来那一版。
                 shutil.rmtree(target, ignore_errors=True)
-                if not already:
-                    self._unland(data_kind, landed)
-                return False, ("安装插件目录失败：%s（已清理半截目录%s）"
-                               % (e, "" if already else "，并回滚本次导入的内容"))
+                if moved_prev:
+                    try:
+                        os.replace(previous, target)
+                    except Exception as back:
+                        self._log_rollback("上一版目录", back)
+                self._unland(data_kind, landed)
+                return False, ("安装插件目录失败：%s（已清理半截目录，并回滚本次导入的内容）" % e)
+            # 累积账：landed 记**历次**落地过的 id（回滚判据 = 当前 − 上一版），指纹账随内容
+            # 一起累积；history 里放上一版那条记录（深度 1）——它是回滚要恢复的登记状态。
+            prev_record = dict(known) if isinstance(known, dict) else {}
+            prev_record.pop("history", None)
             record = {
                 "id": pid,
                 "name": str(meta.get("name") or pid),
@@ -617,7 +962,10 @@ class PluginHost(object):
                 "installed_at": time.strftime("%Y-%m-%d %H:%M:%S"),
                 "validated": {"ok": True, "host_version": self._host_version, "err": ""},
                 "enabled": bool((known or {}).get("enabled", True)),
-                "landed": landed,
+                "landed": _merge_landed(known.get("landed") if already else None, landed),
+                FINGERPRINT_KEY: _ledger_json(ledger),
+                "history": ([prev_record] if (already and moved_prev and prev_record)
+                            else (list(known.get("history") or []) if repeat else [])),
             }
             registry["plugins"][pid] = record
             werr = self._save_registry(registry)
@@ -626,21 +974,23 @@ class PluginHost(object):
                 # 把刚并进宿主库的条目逐条回滚——否则用户看到"安装失败"，而台词/角色其实
                 # 已经永久进了库（插件管理里还看不到它，重装再来一份）。
                 shutil.rmtree(target, ignore_errors=True)
-                if not already:
-                    self._unland(data_kind, landed)
-                return False, ("写入安装登记失败：%s（已撤掉插件目录%s）"
-                               % (werr, "" if already else "，并回滚本次导入的内容"))
-            what = _landed_text(landed)
+                self._unland(data_kind, landed)
+                return False, ("写入安装登记失败：%s（已撤掉插件目录，并回滚本次导入的内容）"
+                               % werr)
             warns = _warn_tail(_landed_warnings(landed))
             state = "" if record["enabled"] else "（沿用上一次的「已禁用」状态）"
             if already:
-                same_zip = str((known or {}).get("zip_sha256") or "") == record["zip_sha256"]
-                note = "" if same_zip else (
-                    "⚠ 这次的包与首次安装的不是同一个文件：覆盖更新只换插件目录，包内"
-                    "新增 / 改动的内容不会重复导入（要重新导入请先卸载再安装）。")
-                return True, ("已更新插件「%s」%s：覆盖旧版本；内容不重复导入"
-                              "（角色 / 台词 / 音效在首次安装时已落地）。%s%s"
-                              % (record["name"], state, note, warns))
+                # v2.6.0：更新会**真的合并**新版新增内容，所以文案必须说清这次进了多少项、
+                # 有多少项与上一版一致（没重复导入）——不许再让用户猜"新内容进来了没有"。
+                if added:
+                    head = ("已更新插件「%s」%s：覆盖旧版本，并把新版新增的 %d 项内容并入"
+                            "（另有 %d 项与已落地的一致，未重复导入）。"
+                            % (record["name"], state, added, skipped))
+                else:
+                    head = ("已更新插件「%s」%s：覆盖旧版本；这一版的内容与已落地的完全一致"
+                            "（没有新增内容）。" % (record["name"], state))
+                return True, head + ledger_note + warns
+            what = _landed_text(landed)
             tail = "可在插件管理里卸载（已导入的内容会保留）。"
             head = ("已安装插件「%s」%s，并导入 %s。" % (record["name"], state, what)
                     if what else "已安装插件「%s」%s。" % (record["name"], state))
@@ -672,6 +1022,10 @@ class PluginHost(object):
         try:
             if os.path.isdir(target):
                 shutil.rmtree(target)
+            # 上一版的备份也一起删：卸载就是"这个插件不在了"，留一份 .prev-* 是残余
+            previous = self.previous_dir(safe)
+            if previous and os.path.isdir(previous):
+                shutil.rmtree(previous, ignore_errors=True)
         except Exception as e:
             return False, "删除插件目录失败：%s" % e
         registry["plugins"].pop(safe, None)
@@ -680,6 +1034,59 @@ class PluginHost(object):
             return False, "插件目录已删，但安装登记写入失败：%s" % werr
         return True, ("已卸载插件「%s」；它导入到角色库 / 台词库 / 音效库的内容**保留**"
                       "（属用户数据，不随插件删除）" % safe)
+
+    # ---------- 回滚（v2.6.0 Phase 2） ----------
+    def rollback(self, pid: Any) -> tuple:
+        """回滚到**上一版**：恢复上一版目录 + 撤销这一版新落地的条目 + 登记回到上一版。
+
+        三件事一起做，缺一件都不算回滚：
+        ① 撤销"当前 landed − 上一版 landed"里的条目——**只撤这一版新落的**，用户自己的
+           角色 / 台词 / 音效一件都不动（它们不在这个差集里）；
+        ② 把 plugins/.prev-<id>/ 换回 plugins/<id>/（上一版 payload 是真留着的那一份）；
+        ③ 登记整条换成上一版那条（连同它的 landed 与内容指纹账）——于是"回滚后再更新一次"
+           会把新版内容重新并进来，不会因为指纹还留着而一条都不落。
+        没有上一版（只装过一次 / 目录被手工删了）→ 明确拒绝并说明原因，绝不假装回滚成功。
+        """
+        reserved = _reserved_problem(pid)
+        if reserved:
+            return False, reserved
+        safe = _safe_id(pid)
+        if not safe or not self._plugins_dir:
+            return False, "插件 id 不合法：%r" % (pid,)
+        registry = self._load_registry()
+        record = registry["plugins"].get(safe)
+        if not isinstance(record, dict):
+            return False, ("插件「%s」没有安装登记（可能从来没装过），回滚不了" % safe)
+        history = record.get("history")
+        prev = history[-1] if isinstance(history, list) and history else None
+        if not isinstance(prev, dict) or not prev:
+            return False, ("插件「%s」没有上一版可回滚（只装过一次，或者上一版记录已经用掉）"
+                           % safe)
+        previous = self.previous_dir(safe)
+        if not previous or not os.path.isdir(previous):
+            return False, ("插件「%s」的上一版目录已经不在了（%s）——没有可恢复的 payload，"
+                           "这次回滚没有做任何改动" % (safe, previous or "(无)"))
+        new_only = _landed_diff(record.get("landed"), prev.get("landed"))
+        count = sum(len(v) for v in new_only.values())
+        target = os.path.join(self._plugins_dir, safe)
+        try:
+            shutil.rmtree(target, ignore_errors=True)
+            os.replace(previous, target)
+        except Exception as e:
+            # 目录没换成 = 这次回滚没成立：**先别撤内容**（撤了就两边都不对了），如实报错
+            return False, ("恢复上一版插件目录失败：%s——这次回滚没有生效，当前这一版仍在用"
+                           % e)
+        self._unland(str(record.get("data_kind") or ""), new_only)
+        restored = dict(prev)
+        restored["history"] = []      # 上一版记录自己的 history 不继承；键保持存在（形状稳定）
+        registry["plugins"][safe] = restored
+        werr = self._save_registry(registry)
+        if werr:
+            return False, ("已恢复上一版目录，但安装登记写入失败：%s（内容已撤销 %d 项，"
+                           "请重开插件管理看看当前状态）" % (werr, count))
+        return True, ("已把插件「%s」回滚到上一版 %s：撤销了本版新导入的 %d 项内容"
+                      "（你自己的角色 / 台词 / 音效一件没动）"
+                      % (safe, restored.get("version") or "(未知)", count))
 
     def set_enabled(self, pid: Any, on: Any) -> tuple:
         """启用/禁用插件：只改登记里的 enabled，**文件一个不动**（可逆）。返回 (ok, msg)。"""
@@ -749,20 +1156,65 @@ class PluginHost(object):
         return [merged[k] for k in sorted(merged)], [str(x) for x in (problems or [])]
 
     # ---------- 落地（把 payload 并进宿主库） ----------
-    def _land(self, data_kind: str, payload_dir: str) -> tuple:
-        """按 data_kind 分派落地 → (landed | {}, err)。"""
+    def _land(self, data_kind: str, payload_dir: str, ledger: Any = None) -> tuple:
+        """按 data_kind 分派落地 → (landed | {}, err)。
+
+        ledger：内容指纹账（{key: [fp…]}，来自安装登记）。里面的条目**不再重复落地**，
+        只有没见过指纹的才是"新版新增"，真正并进宿主库。缺省空账 = 全部落地（首次安装）。
+        """
         handler = {"role": self._land_role, "lines": self._land_lines,
                    "audio": self._land_audio, "voice_ref": self._land_voice_ref,
                    "behaviors": self._land_behaviors, "prompt": self._land_prompt}.get(data_kind)
         if handler is None:
             return {}, ("本版本不支持落地「%s」类插件（已接 %s）"
                         % (data_kind, " / ".join(LANDING_KINDS)))
-        return handler(payload_dir)
+        return handler(payload_dir, _ledger_live(ledger))
+
+    def _legacy_ledger(self, data_kind: str, old_dir: str, new_payload_dir: str,
+                       ledger: dict) -> tuple:
+        """v2.5.1 的旧登记没有内容指纹 → 用**上一版目录**里的 payload 补一次账。
+
+        为什么不能"没账就当全新落地"：旧登记明明记着"内容已落地"，那样用户一更新就会多出
+        一份角色 / 台词。补账读不出上一版目录时才退一步：把**新版**的指纹全部当成已落地
+        （宁可少合并，也不给用户多一份重复内容），并如实告诉用户。
+        返回 (ledger, 说明文案)。
+
+        v2.6.0 第 4 轮（找茬审查 A-3）：这条兜底分支的**文案**此前与行为不符——它说"没有
+        合并新版内容"，但落地的 _fresh 还有一条 still_there 判据（宿主库里已经查不到那条
+        内容时照常补回来，"内容真的不在了就补回来"与 prompt 类同一个口径），所以**库里还缺
+        的条目这一版照样会进来**。补了一条用例钉住它，文案也改成说得准的那句。
+        """
+        old_payload = ""
+        manifest, _err = _read_json_file(os.path.join(str(old_dir or ""), MANIFEST_NAME), dict)
+        if isinstance(manifest, dict):
+            root = _payload_root(manifest).rstrip("/")
+            cand = os.path.join(str(old_dir), *root.split("/")) if root else str(old_dir)
+            if os.path.isdir(cand):
+                old_payload = cand
+        if old_payload:
+            for key, fps in _package_fingerprints(data_kind, old_payload).items():
+                ledger.setdefault(key, set()).update(str(x) for x in fps if str(x))
+            return ledger, ""
+        for key, fps in _package_fingerprints(data_kind, new_payload_dir).items():
+            ledger.setdefault(key, set()).update(str(x) for x in fps if str(x))
+        return ledger, ("⚠ 上一版安装登记里没有内容指纹、上一版目录也读不出来：这次的"
+                        "「哪些内容已经落过」是按**新版自己**的指纹补的账——宿主库里已经有的"
+                        "不会重复落，**还缺的照常补回来**（下次更新就能按上一版内容精确合并了）。")
 
     # ---- role ----
-    def _land_role(self, payload_dir: str) -> tuple:
-        """角色类：payload 是标准角色包就用既有导入管线；是简化写法就走 land_role。"""
-        if os.path.isfile(os.path.join(payload_dir, MANIFEST_NAME)):
+    def _land_role(self, payload_dir: str, ledger: dict) -> tuple:
+        """角色类：payload 是标准角色包就用既有导入管线；是简化写法就走 land_role。
+
+        指纹覆盖角色内容与它引用的素材：同一个角色包再装一次不会再多出一只角色。
+        （有意不查"那只角色还在不在库里"：角色是用户能改名/删除的对象，按内容判"装过了"
+        就够了；要重新装一只请先卸载插件——见 _dev/plugin_market_report_v260.md。）
+        """
+        fp, mode = _role_fingerprint(payload_dir)
+        if fp and fp in ledger.get("roles", set()):
+            return {"roles": [], "skipped": 1}, ""
+        if fp:
+            ledger.setdefault("roles", set()).add(fp)
+        if mode == "bundle":
             return self._land_role_bundle(payload_dir)
         return self._land_role_dict(payload_dir)
 
@@ -877,19 +1329,31 @@ class PluginHost(object):
         return {"roles": [rid] if rid else []}, ""
 
     # ---- lines ----
-    def _land_lines(self, payload_dir: str) -> tuple:
-        """台词类：逐条 add（可选对白按 key → 新 id 映射后 add_dialogue）；失败逐条回滚。"""
+    def _land_lines(self, payload_dir: str, ledger: dict) -> tuple:
+        """台词类：**只落指纹没见过的**台词（可选对白按 key → id 映射后 add_dialogue）。
+
+        v2.6.0：更新时新版新增的台词会真的进库；与上一版内容相同的那些按指纹跳过（不重复
+        落地）。对白引用改按"key → 文本 → 库内 id"解析——被跳过的旧台词也能被新对白引用。
+        失败逐条回滚。
+        """
         lines_lib = self._lib("lines_lib")
         if lines_lib is None:
             return {}, "宿主台词库不可用（lines_lib 未接线），lines 插件无法落地"
-        data, rerr = _read_json_file(os.path.join(payload_dir, LINES_PAYLOAD), None)
-        if data is None:
-            return {}, "lines 插件缺少 %s：%s" % (LINES_PAYLOAD, rerr)
-        items, dialogues = _lines_items(data)
-        if not items and not dialogues:
-            return {}, "%s 里没有任何台词（空表或格式不对）" % LINES_PAYLOAD
+        plan_lines, plan_dialogues, perr = _plan_lines(payload_dir)
+        if perr:
+            return {}, perr
+        live = self._live_line_ids(lines_lib)
+        fresh_lines = _fresh(plan_lines, "lines", ledger,
+                             still_there=(lambda it: it["item"]["text"] in live)
+                             if live is not None else None)
+        fresh_dialogues = _fresh(plan_dialogues, "dialogues", ledger)
+        skipped = ((len(plan_lines) + len(plan_dialogues))
+                   - (len(fresh_lines) + len(fresh_dialogues)))
+        if not fresh_lines and not fresh_dialogues:
+            return {"lines": [], "skipped": skipped}, ""
         added, keyed = [], {}
-        for item in items:
+        for it in fresh_lines:
+            item = it["item"]
             line, lerr = lines_lib.add(item["text"], item["category"],
                                        item["role_slot"], item["voice_slot"])
             if line is None:
@@ -900,22 +1364,51 @@ class PluginHost(object):
             for key in item["keys"]:
                 keyed.setdefault(key, lid)
         made = []
-        for dialogue in dialogues:
-            ids = [keyed.get(ref) for ref in dialogue["refs"]]
+        for it in fresh_dialogues:
+            dialogue, texts = it["dialogue"], it["texts"]
+            unknown = [ref for ref, text in zip(dialogue["refs"], texts) if text is None]
+            if unknown:
+                self._rollback_lines(lines_lib, added, made)
+                return {}, ("对白「%s」引用了包里没有的台词：%s"
+                            % (dialogue["name"], "、".join(unknown[:3])))
+            ids = [keyed.get(ref) or (live or {}).get(text)
+                   for ref, text in zip(dialogue["refs"], texts)]
             missing = [ref for ref, new_id in zip(dialogue["refs"], ids) if not new_id]
             if missing:
                 self._rollback_lines(lines_lib, added, made)
-                return {}, ("对白「%s」引用了包里没有的台词：%s"
+                return {}, ("对白「%s」引用的台词在台词库里找不到（可能被删掉了）：%s"
+                            "——先卸载这个插件再装一次就能修好"
                             % (dialogue["name"], "、".join(missing[:3])))
             made_line, derr = lines_lib.add_dialogue(dialogue["name"], ids)
             if made_line is None:
                 self._rollback_lines(lines_lib, added, made)
                 return {}, "对白导入失败（%s）：%s" % (dialogue["name"], derr)
             made.append(str(made_line.get("id") or ""))
-        landed = {"lines": [x for x in added if x]}
+        landed = {"lines": [x for x in added if x], "skipped": skipped}
         if made:
             landed["dialogues"] = [x for x in made if x]
         return landed, ""
+
+    def _live_line_ids(self, lines_lib: Any) -> Any:
+        """台词库里现存的 {文本: id}（取不到 → None：调用方按"判不了"处理，只按指纹去重）。
+
+        为什么要它：对白引用的 key 只存在于**包内**，被指纹跳过（= 上一版已落地）的台词
+        不会有"本次新 id"，只能按文本回查库里的那一条。
+        """
+        try:
+            rows = lines_lib.lines()
+        except Exception as e:
+            self._log_rollback("台词库清单", e)
+            return None
+        out = {}
+        for row in rows if isinstance(rows, list) else []:
+            if not isinstance(row, dict):
+                continue
+            text = str(row.get("text") or "")
+            lid = str(row.get("id") or "")
+            if text and lid:
+                out.setdefault(text, lid)
+        return out
 
     def _rollback_lines(self, lines_lib: Any, line_ids: Any, dialogue_ids: Any) -> None:
         """回滚已经并进台词库的条目（尽力而为：失败只记日志）。"""
@@ -939,26 +1432,35 @@ class PluginHost(object):
                 pass  # 有意忽略：日志自身失败无处可记
 
     # ---- audio / voice_ref（同一套"逐文件入库"接口） ----
-    def _land_audio(self, payload_dir: str) -> tuple:
-        return self._land_media("audio_lib", payload_dir, "音效")
+    def _land_audio(self, payload_dir: str, ledger: dict) -> tuple:
+        return self._land_media("audio_lib", payload_dir, "音效", ledger)
 
-    def _land_voice_ref(self, payload_dir: str) -> tuple:
-        return self._land_media("voice_assets", payload_dir, "参考音")
+    def _land_voice_ref(self, payload_dir: str, ledger: dict) -> tuple:
+        return self._land_media("voice_assets", payload_dir, "参考音", ledger)
 
-    def _land_media(self, lib_name: str, payload_dir: str, label: str) -> tuple:
+    def _land_media(self, lib_name: str, payload_dir: str, label: str,
+                    ledger: dict) -> tuple:
         """音频类：payload 下每个 .wav/.mp3 逐个 import_file（名字取 pack.json 建议，缺省用文件名）。
 
         只导入条目、**不动用户的音效组槽位**（插件不许改用户已有的东西）。
+        v2.6.0：指纹 = **文件内容的 sha256**——同一个音频（哪怕换了文件名/显示名）不会重复入库，
+        新版里新增的音频会真的进库。有意**不**把显示名算进指纹：改个名字不该多出一份同样的音。
         """
         lib = self._lib(lib_name)
         if lib is None:
             return {}, "宿主%s库不可用（%s 未接线），该类插件无法落地" % (label, lib_name)
-        files = _iter_files(payload_dir, MEDIA_EXTS)
-        if not files:
-            return {}, "%s插件里没有任何 .wav / .mp3 文件" % label
+        key = "audio" if lib_name == "audio_lib" else "voice_ref"
+        plan, perr = _plan_media(payload_dir, label)
+        if perr:
+            return {}, perr
+        fresh = _fresh(plan, key, ledger)
+        skipped = len(plan) - len(fresh)
+        if not fresh:
+            return {key: [], "skipped": skipped}, ""
         names = _pack_names(payload_dir)
         ids = []
-        for rel in files:
+        for it in fresh:
+            rel = it["rel"]
             srcp = os.path.join(payload_dir, *rel.split("/"))
             name = names.get(rel) or os.path.splitext(os.path.basename(rel))[0]
             item, err = lib.import_file(srcp, name=name)
@@ -966,9 +1468,8 @@ class PluginHost(object):
                 self._rollback_media(lib, ids, label)
                 return {}, "%s导入失败（%s）：%s" % (label, rel, err)
             ids.append(str(item.get("id") or ""))
-        key = "audio" if lib_name == "audio_lib" else "voice_ref"
         # landed 记**库内 id**（不是包内路径）：安装最终失败时 _unland 靠它逐条回滚
-        return {key: ids}, ""
+        return {key: ids, "skipped": skipped}, ""
 
     def _rollback_media(self, lib: Any, ids: Any, label: str) -> None:
         for fid in reversed([x for x in (ids or []) if x]):
@@ -978,35 +1479,42 @@ class PluginHost(object):
                 self._log_rollback("%s %s" % (label, fid), e)
 
     # ---- behaviors ----
-    def _land_behaviors(self, payload_dir: str) -> tuple:
-        """行为类：逐条交给既有 BehaviorService.import_file（id 校验/新 id 都由它负责）。"""
+    def _land_behaviors(self, payload_dir: str, ledger: dict) -> tuple:
+        """行为类：逐条交给既有 BehaviorService.import_file（id 校验/新 id 都由它负责）。
+
+        v2.6.0：指纹 = 行为 dict 的规范形——import_file **每次都会分配新 id**，不按内容去重
+        的话每次更新都会多出一份同样的行为。
+        """
         svc = self._lib("behaviors")
         if svc is None:
             return {}, "宿主行为库不可用（behaviors 未接线），behaviors 插件无法落地"
-        records = _behavior_records(payload_dir)
-        if not records:
-            return {}, ("behaviors 插件里没有任何行为（缺 %s，也没有认出 name+steps 的 JSON）"
-                        % BEHAVIORS_PAYLOAD)
+        plan, perr = _plan_behaviors(payload_dir)
+        if perr:
+            return {}, perr
+        fresh = _fresh(plan, "behaviors", ledger)
+        skipped = len(plan) - len(fresh)
+        if not fresh:
+            return {"behaviors": [], "skipped": skipped}, ""
         tmp_dir = tempfile.mkdtemp(prefix="dfypet_beh_")
         added, landed = [], []
         try:
-            for i, (src_name, record) in enumerate(records):
+            for i, it in enumerate(fresh):
                 one = os.path.join(tmp_dir, "b%d.json" % i)
                 try:
                     with open(one, "w", encoding="utf-8") as f:
-                        json.dump({"behavior": record}, f, ensure_ascii=False)
+                        json.dump({"behavior": it["record"]}, f, ensure_ascii=False)
                 except Exception as e:
                     self._rollback_behaviors(svc, added)
-                    return {}, "行为文件准备失败（%s）：%s" % (src_name, e)
+                    return {}, "行为文件准备失败（%s）：%s" % (it["src"], e)
                 item, err = svc.import_file(one)
                 if item is None:
                     self._rollback_behaviors(svc, added)
-                    return {}, "行为导入失败（%s）：%s" % (src_name, err)
+                    return {}, "行为导入失败（%s）：%s" % (it["src"], err)
                 added.append(str(item.get("id") or ""))
                 landed.append(str(item.get("id") or ""))   # 记库内 id：_unland 靠它回滚
         finally:
             shutil.rmtree(tmp_dir, ignore_errors=True)
-        return {"behaviors": landed}, ""
+        return {"behaviors": landed, "skipped": skipped}, ""
 
     def _rollback_behaviors(self, svc: Any, ids: Any) -> None:
         for bid in reversed([x for x in (ids or []) if x]):
@@ -1083,22 +1591,25 @@ class PluginHost(object):
             _drop_empty_dir(self._plugins_dir)
 
     # ---- prompt（人设文件） ----
-    def _land_prompt(self, payload_dir: str) -> tuple:
+    def _land_prompt(self, payload_dir: str, ledger: dict) -> tuple:
         """人设类：payload 下每个 .txt 拷进 <数据目录>/prompts/custom/（**同名一律拒绝**）。
 
         与 桌宠.persona_file_ids 的口径一致：custom/<文件名>.txt 会自动出现在 AI 设置里。
         绝不覆盖用户已有的人设文件（那是用户数据）。
+        v2.6.0：指纹 = 文件名 + 内容——更新时同样的人设不会重写一遍（用户改过它也不会被
+        覆盖回去）；但**文件真的不在了**（用户删了）就补回来。
         """
         if not self._data_dir:
             return {}, "插件数据目录不可用（宿主未接线），prompt 插件无法落地"
-        files = _iter_files(payload_dir, (".txt",))
-        if not files:
-            return {}, "prompt 插件里没有任何 .txt 人设文件"
+        items, perr = _plan_prompts(payload_dir)
+        if perr:
+            return {}, perr
         target_dir = os.path.join(self._data_dir, PROMPTS_DIRNAME, PROMPTS_CUSTOM_DIRNAME)
         # S3③：**先把所有判据过一遍，再建目录**。此前先 makedirs 再逐条判，任何一条不通过
         # 都会留下一个空的 prompts/custom/（"失败的安装不留残余"就不成立了）。
-        plan, seen = [], set()
-        for rel in files:
+        plan, seen, skipped, warnings, blocked = [], set(), 0, [], []
+        for it in items:
+            rel = it["rel"]
             stem = os.path.splitext(os.path.basename(rel))[0].strip()
             if not stem:
                 return {}, "人设文件名不合法：%s" % rel
@@ -1108,9 +1619,34 @@ class PluginHost(object):
                             % name)
             seen.add(name)
             dst = os.path.join(target_dir, name)
+            fp = str(it.get("fp") or "")
+            mine = ledger.get("prompts")
+            mine = mine if isinstance(mine, set) else set(mine or ())
+            if fp and fp in mine and os.path.isfile(dst):
+                skipped += 1                 # 同一个人设已经落地过：不重写（也不动用户改过的它）
+                continue
             if os.path.exists(dst):
-                return {}, "人设文件已存在，插件不许覆盖：%s" % name
+                # v2.6.0 第 4 轮（兼容审查 P2-1）：**按内容指纹区分两种情况**，不再一律整包失败。
+                # 旧行为是"目标文件存在 → 整个更新失败"：新版只改了自己上次落地的那份同名
+                # 人设（用户一个字没动），用户就完全更新不了（实测 v1→v2 改一份内容 → 拒装、
+                # 快照 0 变化）。
+                #   ① 盘上这份的内容 == 本插件落地过的某一版（用户没动过）→ 允许覆盖更新；
+                #   ② 用户改过（盘上内容不是本插件落的任何一版）→ 跳过该文件 + 人话警告，
+                #      其余内容照常落地：保住用户数据，但不拿它把整包更新顶掉。
+                if _fp_named_file(name, dst) not in mine:
+                    blocked.append(name)
+                    warnings.append("「%s」是你自己改过的，这一版没有覆盖它"
+                                    "（插件其余内容照常落地）" % name)
+                    continue
+            if fp:
+                ledger.setdefault("prompts", set()).add(fp)
             plan.append((rel, dst, name))
+        if blocked and not plan and not skipped:
+            # 包里**一条**内容都没进得去（全被用户已有文件挡住）：那是失败，不是"装上了"。
+            # 这条保住了 v2.5.1 的判据（同名就拒、用户人设不被插件吃掉）——只是不再拿它
+            # 去顶掉"部分内容被挡住、其余照常落地"的正常更新（见上面 P2-1 的两种情形）。
+            return {}, ("人设文件已存在且不是本插件落地的，插件不许覆盖：%s"
+                        % "、".join(blocked[:3]))
         try:
             os.makedirs(target_dir, exist_ok=True)
         except Exception as e:
@@ -1124,7 +1660,7 @@ class PluginHost(object):
                 return {}, "写入人设文件失败（%s）：%s" % (rel, e)
             written.append(dst)
             landed.append(name)
-        return {"prompts": landed}, ""
+        return {"prompts": landed, "skipped": skipped, "warnings": warnings}, ""
 
     # ---------- 安装登记（_installed.json） ----------
     def _load_registry(self) -> dict:

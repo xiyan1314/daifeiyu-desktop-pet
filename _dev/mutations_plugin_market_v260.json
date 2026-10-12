@@ -1,0 +1,405 @@
+{
+  "title": "v2.6.0 插件分发 Phase 2（代理 A）变异验证",
+  "note": "变异只在 %TEMP% 影子副本里做，真实仓库只读（只写 _dev/.mutation.lock）；驱动 _dev/mutate_check.py。M-A01..M-A16 覆盖：索引哈希/字节核对、相对 url 口径、host_min 可装性标记、内容指纹落账、更新去重、landed 累积、回滚撤销、上一版目录、旧登记补账、信号接线、后台线程、在途守卫、更新可用性判据、设计尺寸字面量、重复安装不顶掉回滚点。",
+  "mutations": [
+    {
+      "id": "M-A01",
+      "why": "下载后不核对 sha256（坏包会被当成好包交给安装器）",
+      "file": "pet_plugin_index.py",
+      "old": "        if got_sha != want_sha:",
+      "new": "        if False:",
+      "tests": [
+        "tests/test_plugin_market_v252.py::test_sha256不符_拒收并删掉临时文件"
+      ],
+      "expect_fail": [
+        "tests/test_plugin_market_v252.py::test_sha256不符_拒收并删掉临时文件"
+      ]
+    },
+    {
+      "id": "M-A02",
+      "why": "不核对声明的字节数",
+      "file": "pet_plugin_index.py",
+      "old": "                and len(data) != want_bytes:",
+      "new": "                and False:",
+      "tests": [
+        "tests/test_plugin_market_v252.py::test_bytes不符_拒收且不留残余"
+      ],
+      "expect_fail": [
+        "tests/test_plugin_market_v252.py::test_bytes不符_拒收且不留残余"
+      ]
+    },
+    {
+      "id": "M-A03",
+      "why": "相对 url 不再按索引所在目录解析（随包本地副本取不到）",
+      "file": "pet_plugin_index.py",
+      "old": "    head = base if os.path.isdir(base) else os.path.dirname(base)",
+      "new": "    head = \"\"",
+      "tests": [
+        "tests/test_plugin_market_v252.py::test_随包索引_相对url解析到随包本地副本_不联网"
+      ],
+      "expect_fail": [
+        "tests/test_plugin_market_v252.py::test_随包索引_相对url解析到随包本地副本_不联网"
+      ]
+    },
+    {
+      "id": "M-A04",
+      "why": "可装性判据失效（host_min 高于宿主的条目也报可装）",
+      "file": "pet_plugin_index.py",
+      "old": "            \"installable\": not reasons,",
+      "new": "            \"installable\": True,",
+      "tests": [
+        "tests/test_plugin_market_v252.py::test_密钥不可装的条目也列出来_不静默隐藏"
+      ],
+      "expect_fail": [
+        "tests/test_plugin_market_v252.py::test_密钥不可装的条目也列出来_不静默隐藏"
+      ]
+    },
+    {
+      "id": "M-A05",
+      "why": "内容指纹不落账（更新时无从判断哪条落过；注意：这条路上【整包跳过】的老路会被 _legacy_ledger 补账兜住，所以只有登记形状那条用例会红）",
+      "file": "pet_plugin_host.py",
+      "old": "                FINGERPRINT_KEY: _ledger_json(ledger),",
+      "new": "                FINGERPRINT_KEY: {},",
+      "tests": [
+        "tests/test_plugin_market_v252.py::test_内容指纹落在安装登记里",
+        "tests/test_plugin_market_v252.py::test_更新把新版新增内容并入_旧内容不重复落"
+      ],
+      "expect_fail": [
+        "tests/test_plugin_market_v252.py::test_内容指纹落在安装登记里"
+      ]
+    },
+    {
+      "id": "M-A06",
+      "why": "按内容去重失效（更新时旧内容重复落一遍）",
+      "file": "pet_plugin_host.py",
+      "old": "        if fp and fp in seen and (still_there is None or still_there(it)):",
+      "new": "        if False:",
+      "tests": [
+        "tests/test_plugin_market_v252.py::test_更新把新版新增内容并入_旧内容不重复落"
+      ],
+      "expect_fail": [
+        "tests/test_plugin_market_v252.py::test_更新把新版新增内容并入_旧内容不重复落"
+      ]
+    },
+    {
+      "id": "M-A07",
+      "why": "landed 不累积（只记本次新落的）——回滚差集恰好还对得上，但登记里的【历次落地账】没了",
+      "file": "pet_plugin_host.py",
+      "old": "                \"landed\": _merge_landed(known.get(\"landed\") if already else None, landed),",
+      "new": "                \"landed\": landed,",
+      "tests": [
+        "tests/test_plugin_market_v252.py::test_landed_是历次落地的累积账"
+      ],
+      "expect_fail": [
+        "tests/test_plugin_market_v252.py::test_landed_是历次落地的累积账"
+      ]
+    },
+    {
+      "id": "M-A08",
+      "why": "回滚只换目录、不撤销本版新落地的内容",
+      "file": "pet_plugin_host.py",
+      "old": "        self._unland(str(record.get(\"data_kind\") or \"\"), new_only)",
+      "new": "        pass  # 变异：不撤销本版新落地",
+      "tests": [
+        "tests/test_plugin_market_v252.py::test_回滚_撤销本版新增_不碰用户自己的内容"
+      ],
+      "expect_fail": [
+        "tests/test_plugin_market_v252.py::test_回滚_撤销本版新增_不碰用户自己的内容"
+      ]
+    },
+    {
+      "id": "M-A09",
+      "why": "更新时不保留上一版 payload（把当前目录删掉而不是挪到 .prev-<id>/，回滚无从恢复）",
+      "file": "pet_plugin_host.py",
+      "old": "                    if already and os.path.isdir(target):\n                        if os.path.isdir(previous):\n                            shutil.rmtree(previous, ignore_errors=True)\n                        os.replace(target, previous)\n                        moved_prev = True",
+      "new": "                    if already and os.path.isdir(target):\n                        if os.path.isdir(previous):\n                            shutil.rmtree(previous, ignore_errors=True)\n                        shutil.rmtree(target, ignore_errors=True)\n                        moved_prev = False",
+      "tests": [
+        "tests/test_plugin_market_v252.py::test_回滚_撤销本版新增_不碰用户自己的内容"
+      ],
+      "expect_fail": [
+        "tests/test_plugin_market_v252.py::test_回滚_撤销本版新增_不碰用户自己的内容"
+      ]
+    },
+    {
+      "id": "M-A10",
+      "why": "旧版登记（没有指纹）不补账 → 老用户一更新就多出一份重复内容",
+      "file": "pet_plugin_host.py",
+      "old": "            if already and not _ledger_json(ledger):\n                # v2.5.1 的旧登记只有 landed、没有指纹：用**上一版目录**里的 payload 补一次账\n                ledger, ledger_note = self._legacy_ledger(data_kind, target, payload_dir, ledger)",
+      "new": "            if False:\n                ledger, ledger_note = self._legacy_ledger(data_kind, target, payload_dir, ledger)",
+      "tests": [
+        "tests/test_plugin_market_v252.py::test_旧登记没有指纹_也能不重复落地"
+      ],
+      "expect_fail": [
+        "tests/test_plugin_market_v252.py::test_旧登记没有指纹_也能不重复落地"
+      ]
+    },
+    {
+      "id": "M-A11",
+      "why": "后台下载的结果没人接（装上去毫无反应）",
+      "file": "pet_dialogs.py",
+      "old": "        self.packReady.connect(self._on_pack_ready)",
+      "new": "        pass  # 变异：信号不接槽",
+      "tests": [
+        "tests/test_plugin_market_v252.py::test_安装走后台线程_落地在主线程"
+      ],
+      "expect_fail": [
+        "tests/test_plugin_market_v252.py::test_安装走后台线程_落地在主线程"
+      ]
+    },
+    {
+      "id": "M-A12",
+      "why": "下载跑在主线程（界面会卡死）",
+      "file": "pet_dialogs.py",
+      "old": "            threading.Thread(target=self._download_worker, args=(gen, idx),\n                             daemon=True).start()",
+      "new": "            self._download_worker(gen, idx)",
+      "tests": [
+        "tests/test_plugin_market_v252.py::test_安装走后台线程_落地在主线程"
+      ],
+      "expect_fail": [
+        "tests/test_plugin_market_v252.py::test_安装走后台线程_落地在主线程"
+      ]
+    },
+    {
+      "id": "M-A13",
+      "why": "去掉在途守卫（连点会起第二个并发下载）",
+      "file": "pet_dialogs.py",
+      "old": "        if self._pack_active is not None:\n            self._set_hint(\"上一个下载还没结束，等它落地（不会起第二个下载）。\")\n            return False",
+      "new": "        if False:\n            self._set_hint(\"上一个下载还没结束，等它落地（不会起第二个下载）。\")\n            return False",
+      "tests": [
+        "tests/test_plugin_market_v252.py::test_在途期间连点不起第二个下载_结果只落一次"
+      ],
+      "expect_fail": [
+        "tests/test_plugin_market_v252.py::test_在途期间连点不起第二个下载_结果只落一次"
+      ]
+    },
+    {
+      "id": "M-A14",
+      "why": "更新可用性判据恒假（有新版也不出现「更新」）",
+      "file": "pet_dialogs.py",
+      "old": "    return pet_plugin.version_key(release.get(\"version\")) > pet_plugin.version_key(cur)",
+      "new": "    return False",
+      "tests": [
+        "tests/test_plugin_market_v252.py::test_更新按钮只在有新版本时出现_回滚按钮只在有上一版时出现"
+      ],
+      "expect_fail": [
+        "tests/test_plugin_market_v252.py::test_更新按钮只在有新版本时出现_回滚按钮只在有上一版时出现"
+      ]
+    },
+    {
+      "id": "M-A15",
+      "why": "设计尺寸字面量改了（两页签前的老尺寸）",
+      "file": "pet_dialogs.py",
+      "old": "        clamp_dialog(self, 860, 560)   # v2.5.0 B：设计尺寸（口径表按源码字面量核对）",
+      "new": "        clamp_dialog(self, 800, 520)   # v2.5.0 B：设计尺寸（口径表按源码字面量核对）",
+      "tests": [
+        "tests/test_dialog_fit_v250.py::test_每个对话框的设计尺寸就是它自己的契约",
+        "tests/test_dialog_fit_v250.py::test_每个对话框的设计尺寸都写在源码里"
+      ],
+      "expect_fail": [
+        "tests/test_dialog_fit_v250.py::test_每个对话框的设计尺寸就是它自己的契约",
+        "tests/test_dialog_fit_v250.py::test_每个对话框的设计尺寸都写在源码里"
+      ]
+    },
+    {
+      "id": "M-A16",
+      "why": "同一个版本的重复安装照旧轮换 .prev-<id>/（把上一版的回滚点顶掉）",
+      "file": "pet_plugin_host.py",
+      "old": "                if repeat and os.path.isdir(target):",
+      "new": "                if False and os.path.isdir(target):",
+      "tests": [
+        "tests/test_plugin_market_v252.py::test_同一个版本重复安装不顶掉回滚点"
+      ],
+      "expect_fail": [
+        "tests/test_plugin_market_v252.py::test_同一个版本重复安装不顶掉回滚点"
+      ]
+    }
+  ],
+  "results": {
+    "title": "变异验证 spec：mutations_plugin_market_v260.json",
+    "checked_at": "2026-10-12 12:02:57",
+    "total": 16,
+    "caught": 16,
+    "not_caught": 0,
+    "blocked": 0,
+    "items": [
+      {
+        "id": "M-A01",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 0.66s",
+        "failed": [
+          "test_sha256不符_拒收并删掉临时文件"
+        ]
+      },
+      {
+        "id": "M-A02",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 0.51s",
+        "failed": [
+          "test_bytes不符_拒收且不留残余"
+        ]
+      },
+      {
+        "id": "M-A03",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 0.59s",
+        "failed": [
+          "test_随包索引_相对url解析到随包本地副本_不联网"
+        ]
+      },
+      {
+        "id": "M-A04",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 0.50s",
+        "failed": [
+          "test_密钥不可装的条目也列出来_不静默隐藏"
+        ]
+      },
+      {
+        "id": "M-A05",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed, 1 passed in 0.64s",
+        "failed": [
+          "test_内容指纹落在安装登记里"
+        ]
+      },
+      {
+        "id": "M-A06",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 0.56s",
+        "failed": [
+          "test_更新把新版新增内容并入_旧内容不重复落"
+        ]
+      },
+      {
+        "id": "M-A07",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 0.58s",
+        "failed": [
+          "test_landed_是历次落地的累积账"
+        ]
+      },
+      {
+        "id": "M-A08",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 0.70s",
+        "failed": [
+          "test_回滚_撤销本版新增_不碰用户自己的内容"
+        ]
+      },
+      {
+        "id": "M-A09",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 0.56s",
+        "failed": [
+          "test_回滚_撤销本版新增_不碰用户自己的内容"
+        ]
+      },
+      {
+        "id": "M-A10",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 0.56s",
+        "failed": [
+          "test_旧登记没有指纹_也能不重复落地"
+        ]
+      },
+      {
+        "id": "M-A11",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 0.60s",
+        "failed": [
+          "test_安装走后台线程_落地在主线程"
+        ]
+      },
+      {
+        "id": "M-A12",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 0.61s",
+        "failed": [
+          "test_安装走后台线程_落地在主线程"
+        ]
+      },
+      {
+        "id": "M-A13",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 0.57s",
+        "failed": [
+          "test_在途期间连点不起第二个下载_结果只落一次"
+        ]
+      },
+      {
+        "id": "M-A14",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 0.64s",
+        "failed": [
+          "test_更新按钮只在有新版本时出现_回滚按钮只在有上一版时出现"
+        ]
+      },
+      {
+        "id": "M-A15",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "2 failed, 14 passed in 1.45s",
+        "failed": [
+          "test_每个对话框的设计尺寸就是它自己的契约[PluginManagerDialog]",
+          "test_每个对话框的设计尺寸都写在源码里"
+        ]
+      },
+      {
+        "id": "M-A16",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 0.65s",
+        "failed": [
+          "test_同一个版本重复安装不顶掉回滚点"
+        ]
+      }
+    ],
+    "spec": "mutations_plugin_market_v260.json",
+    "tests": [
+      "tests/test_dialog_fit_v250.py::test_每个对话框的设计尺寸就是它自己的契约",
+      "tests/test_dialog_fit_v250.py::test_每个对话框的设计尺寸都写在源码里",
+      "tests/test_plugin_market_v252.py::test_bytes不符_拒收且不留残余",
+      "tests/test_plugin_market_v252.py::test_landed_是历次落地的累积账",
+      "tests/test_plugin_market_v252.py::test_sha256不符_拒收并删掉临时文件",
+      "tests/test_plugin_market_v252.py::test_内容指纹落在安装登记里",
+      "tests/test_plugin_market_v252.py::test_同一个版本重复安装不顶掉回滚点",
+      "tests/test_plugin_market_v252.py::test_回滚_撤销本版新增_不碰用户自己的内容",
+      "tests/test_plugin_market_v252.py::test_在途期间连点不起第二个下载_结果只落一次",
+      "tests/test_plugin_market_v252.py::test_安装走后台线程_落地在主线程",
+      "tests/test_plugin_market_v252.py::test_密钥不可装的条目也列出来_不静默隐藏",
+      "tests/test_plugin_market_v252.py::test_旧登记没有指纹_也能不重复落地",
+      "tests/test_plugin_market_v252.py::test_更新把新版新增内容并入_旧内容不重复落",
+      "tests/test_plugin_market_v252.py::test_更新按钮只在有新版本时出现_回滚按钮只在有上一版时出现",
+      "tests/test_plugin_market_v252.py::test_随包索引_相对url解析到随包本地副本_不联网"
+    ],
+    "note": "变异只在 %TEMP% 影子副本里做，真实仓库只读（只写 _dev/.mutation.lock）",
+    "repo_fingerprint": {
+      "桌宠.py": "99e2abf3e7fb",
+      "pet_export.py": "c01e1593efd2",
+      "pet_lines.py": "5332f60b5f26",
+      "pet_alarm.py": "1149e94deee3",
+      "pet_behaviors.py": "8f57255144f6",
+      "_check_release.py": "e0abfe805849",
+      "pet_balance.py": "2828b2ebc0c9",
+      "pet_plugin.py": "2f7853298fc3",
+      "pet_plugin_host.py": "e41ee09707ba",
+      "pet_dialogs.py": "48f300e4fc50",
+      "pet_menu.py": "920daac1b835",
+      "pet_plugin_index.py": "439340b16523"
+    }
+  }
+}

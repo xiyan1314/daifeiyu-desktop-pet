@@ -869,7 +869,13 @@ class RoleLibrary:
             fn = "%s_e%s.png" % (uuid.uuid4().hex[:8], str(int(time.time())))
             shutil.copyfile(src, os.path.join(self._dir, fn))
             return fn
-        except Exception:
+        except Exception as e:
+            # v2.6.0（D7-B ①）：调用方拿到 None 后只会弹一句笼统的"写入角色目录失败"
+            # （pet_dialogs 的 RuntimeError 把异常原文丢了）——"为什么写不进去"此前全仓
+            # 没有任何线索。补限流日志（同名 60s 一条）；返回值口径不变（None＝失败）。
+            pet_log.log_throttled("role.stage_file",
+                                  "角色素材暂存失败（返回 None，调用方按失败处理）：%r <- %s"
+                                  % (e, src))
             return None
 
     def is_v2(self, role_id):

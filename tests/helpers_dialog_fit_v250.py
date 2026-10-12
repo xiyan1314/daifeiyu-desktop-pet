@@ -141,7 +141,8 @@ def dialog_factories():
         ("IdleDialog", lambda p: d.IdleDialog(p)),
         ("_VoicePickDialog", lambda p: d._VoicePickDialog(p, p)),
         ("build_role_meta_dialog", lambda p: d.build_role_meta_dialog(p)[0]),
-        # v2.5.1 代理B：插件管理（设计尺寸 760x520，登记口径见 _DESIGN_SIZES）
+        # v2.5.1 代理B：插件管理（设计尺寸见 _DESIGN_SIZES = 860x560 —— v2.6.0 第 4 轮
+        # 找茬审查 P3-5：这里此前还写着旧的 760x520，与真正三处契约不一致的只剩这条注释）
         ("PluginManagerDialog", lambda p: d.PluginManagerDialog(p)),
     )
 

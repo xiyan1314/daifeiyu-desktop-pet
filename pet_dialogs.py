@@ -90,6 +90,7 @@ import os
 import shutil
 import sys
 import tempfile
+import threading
 import time
 
 import pet_log
@@ -118,6 +119,7 @@ from PySide6.QtWidgets import (
     QListWidgetItem,
     QMessageBox,
     QPlainTextEdit,
+    QProgressBar,
     QPushButton,
     QScrollArea,
     QSpinBox,
@@ -136,7 +138,9 @@ import pet_chat  # v2.0.4：服务商预设/错误归类/连通性测试（pet_c
 import pet_alarm  # v2.0.5：闹钟服务（AlarmDialog 共用时间校验/铃声导入口径）
 import pet_lines  # v2.1：台词库（类别/标签单一来源；LinesDialog 直接用服务接口）
 import pet_voice  # v2.1：可插拔配音后端清单（VoiceDialog 用）
-import pet_plugin_host  # v2.5.1：PetHub 插件宿主（安装/卸载/启用禁用/清单；Qt-free）
+import pet_plugin  # v2.6.0：包判据 / 版本比较（市场页按同款四段整数比版本，不自己写一套）
+import pet_plugin_host  # v2.5.1：PetHub 插件宿主（安装/卸载/启用禁用/清单/回滚；Qt-free）
+import pet_plugin_index  # v2.6.0：索引读取与下载（注入式取数；Qt-free）
 from pet_widgets import BUBBLE_STYLE as _BUBBLE_STYLE  # v2.1.2：气泡默认样式单一来源
 # v2.4.3（兼容审查 M1）：对话框 QSS 的 font-family 也取同一条回退链——此前这里是单族
 # "Microsoft YaHei"，而它被 24 处 setStyleSheet 用在**中文文本量最大**的对话框上。
@@ -5853,8 +5857,15 @@ def set_frame_max(pet, save_cfg):
     pet.show_bubble("帧上限改为 %d 帧啦~" % val)
 
 
-# ---------------- 插件管理（v2.5.1 · PetHub Phase 1） ----------------
+# ---------------- 插件管理（v2.5.1 Phase 1 → v2.6.0 Phase 2：市场页） ----------------
 _PLUGIN_COLUMNS = ("插件", "名称", "版本", "类型", "状态", "来源")
+# 「可安装」页签的列（A2 口径：名称 / 类型 / 大小 / 版本 / 是否已装 / 可不可装）
+_INDEX_COLUMNS = ("插件", "名称", "类型", "大小", "版本", "是否已装", "可否安装")
+# 禁用口径的界面文案：与 pet_plugin_host.set_enabled 的行为**逐字对齐**（只改登记、
+# 不撤内容、不删目录）——"已禁用"三个字很容易被读成"卸载了"，所以每个能看到它的地方
+# 都把话写全（列表提示行 + 状态格 tooltip + 确认/结果文案）。
+_PLUGIN_DISABLE_TIP = ("「启用 / 禁用」只改登记：插件内容（角色 / 台词 / 音效）仍然在库里，"
+                       "插件目录也不会删——不等于卸载。")
 
 
 def _fallback_host(pet):
@@ -5889,57 +5900,169 @@ def _plugin_source_text(rec):
     return "本地安装" if rec.get("installed_at") else "-"
 
 
+def _plugin_update_available(rec, entry):
+    """已装记录 + 索引条目 → 有没有**更新的版本**可装。
+
+    版本比较走 pet_plugin.version_key（与校验器 / 发布门同款的四段整数比较）；
+    记录里没有版本号时按"有更新"处理（装的时候没记版本，就不能咬定它是新的）。
+    """
+    if not isinstance(rec, dict) or not isinstance(entry, dict):
+        return False
+    if not entry.get("installable"):
+        return False
+    release = entry.get("release")
+    if not isinstance(release, dict):
+        return False
+    cur = str(rec.get("version") or "").strip()
+    if not cur:
+        return True
+    return pet_plugin.version_key(release.get("version")) > pet_plugin.version_key(cur)
+
+
+def _plugin_market_state(rec, entry):
+    """「是否已装」列：未装 / 已装 vX / 已装 vX（可更新到 vY）。"""
+    if not isinstance(rec, dict):
+        return "未装"
+    cur = str(rec.get("version") or "").strip() or "?"
+    if _plugin_update_available(rec, entry):
+        return "已装 v%s（可更新到 v%s）" % (cur, entry.get("version") or "?")
+    return "已装 v%s" % cur
+
+
 class PluginManagerDialog(_FitDialog):
-    """插件管理：**只读**列表（插件 / 名称 / 版本 / 类型 / 状态 / 来源）+ 四个动作按钮。
+    """插件管理（v2.6.0 Phase 2）：两个页签 + 安装 / 更新 / 回滚 / 卸载 / 启用禁用 / 刷新索引。
 
-    "只读"的边界（写清楚，免得下一轮误读）：列表不可编辑，也没有"在线更新 / 编辑插件内容"；
-    安装（选本地 zip）、卸载、启用/禁用、刷新这四个动作全部委托宿主服务 pet_plugin_host。
-    内容并进宿主库（角色 / 台词）发生在**安装**那一步；卸载只删插件目录，已导入的内容保留
-    （属用户数据，与「导入角色包」同口径）——确认框里明写这一点。
+    页签：
+    · 「已安装」——现有列表（插件 / 名称 / 版本 / 类型 / 状态 / 来源）+ 卸载 / 启用禁用 / 回滚；
+    · 「可安装」——索引里的条目（插件 / 名称 / 类型 / 大小 / 版本 / 是否已装 / 可否安装）
+      + 安装（没装过）/ 更新（装过且有更高版本时才出现）。
+    索引读取 / 下载 / 校验 / 落地**都不在本文件**：索引与下载在 pet_plugin_index（Qt-free）、
+    包判据在 pet_plugin、安装登记与回滚在 pet_plugin_host；本文件只做界面、确认文案与调度。
 
-    尺寸走 v2.5.0 那一套（clamp + 可滚动 + 按钮吸附）；设计尺寸 760x520 就写在
+    **网络操作不许卡界面**（照 pet_balance 那套代次/守卫口径，不自创）：
+    · 远端索引与插件包在后台 daemon 线程里取数，结果用信号交回主线程槽；
+    · 同一时刻**只有一个在途请求**（代次 _index_active / _pack_active）；在途期间再点一次
+      只置 pending，等这一代落地后补发一次，绝不起第二个线程；
+    · 旧代的迟到结果一律丢弃并记一行日志（不许静默），也绝不拿它去改界面状态；
+    · **落地永远在主线程**（宿主库 / 安装登记都在主线程读写，与 pet_balance"记账在主线程"同款）。
+
+    尺寸走 v2.5.0 那一套（clamp + 可滚动 + 按钮吸附）；设计尺寸 860x560 就写在
     clamp_dialog(...) 那一行（tests/test_dialog_fit_v250.py 从**源码字面量**读它，
     所以这里不留第二份常量——两处真源迟早对不上）。
     """
 
-    def __init__(self, pet=None):
+    # 后台取数 → 主线程（gen = 请求代次；参数个数与下面三个槽逐一对应）
+    indexReady = Signal(int, object, object)      # gen, 归一索引 | None, err
+    packReady = Signal(int, object, object)       # gen, 下载好的临时文件 | None, err
+    packProgress = Signal(int, int, int)          # gen, 已下载字节, 总字节（0 = 未知）
+
+    def __init__(self, pet=None, index=None):
         super().__init__(_qt_parent(pet))
         self.pet = pet
         self._host_obj = _get(pet, "plugin_host")
-        self._rows = []
+        self._index_obj = index        # 测试注入（假取数，不联网）；缺省按宿主目录现造
+        self._rows = []                # 已安装（宿主清单）
+        self._entries = []             # 索引条目（可安装页）
+        self._entries_err = ""
+        self._closing = False
+        # 代次守卫（与 pet_balance 同款：只有"代次"说话，线程号不参与判定）
+        self._index_gen = 0
+        self._index_active = None
+        self._index_pending = False
+        self._pack_gen = 0
+        self._pack_active = None
+        self._pack_entry = {}
         self.setWindowTitle("🧩 插件管理")
         self.setStyleSheet(DIALOG_QSS)
-        clamp_dialog(self, 760, 520)   # v2.5.0 B：设计尺寸（口径表按源码字面量核对）
+        clamp_dialog(self, 860, 560)   # v2.5.0 B：设计尺寸（口径表按源码字面量核对）
         root = scroll_content(self)    # v2.5.0 B：内容区可滚动
-        tip = QLabel("插件装在数据目录的 plugins/ 下。卸载只删插件目录——"
-                     "插件已经导入的角色 / 台词会保留（属用户数据）。")
+        tip = QLabel("插件装在数据目录的 plugins/ 下。\n"
+                     "· " + _PLUGIN_DISABLE_TIP + "\n"
+                     "· 「卸载」只删插件目录 plugins/<id>/，它已经导入的角色 / 台词会**保留**"
+                     "（属用户数据）。\n"
+                     "· 「更新」会把新版新增的内容并进库（与已落地内容相同的条目不重复导入）；"
+                     "「回滚」把插件退回上一版。")
         tip.setWordWrap(True)
         root.addWidget(tip)
+        self._tabs = QTabWidget()
+        page1 = QWidget()
+        lay1 = QVBoxLayout(page1)
+        lay1.setContentsMargins(0, 0, 0, 0)
         self._table = _detail_table(_PLUGIN_COLUMNS)
-        root.addWidget(self._table, 1)
+        lay1.addWidget(self._table, 1)
+        page2 = QWidget()
+        lay2 = QVBoxLayout(page2)
+        lay2.setContentsMargins(0, 0, 0, 0)
+        self._market = _detail_table(_INDEX_COLUMNS)
+        lay2.addWidget(self._market, 1)
+        self._tabs.addTab(page1, "已安装")
+        self._tabs.addTab(page2, "可安装")
+        self._tabs.currentChanged.connect(self._on_tab_changed)
+        root.addWidget(self._tabs, 1)
         self._hint = QLabel("")
         self._hint.setWordWrap(True)
         root.addWidget(self._hint)
+        self._progress = QProgressBar()
+        self._progress.setRange(0, 0)          # 忙等模式：长度未知也能看出"在动"
+        self._progress.setVisible(False)
+        root.addWidget(self._progress)
+        self._wire_signals()           # 后台取数 → 主线程槽（三个信号必须真接上）
+        self._table.itemSelectionChanged.connect(self._sync_buttons)
+        self._market.itemSelectionChanged.connect(self._sync_buttons)
         row = QHBoxLayout()
-        self._btn_install = QPushButton("安装…")
+        self._btn_install = QPushButton("安装")
+        # v2.6.0 第 4 轮（兼容审查 P1-1）：**把"选本地包安装"这个入口加回来**。
+        # v2.5.1 的底排是「安装…」→ QFileDialog 选本地 zip（当时用户装第三方/自制包的
+        # 唯一入口）；本轮把「安装」改成"从索引装选中条目"时，_install() 整个失去了调用点
+        # ——而 6142 的提示行还在说"「安装…」选本地包仍然可用"，界面在骗用户。
+        # 现在两个入口并列：安装 = 从索引下载安装；安装… = 选本地 zip（索引坏了也能用，
+        # 所以它**不跟选中行/在途请求联动**，永远可用——提示行那句话才成立）。
+        self._btn_install_file = QPushButton("安装…")
+        self._btn_install_file.setToolTip("选一个本地的插件 zip 安装（不读索引，离线也能用）")
+        self._btn_update = QPushButton("更新")
+        self._btn_rollback = QPushButton("回滚")
         self._btn_uninstall = QPushButton("卸载")
         self._btn_toggle = QPushButton("启用 / 禁用")
-        self._btn_refresh = QPushButton("刷新")
+        self._btn_refresh = QPushButton("刷新索引")
         close_btn = QPushButton("关闭")
         close_btn.setDefault(True)
-        self._btn_install.clicked.connect(lambda checked=False: self._install())
+        self._btn_install.clicked.connect(lambda checked=False: self._install_selected())
+        self._btn_install_file.clicked.connect(lambda checked=False: self._install())
+        self._btn_update.clicked.connect(lambda checked=False: self._update_selected())
+        self._btn_rollback.clicked.connect(lambda checked=False: self._rollback())
         self._btn_uninstall.clicked.connect(lambda checked=False: self._uninstall())
         self._btn_toggle.clicked.connect(lambda checked=False: self._toggle())
-        self._btn_refresh.clicked.connect(lambda checked=False: self.refresh())
+        self._btn_refresh.clicked.connect(lambda checked=False: self.refresh_index(manual=True))
         close_btn.clicked.connect(self.reject)
-        row.addWidget(self._btn_install)
-        row.addWidget(self._btn_uninstall)
-        row.addWidget(self._btn_toggle)
-        row.addWidget(self._btn_refresh)
+        for btn in (self._btn_install, self._btn_install_file, self._btn_update,
+                    self._btn_rollback, self._btn_uninstall, self._btn_toggle,
+                    self._btn_refresh):
+            row.addWidget(btn)
         row.addStretch(1)
         row.addWidget(close_btn)
         stick_buttons(self, row)       # v2.5.0 B：按钮行在滚动区之外
-        self.refresh()
+        self.refresh()                 # 已安装（只读本地清单）
+        idx = self._index_ref()
+        if idx is not None and not idx.index_url:
+            # **随包**本地索引是本地文件、毫秒级：打开就把「可安装」填好，不联网。
+            # 远端索引**不在打开时自动联网**（等用户点「刷新索引」或切到那个页签）——
+            # 桌面程序不在用户没要求的时候发网络请求。
+            self.refresh_index()
+
+    def closeEvent(self, event):
+        """关窗后不再响应在途结果（_closing 守卫）；已经落库的步骤不受影响。"""
+        self._closing = True
+        super().closeEvent(event)
+
+    def _wire_signals(self):
+        """把三个后台信号接到主线程槽上（**必须在 __init__ 里调**）。
+
+        后台线程只 emit，不碰控件；Qt 的自动连接按"接收者所在线程"派发，所以这三个槽
+        都在主线程跑——这正是"网络不卡界面 + 落地在主线程"的实现方式。
+        """
+        self.indexReady.connect(self._on_index_ready)
+        self.packReady.connect(self._on_pack_ready)
+        self.packProgress.connect(self._on_pack_progress)
 
     # ---------- 读 ----------
     def _host_ref(self):
@@ -5948,47 +6071,411 @@ class PluginManagerDialog(_FitDialog):
             self._host_obj = _fallback_host(self.pet)
         return self._host_obj
 
+    def _index_ref(self):
+        """索引下载器：注入优先；否则按宿主目录现造（缺省只读**随包**索引，不联网）。"""
+        if self._index_obj is None:
+            host = self._host_ref()
+            if host is None:
+                return None
+            self._index_obj = pet_plugin_index.PluginIndex(
+                host.plugins_dir, host_version=host.host_version,
+                index_url=str(_get(self.pet, "plugin_index_url") or ""),
+                landing_kinds=pet_plugin_host.LANDING_KINDS)
+        return self._index_obj
+
     def refresh(self):
-        """重读已装清单（只读）。坏目录 / 坏 JSON 只显示成一句提示，绝不抛。"""
+        """重读已装清单并重画两个页签（只读）。坏目录 / 坏 JSON 只显示成一句提示，绝不抛。"""
         host = self._host_ref()
         if host is None:
             self._rows = []
             self._table.setRowCount(0)
-            self._hint.setText("插件宿主未接线：重启一次桌宠即可（详情见数据目录的 error.log）。")
+            self._market.setRowCount(0)
+            self._set_hint("插件宿主未接线：重启一次桌宠即可（详情见数据目录的 error.log）。")
+            self._sync_buttons()
             return
         rows, problems = host.list_installed()
         self._rows = [r for r in rows if isinstance(r, dict)]
         self._table.setRowCount(len(self._rows))
         for i, rec in enumerate(self._rows):
+            enabled = bool(rec.get("enabled", True))
             cells = (str(rec.get("id") or ""), str(rec.get("name") or ""),
                      str(rec.get("version") or ""), _plugin_kind_text(rec),
-                     "已启用" if rec.get("enabled", True) else "已禁用",
+                     "已启用" if enabled else "已禁用",
                      _plugin_source_text(rec))
             for j, text in enumerate(cells):
-                self._table.setItem(i, j, QTableWidgetItem(text))
+                item = QTableWidgetItem(text)
+                if j == 4 and not enabled:
+                    # 文案与行为一致（A3）：这三个字很容易被读成"卸载了"，补一句 tooltip
+                    item.setToolTip(_PLUGIN_DISABLE_TIP)
+                self._table.setItem(i, j, item)
+        note = self._fill_market()
         if problems:
-            self._hint.setText("共 %d 个插件；有 %d 处读不出来：%s"
-                               % (len(self._rows), len(problems), "；".join(problems[:3])))
+            self._set_hint("已安装 %d 个插件；有 %d 处读不出来：%s%s"
+                           % (len(self._rows), len(problems), "；".join(problems[:3]), note))
         else:
-            self._hint.setText("共 %d 个插件。" % len(self._rows))
+            self._set_hint("已安装 %d 个插件。%s" % (len(self._rows), note))
+        self._sync_buttons()
+
+    def _set_hint(self, text):
+        self._hint.setText(str(text or ""))
+
+    def _installed_map(self):
+        """已装清单 → {id: 记录}（两处对账都用它，免得各写一份）。"""
+        out = {}
+        for rec in self._rows:
+            if isinstance(rec, dict):
+                out[str(rec.get("id") or "")] = rec
+        return out
+
+    def _fill_market(self):
+        """可安装页：索引条目 + 与"已装"的对照（是否已装 / 可不可装）→ 一句索引侧提示。
+
+        提示**返回**给调用方拼（而不是自己 setText）：refresh() 也要写提示行，
+        两处各写一次会把"索引读不出来"这句盖掉（用户就看不到索引坏了）。
+        """
+        installed = self._installed_map()
+        self._market.setRowCount(len(self._entries))
+        for i, entry in enumerate(self._entries):
+            eid = str(entry.get("id") or "")
+            reason = str(entry.get("reason") or "")
+            cells = (eid, str(entry.get("name") or ""), _plugin_kind_text(entry),
+                     str(entry.get("size_text") or "-"), str(entry.get("version") or "-"),
+                     _plugin_market_state(installed.get(eid), entry),
+                     "可安装" if entry.get("installable") else
+                     "不可安装：%s" % (reason or "原因未知"))
+            for j, text in enumerate(cells):
+                item = QTableWidgetItem(text)
+                if j == 6 and not entry.get("installable") and reason:
+                    item.setToolTip(reason)
+                self._market.setItem(i, j, item)
+        if self._entries_err:
+            return " 索引读不出来：%s（「安装」暂不可用；「安装…」选本地包仍然可用）" \
+                % self._entries_err
+        return ""
 
     def _selected(self):
-        """选中行 → 记录 dict；没选中（或列表空）返回 None。"""
+        """已安装页选中行 → 记录 dict；没选中（或列表空）返回 None。"""
         row = self._table.currentRow()
         if row < 0 or row >= len(self._rows):
             return None
         return self._rows[row]
 
+    def _selected_entry(self):
+        """可安装页选中行 → 索引条目；没选中返回 None。"""
+        row = self._market.currentRow()
+        if row < 0 or row >= len(self._entries):
+            return None
+        return self._entries[row]
+
+    def _on_tab_changed(self, index):
+        """换页签 → 必要时补一次索引读取（远端在切页签时才联网），再重算按钮状态。"""
+        if index == 1 and not self._entries and not self._entries_err:
+            self.refresh_index(manual=True)
+        self._sync_buttons()
+
+    def _sync_buttons(self):
+        """按钮的可用性与可见性跟着"当前页签 / 选中行 / 在途请求"走。
+
+        「更新」**有新版本时才出现**（A2）；「回滚」只在选中了有上一版的插件时出现。
+        """
+        busy = self._pack_active is not None
+        on_market = self._tabs.currentIndex() == 1
+        entry = self._selected_entry() if on_market else None
+        rec = None if on_market else self._selected()
+        installed = self._installed_map()
+        eid = str(entry.get("id") or "") if entry is not None else ""
+        can_install = bool(entry is not None and entry.get("installable") and not busy
+                           and eid not in installed)
+        has_update = bool(entry is not None and not busy
+                          and _plugin_update_available(installed.get(eid), entry))
+        has_history = bool(rec is not None and rec.get("history") and not on_market)
+        self._btn_install.setEnabled(can_install)
+        self._btn_update.setVisible(has_update)
+        self._btn_update.setEnabled(has_update)
+        self._btn_rollback.setVisible(has_history)
+        self._btn_rollback.setEnabled(has_history and not busy)
+        self._btn_uninstall.setEnabled(rec is not None and not busy)
+        self._btn_toggle.setEnabled(rec is not None and not busy)
+        self._btn_refresh.setEnabled(not busy)
+
+    # ---------- 可安装列表：读索引（远端走后台线程 + 代次守卫） ----------
+    def refresh_index(self, manual=False):
+        """刷新「可安装」→ 是否**真的起了**一次取数。
+
+        远端索引走后台线程（网络不许卡界面）；**随包本地索引**直接读——它是本地文件、
+        毫秒级，没有"卡界面"的问题，也就没必要为它起线程（构造期尤其不该起）。
+        代次守卫与 pet_balance 同款：同一时刻只有一个在途取数；在途期间再点一次只置
+        pending，等这一代落地后自动补发一次——连点不会起第二个线程。
+        """
+        idx = self._index_ref()
+        if idx is None:
+            self._entries, self._entries_err = [], ""
+            self._market.setRowCount(0)
+            self._set_hint("插件宿主未接线：重启一次桌宠即可（详情见数据目录的 error.log）。")
+            self._sync_buttons()
+            return False
+        if self._index_active is not None:
+            # 在途（含"结果已 emit、槽还没轮到跑"那一小段）：手动刷新排队，自动刷新跳过
+            if manual:
+                self._index_pending = True
+            return False
+        if not str(getattr(idx, "index_url", "") or ""):
+            data, err = idx.load_index()
+            self._apply_index(data, err)
+            return not err
+        gen = int(self._index_gen) + 1
+        self._index_gen = gen
+        self._index_active = gen
+        self._set_hint("正在读取索引…")
+        self._sync_buttons()
+        try:
+            threading.Thread(target=self._index_worker, args=(gen, idx), daemon=True).start()
+        except Exception as e:
+            self._index_retire(gen, "线程启动失败：%r" % (e,))
+            self._apply_index(None, "取数失败：%r" % (e,))
+            return False
+        return True
+
+    def _apply_index(self, data, err):
+        """把一次索引读取的结果画到「可安装」页（只在主线程调用）。"""
+        if data is None:
+            self._entries, self._entries_err = [], str(err or "索引读不出来")
+            note = self._fill_market()
+            self._set_hint(note.strip() or "索引读不出来")
+            self._sync_buttons()
+            return
+        self._entries = [e for e in (data.get("entries") or []) if isinstance(e, dict)]
+        self._entries_err = ""
+        problems = [str(x) for x in (data.get("problems") or [])]
+        note = ("；索引里有 %d 条读不出来：%s" % (len(problems), "；".join(problems[:2]))
+                if problems else "")
+        installed = len(self._installed_map())
+        self._set_hint("%s：%d 个条目（已装 %d 个）%s%s"
+                       % (data.get("source") or "索引", len(self._entries), installed,
+                          note, self._fill_market()))
+        self._sync_buttons()
+
+    def _index_worker(self, gen, idx):
+        """后台线程：只读索引（网络 / 本地文件），**不碰任何 Qt 控件**，结果交回主线程槽。"""
+        try:
+            data, err = idx.load_index()
+        except Exception as e:
+            data, err = None, "读取索引失败：%r" % (e,)
+        if not self._emit_safe("indexReady", gen, data, err):
+            self._index_retire(gen, "结果没能交给主线程")
+
+    def _on_index_ready(self, gen, data, err):
+        """索引结果落地（主线程槽）：先消费自己那一代，旧代一律丢弃。"""
+        if self._closing_now():
+            self._index_retire(gen, "窗口已关闭，丢弃索引结果")
+            return
+        if not self._index_consume(gen, "index"):
+            return
+        pending = self._index_pending
+        self._index_pending = False
+        self._apply_index(data, err)
+        if pending:
+            QTimer.singleShot(0, self, lambda: self.refresh_index(manual=True))   # 补发排队那次
+
+    def _index_consume(self, gen, source):
+        """槽端消费一代：只有当前那一代才放行（旧代丢弃并记日志，绝不动界面状态）。"""
+        cur = self._index_active
+        if cur != gen:
+            self._index_log("丢弃旧代索引结果 %s（代次 %s 已过期，当前在途 %r）"
+                            % (source, gen, cur))
+            return False
+        self._index_active = None
+        return True
+
+    def _index_retire(self, gen, why):
+        """把 gen 那一代收尾（只在它仍是当前那一代时生效）——结果交不出去时的兜底。"""
+        if self._index_active == gen:
+            self._index_pending = False
+            self._index_active = None
+        self._index_log("索引代次 %s 由收尾路径结束（%s）" % (gen, why))
+
+    # ---------- 安装 / 更新：下载在后台线程，校验与并库在主线程 ----------
+    def install_entry(self, entry):
+        """按索引条目安装（「更新」走的是同一条路）→ 是否**真的起了**这次下载。
+
+        下载（网络 + 写临时文件）在后台线程；校验与并库在主线程槽里做——宿主库与安装登记
+        都不许跨线程写（与 pet_balance"记账在主线程"同款）。
+        """
+        host = self._host_ref()
+        idx = self._index_ref()
+        if host is None or idx is None:
+            _warn(self, "安装插件", "插件宿主未接线，装不了（重启一次桌宠即可）。")
+            return False
+        if not isinstance(entry, dict) or not entry.get("installable"):
+            _warn(self, "安装插件", "这个条目不能装：%s"
+                  % (entry.get("reason") if isinstance(entry, dict) else "条目不可用"))
+            return False
+        if self._pack_active is not None:
+            self._set_hint("上一个下载还没结束，等它落地（不会起第二个下载）。")
+            return False
+        idx.cleanup()                 # 顺手清掉上次崩溃 / 被丢弃留下的临时下载
+        gen = int(self._pack_gen) + 1
+        self._pack_gen = gen
+        self._pack_active = gen
+        self._pack_entry = dict(entry)
+        self._progress.setRange(0, 0)
+        self._progress.setVisible(True)
+        self._set_hint("正在下载「%s」（%s）…" % (entry.get("name") or entry.get("id"),
+                                                entry.get("size_text") or "大小未知"))
+        self._sync_buttons()
+        try:
+            threading.Thread(target=self._download_worker, args=(gen, idx),
+                             daemon=True).start()
+        except Exception as e:
+            self._pack_retire(gen, "线程启动失败：%r" % (e,))
+            self._progress.setVisible(False)
+            self._set_hint("下载失败：%r" % (e,))
+            self._sync_buttons()
+            _warn(self, "安装插件失败", "起不了下载线程：%r" % (e,))
+            return False
+        return True
+
+    def _download_worker(self, gen, idx):
+        """后台线程：只下载 + 落临时文件。**不碰 Qt 控件，也不碰宿主库**。"""
+
+        def _progress(done, total):
+            self._emit_safe("packProgress", gen, int(done or 0), int(total or 0))
+
+        try:
+            path, err = idx.download(self._pack_entry, progress=_progress)
+        except Exception as e:
+            path, err = None, "下载失败：%r" % (e,)
+        if not self._emit_safe("packReady", gen, path, err):
+            if path:
+                idx.cleanup()         # 主线程不要这一代了：临时文件不许留下
+            self._pack_retire(gen, "结果没能交给主线程")
+
+    def _on_pack_progress(self, gen, done, total):
+        """下载进度（主线程槽）：只有当前那一代才画。"""
+        if self._pack_active != gen:
+            return
+        if total > 0:
+            self._progress.setRange(0, 100)
+            self._progress.setValue(max(0, min(100, int(done * 100 / total))))
+            self._set_hint("正在下载…%d%%（%s / %s）"
+                           % (self._progress.value(),
+                              pet_plugin_index.format_size(done),
+                              pet_plugin_index.format_size(total)))
+        else:
+            self._progress.setRange(0, 0)
+            self._set_hint("正在下载…%s" % pet_plugin_index.format_size(done))
+
+    def _on_pack_ready(self, gen, path, err):
+        """下载结果落地（主线程槽）：校验 + 并库都在这里做；临时文件无论如何都清掉。"""
+        if self._closing_now():
+            self._pack_retire(gen, "窗口已关闭，丢弃下载结果")
+            self._drop_download(path)
+            return
+        if not self._pack_consume(gen, "pack"):
+            self._drop_download(path)     # 旧代 / 被丢弃的结果：临时文件不留
+            return
+        entry = dict(self._pack_entry)
+        idx = self._index_ref()
+        self._progress.setVisible(False)
+        if path is None or idx is None:
+            msg = err or "下载失败"
+            self._set_hint("下载失败：%s" % msg)
+            self._sync_buttons()
+            _warn(self, "下载插件失败", "%s\n\n插件目录与宿主内容一个字节都没动。" % msg)
+            return
+        already = str(entry.get("id") or "") in self._installed_map()
+        self._set_hint("正在校验并安装「%s」…" % (entry.get("name") or entry.get("id")))
+        ok, msg = idx.install_file(self._host_ref(), entry, path)
+        if ok:
+            _info(self, "插件已更新" if already else "插件已安装", msg)
+        else:
+            _warn(self, "安装插件失败", msg)
+        self.refresh()
+
+    def _pack_consume(self, gen, source):
+        """槽端消费一代：只有当前那一代才放行（旧代丢弃并记日志）。"""
+        cur = self._pack_active
+        if cur != gen:
+            self._index_log("丢弃旧代下载结果 %s（代次 %s 已过期，当前在途 %r）"
+                            % (source, gen, cur))
+            return False
+        self._pack_active = None
+        return True
+
+    def _pack_retire(self, gen, why):
+        """把 gen 那一代收尾（只在它仍是当前那一代时生效）。"""
+        if self._pack_active == gen:
+            self._pack_active = None
+        self._index_log("下载代次 %s 由收尾路径结束（%s）" % (gen, why))
+
+    def _drop_download(self, path):
+        """删掉一个下载临时文件（结果被丢弃的路径上，别把临时文件留下）。"""
+        try:
+            if path and os.path.isfile(path):
+                os.remove(path)
+        except OSError:
+            pass    # 有意忽略：删不掉不影响正确性（下次 install_entry / cleanup 还会清）
+
+    # ---------- 后台线程的安全出口 ----------
+    def _closing_now(self):
+        """在退出中？取属性本身也可能抛（对象已销毁）——抛一律按"在退出"处理。"""
+        try:
+            return bool(self._closing)
+        except Exception:
+            return True     # 有意忽略：宁可不发，也不把异常带进 daemon 线程
+
+    def _emit_safe(self, name, *args):
+        """从后台线程 emit 一个信号；窗口已关闭 / 对象已销毁就不发（返回 False）。
+
+        与 pet_balance 的 _emit 同款：emit 到已销毁的 C++ 对象会抛 RuntimeError，而这是
+        daemon 线程，异常只会往 stderr 打一行就没了——所以这里必须自己兜住。
+        """
+        if self._closing_now():
+            return False
+        try:
+            getattr(self, name).emit(*args)
+            return True
+        except Exception as e:
+            self._index_log("emit %s 失败：%r" % (name, e))
+            return False
+
+    def _index_log(self, msg):
+        """守卫路径 / 后台线程的日志：日志自身失败绝不影响流程（与 pet_balance 同口径）。"""
+        try:
+            pet_log.log_error("plugin market: %s" % msg)
+        except Exception:
+            pass    # 有意忽略：日志通道失败无处可记
+
     # ---------- 动作（界面只做确认与提示，落地全在 pet_plugin_host） ----------
+    def _install_selected(self):
+        """安装选中的索引条目（没装过的）。"""
+        entry = self._selected_entry()
+        if entry is None:
+            _warn(self, "安装插件", "请先在「可安装」页签里选中一个插件。")
+            return False
+        return self.install_entry(entry)
+
+    def _update_selected(self):
+        """更新选中的索引条目（装过且有更高版本）。"""
+        entry = self._selected_entry()
+        if entry is None:
+            _warn(self, "更新插件", "请先在「可安装」页签里选中一个插件。")
+            return False
+        rec = self._installed_map().get(str(entry.get("id") or ""))
+        if not _plugin_update_available(rec, entry):
+            _warn(self, "更新插件", "这个插件没有更新的版本。")
+            return False
+        return self.install_entry(entry)
+
     def _install(self):
-        """安装：选一个本地 zip（下载安装留给 Phase 2 的索引）。"""
+        """安装：选一个本地 zip（「可安装」页签是从索引下载安装）。"""
         path, _filter = QFileDialog.getOpenFileName(
             self, "选择插件包", "", "插件包 (*.zip);;所有文件 (*)")
         if path:
             self.install_path(path)
 
     def install_path(self, path):
-        """安装指定 zip → 是否装上。公开给测试与将来的"下载后安装"用（绕开文件选择框）。"""
+        """安装指定 zip → 是否装上。公开给测试与"下载后安装"用（绕开文件选择框）。"""
         host = self._host_ref()
         if host is None:
             _warn(self, "安装插件", "插件宿主未接线，装不了（重启一次桌宠即可）。")
@@ -6026,6 +6513,34 @@ class PluginManagerDialog(_FitDialog):
             _info(self, "卸载插件", msg)
         else:
             _warn(self, "卸载插件失败", msg)
+        self.refresh()
+        return ok
+
+    def _rollback(self):
+        rec = self._selected()
+        if rec is None:
+            _warn(self, "回滚插件", "请先在「已安装」页签里选中一个插件。")
+            return False
+        pid = str(rec.get("id") or "")
+        if not _confirm(self, "回滚插件",
+                        "确定把插件「%s」回滚到上一版？\n\n"
+                        "· 恢复上一版的插件目录；\n"
+                        "· 只撤销**这一版新导入**的内容——你自己的角色 / 台词 / 音效"
+                        "一件都不会动。" % pid):
+            return False
+        return self.rollback_id(pid)
+
+    def rollback_id(self, pid):
+        """回滚指定插件 → 是否成功（文案里写清楚撤销了什么）。"""
+        host = self._host_ref()
+        if host is None:
+            _warn(self, "回滚插件", "插件宿主未接线，回滚不了（重启一次桌宠即可）。")
+            return False
+        ok, msg = host.rollback(pid)
+        if ok:
+            _info(self, "回滚插件", msg)
+        else:
+            _warn(self, "回滚插件失败", msg)
         self.refresh()
         return ok
 

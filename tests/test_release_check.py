@@ -364,6 +364,51 @@ def test_mutation_evidence_notes_flags_a_stale_result_json(tmp_path):
     assert any("mutations_ok.json" in n for n in notes2), notes2
 
 
+def test_missing_fingerprint_keys_is_pure_and_ignores_absent_files():
+    """v2.6.0（代理 C）：纯函数——只点名"当前树里存在、记录里没记"的键。
+
+    能真失败：把实现写成"清单里所有键都算缺"（或反过来恒返回 []）→ 前后两组断言红。
+    当前树没有的文件无从比对（树里没有就算不出指纹），点名它只会误导。
+    """
+    cur = {"桌宠.py": "aaaa", "pet_plugin.py": "bbbb"}
+    assert chk.missing_fingerprint_keys({"桌宠.py": "aaaa"}, cur) == ["pet_plugin.py"]
+    assert chk.missing_fingerprint_keys(cur, cur) == []
+    assert chk.missing_fingerprint_keys({}, cur) == []
+    assert chk.missing_fingerprint_keys(None, cur) == []
+    assert chk.missing_fingerprint_keys({"桌宠.py": "aaaa"}, {}) == []
+    # 记录了一个当前树里不存在的名字（清单换了）：等于没记有用的键，两个都要点名
+    assert chk.missing_fingerprint_keys({"gone.py": "x"}, cur) == ["pet_plugin.py", "桌宠.py"]
+
+
+def test_mutation_evidence_notes_flags_evidence_missing_keys(tmp_path):
+    """v2.6.0（代理 C）：证据只记了部分关键文件时，发布门要提示"这份证据缺这些键"。
+
+    背景（v2.5.1 审查实测）：stale_fingerprints 只比对**记录里存在的键**，所以清单里后来补的
+    四个模块（pet_plugin.py / pet_plugin_host.py / pet_dialogs.py / pet_menu.py）在之前 14 份
+    _dev/*.json 里等于不存在——改它们**一条提示都不会有**（发布门在那几个文件上是瞎子）。
+    只提示、不挡发布。
+
+    能真失败：去掉 mutation_evidence_notes 里 missing_fingerprint_keys 那次判定（或让它恒
+    返回 []）→ 第二条断言红（notes 变空）。
+    """
+    dev = tmp_path / "_dev"
+    dev.mkdir()
+    (tmp_path / "桌宠.py").write_text("x", encoding="utf-8")
+    (tmp_path / "pet_plugin.py").write_text("y", encoding="utf-8")
+    cur = chk.tree_fingerprint(str(tmp_path))
+    assert set(cur) == {"桌宠.py", "pet_plugin.py"}, "夹具前提：当前树里有这两个文件"
+    (dev / "mutations_partial.json").write_text(
+        json.dumps({"repo_fingerprint": {"桌宠.py": cur["桌宠.py"]}}), encoding="utf-8")
+    notes = chk.mutation_evidence_notes(str(tmp_path))
+    assert len(notes) == 1, notes
+    assert "mutations_partial.json" in notes[0], notes
+    assert "pet_plugin.py" in notes[0] and "缺" in notes[0], notes
+    # 控制组：补齐两个键 → 归零（别把提示变成常驻噪音）
+    (dev / "mutations_partial.json").write_text(
+        json.dumps({"repo_fingerprint": cur}), encoding="utf-8")
+    assert chk.mutation_evidence_notes(str(tmp_path)) == []
+
+
 def test_fingerprint_file_list_matches_the_mutation_lib():
     """发布门与 _dev/_mutate_lib.repo_fingerprint 的"关键文件"清单不许漂移。
 
@@ -384,8 +429,10 @@ def test_fingerprint_file_list_matches_the_mutation_lib():
     # v2.5.1（找茬审查 P3-1）：同一个盲区本轮又犯了一次——pet_plugin.py / pet_plugin_host.py /
     # pet_dialogs.py / pet_menu.py 都不在清单里，12 条 M-P*/M-L1 的锚就在前两个文件上。所以这里
     # 改成**逐项点名**（别再写成"只钉 pet_balance.py 那种"：下一个新模块照样漏）。
+    # v2.6.0（找茬审查 C-5）：第三次漏新模块——pet_plugin_index.py 是本轮全新模块，
+    # M-A01~M-A04 四条变异锚全在它上面，而两处清单里都没有它。加进点名元组，别再漏第四个。
     for rel in ("pet_balance.py", "pet_plugin.py", "pet_plugin_host.py", "pet_dialogs.py",
-                "pet_menu.py"):
+                "pet_menu.py", "pet_plugin_index.py"):
         assert rel in chk.MUTATION_FINGERPRINT_FILES, \
             "%s 不在发布门的指纹清单里（改了它不会有任何提示）：%r" % (
                 rel, chk.MUTATION_FINGERPRINT_FILES)
@@ -652,3 +699,52 @@ def test_第三方依赖白名单与requirements一致():
                 or top in chk.shipped_module_names()), \
             "真仓 import 了一个不在白名单里的顶层模块：%s" % top
 
+
+# ---------------- v2.6.0 第 4 轮（兼容审查 P2-2 / P2-3） ----------------
+
+def test_发布包里的用户自建人设必须点名(tmp_path):
+    """P2-2：prompts/custom/ 是**用户数据**——打包时必须点名（此前进出口是敞的）。
+
+    落地目标就是 <数据目录>/prompts/custom/（插件 prompt 类内容 + 用户自建人设都在那儿），
+    却在 SYNC_FILES 与 USER_DATA_DIRS 两边都没有位置：把绿色版目录整体打包时，用户自己
+    的人设会随包发出去（与 plugins/<id>/ 有白名单判据的处理完全不对称）。
+    能真失败：把 "prompts/custom" 从 USER_DATA_DIRS 里去掉 → 第一条断言红。
+    """
+    p = str(tmp_path / "withprompts.zip")
+    _make_zip(p, ["桌宠.py", "main.py", "python.exe", "assets/",
+                  "prompts/custom/我的人设.txt", "prompts/default.txt"])
+    fails = chk.check_zip(p, chk.repo_version())
+    joined = " ".join(fails)
+    assert "prompts/custom/我的人设.txt" in joined, "用户自建人设没被点名：%s" % joined
+    # 反向：内置预设 prompts/*.txt 是**要随包发货**的（首启从内置常量生成），不许被误伤
+    assert "prompts/default.txt" not in joined, "内置预设被误判成用户数据：%s" % joined
+
+
+def _git_check_ignore(*paths):
+    """git check-ignore → 每条路径是否被忽略（True = 被忽略）。"""
+    out = []
+    for p in paths:
+        r = subprocess.run(["git", "check-ignore", "-q", p], cwd=chk.ROOT,
+                           capture_output=True, text=True, encoding="utf-8",
+                           errors="replace", timeout=30)
+        out.append(r.returncode == 0)
+    return out
+
+
+def test_插件运行时刻产物必须被忽略(tmp_path):
+    """P2-3：手测一次"更新"留下的 .prev-<id>/ 与 _download/ 不许弄脏 git status。
+
+    本仓的开发方式就是"直接在仓库里跑桌宠"（仓库目录同时是数据目录）→ 缺一条忽略规则，
+    发布门 check_clean_tree 就会在**手测之后**判"未跟踪文件"（门红）。
+    能真失败：把 plugins/*/ 与 !plugins/packs/ 两条删掉 → 前三条断言红。
+    """
+    ignored = _git_check_ignore("plugins/_download/a.part",
+                                "plugins/.prev-demo/manifest.json",
+                                "plugins/demo/manifest.json")
+    assert ignored == [True, True, True], (
+        "插件运行时刻产物没进 .gitignore（手测一次市场安装就会把发布门弄红）：%r" % (ignored,))
+    # 反向：随包发货的三类**必须仍可见**（plugins/*/ 不许把它们一起吞掉）
+    keep = _git_check_ignore("plugins/index.json", "plugins/README.md",
+                             "plugins/packs/official-lines-moyu-1.0.0.dfypet-plugin.zip")
+    assert keep == [False, False, False], (
+        "要随包发货的插件资产被 .gitignore 吞掉了：%r" % (keep,))

@@ -13,7 +13,7 @@
 
 ---
 
-## 零、两条铁律（动手之前先看一眼；代价都是实测过的）
+## 零、四条铁律（动手之前先看一眼；代价都是实测过的）
 
 **铁律 1：在绿色版目录里调用 `python.exe`，一律加 `-B`（或设 `PYTHONDONTWRITEBYTECODE=1`）。**
 
@@ -47,6 +47,26 @@
 （SIGKILL / 关终端窗口）时 `finally` 跑不到，锁会留下变成**死锁**。看到锁的正确动作：先确认没有
 `mutate_*` / `verify_guardrails_can_fail.py` 在跑（`Get-Process python` 看启动时间），确认是死锁再删目录；
 **带着锁跑出来的全量结果不作数**（v2.4.2 那次"看似测试污染"的一半成因就是变异窗口与全量门重叠）。
+
+**铁律 3：测试断言不许依赖机器速度（墙钟阈值 = 公开 CI 连红五个提交 #46~#50 的病根）。**
+
+要判"分片/限流/成本"这类事，**先注入"每单位固定成本"**（v2.5.1 用的是帧 5ms / 写条目 8ms），
+再断言**结构性事实**：每片单位数上界由预算除注入成本推出来、片数下界、单位守恒、真解码张数守恒、
+进度气泡必然出现。**不要**写 `elapsed < 200ms` 这种阈值——同一条用例在快机器上必然假红/假绿。
+口径来自提交 `7ee8766`（"修复公开 CI 红门禁"）：三条墙钟用例去墙钟化后，模拟快机器（活变小、
+预算与成本同比放大）不假红，**拿掉注入立刻复现 CI #50 的三条红**。
+
+**铁律 4：契约必须双向覆盖（只钉一侧 = 另一侧漂了也没人知道）。**
+
+同一个口径写在两处（两条实现 / 代码与文档）时，**两侧都要有用例**，而且要**互为反向**：
+
+1. **校验器 ↔ 安装器**：v2.5.1 审查实测的两处口径差就是单向覆盖的产物——"必须拒"只在安装器
+   一侧有用例，于是校验器悄悄放行了 `payload/a:b.png`（安装器解包时才算"越界"）与 `files: []`
+   （安装器才以"没有 payload 目录"拒）。现在校验器**先拒**，两侧一起钉：
+   `tests/test_plugin_v251.py::test_口径差_校验器先拒_安装器不留残余`。
+2. **常量 ↔ 文档**：`pet_plugin.WIN_ILLEGAL_CHARS` / `WIN_RESERVED_NAMES` 与
+   `_dev/plugin_format_v251.md` **互查**——常量里的每个名字都要在文档里，文档里多写一个
+   `com10`（常量里没有）也要红：`tests/test_plugin_v251.py::test_windows名字判据与文档同时写死`。
 
 ---
 
@@ -100,11 +120,27 @@ SPEC-BAD / ANCHOR-LOST / INVALID / BASELINE-RED 就**出声**（只提示、不�
 与出货修订不是同一份。现在发布门（`_check_release.py` 的 `mutation_evidence_notes()`）逐个读
 `_dev/*.json` 的指纹，不一致就打印"该证据已过期，需复跑对应 spec"（只提示、不挡发布；
 过期是开发期的正常中间态，但**不许静默**）。
-关键文件清单 = **7 个**：`桌宠.py` / `pet_export.py` / `pet_lines.py` / `pet_alarm.py` / `pet_behaviors.py` /
-`_check_release.py` / `pet_balance.py`。最后那个是 v2.4.4 补的：A-1 改的正是 `pet_balance.py`、3 条锚点随之
-失效，而在此之前清单里没有它 → **发布门一条"证据过期"都不会提示**（真盲区）。两份清单
-（`_check_release.MUTATION_FINGERPRINT_FILES` 与 `_dev/_mutate_lib.repo_fingerprint`）由
-`tests/test_release_check.py` 的清单一致性用例钉住，且点名"必须有 pet_balance.py"。
+关键文件清单 = **11 个**：`桌宠.py` / `pet_export.py` / `pet_lines.py` / `pet_alarm.py` /
+`pet_behaviors.py` / `_check_release.py` / `pet_balance.py`（v2.4.4 补）/ `pet_plugin.py` /
+`pet_plugin_host.py` / `pet_dialogs.py` / `pet_menu.py`（v2.5.1 找茬审查 P3-1 补的四个模块）。
+`pet_balance.py` 那次是典型盲区：A-1 改的正是它、3 条锚点随之失效，而清单里没有它 →
+**发布门一条"证据过期"都不会提示**。两份清单（`_check_release.MUTATION_FINGERPRINT_FILES` 与
+`_dev/_mutate_lib.repo_fingerprint`）由 `tests/test_release_check.py` 的清单一致性用例钉住，
+且**逐项点名**必须有那 5 个文件（`pet_balance.py` + 四个新模块）。
+
+**"缺键"提示（v2.6.0 · 代理 C）**：把清单补到 11 个**救不了已经在盘上的老证据**——
+`stale_fingerprints()` 只比对"记录里存在的键"，于是那 14 份 7 键的老 JSON 里
+`pet_plugin.py` / `pet_plugin_host.py` / `pet_dialogs.py` / `pet_menu.py` **等于不存在**：
+改这四个文件，发布门一条提示都不会有（补清单那次留下的后半截盲区）。现在
+`mutation_evidence_notes()` 会**汇总一句**点名"哪几份证据缺哪些键"（`missing_fingerprint_keys()`，
+判据只认**当前树里真的存在**的文件）：
+
+* **只提示、不挡发布**（与"指纹过期"同一条 notes 通道）；
+* 汇总成**一行**而不是一份证据一行——实测那是 14 行噪音，结论完全一样；
+* 影响面（2026-10-12 v2.6.0 实测，脚本 `_dev/probe_fingerprint_gap_v260.py`）：**14 份**证据各缺
+  4 个键；同轮**17 份**证据处于"指纹过期"（多路并行改树窗口里的正常中间态，定版前统一复跑即可）。
+  要消掉缺键那条只有两条路：**重跑对应 spec 让指纹补齐**，或在报告里**点名"这份证据不覆盖这几个
+  模块"**（两者都行，但必须选一个——不许当作没看见）。
 
 **基线为什么要重跑几次**：`run_baseline()` 在基线红时会重跑（最多 3 遍，间隔 3s）。原因不是放水，
 而是时序敏感的用例在"影子副本刚复制出来 = 冷缓存 + 机器上还有别的会话在跑 pytest"时会偶发红：
@@ -128,6 +164,7 @@ spec 清单（**状态列的 CAUGHT 数 = 该文件 `results` 段当前的实测
 | `mutations_services_v250.json` | **v2.5.0 第 3 轮新增**：服务注册表（A1）构造顺序 + **实参级** golden + 摸头守卫（A3）——M-S1 wander/weather 顺序对调 · M-S2 WeatherService 的 signals↔lambda 对调 · M-S3 MenuBuilder 后两实参对调 · M-S4 mood 拆回字面 new · M-S5 A3 口径退回（不传组名） · M-S6 从 SYNC_FILES 删掉新模块 | **6/6 CAUGHT** |
 | `mutations_dialog_fit_v250.json` | **v2.5.0 第 3 轮新增**：对话框尺寸与滚动（B）——M-D01..D12 **逐个**删掉 12 个类的设计尺寸 clamp · M-D13 自指比例 0.85→1.5 · M-D14 重钳兜底 · M-D15 下限保护 · M-D16 滚动容器 · M-D17 按钮行进滚动区 | **17/17 CAUGHT** |
 | `mutations_plugin_v251.json` | **v2.5.1 代理A新增**：插件包校验器（M-P1 code 一致性 · M-P2 路径穿越 · M-P3 双版本门 · M-P4 禁止项清单 · M-P5 files 覆盖 · M-P6 容量上限复用 · M-P7 执行位 · M-P8 read_installed 不抛）· 发布门反向校验（M-R1 漏件必须报 · M-R2 AST 扫描不许空转 · M-R3 用户插件必须点名）· L5 设计宽 620（M-L1） | **12/12 CAUGHT**（2026-10-11 实测；M-P4/M-P8 首轮 NOT CAUGHT——M-P4 的"点名"被扩展名白名单分支同样满足、M-P8 的锚点钉在了走不到的分支上，都已重锚 + 收紧断言后复跑） |
+| `mutations_plugin_gap_v260.json` | **v2.6.0 代理C新增**：校验器与安装器两处口径差收口（M-G1 Windows 非法字符 · M-G2 保留设备名 · M-G3 空 files · M-G4/G5 发布门"缺键"提示与纯函数 · M-G6/G7 文档↔常量双向契约 · M-G8 安装器不再交出校验器那句原因） | **8/8 CAUGHT**（2026-10-12 实测：`python -B _dev/mutate_check.py _dev/mutations_plugin_gap_v260.json`） |
 
 **2026-10-11 v2.4.4 证据对齐复跑**（真仓只读、逐个在 %TEMP% 影子里跑；本次总耗时约 255s）：上表
 **9 个 spec 全部 rc=0、共 94 条变异 100% CAUGHT**；三条**不是** `mutate_check.py` 形态的结果文件
@@ -203,6 +240,8 @@ diff 未知键带回 / pet_fx 重新写死帧集 / README 口径说明被删）�
 | `probe_asset_absence.py` | **素材缺失探针**：临时资源根（`main.app_dir` 指到 %TEMP%）上构造 PetWindow，逐条打印"缺素材时各消费点的返回值/异常"——真实 `assets/` 全程只读。用户可感知的降级清单见 `asset_absence_report.md` |
 | `probe_money_preload_gap.py` | **撒钱预载的事件循环缺口**：eager（v2.4.2 原样：一次同步解 86 帧）vs sliced（当前：按 _FRAME_SLICE_MS 分片），**每轮一个新进程** + 1ms PreciseTimer 心跳、交替采样（`--rounds N --json out`；`--repo <树>` 可量别的检出）。摘要见 `money_preload_summary.json` |
 | `probe_test_order.py` | **反序探针**（pytest 插件）：把 `tests/test_export_slice_v242.py` 挪到收集顺序最前/最后，用来判定"这些红是不是被别的模块污染"——顺序无关的失败才是真失败 |
+| `probe_plugin_gap_v260.py` | **校验器/安装器口径差复现探针**（v2.6.0 代理C）：造 4 个曾被校验器放行的合成包（`payload/a:b.png` / `payload/con.png` / `files: []` 两种形状）+ 1 个控制组，逐条打印"校验器怎么说 / 安装器怎么说 / plugins/ 下有没有残余"。收口前后各跑一次就是证据（收口前：校验器全放行、安装器才拒；收口后：两侧同一句原因、零残余） |
+| `probe_fingerprint_gap_v260.py` | **发布门"缺键"影响面探针**（v2.6.0 代理C，只读）：逐份打印 `_dev/*.json` 记了几个键 / 缺哪些键 / 哪些指纹过期，再打印 `mutation_evidence_notes()` 当前返回的每一条提示 |
 
 ---
 
@@ -270,7 +309,8 @@ diff 未知键带回 / pet_fx 重新写死帧集 / README 口径说明被删）�
 | `money_preload_summary.json` | 撒钱预载缺口摘要（4 轮交替、每轮新进程：eager 中位 70.9ms / sliced **单片** 12.3~12.6ms、**事件循环间隔**中位 25.5ms、入口 0.0ms、5~6 片、86/86 逐张 toImage 全等）。注意单片与循环间隔不是一回事，口径见该文件 `interpretation` |
 | `pytest_v242_full.txt` | v2.4.2 定版那次全量的原始输出尾巴（632 passed）——提交信息引用它，别删 |
 | `pytest_v243_full.txt` | v2.4.3 全量输出（`python -m pytest tests -o addopts="" -q` → **691 passed / 0 failed**，65.4s；连跑两次同结果）。定版提交信息引用它 |
-| `plugin_packs_report.md` | **官方内容插件与索引**（v2.5.1 代理 C）：5 个包逐类"能不能落地"的实测证据 + 26 条反向变异清单 + 踩坑与发货注意。配 `build_official_plugins.py`（打包，幂等）· `plugin_pack_rules.py`（12 条判据参照实现）· `verify_plugin_packs_v251.py`（验收：正向 + 反向 + 索引 + 上架门槛 + 幂等，62 条）· `probe_plugin_landing_v251.py`（五类宿主接口落地，29 条）· `probe_plugin_install_v251.py`（索引→包→真安装器→宿主库端到端，20 条） |
+| `plugin_packs_report.md` | **官方内容插件与索引**（v2.5.1 代理 C）：5 个包逐类"能不能落地"的实测证据 + 26 条反向变异清单 + 踩坑与发货注意。配 `build_official_plugins.py`（打包，幂等）· `plugin_pack_rules.py`（12 条判据参照实现）· `verify_plugin_packs_v251.py`（验收：正向 + 反向 + 索引 + 上架门槛 + 幂等；v2.6.0 加了两条真 zip 反向与 6 条单元级交叉核对 → **70 条**）· `probe_plugin_landing_v251.py`（五类宿主接口落地，29 条）· `probe_plugin_install_v251.py`（索引→包→真安装器→宿主库端到端，20 条）。**§九 是 v2.6.0 增量**（口径差收口 + 70/70 + 8/8 变异），§七/§八 的 890 是历史读数，**基线以当轮实测为准** |
+| `agent_c_v260_report.md` | **v2.6.0 代理 C 完工报告**：校验器/安装器两处口径差收口、发布门"缺键"提示、文档同步（12 条判据文档 / plugins README / 基线数字）、两条新铁律的落地位置。含"没做到/有疑问"一节 |
 
 **v2.4.4 三项硬性门实测（2026-10-11 A-4 复跑，未提交树）**：`python -m pytest tests -o addopts="" -q` →
 **716 passed / 0 failed**（104.89s）· `python _verify_v13.py` → **273 项 / 0 FAILS**（27.9s）·

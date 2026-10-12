@@ -519,7 +519,14 @@ def _persona_file_text(pid):
     try:
         with open(_p, "r", encoding="utf-8") as f:
             return f.read().strip() or None
-    except Exception:
+    except Exception as e:
+        # v2.6.0（D7-B ①）：读不到时调用方（_build_ai_sys_prompt）**直接回退内置人设**，
+        # 界面上看不出任何变化——用户只会觉得"人设自己变了"。只对**用户自建**的人设
+        # （file: 前缀，id 由 persona_file_ids() 从 prompts/custom/*.txt 枚举而来）记日志：
+        # 内置预设 id 本来就可能没有同名文件（回退 PERSONA_PRESETS 是设计行为），记它只会刷屏。
+        if pid.startswith("file:"):
+            pet_log.log_throttled("persona_file_text:" + pid,
+                                  "自建人设文件读取失败（回退内置人设）：%r <- %s" % (e, _p))
         return None
 
 
@@ -693,7 +700,14 @@ def _build_ai_sys_prompt(cfg):
 
 # ---------------- 主窗口 ----------------
 def _log_slot_error(name, err):
-    """定时器槽异常限流日志（同一槽 60 秒内只记一次，避免每拍刷屏）。"""
+    """定时器槽异常限流日志（同一槽 60 秒内只记一次，避免每拍刷屏）。
+
+    v2.6.0（D7-B）：**未改动**。这里是"同名 60s 一条"的第二份实现（第一份是
+    pet_log.guard_slot，本轮已收敛到 pet_log.log_throttled）。不顺手改它的原因：
+    它的 except 分支是**有意义的兜底**（取不到 traceback 也要记一行），改成调用
+    log_throttled 会让这个兜底变成一个纯静默 except——本轮的主题正是消灭静默，
+    不为"口径好看"制造新的静默点。留给下一轮（连同 pet_resources._SOURCE_FAIL_SEEN）。
+    """
     now = time.monotonic()
     seen = globals().setdefault("_SLOT_ERR_SEEN", {})
     if now - float(seen.get(name, 0.0)) < 60:
@@ -4765,7 +4779,13 @@ class PetWindow(QWidget):
             self._preview_player.setSource(QUrl.fromLocalFile(path))
             self._preview_player.play()
             return True
-        except Exception:
+        except Exception as e:
+            # v2.6.0（D7-B ①）：两条链路（winsound 主链路 → QMediaPlayer 降级）都失败时
+            # 此前静默返回 False——用户点了"试听"没反应，error.log 里也查不到原因。
+            # 限流键按**文件路径**（不同文件各记各的，口径同 pet_log.guard_slot 的 60s 一条）。
+            pet_log.log_throttled("preview_audio:" + str(path),
+                                  "试听失败（winsound 与 QMediaPlayer 都不可用）：%r <- %s"
+                                  % (e, path), data_dir=DATA_DIR)
             return False
 
     def apply_bubble_style(self, style):
