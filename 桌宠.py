@@ -69,7 +69,7 @@ from pet_plugin_host import PluginHost as _PluginHost  # v2.5.1：PetHub 插件�
 
 
 APP_NAME = "大肥鱼桌宠"
-VERSION = "2.6.0"
+VERSION = "2.6.1"
 PAD = 1.25  # 窗口相对角色的透明边距（为压扁/回弹预留空间）
 IDLE_FRAME_MS = 140      # 待机帧间隔
 IDLE_FORM_HOLD_SECS = 8  # v2.1.3：只有形态、没有动作可播时的展示期上限（到期回用户形态）
