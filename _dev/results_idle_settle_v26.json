@@ -1,0 +1,62 @@
+{
+  "title": "v2.6.0 收尾兜底（idle settle）新用例牙齿实测（影子副本）",
+  "checked_at": "2026-10-12 13:39:26",
+  "total": 5,
+  "caught": 5,
+  "not_caught": 0,
+  "items": [
+    {
+      "id": "BASELINE",
+      "verdict": "PASS",
+      "rc": 0,
+      "tail": "7 passed",
+      "hit": []
+    },
+    {
+      "id": "M-S01",
+      "verdict": "CAUGHT",
+      "rc": 1,
+      "tail": "rc=1 2 failed failed=['test_jump_inserted_during_proc_settles_back_to_idle', 'test_idle_gates_usable_after_interleave'] 命中=2/2 用时=2.0s",
+      "hit": [
+        "test_jump_inserted_during_proc_settles_back_to_idle",
+        "test_idle_gates_usable_after_interleave"
+      ]
+    },
+    {
+      "id": "M-S02",
+      "verdict": "CAUGHT",
+      "rc": 1,
+      "tail": "rc=1 1 failed failed=['test_chain_keeps_owner_then_settles_to_idle'] 命中=1/1 用时=2.0s",
+      "hit": [
+        "test_chain_keeps_owner_then_settles_to_idle"
+      ]
+    },
+    {
+      "id": "M-S03",
+      "verdict": "CAUGHT",
+      "rc": 1,
+      "tail": "rc=1 1 failed failed=['test_frame_action_owner_is_not_truncated_by_a_tween_finish'] 命中=1/1 用时=2.0s",
+      "hit": [
+        "test_frame_action_owner_is_not_truncated_by_a_tween_finish"
+      ]
+    },
+    {
+      "id": "M-S04",
+      "verdict": "CAUGHT",
+      "rc": 1,
+      "tail": "rc=1 1 failed failed=['test_tween_reset_during_eat_keeps_eat'] 命中=1/1 用时=2.0s",
+      "hit": [
+        "test_tween_reset_during_eat_keeps_eat"
+      ]
+    },
+    {
+      "id": "M-S05",
+      "verdict": "CAUGHT",
+      "rc": 1,
+      "tail": "rc=1 1 failed failed=['test_proc_finish_during_eat_keeps_eat'] 命中=1/1 用时=1.9s",
+      "hit": [
+        "test_proc_finish_during_eat_keeps_eat"
+      ]
+    }
+  ]
+}

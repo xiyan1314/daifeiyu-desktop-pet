@@ -1,0 +1,30 @@
+{
+  "title": "v2.6.0 环境插播收尾（settle）承重对照",
+  "checked_at": "2026-10-12 13:18:04",
+  "total": 2,
+  "caught": 0,
+  "not_caught": 0,
+  "blocked": 0,
+  "items": [
+    {
+      "id": "A-无 settle（对照）",
+      "verdict": "RED-AS-EXPECTED",
+      "rc": 0,
+      "tail": "fails=4 红=['frame', 'proc', 'proc', 'proc']",
+      "failed": [
+        "frame action plays",
+        "proc action starts anim='QVariantAnimation' probe=(<State.Running: 2>, 0, 520) want_dur=400 mode='idle'",
+        "proc transform applied 步进=81 err=None 半波=0 sx=[1.0000,1.0000] sy=[1.0000,1.0000] amp=0.060",
+        "proc resets to idle 自然播完=False/探针=(<State.Running: 2>, 400, 520) 顶替前有形变=False 顶替后已复位=True err=None：anim='idle' sx=1.0000 sy=1.0000 oy=0 收尾回调=None"
+      ]
+    },
+    {
+      "id": "B-有 settle（现状）",
+      "verdict": "GREEN-AS-EXPECTED",
+      "rc": 0,
+      "tail": "total=273 fails=0",
+      "failed": []
+    }
+  ],
+  "stamp": "2026-10-12 13:18:04"
+}

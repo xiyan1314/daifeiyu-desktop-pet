@@ -3677,6 +3677,21 @@ class PetWindow(QWidget):
             except RuntimeError:
                 pass  # 动画已被自身 finished→deleteLater 释放
             self._tween_anim = None
+        # v2.6.0（公开 CI #52）：默认收尾也必须把状态机带回待机——"收回 anim_mode 的责任"
+        # 此前没有兜底。病根：_play_proc 起播时把 anim_mode 置 "state"（:1518），收回待机的
+        # 责任在它自己的收尾 _done；而 _done 在"有交互在途"时会**有意**跳过 _play_idle
+        # （:1515，防 anim.play('idle') 内部 stop() 顶掉 _eat_done 等收尾回调），注释里假定
+        # "对方的收尾自会回待机"——jump（pet_actions.py:33 用的正是这里这个默认收尾）只清
+        # busy/squash、不碰 anim_mode。于是"sway 在途时插播 jump"这一交错跑完，anim_mode
+        # 永久停在 'state'：待机帧不再按形态重绘，_idle_ready / idle_tick 的入睡判定
+        # （anim_mode in ("idle","form_idle")）也永不成立。
+        # 判据 = "state 这个模式此刻还有没有主人"：表情展示的收尾定时器（_state_done 会收回）
+        # 与在播帧动作的收尾回调（on_finish 会收回）都算主人，交给它们；两者都不在，才说明
+        # 'state' 是 tween 家族留下的孤儿，由这里兜底回落待机。吃帧是有意例外
+        # （anim_mode == "eat"）：任何收尾路径都不得把它顶掉。
+        if (self.anim_mode == "state" and not self.busy and self._tween_anim is None
+                and not self._state_timer.isActive() and self.anim._on_finish is None):
+            self._play_idle()
 
     # ---------- 气泡 ----------
     def _pad_top(self):

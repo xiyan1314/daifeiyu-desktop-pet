@@ -43,7 +43,10 @@ def check(name, cond, extra=""):
 _tmp = tempfile.mkdtemp(prefix="dfy_v13_")
 import pet_dialogs  # noqa: E402
 import 桌宠 as main  # noqa: E402
-from PySide6.QtCore import QEventLoop, QTimer  # noqa: E402  # P1-1 异步向导等待用
+from PySide6.QtCore import (  # noqa: E402
+    QEventLoop, QTimer,  # P1-1 异步向导等待用
+    QVariantAnimation, QAbstractAnimation,  # v2.6.0：合成动作结构性驱动用
+)
 main.DATA_DIR = _tmp
 main.CONFIG_PATH = os.path.join(_tmp, "config.json")
 main.USAGE_PATH = os.path.join(_tmp, "usage.json")
@@ -218,10 +221,13 @@ def main_flow():
         # H1 回归：喂食路径（squash 动画收尾）也必须落到吃饱图
         pet.apply_role(dual["id"])
         pet.feed("小鱼干")
-        t0 = time.time()
-        while pet.busy and time.time() - t0 < 3:
-            app.processEvents()
-            time.sleep(0.02)
+        # v2.6.0（公开 CI #52 同类口径）：无吃帧的自定义角色喂食走 900ms 合成形变
+        # （桌宠.py:4147），收尾 _squash_done → _reset_squash + _play_idle，H1 要的贴图
+        # 就落在那里，由 QVariantAnimation.finished 驱动。原先"等 3 秒看它自己播完"是墙钟
+        # 判据；这里直接把在途动画按同一路径推到终态（finished 同拍同步发出）。
+        _fda = getattr(pet, "_tween_anim", None)
+        if isinstance(_fda, QVariantAnimation):
+            _fda.setCurrentTime(_fda.duration())
         check("feed shows f1 pix (dual)", pet.form == "f1"
               and pet.item.pixmap().cacheKey() == pet.sprites["f1"]["side"].cacheKey())
         pet._set_form("f0")
@@ -465,10 +471,11 @@ def main_flow():
         check("3 form keys", pet.form_keys == ["f0", "f1", "f2"])
         for expect in ("f1", "f2", "f0"):
             pet.feed("小鱼干")
-            t0 = time.time()
-            while pet.busy and time.time() - t0 < 3:
-                app.processEvents()
-                time.sleep(0.02)
+            # v2.6.0（公开 CI #52 同类口径）：同上——无吃帧角色喂食的收尾由 900ms 合成形变
+            # 驱动，判据（贴图/形态）落在它的收尾路径上，所以主动推到终态而不是等钟。
+            _fdc = getattr(pet, "_tween_anim", None)
+            if isinstance(_fdc, QVariantAnimation):
+                _fdc.setCurrentTime(_fdc.duration())
             check("feed cycle -> %s" % expect, pet.form == expect)
             # bug 审查回归：贴图必须同步切到目标形态（变量断言不够）
             check("feed pix -> %s" % expect,
@@ -705,60 +712,173 @@ def main_flow():
     check("menu lists custom actions",
           _cap_ca is not None and "✦ dance" in _tca and "✦ sway（合成）" in _tca,
           "texts=%r" % (_tca,))
+    # v2.6.0（CI #52 同源）：本段所有动作都走 play_action，而它有 busy/摸头/跟随门控。
+    # 上一拍的「闲逛节拍」（桌宠.py:1119-1121，15s 一次；25% 权重挑 jump，桌宠.py:613-620）
+    # 可能在**别的 check 的事件循环里**插播过一次 jump，此后本脚本长时间不泵事件 → 那个动画
+    # **冻结在途**（Qt 统一动画定时器要事件循环才推进）、busy 一直为真。实测：不先收掉它，
+    # 本段会连红 4 条，且全是被 busy 门控吞掉的假红。这里用与下面完全相同的手法把它推到
+    # 终态（setCurrentTime(duration)，一点不看钟），让场景从确定状态开始。
+    _amb = getattr(pet, "_tween_anim", None)
+    if pet.busy and isinstance(_amb, QVariantAnimation):
+        _amb.setCurrentTime(_amb.duration())
     # 播放：命名帧动作 → 播完自动回待机
     pet.actions.play_action("dance")
-    check("frame action plays", pet.anim_mode == "state" and pet.anim._timer.isActive())
-    _t0 = time.time()
-    while pet.anim_mode == "state" and time.time() - _t0 < 3:
-        app.processEvents()
-        time.sleep(0.02)
-    check("frame action back to idle", pet.anim_mode == "idle")
-    # 播放：程序化合成动作 → 变换生效，播完复位并回待机
-    pet.actions.play_action("sway")
-    check("proc action starts", pet.anim_mode == "state")
-    # v2.4.4（C-3）：固定 1.2 秒预算 → **轮询直到条件成立 + 超时上限**。sway 是
-    # period_ms=200 × 2 周期 ≈400ms 的合成动作，1.2 秒只剩 3 倍余量——负载下第一次基线
-    # 就红过一次（之后 8 次全绿），那是计时抖动而不是回归。现在条件一成立就通过，
-    # 只有超时才判失败，并把"实际等了多久 / 轮询了几次"写进失败信息。
-    # v2.4.4（复审 L3）：这个循环每 20ms 读一次 pet._proc_offset_y —— 裸取属性的话，属性一旦
-    # 改名就会在**循环里**抛 AttributeError（护栏从"最后那条 check 红"变成"脚本炸了"，
-    # 拿不到可读结论）；计时也改用单调钟，系统时钟回拨不会把等待拖长。
+    _dance_frames = pet.anim._sets.get("dance") or []
+    _dance_loops = pet.anim._loops
+    check("frame action plays", pet.anim_mode == "state" and pet.anim._timer.isActive()
+          and pet.anim._name == "dance" and _dance_loops == 1 and len(_dance_frames) == 2)
+    # v2.6.0（公开 CI #52）：原先这里是"轮询 3 秒等它自己播完"——帧推进由 QTimer 驱动，
+    # 到点与否是墙钟问题（与已修的三条同一类）。改为**固定步进手动推进**：每步固定成本
+    # = 一帧，步数由结构推出（play 起播即计 1 帧 → 还差 loops×帧数-1 步），与机器速度无关；
+    # "收尾回调真的跑过"由 _on_finish 被清空见证（没跑完就还是 _play_idle，一眼可辨）。
+    _dance_need = max(0, _dance_loops * len(_dance_frames) - 1)
+    _dance_steps = 0
+    _dance_err = None
+    try:
+        while _dance_steps < _dance_need:
+            pet.anim._advance()
+            _dance_steps += 1
+    except Exception as _e:      # 驱动期异常要变成可读的 FAIL，而不是把脚本炸掉
+        _dance_err = repr(_e)
+    check("frame action back to idle",
+          _dance_err is None and _dance_steps == _dance_need and pet.anim_mode == "idle"
+          and pet.anim._name == "idle" and pet.anim._on_finish is None,
+          "steps=%d/%d err=%r anim=%r name=%r 收尾回调=%r"
+          % (_dance_steps, _dance_need, _dance_err, pet.anim_mode, pet.anim._name,
+             pet.anim._on_finish))
+    # v2.6.0（复审 L3 教训保留）：读产品属性一律走 getattr 默认值——属性改名时护栏要给出
+    # 可读 FAIL，而不是在中间抛 AttributeError 把整脚本炸掉。
     def _proc_oy():
         return getattr(pet, "_proc_offset_y", 0)
 
-    _t0 = time.monotonic()
-    _moved = False
-    _polls = 0
-    _proc_timeout = 5.0
-    while True:
-        app.processEvents()
-        _polls += 1
-        if abs(pet.squash_x - 1.0) > 1e-4:
-            _moved = True
-        if pet.anim_mode == "idle" and abs(pet.squash_x - 1.0) < 1e-6 \
-                and abs(pet.squash_y - 1.0) < 1e-6 and _proc_oy() == 0:
-            break                      # 条件成立：立刻通过（不再白等剩下的预算）
-        if time.monotonic() - _t0 >= _proc_timeout:
-            break                      # 超时：下面那条 check 会带上实耗与轮询次数
-        time.sleep(0.02)
-    check("proc transform applied", _moved)
-    _proc_reset = (pet.anim_mode == "idle" and abs(pet.squash_x - 1.0) < 1e-6
-                   and abs(pet.squash_y - 1.0) < 1e-6 and _proc_oy() == 0)
+    def _anim_probe(a):
+        """结构性事实 (state, currentTime, duration)；对象缺失/已销毁返回 None（不炸护栏）。"""
+        try:
+            return (a.state(), a.currentTime(), a.duration())
+        except Exception:
+            return None
+
+    # 播放：程序化合成动作 → 变换生效，播完复位并回待机
+    pet.actions.play_action("sway")
+    _sway = pet._cur_procs().get("sway") or {}
+    _sway_amp = float(_sway.get("amp", 0.0))
+    _sway_dur = int(float(_sway.get("period_ms", 0)) * 2)   # _play_proc：播 2 个周期
+    _sway_anim = getattr(pet, "_tween_anim", None)
+    _ap0 = _anim_probe(_sway_anim)
+    check("proc action starts",
+          pet.anim_mode == "state" and _ap0 is not None and _ap0[2] == _sway_dur > 0
+          and _ap0[0] == QAbstractAnimation.State.Running,
+          "anim=%r probe=%r want_dur=%d mode=%r"
+          % (type(_sway_anim).__name__, _ap0, _sway_dur, pet.anim_mode))
+    # v2.6.0（公开 CI #52）：这条 check 从"固定 1.2s 预算"（v2.4.4）改成"轮询到条件成立 +
+    # 5s 超时"（v2.4.4 C-3）都还是**墙钟判据**——只是把窗口开大，没让它变确定。真正的病根
+    # 不是"等得不够久"：合成动作的复位由 QVariantAnimation 的 finished → _finish_tween
+    # → _done 驱动（桌宠.py:3965/3926/1508），而 _done 收尾那一刻若**恰有交互在途**
+    # （busy=True，例如 15s 闲逛节拍按 25% 权重插播的 jump：桌宠.py:1119/1121 + pet_actions.py:30）
+    # 会**有意跳过** _play_idle（桌宠.py:1515），随后那个 jump 自己的收尾 _reset_squash
+    # （桌宠.py:3669）只清 busy/squash、**不恢复 anim_mode** → anim_mode 永久停在 'state'，
+    # 等多久都不可能复位。CI #52 原文 "anim='state' sx=1.0000 sy=1.0000 oy=0" 已在本机
+    # 用**同一交错**逐字复现（探针在 400ms 合成动作窗口里强制插播一次 jump；探针 5.02s/218 次
+    # 轮询 vs CI 5.01s/244 次，值一模一样）。
+    # 新判据：**结构性 + 零让出**（不 sleep、不 processEvents）——主动把动画按固定步进推到
+    # 终态（setCurrentTime 0→duration），finished 同拍同步发出，再断言四件结构事实：
+    #   ① 波形真的是 2 个周期、振幅到标称值（变换确实被驱动过）；
+    #   ② 收尾路径真的跑过（_finish_tween 入口清空 _tween_finish_cb）；
+    #   ③ 动画到终态（Stopped 且 currentTime == duration）；
+    #   ④ 状态机回 idle、squash/位移回基线。
+    _drive_steps = 80          # 固定 80 步（每步 = 时长/80 = 5ms），与机器速度无关
+    _traj = []
+    _drive_err = None
+    try:
+        if isinstance(_sway_anim, QVariantAnimation):
+            for _i in range(_drive_steps + 1):
+                _sway_anim.setCurrentTime(_sway_dur * _i // _drive_steps)
+                _traj.append((pet.squash_x, pet.squash_y, _proc_oy()))
+    except Exception as _e:
+        _drive_err = repr(_e)
+    _sxs = [t[0] for t in _traj]
+    _sys = [t[1] for t in _traj]
+    _half = 0                  # 半波段数：2 个周期 = 4 段（sin 过零 4 次，含起播那 0 点）
+    _prev = 0
+    for _v in _sxs:
+        _s = 1 if _v - 1.0 > 1e-9 else (-1 if _v - 1.0 < -1e-9 else 0)
+        if _s != 0 and _s != _prev:
+            _half += 1
+        if _s != 0:
+            _prev = _s
+    _moved = (_drive_err is None and _sxs and _half == 4 and _sway_amp > 0
+              and max(_sxs) > 1.0 + _sway_amp * 0.9 and min(_sxs) < 1.0 - _sway_amp * 0.9
+              and max(_sys) > 1.0 + _sway_amp * 0.6 * 0.9
+              and min(_sys) < 1.0 - _sway_amp * 0.6 * 0.9)
+    check("proc transform applied", _moved,
+          "步进=%d err=%r 半波=%d sx=[%.4f,%.4f] sy=[%.4f,%.4f] amp=%.3f"
+          % (len(_sxs), _drive_err, _half, min(_sxs or [-1.0]), max(_sxs or [-1.0]),
+             min(_sys or [-1.0]), max(_sys or [-1.0]), _sway_amp))
+    _ap1 = _anim_probe(_sway_anim)
+    # (a) 自然播完（finished 路径）：复位回基线 + 回 idle + 收尾回调被消费 + 动画到终态
+    _reset_done = (pet.anim_mode == "idle" and abs(pet.squash_x - 1.0) < 1e-6
+                   and abs(pet.squash_y - 1.0) < 1e-6 and _proc_oy() == 0
+                   and pet._tween_finish_cb is None          # 收尾路径真的跑过
+                   and _ap1 is not None and _ap1[0] == QAbstractAnimation.State.Stopped
+                   and _ap1[1] == _sway_dur and pet._tween_anim is _sway_anim)
+    # (b) **被顶替**也复位——CI #52 走的正是这条路（交互插播 → _run_anim/_play_eat 先 _stop_tween）。
+    #     播到波峰处置于最大形变，再用产品自己的顶替路径收尾：必须同样回基线。这一段是
+    #     "复位分支不执行"的**唯一可观测面**：自然播完时正弦末值本来就 ≈1.0，不复位也看不出差别。
+    _pre_off = False
+    _reset_stop = False
+    _pre_err = None
+    try:
+        pet.actions.play_action("sway")
+        _anim2 = getattr(pet, "_tween_anim", None)
+        if isinstance(_anim2, QVariantAnimation):
+            _anim2.setCurrentTime(_sway_dur // 8)   # v=1/8 → sin(π/2)=1 → 形变最大处
+            _pre_off = abs(pet.squash_x - 1.0) > _sway_amp * 0.9
+            pet._stop_tween()                       # 顶替路径（桌宠.py:3935，_run_anim 起播第一件事）
+            _reset_stop = (pet.anim_mode == "idle" and abs(pet.squash_x - 1.0) < 1e-6
+                           and abs(pet.squash_y - 1.0) < 1e-6 and _proc_oy() == 0
+                           and pet._tween_anim is None and pet._tween_finish_cb is None)
+    except Exception as _e:
+        _pre_err = repr(_e)
+    _proc_reset = (_reset_done and _pre_off and _reset_stop and _pre_err is None)
     check("proc resets to idle", _proc_reset, "" if _proc_reset else
-          "等了 %.2fs / 轮询 %d 次仍未复位（超时上限 %.1fs）：anim=%r sx=%.4f sy=%.4f oy=%r"
-          % (time.monotonic() - _t0, _polls, _proc_timeout, pet.anim_mode, pet.squash_x,
-             pet.squash_y, _proc_oy()))
+          "自然播完=%r/探针=%r 顶替前有形变=%r 顶替后已复位=%r err=%r：anim=%r sx=%.4f sy=%.4f"
+          " oy=%r 收尾回调=%r"
+          % (_reset_done, _ap1, _pre_off, _reset_stop, _pre_err, pet.anim_mode, pet.squash_x,
+             pet.squash_y, _proc_oy(), pet._tween_finish_cb))
     # 审查修复回归：合成动作播放中喂食 → 吃帧收尾不被顶掉，busy 必须释放
     pet.actions.play_action("sway")
+    _feed_tween = getattr(pet, "_tween_anim", None)   # 在途合成动作（喂食路径会顶掉它）
     pet.feed("小鱼干")
-    _t0 = time.time()
-    while pet.busy and time.time() - _t0 < 6:
+    # 吃帧起播挂在 QTimer.singleShot(120) 错峰上（桌宠.py:4129）——一次性定时器只能靠事件
+    # 循环放行（CI #52 上 QTimer 节拍全程正常，本条当时就是绿的；病根不是定时器被饿死）。
+    # 这里只放行到"进入吃帧态"这个**结构性状态**为止，之后帧推进一律按固定步进手动做完，
+    # 判据全部结构性（不再"等它播完"）。
+    _eat_pump = 0
+    while pet.anim_mode != "eat" and _eat_pump < 300:
         app.processEvents()
-        time.sleep(0.02)
-    check("feed during proc releases busy", not pet.busy and pet.anim_mode == "idle"
-          and abs(pet.squash_x - 1.0) < 1e-6 and pet._proc_offset_y == 0,
-          "busy=%r anim=%r sx=%.4f oy=%.4f" % (pet.busy, pet.anim_mode, pet.squash_x,
-                                               pet._proc_offset_y))
+        _eat_pump += 1
+        time.sleep(0.005)
+    _eat_enter = (pet.anim_mode == "eat")
+    # 固定步进推完吃帧：每步固定成本 = 一帧，步数由结构推出（play 起播即计 1 帧 →
+    # 还差 loops×帧数-1 步）；步数必须**刚好**用满，少一步 = 收尾链断了（busy 没释放）。
+    _eat_need = max(0, pet.anim._loops * len(pet.anim._frames or []) - 1)
+    _eat_steps = 0
+    _eat_err = None
+    try:
+        while pet.busy and _eat_steps < _eat_need:
+            pet.anim._advance()
+            _eat_steps += 1
+    except Exception as _e:
+        _eat_err = repr(_e)
+    check("feed during proc releases busy",
+          _eat_enter and _eat_err is None and _eat_steps == _eat_need
+          and _feed_tween is not None                       # 场景非空洞：确实有在途合成动作
+          and getattr(pet, "_tween_anim", None) is None     # 已被喂食路径 _stop_tween 顶掉
+          and not pet.busy and pet.anim_mode == "idle"
+          and abs(pet.squash_x - 1.0) < 1e-6 and _proc_oy() == 0,
+          "吃帧态=%r 步进=%d/%d err=%r 在途动作=%r busy=%r anim=%r sx=%.4f oy=%r"
+          % (_eat_enter, _eat_steps, _eat_need, _eat_err, _feed_tween, pet.busy,
+             pet.anim_mode, pet.squash_x, _proc_oy()))
     # 审查修复回归：角色切换立即停掉在途合成动作（新角色无残留振荡）
     pet.actions.play_action("sway")
     pet.apply_role("")

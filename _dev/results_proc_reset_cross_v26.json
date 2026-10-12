@@ -1,0 +1,125 @@
+{
+  "title": "v2.6.0 产品修复 × 护栏变异交叉验证（影子副本）",
+  "checked_at": "2026-10-12 13:52:25",
+  "note": "复用 _dev/mutate_proc_reset_v26.py 的 MUTATIONS 表；不覆盖其证据文件",
+  "total": 12,
+  "caught": 12,
+  "not_caught": 0,
+  "items": [
+    {
+      "id": "BASELINE",
+      "verdict": "PASS",
+      "rc": 0,
+      "tail": "total=273 fails=0",
+      "hit": []
+    },
+    {
+      "id": "M-P01",
+      "verdict": "CAUGHT",
+      "rc": 1,
+      "tail": "rc=1 total=273 fails=6 命中=['proc resets to idle'] 用时=21.5s",
+      "hit": [
+        "proc resets to idle"
+      ]
+    },
+    {
+      "id": "M-P02",
+      "verdict": "CAUGHT",
+      "rc": 1,
+      "tail": "rc=1 total=273 fails=3 命中=['proc resets to idle'] 用时=21.6s",
+      "hit": [
+        "proc resets to idle"
+      ]
+    },
+    {
+      "id": "M-P03",
+      "verdict": "CAUGHT",
+      "rc": 1,
+      "tail": "rc=1 total=273 fails=1 命中=['proc resets to idle'] 用时=21.7s",
+      "hit": [
+        "proc resets to idle"
+      ]
+    },
+    {
+      "id": "M-P04",
+      "verdict": "CAUGHT",
+      "rc": 1,
+      "tail": "rc=1 total=273 fails=2 命中=['proc resets to idle'] 用时=22.0s",
+      "hit": [
+        "proc resets to idle"
+      ]
+    },
+    {
+      "id": "M-P05",
+      "verdict": "CAUGHT",
+      "rc": 1,
+      "tail": "rc=1 total=273 fails=3 命中=['proc resets to idle'] 用时=22.1s",
+      "hit": [
+        "proc resets to idle"
+      ]
+    },
+    {
+      "id": "M-P06",
+      "verdict": "CAUGHT",
+      "rc": 1,
+      "tail": "rc=1 total=273 fails=3 命中=['proc resets to idle'] 用时=21.7s",
+      "hit": [
+        "proc resets to idle"
+      ]
+    },
+    {
+      "id": "M-P07",
+      "verdict": "CAUGHT",
+      "rc": 1,
+      "tail": "rc=1 total=273 fails=3 命中=['proc transform applied'] 用时=21.4s",
+      "hit": [
+        "proc transform applied"
+      ]
+    },
+    {
+      "id": "M-P08",
+      "verdict": "CAUGHT",
+      "rc": 1,
+      "tail": "rc=1 total=273 fails=1 命中=['proc transform applied'] 用时=21.6s",
+      "hit": [
+        "proc transform applied"
+      ]
+    },
+    {
+      "id": "M-P09",
+      "verdict": "CAUGHT",
+      "rc": 1,
+      "tail": "rc=1 total=273 fails=2 命中=['frame action back to idle'] 用时=21.4s",
+      "hit": [
+        "frame action back to idle"
+      ]
+    },
+    {
+      "id": "M-P10",
+      "verdict": "CAUGHT",
+      "rc": 1,
+      "tail": "rc=1 total=273 fails=2 命中=['frame action back to idle'] 用时=21.7s",
+      "hit": [
+        "frame action back to idle"
+      ]
+    },
+    {
+      "id": "M-P11",
+      "verdict": "CAUGHT",
+      "rc": 1,
+      "tail": "rc=1 total=273 fails=1 命中=['feed during proc releases busy'] 用时=21.7s",
+      "hit": [
+        "feed during proc releases busy"
+      ]
+    },
+    {
+      "id": "M-P12",
+      "verdict": "CAUGHT",
+      "rc": 1,
+      "tail": "rc=1 total=273 fails=4 命中=['feed during proc releases busy'] 用时=21.6s",
+      "hit": [
+        "feed during proc releases busy"
+      ]
+    }
+  ]
+}
