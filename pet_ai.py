@@ -41,24 +41,42 @@ class AIService:
     # ---- AI 对话开关 ----
     def set_ai_enabled(self, on: Any) -> None:
         cfg = self._cfg()
-        cfg["ai_enabled"] = bool(on)
-        err = self._save_cfg(cfg)
+        # v2.8.0 第 6 轮（代理 B · 先写盘再改内存）：改前是"先原地改 cfg、再 save"——写失败后
+        # 用户看到"没能保存"，**本次会话的开关状态却已经变了**（重启才回旧值），被同时骗两次。
+        # 现在与 apply_settings 同一口径：先改副本 → 写盘 → 成功才 cfg.update（见 B3 用例）。
+        new = dict(cfg)
+        new["ai_enabled"] = bool(on)
+        err = self._save_cfg(new)
         if err:
             # v2.7.0 第 5 轮（B · 闭环）：开关写盘失败时只说"开关没生效"，不再让勾选状态
             # 假装已经持久化（重启就变回去 = 用户以为设置丢了）
+            # v2.8.0：失败还要**留痕**（内存不变 + 日志 + 如实气泡，不复用成功话术）。
+            self._log("ai set_ai_enabled save failed: %s" % (err,))
             self.pet.show_bubble("AI 开关没能保存：%s\n（详情见数据目录的 error.log）" % (err,))
             return
+        cfg.update(new)          # 写盘成功才提交进内存（内容与键顺序与"原地改"逐位相同）
         if on and not cfg.get("api_key"):
             self.set_api_key()
             if not self._cfg().get("api_key"):
-                cfg["ai_enabled"] = False
+                new2 = dict(cfg)                 # 第二次落盘同样先写副本
+                new2["ai_enabled"] = False
                 # v2.7.0 第 5 轮（兼容审查 P3-2）：第二次落盘的返回值此前**丢弃**——
                 # "没 Key 就把开关退回关"这一步没写进去时，勾选状态与磁盘不一致（重启后
                 # 又是开的）。现在按同一口径判，失败就一并说出来（成功路径文案逐字不变）。
-                _err2 = self._save_cfg(cfg)
+                _err2 = self._save_cfg(new2)
+                _bad2 = _err2 is False or (isinstance(_err2, str) and _err2.strip())
+                if not _bad2:
+                    cfg.update(new2)     # v2.8.0：这次写盘成功才提交（失败时内存保持第一次提交后的状态）
+                else:
+                    self._log("ai set_ai_enabled rollback save failed: %s"
+                              % (_err2 if isinstance(_err2, str) and _err2.strip()
+                                 else "save callback returned False"))
                 if self.pet._ai_act:
-                    self.pet._ai_act.setChecked(False)  # 同步菜单勾选状态，避免残留
-                if _err2 is False or (isinstance(_err2, str) and _err2.strip()):
+                    # v2.8.0 第 6 轮（裁决 ③ · A 临时跨入 B 的领地改这一处）：**界面 = cfg**。
+                    # 改前硬写 False：第二次写盘（把开关退回关）失败时内存仍是已提交的 True，
+                    # 菜单勾选却已经打回未选中 —— 同一件事两个真相。回读 cfg 的实际值即可。
+                    self.pet._ai_act.setChecked(bool(self._cfg().get("ai_enabled")))
+                if _bad2:
                     self.pet.show_bubble("要先填 DeepSeek API Key 才能开 AI 对话哦~\n"
                                          "（另外：AI 开关也没能保存：%s）" % (_err2,))
                 else:
@@ -89,13 +107,22 @@ class AIService:
                 # 所以这条改动不存在"手滑把 Key 清掉"的数据风险。
                 pet.show_bubble("没有输入 Key，什么都没改~（要清空请用菜单「清除DeepSeek API Key」）")
                 return
-            self._cfg()["api_key"] = key
-            err = self._save_cfg(self._cfg())
-            self._redact(key)   # 内存里已经存了这个值（不论落盘成败）→ 必须登记脱敏
+            # v2.8.0 第 6 轮（代理 B · 先写盘再改内存）：改前先改内存再写盘——写失败时内存里
+            # 已经是新 Key（本次会话照用新值），用户却读到"没能保存"。现在与 apply_settings 同口径。
+            cfg = self._cfg()
+            new = dict(cfg)
+            new["api_key"] = key
+            err = self._save_cfg(new)
+            # 用户已经把这个值打进过输入框（也可能已经进了日志之外的任何地方）→ 不论落盘成败
+            # 都要登记脱敏：失败时内存里虽然没提交，但脱敏登记不会因此变多此一举。
+            self._redact(key)
             if err:
                 # v2.7.0 第 5 轮（B · 闭环）：写失败不许再回「记住啦！」——那是"保存成功"假象
+                # v2.8.0：内存不变 + 留痕 + 如实说（不复用成功话术）。
+                self._log("ai set_api_key save failed: %s" % (err,))
                 pet.show_bubble("Key 没能保存：%s\n（详情见数据目录的 error.log）" % (err,))
                 return
+            cfg.update(new)     # 写盘成功才提交进内存（内容与键顺序与"原地改"逐位相同）
             pet.show_bubble("记住啦！可以和我聊天了~")
 
     def clear_api_key(self) -> None:
@@ -183,10 +210,31 @@ class AIService:
             pet.mood.blush()
         cfg = self._cfg()
         if not cfg.get("ai_enabled"):
-            cfg["ai_enabled"] = True
+            # v2.8.0 第 6 轮（代理 B · 同族第 4 处）：改前是"先改内存、再 save"**且丢弃返回值**
+            # —— 写失败时内存 True、菜单已勾选、盘上没有这个键、零气泡零日志，而对话照常发起；
+            # 重启又变回关（用户以为设置丢了，且没有任何线索）。现在与 set_api_key /
+            # set_ai_enabled / set_chat_rounds 同一口径：先写盘、成功才提交。
+            new = dict(cfg)
+            new["ai_enabled"] = True
+            err = self._save_cfg(new)
+            if err:
+                # 如实说、**不复用成功话术**；对话**照常发起**（用户目的是说话，不是改开关——
+                # 落盘失败只影响"下次启动要不要重新打开"，不该把这次对话掐掉）。
+                self._log("ai talk auto-enable save failed: %s" % (err,))
+                pet.show_bubble("AI 开关没能保存：%s\n（这次对话照常；重启后开关会回到关闭，"
+                                "详情见数据目录的 error.log）" % (err,))
+            else:
+                cfg.update(new)      # 写盘成功才提交进内存
             if pet._ai_act:
-                pet._ai_act.setChecked(True)
-            self._save_cfg(cfg)
+                # 界面 = cfg（与 set_ai_enabled 的裁决同口径）：勾选回读 cfg 的**实际值**。
+                # **必须屏蔽信号**：不屏蔽的话 setChecked 会 emit toggled → set_ai_enabled 再写一次
+                # 盘；没填 Key 时那条路还会再弹一次 API Key 输入框（实测：一次"和它说话"变成
+                # 两次落盘 / 两次询问）。这里我们已经自己写过了，不需要它再代劳。
+                _was = pet._ai_act.blockSignals(True)
+                try:
+                    pet._ai_act.setChecked(bool(self._cfg().get("ai_enabled")))
+                finally:
+                    pet._ai_act.blockSignals(_was)
         # v2.0.4：本地服务（Ollama 等）无需 Key；云服务商才要求先填 Key
         if not cfg.get("api_key") and not pet_chat.is_local_base(cfg.get("ai_base_url", "")):
             self.set_api_key()
@@ -262,12 +310,18 @@ class AIService:
             return
         val = dlg.intValue()
         cfg = self._cfg()
-        cfg["chat_memory_rounds"] = val
-        err = self._save_cfg(cfg)
+        # v2.8.0 第 6 轮（代理 B · 先写盘再改内存）：与 set_api_key / set_ai_enabled / apply_settings
+        # 同一口径——写失败时内存里的轮数一个数都不变（也不许回成功话术）。
+        new = dict(cfg)
+        new["chat_memory_rounds"] = val
+        err = self._save_cfg(new)
         if err:
             # v2.7.0 第 5 轮（B · 闭环）：写失败就不许回「记住最近 N 轮啦~」（假象）
+            # v2.8.0：再补一条日志（此前只有气泡，error.log 里查不到这次失败）。
+            self._log("ai set_chat_rounds save failed: %s" % (err,))
             pet.show_bubble("对话记忆没能保存：%s\n（详情见数据目录的 error.log）" % (err,))
             return
+        cfg.update(new)         # 写盘成功才提交进内存
         if val:
             pet.show_bubble("记住最近 %d 轮对话啦~" % val)
         else:

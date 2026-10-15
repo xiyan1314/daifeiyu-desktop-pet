@@ -13,10 +13,12 @@
   H 未使用导入
   I 死常量        模块级大写常量零引用
   L 散落 print     非 __main__ 块里的 print
+  N 未定义全局名    用了没 import / 没定义的名字（运行时 NameError；v2.8.0 补）
 
 用法：python _check_static.py   退出码 0=无问题 1=有问题（"待确认"只打印、不阻塞）
 """
 import ast
+import builtins
 import io
 import os
 import re
@@ -582,6 +584,224 @@ def check_thread_writes(files):
     return [], notes
 
 
+# ---------------- v2.8.0 第 7 轮：N 未定义全局名（漏 import 这类 NameError 的系统性防线） ----------------
+# 为什么补这一类（v2.8.0 找茬审查的归因，本文件原先 10 类检查里**没有**它）：
+# A 检查只认 `pet_dialogs.X` / `pet.X` 的**属性形状**，"某个名字压根没 import"它一个字都看不到
+# —— pet_dialogs 少写一个 QTimer 就是这样穿过所有静态门，直到实测才被发现的。现象还特别隐蔽：
+# 出问题的那两处都在"索引取数在途时再点一次「刷新索引」"的补发路径上，PySide6 只往 stderr 打
+# 一行 traceback 就继续跑，而绿色版的 pythonw **没有控制台** → 对用户就是"点了没反应"。
+# 判据（真漏必须报）：一个 `Name`(Load) 的名字既不在
+#   · 它的词法查找链里（当前作用域 → 外层函数作用域 → 模块级 → 内置；类体按 Python 的规则
+#     不参与方法/嵌套函数的查找，只有"正处在类体里"那一层算），
+#   · 也不在模块级绑定 / 白名单里 → 报"未定义全局名"。
+# 有意保守的两处（宁可漏检也不误报，但盲区写明白）：
+#   · 出现 `from x import *` 的模块**整份跳过**：那些名字从哪来静态判不了；
+#   · exec/eval/globals() 注入、以及解释器塞进模块命名空间的 dunder，只放行**一张能一眼看完的
+#     显式白名单**（_UNDEF_OK_NAMES，下面），不用正则、不做模式猜测。
+# 已知漏检（刻意留在宽松侧，免得把正常代码报成红）：函数里"先 use 后同名赋值"（真实的
+# UnboundLocalError）不报——本检查只问"这个名字在本作用域链里有没有绑定"。
+# 白名单要不要加？**要，但只有 11 个名字，全部是解释器/动态命名空间的产物**；凡"业务名字"
+# 一律不许进白名单（那才是漏检的口子）。实测本仓 35 个 .py 文件（sources() 扫到的全部）0 命中——加这条前后
+# 静态体检都该是 0 问题（见 tests/test_static_undef_names_v280.py 的两条反例/正例）。
+_UNDEF_OK_NAMES = frozenset((
+    # 解释器 / 导入系统塞进模块命名空间的属性（源码里出现 ≠ 用户没定义）
+    "__file__", "__name__", "__doc__", "__package__", "__loader__", "__spec__",
+    "__builtins__", "__path__", "__debug__", "__class__", "__qualname__",
+))
+# 内置名（print/len/Exception/…）：dir(builtins) 是唯一真源，不许手抄一张表
+_UNDEF_BUILTINS = frozenset(dir(builtins))
+
+
+def _func_default_exprs(node):
+    """def/lambda 的默认值与注解表达式（装饰器/基类由调用方另扫）——都在**外层**作用域求值。"""
+    a = node.args
+    out = list(a.defaults) + [k for k in a.kw_defaults if k is not None]
+    for arg in list(a.posonlyargs) + list(a.args) + list(a.kwonlyargs):
+        if arg.annotation is not None:
+            out.append(arg.annotation)
+    for arg in (a.vararg, a.kwarg):
+        if arg is not None and arg.annotation is not None:
+            out.append(arg.annotation)
+    if getattr(node, "returns", None) is not None:
+        out.append(node.returns)
+    return out
+
+
+def _bound_names(nodes):
+    """一段语句/表达式里**绑定**的名字（不下钻嵌套 def/class/lambda 的作用域，但含它们的名字）。
+
+    与 M 检查的 _scope_bindings 同思路、口径不同：那里要"证据唯一"才认（有歧义就整份丢弃），
+    这里只问"这个名字在本作用域里有绑定" —— 多认几个名字的代价是**漏检**，正合本检查
+    "宁可少量误报也不要放过真漏"的取舍（见上面 N 段的说明）。
+    """
+    out = set()
+
+    def walk(node):
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            out.add(node.name)                 # 名字绑在**外层**作用域
+            for ch in node.decorator_list:     # 装饰器 / 默认值 / 注解都在外层求值
+                walk(ch)
+            for ch in _func_default_exprs(node):
+                walk(ch)
+            return                             # 不下钻函数体（那是另一个作用域）
+        if isinstance(node, ast.ClassDef):
+            out.add(node.name)
+            for ch in node.decorator_list:
+                walk(ch)
+            for ch in list(node.bases) + [k.value for k in node.keywords]:
+                walk(ch)
+            return                             # 不下钻类体
+        if isinstance(node, ast.Lambda):
+            for ch in _func_default_exprs(node):
+                walk(ch)
+            return
+        if isinstance(node, ast.Import):
+            for a in node.names:
+                out.add((a.asname or a.name).split(".")[0])
+            return
+        if isinstance(node, ast.ImportFrom):
+            for a in node.names:
+                if a.name != "*":
+                    out.add(a.asname or a.name)
+            return
+        if isinstance(node, (ast.Global, ast.Nonlocal)):
+            out.update(node.names)
+            return
+        if isinstance(node, ast.ExceptHandler) and node.name:
+            out.add(node.name)
+        if isinstance(node, ast.MatchAs) and node.name:
+            out.add(node.name)
+        if isinstance(node, ast.MatchStar) and node.name:
+            out.add(node.name)
+        if isinstance(node, ast.MatchMapping) and node.rest:
+            out.add(node.rest)
+        if isinstance(node, ast.Name) and isinstance(node.ctx, ast.Store):
+            out.add(node.id)                   # 赋值 / for / with-as / 海象 / 推导式目标
+        for ch in ast.iter_child_nodes(node):
+            walk(ch)
+
+    for n in nodes:
+        walk(n)
+    return out
+
+
+def _arg_names(args):
+    """形参名（含 *args / **kwargs）——形参就是本作用域的局部绑定。"""
+    out = {a.arg for a in list(args.posonlyargs) + list(args.args) + list(args.kwonlyargs)}
+    for a in (args.vararg, args.kwarg):
+        if a is not None:
+            out.add(a.arg)
+    return out
+
+
+class _UndefNames(ast.NodeVisitor):
+    """按词法作用域链扫每个 Name(Load)：链上没有绑定 → 记一条"未定义全局名"。"""
+
+    def __init__(self, module_names, ok_names):
+        self._chain = [("module", set(module_names) | set(ok_names) | set(_UNDEF_BUILTINS))]
+        self._labels = []           # 当前所在的 def/class 名（报告里说清是哪一段）
+        self.bad = []               # [(名字, 行号, 所在作用域)]
+
+    def _defined(self, name):
+        """查找链：最里层往外找；**类作用域只在"正处在类体里"那一层算**（Python 的规则）。"""
+        last = len(self._chain) - 1
+        for i in range(last, -1, -1):
+            kind, names = self._chain[i]
+            if kind == "class" and i != last:
+                continue            # 方法 / 嵌套函数看不到类体里的名字
+            if name in names:
+                return True
+        return False
+
+    def _push(self, kind, names, label):
+        self._chain.append((kind, set(names)))
+        self._labels.append(label)
+
+    def _pop(self):
+        self._chain.pop()
+        self._labels.pop()
+
+    def _where(self):
+        return ".".join(self._labels) if self._labels else "<module>"
+
+    def visit_Name(self, node):
+        if isinstance(node.ctx, ast.Load) and not self._defined(node.id):
+            self.bad.append((node.id, node.lineno, self._where()))
+
+    def visit_FunctionDef(self, node):
+        self._visit_function(node)
+
+    def visit_AsyncFunctionDef(self, node):
+        self._visit_function(node)
+
+    def _visit_function(self, node):
+        for sub in node.decorator_list:          # 装饰器 / 默认值 / 注解：外层作用域求值
+            self.visit(sub)
+        for sub in _func_default_exprs(node):
+            self.visit(sub)
+        self._push("func", _arg_names(node.args) | _bound_names(node.body), node.name)
+        try:
+            for stmt in node.body:
+                self.visit(stmt)
+        finally:
+            self._pop()
+
+    def visit_Lambda(self, node):
+        for sub in _func_default_exprs(node):
+            self.visit(sub)
+        self._push("func", _arg_names(node.args) | _bound_names([node.body]), "lambda")
+        try:
+            self.visit(node.body)
+        finally:
+            self._pop()
+
+    def visit_ClassDef(self, node):
+        for sub in node.decorator_list:
+            self.visit(sub)
+        for sub in list(node.bases) + [k.value for k in node.keywords]:
+            self.visit(sub)
+        self._push("class", _bound_names(node.body), node.name)
+        try:
+            for stmt in node.body:
+                self.visit(stmt)
+        finally:
+            self._pop()
+
+
+def check_undefined_names(files):
+    """扫"用了未导入 / 未定义的全局名"（N）→ (problems, notes)。
+
+    判据与盲区见上面 N 段说明；一条问题按 (文件, 名字) 合并，最多列 4 个行号。
+    """
+    problems, notes = [], []
+    for name, raw in files:
+        try:
+            tree = ast.parse(raw)
+        except SyntaxError:
+            continue
+        if any(isinstance(n, ast.ImportFrom) and any(a.name == "*" for a in n.names)
+               for n in ast.walk(tree)):
+            notes.append("N? %s 有 `from … import *` → 整份跳过（名字从哪来静态判不了）" % name)
+            continue
+        module_names = _bound_names(tree.body)
+        # 函数里 `global X` 声明过的名字：赋值落到模块命名空间，module 级用它不算未定义（保守）
+        module_names |= {g for n in ast.walk(tree) if isinstance(n, ast.Global) for g in n.names}
+        checker = _UndefNames(module_names, _UNDEF_OK_NAMES)
+        checker.visit(tree)
+        grouped = {}
+        for nm, ln, where in checker.bad:
+            grouped.setdefault(nm, {"lines": [], "where": where})["lines"].append(ln)
+        for nm in sorted(grouped):
+            info = grouped[nm]
+            lines = sorted(set(info["lines"]))
+            shown = ",".join(str(x) for x in lines[:4])
+            more = "" if len(lines) <= 4 else " 等 %d 处" % len(lines)
+            problems.append(
+                "N 未定义全局名 %s @ %s:%s%s（%s；既不在 import/定义/内置里，也不是局部变量"
+                " → 跑起来 NameError）" % (nm, name, shown, more, info["where"]))
+    return problems, notes
+
+
 def main():
     problems = []
     notes = []
@@ -784,6 +1004,11 @@ def main():
     _thr_p, _thr_n = check_thread_writes(files)
     problems.extend(_thr_p)
     notes.extend(_thr_n)
+
+    # ---------- N 未定义全局名（v2.8.0：QTimer 漏 import 这类 NameError 的系统性防线） ----------
+    _und_p, _und_n = check_undefined_names(files)
+    problems.extend(_und_p)
+    notes.extend(_und_n)
 
     print("=== 问题（必须修/确认）===")
     for p in sorted(set(problems)):

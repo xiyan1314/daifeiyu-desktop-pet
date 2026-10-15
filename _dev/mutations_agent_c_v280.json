@@ -1,0 +1,2222 @@
+{
+  "mutations": [
+    {
+      "id": "M-C-H01",
+      "why": "insecure_reason 恒返回空串 = 明文 http 全放行（远端只收 https 的单一判据被摘掉）",
+      "file": "pet_plugin_index.py",
+      "old": "    if is_insecure_remote(target):\n",
+      "new": "    if False:  # MUT-H01: insecure_reason 恒返回空串（明文 http 放行）\n",
+      "tests": [
+        "tests/test_plugin_market_v252.py::test_明文http一律拒_只收https"
+      ]
+    },
+    {
+      "id": "M-C-H02",
+      "why": "load_index 不再自己拒明文 http 的远端索引（在取数之前拒这一层没了）",
+      "file": "pet_plugin_index.py",
+      "old": "            bad = insecure_reason(self._index_url)\n            if bad:                     # v2.6.0（P2-a）：远端索引本身也只收 https\n                return None, bad\n",
+      "new": "            bad = \"\"  # MUT-H02: 远端索引本身不再拒明文 http\n",
+      "tests": [
+        "tests/test_plugin_market_v252.py::test_明文http一律拒_只收https"
+      ]
+    },
+    {
+      "id": "M-C-H03",
+      "why": "resolve_url 的绝对 http(s) 分支不再查 https（条目里的明文 http 包地址被放行）",
+      "file": "pet_plugin_index.py",
+      "old": "    if is_remote(url):\n        bad = insecure_reason(url)\n        if bad:\n            return None, bad\n        return \"http\", url\n",
+      "new": "    if is_remote(url):  # MUT-H03: 绝对 url 不再查 https\n        return \"http\", url\n",
+      "tests": [
+        "tests/test_plugin_market_v252.py::test_明文http一律拒_只收https"
+      ]
+    },
+    {
+      "id": "M-C-H04",
+      "why": "远端相对 url 拼出来之后不再查 https（拼接结果可以偷偷变成明文 http）",
+      "file": "pet_plugin_index.py",
+      "old": "        joined = urllib.parse.urljoin(base, url)\n        bad = insecure_reason(joined)\n        if bad:\n            return None, bad\n        return \"http\", joined\n",
+      "new": "        joined = urllib.parse.urljoin(base, url)  # MUT-H04: 拼接结果不再查 https\n        return \"http\", joined\n",
+      "tests": [
+        "tests/test_plugin_market_v252.py::test_明文http一律拒_只收https"
+      ]
+    },
+    {
+      "id": "M-C-H05",
+      "why": "远端索引指向本地路径不再拒（跨信任域：远端能指挥宿主读本机文件）",
+      "file": "pet_plugin_index.py",
+      "old": "        if base_remote:\n            return None, (\"远端索引指向了本地路径（跨信任域，拒绝）：%s\" % url)\n",
+      "new": "        if False:  # MUT-H05: 远端索引可以指向本地路径\n            return None, (\"远端索引指向了本地路径（跨信任域，拒绝）：%s\" % url)\n",
+      "tests": [
+        "tests/test_plugin_market_v252.py::test_远端索引不许指向本地路径_随包索引不受限"
+      ]
+    },
+    {
+      "id": "M-C-H06",
+      "why": "相对地址不再拒 .. / 空段 / 保留设备名（索引目录之外的文件可被取数）",
+      "file": "pet_plugin_index.py",
+      "old": "    why = _rel_url_reason(url)              # v2.6.0（P3-2）：.. / 空段 / 保留名一律拒\n    if why:\n        return None, \"相对地址不合法（%s）：%s\" % (why, url)\n",
+      "new": "    why = \"\"  # MUT-H06: 相对地址不再拒 .. / 空段 / 保留名\n",
+      "tests": [
+        "tests/test_plugin_market_v252.py::test_相对地址拒路径穿越与空段"
+      ]
+    },
+    {
+      "id": "M-C-H07",
+      "why": "file:// 折本机路径退回裸 url[7:]（/C:/x 在 Windows 上不是绝对路径）",
+      "file": "pet_plugin_index.py",
+      "old": "    tail = url[7:]\n    try:\n        if tail[:1] == \"/\" and _DRIVE_RE.match(tail[1:]):\n            tail = tail[1:]                 # /C:/x → C:/x（URL 口径 → 本机口径）\n        return urllib.request.url2pathname(tail) or tail\n    except Exception:\n        return tail\n",
+      "new": "    return url[7:]  # MUT-H07: 退回裸 url[7:]\n",
+      "tests": [
+        "tests/test_plugin_market_v252.py::test_file_url折成本机路径"
+      ]
+    },
+    {
+      "id": "M-C-H08",
+      "why": "远端 Content-Length 的前置上限判据被摘掉（对端自报超限也要先把内容读回来）",
+      "file": "pet_plugin_index.py",
+      "old": "            if total and total > cap:           # 前置：对端自己就说超了，不必读回来再判\n",
+      "new": "            if False:  # MUT-H08: 不看对端自报长度（前置判断被摘掉）\n",
+      "tests": [
+        "tests/test_plugin_market_v252.py::test_远端ContentLength自报超限_一个字节都不读"
+      ]
+    },
+    {
+      "id": "M-C-H09",
+      "why": "本地取数的上限退回\"整份读完再判\"（边读边判 + 到上限停手被拿掉）",
+      "file": "pet_plugin_index.py",
+      "old": "                    if done > cap:\n                        return None, \"取数内容超过上限（已读 %d 字节，上限 %d）——已丢弃\" % (done, cap)\n",
+      "new": "                    pass  # MUT-H09: 本地分支不再边读边判\n",
+      "tests": [
+        "tests/test_plugin_market_v252.py::test_本地取数边读边判_到上限就停手"
+      ]
+    },
+    {
+      "id": "M-C-H10",
+      "why": "注入取数（老契约 fetch(url)）拿回 bytes 后那条容量上限兜底被拿掉",
+      "file": "pet_plugin_index.py",
+      "old": "        guard = pet_export.EXPORT_MAX_BYTES\n        if len(data) > guard:\n            return None, (\"取数结果超过容量上限（%d 字节，上限 %d）——已丢弃\"\n                          % (len(data), guard))\n",
+      "new": "        pass  # MUT-H10: 注入取数不再有容量上限兜底\n",
+      "tests": [
+        "tests/test_plugin_market_v252.py::test_注入取数也有容量上限_超了不落盘"
+      ]
+    },
+    {
+      "id": "M-C-H11",
+      "why": "install_file 解包前不再走校验器（校验器是唯一真源：索引层这道门不能省）",
+      "file": "pet_plugin_index.py",
+      "old": "            manifest, verr = pet_plugin.validate_plugin_zip(path, self._host_version)\n",
+      "new": "            manifest, verr = None, \"\"  # MUT-H11: 索引层不再走校验器\n",
+      "tests": [
+        "tests/test_plugin_market_v252.py::test_下载后走校验器与安装器_真装进宿主库"
+      ]
+    },
+    {
+      "id": "M-C-B01",
+      "why": "set_remote_base 写盘失败时内存里的地址不许变（先改副本、成功才 update）",
+      "file": "pet_plugin_index.py",
+      "old": "        new = dict(cfg)                     # 先改副本（失败时内存不变）\n",
+      "new": "        new = cfg                            # MUT-B01: 直接改内存（写失败也不回滚）\n",
+      "tests": [
+        "tests/test_plugin_phase3_v280.py::test_set_remote_base_成功才提交_写失败内存不变"
+      ],
+      "expect_fail": [
+        "tests/test_plugin_phase3_v280.py::test_set_remote_base_成功才提交_写失败内存不变"
+      ]
+    },
+    {
+      "id": "M-C-B02",
+      "why": "空串清除远端时把它的本地缓存一并删掉（免得换个地址后串味）",
+      "file": "pet_plugin_index.py",
+      "old": "            self._drop_cache()              # 回随包索引：连这份缓存一起清（免得换个地址后串味）\n",
+      "new": "            pass  # MUT-B02: 回随包索引时不删远端缓存\n",
+      "tests": [
+        "tests/test_plugin_phase3_v280.py::test_set_remote_base_空串清除远端并丢掉它的缓存"
+      ],
+      "expect_fail": [
+        "tests/test_plugin_phase3_v280.py::test_set_remote_base_空串清除远端并丢掉它的缓存"
+      ]
+    },
+    {
+      "id": "M-C-B03",
+      "why": "set_remote_base 保存前必须过 remote_base_reason（只收 https / 不接本机路径 / 超长拒）",
+      "file": "pet_plugin_index.py",
+      "old": "            bad = remote_base_reason(text)\n            if bad:\n                return False, bad\n",
+      "new": "            bad = \"\"  # MUT-B03: set_remote_base 不再校验地址\n            if bad:\n                return False, bad\n",
+      "tests": [
+        "tests/test_plugin_phase3_v280.py::test_set_remote_base_非https与本地路径一律拒_且不落盘"
+      ],
+      "expect_fail": [
+        "tests/test_plugin_phase3_v280.py::test_set_remote_base_非https与本地路径一律拒_且不落盘"
+      ]
+    },
+    {
+      "id": "M-C-B04",
+      "why": "没接线（没注入 cfg_getter/save_cfg）时如实报错，不许假装存下",
+      "file": "pet_plugin_index.py",
+      "old": "        if self._cfg_getter is None or self._save_cfg is None:\n            return False, (\"索引地址没有接线（构造 PluginIndex 时要传 cfg_getter / save_cfg）——\"\n                           \"这次改动一个字节都没落盘\")\n",
+      "new": "        if self._cfg_getter is None or self._save_cfg is None:\n            self._index_url = text  # MUT-B04: 没接线也改内存（假装存下）\n            return True, \"已改用远端索引：%s\" % text\n",
+      "tests": [
+        "tests/test_plugin_phase3_v280.py::test_set_remote_base_没接线时如实报错不假装存下"
+      ],
+      "expect_fail": [
+        "tests/test_plugin_phase3_v280.py::test_set_remote_base_没接线时如实报错不假装存下"
+      ]
+    },
+    {
+      "id": "M-C-B05",
+      "why": "远端基址超长（> REMOTE_BASE_MAX_LEN）当场拒",
+      "file": "pet_plugin_index.py",
+      "old": "    if len(text) > REMOTE_BASE_MAX_LEN:\n        return \"索引地址太长（%d 个字符，最多 %d）\" % (len(text), REMOTE_BASE_MAX_LEN)\n",
+      "new": "    if False:  # MUT-B05: 地址超长不再拒\n        return \"索引地址太长（%d 个字符，最多 %d）\" % (len(text), REMOTE_BASE_MAX_LEN)\n",
+      "tests": [
+        "tests/test_plugin_phase3_v280.py::test_set_remote_base_非https与本地路径一律拒_且不落盘"
+      ],
+      "expect_fail": [
+        "tests/test_plugin_phase3_v280.py::test_set_remote_base_非https与本地路径一律拒_且不落盘"
+      ]
+    },
+    {
+      "id": "M-C-B06",
+      "why": "远端基址只收 https:// 前缀（ftp:// 等一律拒）",
+      "file": "pet_plugin_index.py",
+      "old": "    if not low.startswith(\"https://\"):\n        return \"远端索引地址只收 https 链接（当前：%s）\" % text\n",
+      "new": "    if False:  # MUT-B06: 非 https 前缀也放行（ftp:// 会被收下）\n        return \"远端索引地址只收 https 链接（当前：%s）\" % text\n",
+      "tests": [
+        "tests/test_plugin_phase3_v280.py::test_set_remote_base_非https与本地路径一律拒_且不落盘"
+      ],
+      "expect_fail": [
+        "tests/test_plugin_phase3_v280.py::test_set_remote_base_非https与本地路径一律拒_且不落盘"
+      ]
+    },
+    {
+      "id": "M-C-B07",
+      "why": "远端基址必须有主机名（https:///index.json 这类拼坏的地址拒） ｜ 2026-10-15 重锚：原锚点是 netloc 版判据，被 v2.8.0 的 F2 修复（_safe_urlsplit + hostname）替换 → 按现树重锚，语义不变（\"没有主机名要拒\"）。",
+      "file": "pet_plugin_index.py",
+      "old": "    if not parts.hostname:\n        return \"远端索引地址缺少主机名：%s\" % text\n",
+      "new": "    if False:  # MUT-B07: 没有主机名的地址也放行\n        return \"远端索引地址缺少主机名：%s\" % text\n",
+      "tests": [
+        "tests/test_plugin_phase3_v280.py::test_set_remote_base_非https与本地路径一律拒_且不落盘"
+      ],
+      "expect_fail": [
+        "tests/test_plugin_phase3_v280.py::test_set_remote_base_非https与本地路径一律拒_且不落盘"
+      ],
+      "reanchored_at": "2026-10-15 v2.8.0"
+    },
+    {
+      "id": "M-C-B08",
+      "why": "配置键名字面量单一来源（pet_config 再导出 pet_plugin_index 的那一份）",
+      "file": "pet_config.py",
+      "old": "PLUGIN_INDEX_URL_KEY = pet_plugin_index.PLUGIN_INDEX_URL_KEY\n",
+      "new": "PLUGIN_INDEX_URL_KEY = \"plugin_index_url_v2\"  # MUT-B08: 键名两处漂开\n",
+      "tests": [
+        "tests/test_plugin_phase3_v280.py::test_配置键名两处一致_单一来源"
+      ],
+      "expect_fail": [
+        "tests/test_plugin_phase3_v280.py::test_配置键名两处一致_单一来源"
+      ]
+    },
+    {
+      "id": "M-C-B09",
+      "why": "validate_plugin_index_url 走与取数同一个判据（不是第二套）",
+      "file": "pet_config.py",
+      "old": "    bad = pet_plugin_index.remote_base_reason(text)\n    if bad:\n        return False, bad\n    return True, \"\"\n",
+      "new": "    return True, \"\"  # MUT-B09: 界面校验放行一切非空地址\n",
+      "tests": [
+        "tests/test_plugin_phase3_v280.py::test_配置键名两处一致_单一来源"
+      ],
+      "expect_fail": [
+        "tests/test_plugin_phase3_v280.py::test_配置键名两处一致_单一来源"
+      ]
+    },
+    {
+      "id": "M-C-B10",
+      "why": "refresh 成功后必须把远端索引原子落地成本地缓存",
+      "file": "pet_plugin_index.py",
+      "old": "        werr = self._write_cache(target, raw)\n        if werr:\n            return False, \"远端索引取回来了，但本地缓存写盘失败：%s\" % werr, 0\n",
+      "new": "        werr = \"\"  # MUT-B10: 刷新成功却不落地缓存\n",
+      "tests": [
+        "tests/test_plugin_phase3_v280.py::test_refresh_取回校验落地并返回条目数"
+      ],
+      "expect_fail": [
+        "tests/test_plugin_phase3_v280.py::test_refresh_取回校验落地并返回条目数"
+      ]
+    },
+    {
+      "id": "M-C-B11",
+      "why": "refresh 的 count = 索引里列出的条目数（不是 0、不是可安装数）",
+      "file": "pet_plugin_index.py",
+      "old": "        return True, (\"远端索引已更新（共 %d 个插件，其中 %d 个可安装）\"\n                      % (len(entries), ready)), len(entries)\n",
+      "new": "        return True, (\"远端索引已更新（共 %d 个插件，其中 %d 个可安装）\"\n                      % (len(entries), ready)), 0  # MUT-B11: count 恒 0\n",
+      "tests": [
+        "tests/test_plugin_phase3_v280.py::test_refresh_取回校验落地并返回条目数"
+      ],
+      "expect_fail": [
+        "tests/test_plugin_phase3_v280.py::test_refresh_取回校验落地并返回条目数"
+      ]
+    },
+    {
+      "id": "M-C-B12",
+      "why": "force=False 命中缓存就不联网（force=True 才无条件重取）",
+      "file": "pet_plugin_index.py",
+      "old": "        if not force:\n            cached = self._read_cache(base)\n            if cached is not None:\n",
+      "new": "        if False:  # MUT-B12: 缓存短路被删（每次刷新都重取）\n            cached = self._read_cache(base)\n            if cached is not None:\n",
+      "tests": [
+        "tests/test_plugin_phase3_v280.py::test_refresh_force语义_命中缓存不联网_force强制重取"
+      ],
+      "expect_fail": [
+        "tests/test_plugin_phase3_v280.py::test_refresh_force语义_命中缓存不联网_force强制重取"
+      ]
+    },
+    {
+      "id": "M-C-B13",
+      "why": "随包模式（没有远端地址）点刷新 → 如实拒绝且一次都不联网",
+      "file": "pet_plugin_index.py",
+      "old": "        if not base:\n            return False, \"当前用的是随包索引（没有设置远端地址），没有可刷新的远端索引\", 0\n",
+      "new": "        if False:  # MUT-B13: 没有远端地址也去取数\n            return False, \"当前用的是随包索引（没有设置远端地址），没有可刷新的远端索引\", 0\n",
+      "tests": [
+        "tests/test_plugin_phase3_v280.py::test_refresh_没有远端地址时如实拒绝"
+      ],
+      "expect_fail": [
+        "tests/test_plugin_phase3_v280.py::test_refresh_没有远端地址时如实拒绝"
+      ]
+    },
+    {
+      "id": "M-C-B14",
+      "why": "刷新失败不许动盘上原有的缓存（可回退的物证）",
+      "file": "pet_plugin_index.py",
+      "old": "        if data is None:\n            return False, err or \"远端索引取数失败\", 0\n",
+      "new": "        if data is None:\n            self._drop_cache()  # MUT-B14: 刷新失败连旧缓存一起毁掉\n            return False, err or \"远端索引取数失败\", 0\n",
+      "tests": [
+        "tests/test_plugin_phase3_v280.py::test_refresh_失败不留假象_旧缓存与随包索引都不动"
+      ],
+      "expect_fail": [
+        "tests/test_plugin_phase3_v280.py::test_refresh_失败不留假象_旧缓存与随包索引都不动"
+      ]
+    },
+    {
+      "id": "M-C-B15",
+      "why": "生产口径（没注入 fetch）的 load_index 绝不联网：退回随包索引并如实标注来源",
+      "file": "pet_plugin_index.py",
+      "old": "            if self._fetch is None:\n                fallback, ferr = self._bundled_index_with_note()\n",
+      "new": "            if False:  # MUT-B15: 生产口径没缓存也去联网\n                fallback, ferr = self._bundled_index_with_note()\n",
+      "tests": [
+        "tests/test_plugin_phase3_v280.py::test_load_index_生产口径绝不联网_没缓存退回随包索引"
+      ],
+      "expect_fail": [
+        "tests/test_plugin_phase3_v280.py::test_load_index_生产口径绝不联网_没缓存退回随包索引"
+      ]
+    },
+    {
+      "id": "M-C-B16",
+      "why": "load_index 命中本地缓存就用它（远端清单落地后不再联网）",
+      "file": "pet_plugin_index.py",
+      "old": "            cached = self._read_cache(self._index_url)\n            if cached is not None:\n                return self._index_from_cache(cached)\n",
+      "new": "            cached = None  # MUT-B16: 缓存命中也不认\n",
+      "tests": [
+        "tests/test_plugin_phase3_v280.py::test_load_index_生产口径缓存命中就能用远端清单"
+      ],
+      "expect_fail": [
+        "tests/test_plugin_phase3_v280.py::test_load_index_生产口径缓存命中就能用远端清单"
+      ]
+    },
+    {
+      "id": "M-C-B17",
+      "why": "source_info 的 kind 按有没有远端地址如实报（bundled / remote）",
+      "file": "pet_plugin_index.py",
+      "old": "        info = {\"kind\": \"remote\" if base else \"bundled\", \"url\": base,\n",
+      "new": "        info = {\"kind\": \"bundled\", \"url\": base,  # MUT-B17: kind 写死 bundled\n",
+      "tests": [
+        "tests/test_plugin_phase3_v280.py::test_来源信息_随包与远端两种口径"
+      ],
+      "expect_fail": [
+        "tests/test_plugin_phase3_v280.py::test_来源信息_随包与远端两种口径"
+      ]
+    },
+    {
+      "id": "M-C-B18",
+      "why": "source_info 从本地缓存里取 updated_at / fetched_at / count / cached",
+      "file": "pet_plugin_index.py",
+      "old": "            cached = self._read_cache(base)\n            if cached is not None:\n                info[\"cached\"] = True\n",
+      "new": "            cached = None  # MUT-B18: source_info 不看缓存（updated_at / count 恒空）\n            if cached is not None:\n                info[\"cached\"] = True\n",
+      "tests": [
+        "tests/test_plugin_phase3_v280.py::test_来源信息_随包与远端两种口径"
+      ],
+      "expect_fail": [
+        "tests/test_plugin_phase3_v280.py::test_来源信息_随包与远端两种口径"
+      ]
+    },
+    {
+      "id": "M-C-B19",
+      "why": "refresh 取索引时把 INDEX_MAX_BYTES 当前置上限传进取数实现",
+      "file": "pet_plugin_index.py",
+      "old": "        data, err = self._fetch_bytes(target, self._progress, INDEX_MAX_BYTES)\n",
+      "new": "        data, err = self._fetch_bytes(target, self._progress)  # MUT-B19: 上限不前置\n",
+      "tests": [
+        "tests/test_plugin_phase3_v280.py::test_远端索引体积上限_前置传下去且事后仍判"
+      ],
+      "expect_fail": [
+        "tests/test_plugin_phase3_v280.py::test_远端索引体积上限_前置传下去且事后仍判"
+      ]
+    },
+    {
+      "id": "M-C-B20",
+      "why": "取回来之后仍要按 INDEX_MAX_BYTES 再判一次（前置只是止损）",
+      "file": "pet_plugin_index.py",
+      "old": "        if len(data) > INDEX_MAX_BYTES:     # 上限前置只是止损；这条事后判据仍是唯一口径\n",
+      "new": "        if False:  # MUT-B20: 事后上限判据被删（超限索引照收）\n",
+      "tests": [
+        "tests/test_plugin_phase3_v280.py::test_远端索引体积上限_前置传下去且事后仍判"
+      ],
+      "expect_fail": [
+        "tests/test_plugin_phase3_v280.py::test_远端索引体积上限_前置传下去且事后仍判"
+      ]
+    },
+    {
+      "id": "M-C-B21",
+      "why": "sha256 与索引不符一律拒收（v2.8.0 新链路 refresh→缓存→load_index→download 上复验；与 M-A01 同锚点、不同用例）",
+      "file": "pet_plugin_index.py",
+      "old": "        if got_sha != want_sha:\n",
+      "new": "        if False:  # MUT-B21: sha256 不符也收（v2.8.0 新链路用例）\n",
+      "tests": [
+        "tests/test_plugin_phase3_v280.py::test_远端包sha256与bytes不符一律拒收且不留残余"
+      ],
+      "expect_fail": [
+        "tests/test_plugin_phase3_v280.py::test_远端包sha256与bytes不符一律拒收且不留残余"
+      ]
+    },
+    {
+      "id": "M-C-B22",
+      "why": "下载字节数与索引声明不符一律拒收（与 M-A02 同一判据、不同用例）",
+      "file": "pet_plugin_index.py",
+      "old": "        if isinstance(want_bytes, int) and not isinstance(want_bytes, bool) \\\n                and len(data) != want_bytes:\n",
+      "new": "        if False:  # MUT-B22: bytes 不符也收（v2.8.0 新链路用例）\n",
+      "tests": [
+        "tests/test_plugin_phase3_v280.py::test_远端包sha256与bytes不符一律拒收且不留残余"
+      ],
+      "expect_fail": [
+        "tests/test_plugin_phase3_v280.py::test_远端包sha256与bytes不符一律拒收且不留残余"
+      ]
+    },
+    {
+      "id": "M-C-B23",
+      "why": "refresh 自己也要拒明文 http 基址（在取数之前），不依赖别处已经拦过",
+      "file": "pet_plugin_index.py",
+      "old": "        bad = insecure_reason(base)\n        if bad:\n            return False, bad, 0\n",
+      "new": "        bad = \"\"  # MUT-B23: refresh 不再拒非 https 基址\n        if bad:\n            return False, bad, 0\n",
+      "tests": [
+        "tests/test_plugin_phase3_v280.py::test_非https的远端地址_刷新前就拒且不取数"
+      ],
+      "expect_fail": [
+        "tests/test_plugin_phase3_v280.py::test_非https的远端地址_刷新前就拒且不取数"
+      ]
+    },
+    {
+      "id": "M-C-B24",
+      "why": "解析不了的远端索引整份拒（fail-closed）且不落地缓存",
+      "file": "pet_plugin_index.py",
+      "old": "        index, perr = parse_index(raw, target, self._host_version, self._kinds)\n        if index is None:\n            return False, \"远端索引用不了：%s\" % (perr or \"原因未知\"), 0\n",
+      "new": "        index, perr = parse_index(raw, target, self._host_version, self._kinds)\n        if index is None:\n            index = {\"entries\": []}  # MUT-B24: 坏索引照样落地\n",
+      "tests": [
+        "tests/test_plugin_phase3_v280.py::test_索引格式不认识_整份拒且不落地"
+      ],
+      "expect_fail": [
+        "tests/test_plugin_phase3_v280.py::test_索引格式不认识_整份拒且不落地"
+      ]
+    },
+    {
+      "id": "M-C-B25",
+      "why": "保存成功后生效地址（self._index_url）必须跟着变",
+      "file": "pet_plugin_index.py",
+      "old": "        cfg.update(new)                     # 写盘成功才提交进内存（键顺序与原地写逐位相同）\n        self._index_url = text\n",
+      "new": "        cfg.update(new)                     # MUT-B25: 提交内存时漏掉生效中的地址\n",
+      "tests": [
+        "tests/test_plugin_phase3_v280.py::test_set_remote_base_成功才提交_写失败内存不变"
+      ],
+      "expect_fail": [
+        "tests/test_plugin_phase3_v280.py::test_set_remote_base_成功才提交_写失败内存不变"
+      ]
+    },
+    {
+      "id": "M-C-B27",
+      "why": "配置写目录时真正取数的地址要拼上 index.json",
+      "file": "pet_plugin_index.py",
+      "old": "    return text.rstrip(\"/\") + \"/\" + INDEX_NAME\n",
+      "new": "    return text  # MUT-B27: 目录形态不再拼 index.json\n",
+      "tests": [
+        "tests/test_plugin_phase3_v280.py::test_refresh_取回校验落地并返回条目数"
+      ],
+      "expect_fail": [
+        "tests/test_plugin_phase3_v280.py::test_refresh_取回校验落地并返回条目数"
+      ]
+    },
+    {
+      "id": "M-C-B29",
+      "why": "normalize_plugin_index_url 把坏类型 / 空白归一到 \"\"",
+      "file": "pet_config.py",
+      "old": "    if isinstance(value, str):\n        return value.strip()\n    return str(value).strip()\n",
+      "new": "    return value  # MUT-B29: 不再归一（None / 数字原样流下去）\n",
+      "tests": [
+        "tests/test_plugin_phase3_v280.py::test_配置键名两处一致_单一来源"
+      ],
+      "expect_fail": [
+        "tests/test_plugin_phase3_v280.py::test_配置键名两处一致_单一来源"
+      ]
+    },
+    {
+      "id": "M-C-B30",
+      "why": "set_api_key 写盘失败时新 Key 不许进内存（先改副本、成功才 update）",
+      "file": "pet_ai.py",
+      "old": "            cfg = self._cfg()\n            new = dict(cfg)\n            new[\"api_key\"] = key\n            err = self._save_cfg(new)\n",
+      "new": "            cfg = self._cfg()\n            new = cfg            # MUT-B30: 直接改内存（写失败也在用新 Key）\n            new[\"api_key\"] = key\n            err = self._save_cfg(new)\n",
+      "tests": [
+        "tests/test_ai_write_first_v280.py::test_set_api_key_写失败_内存不变且不说记住了"
+      ],
+      "expect_fail": [
+        "tests/test_ai_write_first_v280.py::test_set_api_key_写失败_内存不变且不说记住了"
+      ]
+    },
+    {
+      "id": "M-C-B31",
+      "why": "set_api_key 成功路径与改前逐位等价（键顺序 / 盘上字节都不许变）",
+      "file": "pet_ai.py",
+      "old": "            new = dict(cfg)\n            new[\"api_key\"] = key\n",
+      "new": "            new = dict(sorted(cfg.items()))  # MUT-B31: 成功路径的键顺序被改动\n            new[\"api_key\"] = key\n",
+      "tests": [
+        "tests/test_ai_write_first_v280.py::test_set_api_key_成功路径与改前逐位等价"
+      ],
+      "expect_fail": [
+        "tests/test_ai_write_first_v280.py::test_set_api_key_成功路径与改前逐位等价"
+      ]
+    },
+    {
+      "id": "M-C-B32",
+      "why": "set_ai_enabled 写盘失败时开关状态不许进内存",
+      "file": "pet_ai.py",
+      "old": "        new = dict(cfg)\n        new[\"ai_enabled\"] = bool(on)\n",
+      "new": "        new = cfg                    # MUT-B32: 直接改内存（开关写失败也生效）\n        new[\"ai_enabled\"] = bool(on)\n",
+      "tests": [
+        "tests/test_ai_write_first_v280.py::test_set_ai_enabled_写失败_内存不变且不假装生效"
+      ],
+      "expect_fail": [
+        "tests/test_ai_write_first_v280.py::test_set_ai_enabled_写失败_内存不变且不假装生效"
+      ]
+    },
+    {
+      "id": "M-C-B33",
+      "why": "set_ai_enabled 第二次落盘（没 Key 把开关退回关）失败时不提交——盘与内存不许两个真相",
+      "file": "pet_ai.py",
+      "old": "                if not _bad2:\n                    cfg.update(new2)     # v2.8.0：这次写盘成功才提交（失败时内存保持第一次提交后的状态）\n",
+      "new": "                if True:  # MUT-B33: 第二次落盘失败也照样提交\n                    cfg.update(new2)     # v2.8.0：这次写盘成功才提交（失败时内存保持第一次提交后的状态）\n",
+      "tests": [
+        "tests/test_ai_write_first_v280.py::test_set_ai_enabled_无Key回退落盘失败_内存保持已提交值"
+      ],
+      "expect_fail": [
+        "tests/test_ai_write_first_v280.py::test_set_ai_enabled_无Key回退落盘失败_内存保持已提交值"
+      ]
+    },
+    {
+      "id": "M-C-B34",
+      "why": "set_chat_rounds 写盘失败时轮数不许进内存",
+      "file": "pet_ai.py",
+      "old": "        new = dict(cfg)\n        new[\"chat_memory_rounds\"] = val\n",
+      "new": "        new = cfg                    # MUT-B34: 直接改内存（轮数写失败也生效）\n        new[\"chat_memory_rounds\"] = val\n",
+      "tests": [
+        "tests/test_ai_write_first_v280.py::test_set_chat_rounds_写失败_内存不变且不报成功"
+      ],
+      "expect_fail": [
+        "tests/test_ai_write_first_v280.py::test_set_chat_rounds_写失败_内存不变且不报成功"
+      ]
+    },
+    {
+      "id": "M-C-B35",
+      "why": "set_chat_rounds 成功路径必须把新轮数提交进内存",
+      "file": "pet_ai.py",
+      "old": "        cfg.update(new)         # 写盘成功才提交进内存\n",
+      "new": "        pass  # MUT-B35: 成功路径不再提交进内存\n",
+      "tests": [
+        "tests/test_ai_write_first_v280.py::test_set_chat_rounds_成功路径落盘且内存同步"
+      ],
+      "expect_fail": [
+        "tests/test_ai_write_first_v280.py::test_set_chat_rounds_成功路径落盘且内存同步"
+      ]
+    },
+    {
+      "id": "M-C-B36",
+      "why": "set_api_key 写失败必须在 error.log 留痕",
+      "file": "pet_ai.py",
+      "old": "                self._log(\"ai set_api_key save failed: %s\" % (err,))\n",
+      "new": "                pass  # MUT-B36: set_api_key 写失败不再留痕\n",
+      "tests": [
+        "tests/test_ai_write_first_v280.py::test_set_api_key_写失败_内存不变且不说记住了"
+      ],
+      "expect_fail": [
+        "tests/test_ai_write_first_v280.py::test_set_api_key_写失败_内存不变且不说记住了"
+      ]
+    },
+    {
+      "id": "M-C-B37",
+      "why": "set_ai_enabled 写失败必须在 error.log 留痕",
+      "file": "pet_ai.py",
+      "old": "            self._log(\"ai set_ai_enabled save failed: %s\" % (err,))\n",
+      "new": "            pass  # MUT-B37: set_ai_enabled 写失败不再留痕\n",
+      "tests": [
+        "tests/test_ai_write_first_v280.py::test_set_ai_enabled_写失败_内存不变且不假装生效"
+      ],
+      "expect_fail": [
+        "tests/test_ai_write_first_v280.py::test_set_ai_enabled_写失败_内存不变且不假装生效"
+      ]
+    },
+    {
+      "id": "M-C-B38",
+      "why": "set_chat_rounds 写失败必须在 error.log 留痕",
+      "file": "pet_ai.py",
+      "old": "            self._log(\"ai set_chat_rounds save failed: %s\" % (err,))\n",
+      "new": "            pass  # MUT-B38: set_chat_rounds 写失败不再留痕\n",
+      "tests": [
+        "tests/test_ai_write_first_v280.py::test_set_chat_rounds_写失败_内存不变且不报成功"
+      ],
+      "expect_fail": [
+        "tests/test_ai_write_first_v280.py::test_set_chat_rounds_写失败_内存不变且不报成功"
+      ]
+    },
+    {
+      "id": "M-C-B39",
+      "why": "set_ai_enabled 第二次落盘失败必须在 error.log 留痕",
+      "file": "pet_ai.py",
+      "old": "                    self._log(\"ai set_ai_enabled rollback save failed: %s\"\n                              % (_err2 if isinstance(_err2, str) and _err2.strip()\n                                 else \"save callback returned False\"))\n",
+      "new": "                    pass  # MUT-B39: 第二次落盘失败不再留痕\n",
+      "tests": [
+        "tests/test_ai_write_first_v280.py::test_set_ai_enabled_无Key回退落盘失败_内存保持已提交值"
+      ],
+      "expect_fail": [
+        "tests/test_ai_write_first_v280.py::test_set_ai_enabled_无Key回退落盘失败_内存保持已提交值"
+      ]
+    },
+    {
+      "id": "M-C-B40",
+      "why": "默认值必须是空串：默认值的键不进 config.json 的 diff 落盘（逐字节回归）",
+      "file": "pet_config.py",
+      "old": "PLUGIN_INDEX_URL_DEFAULT = \"\"      # 空 = 只读**随包**索引（不联网、离线也装得上官方内容）\n",
+      "new": "PLUGIN_INDEX_URL_DEFAULT = \"https://default.invalid/index.json\"  # MUT-B40: 默认值非空（改变既有行为）\n",
+      "tests": [
+        "tests/test_plugin_phase3_v280.py::test_配置键默认值不进diff落盘_逐字节回归"
+      ],
+      "expect_fail": [
+        "tests/test_plugin_phase3_v280.py::test_配置键默认值不进diff落盘_逐字节回归"
+      ]
+    },
+    {
+      "id": "M-C-B41",
+      "why": "normalize_cfg 要把 plugin_index_url 归一到去空白的字符串",
+      "file": "pet_config.py",
+      "old": "    if PLUGIN_INDEX_URL_KEY in cfg:\n        cfg[PLUGIN_INDEX_URL_KEY] = normalize_plugin_index_url(cfg[PLUGIN_INDEX_URL_KEY])\n",
+      "new": "    pass  # MUT-B41: 配置里的索引地址不再归一（空白 / None 原样流下去）\n",
+      "tests": [
+        "tests/test_plugin_phase3_v280.py::test_配置键真的存得住_读得回来"
+      ],
+      "expect_fail": [
+        "tests/test_plugin_phase3_v280.py::test_配置键真的存得住_读得回来"
+      ]
+    },
+    {
+      "id": "M-C-B42",
+      "why": "键不在 cfg 里时不许凭空补上（会让老配置存一次就多出这个键）",
+      "file": "pet_config.py",
+      "old": "    if PLUGIN_INDEX_URL_KEY in cfg:\n        cfg[PLUGIN_INDEX_URL_KEY] = normalize_plugin_index_url(cfg[PLUGIN_INDEX_URL_KEY])\n",
+      "new": "    cfg.setdefault(PLUGIN_INDEX_URL_KEY, PLUGIN_INDEX_URL_DEFAULT)  # MUT-B42: 凭空增添量未知键\n    cfg[PLUGIN_INDEX_URL_KEY] = normalize_plugin_index_url(cfg[PLUGIN_INDEX_URL_KEY])\n",
+      "tests": [
+        "tests/test_plugin_phase3_v280.py::test_配置键真的存得住_读得回来"
+      ],
+      "expect_fail": [
+        "tests/test_plugin_phase3_v280.py::test_配置键真的存得住_读得回来"
+      ]
+    },
+    {
+      "id": "M-C-B43",
+      "why": "DEFAULT_CONFIG 是这个键的加载白名单：漏了它配置就存不住",
+      "file": "桌宠.py",
+      "old": "    \"plugin_index_url\": \"\",\n",
+      "new": "    # MUT-B43: 从加载白名单里删掉这个键（配置永远存不住，而且不报错）\n",
+      "tests": [
+        "tests/test_plugin_phase3_v280.py::test_真加载器_老config读入写出不冒出这个键"
+      ],
+      "expect_fail": [
+        "tests/test_plugin_phase3_v280.py::test_真加载器_老config读入写出不冒出这个键"
+      ]
+    },
+    {
+      "id": "M-C-A01",
+      "why": "远端索引还没取回来时，来源区要写清「还没取回来——点『刷新索引』」",
+      "file": "pet_dialogs.py",
+      "old": "                extra.append(\"还没取回来——点「刷新索引」\")\n",
+      "new": "                extra.append(\"远端索引\")  # MUT-A01: 没缓存却不告诉用户要点「刷新索引」\n",
+      "tests": [
+        "tests/test_dialogs_feedback_v280.py::test_source_shows_remote_from_config_without_network"
+      ],
+      "expect_fail": [
+        "tests/test_dialogs_feedback_v280.py::test_source_shows_remote_from_config_without_network"
+      ]
+    },
+    {
+      "id": "M-C-A02",
+      "why": "来源区按 kind=remote 显示远端索引（而不是一律显示随包索引）",
+      "file": "pet_dialogs.py",
+      "old": "        if str(info.get(\"kind\") or \"\") == \"remote\" and url:\n",
+      "new": "        if False:  # MUT-A02: 配了远端地址也显示成随包索引\n",
+      "tests": [
+        "tests/test_dialogs_feedback_v280.py::test_source_shows_remote_from_config_without_network"
+      ],
+      "expect_fail": [
+        "tests/test_dialogs_feedback_v280.py::test_source_shows_remote_from_config_without_network"
+      ]
+    },
+    {
+      "id": "M-C-A03",
+      "why": "空地址点「保存并使用」要当场拒绝，并指明要回随包索引得点「恢复默认」",
+      "file": "pet_dialogs.py",
+      "old": "        if not raw and not clearing:\n            self._source_failed(\"要填一个 https:// 开头的远端索引地址（填目录或 .json 都行）；\"\n                                \"想回到随包索引，请点「恢复默认（随包索引）」。\")\n            return False\n",
+      "new": "        if False:  # MUT-A03: 空地址也当成合法保存\n            self._source_failed(\"要填一个 https:// 开头的远端索引地址（填目录或 .json 都行）；\"\n                                \"想回到随包索引，请点「恢复默认（随包索引）」。\")\n            return False\n",
+      "tests": [
+        "tests/test_dialogs_feedback_v280.py::test_empty_save_is_rejected_and_points_at_reset"
+      ],
+      "expect_fail": [
+        "tests/test_dialogs_feedback_v280.py::test_empty_save_is_rejected_and_points_at_reset"
+      ]
+    },
+    {
+      "id": "M-C-A04",
+      "why": "界面这一道地址校验（非 https / 本地路径 / file:// / 无主机 / 超长）必须当场拒绝",
+      "file": "pet_dialogs.py",
+      "old": "        ok, reason = pet_config.validate_plugin_index_url(raw)\n        if not ok:\n            self._source_failed(reason)\n            return False\n",
+      "new": "        ok, reason = pet_config.validate_plugin_index_url(raw)\n        if False:  # MUT-A04: 界面不再校验地址\n            self._source_failed(reason)\n            return False\n",
+      "tests": [
+        "tests/test_dialogs_feedback_v280.py::test_bad_source_url_is_rejected_on_the_spot_with_a_reason"
+      ],
+      "expect_fail": [
+        "tests/test_dialogs_feedback_v280.py::test_bad_source_url_is_rejected_on_the_spot_with_a_reason"
+      ]
+    },
+    {
+      "id": "M-C-A05",
+      "why": "后端回 (False, msg) 时界面要如实回报失败（不关窗、不报成功气泡）",
+      "file": "pet_dialogs.py",
+      "old": "        if not (isinstance(res, (tuple, list)) and res and res[0]):\n            msg = \"\"\n            if isinstance(res, (tuple, list)) and len(res) > 1 and res[1]:\n                msg = str(res[1])\n            self._source_failed(msg or \"索引来源没能保存（详情见数据目录的 error.log）。\")\n            return False\n",
+      "new": "        if False:  # MUT-A05: 后端说写失败也当成成功\n            pass\n",
+      "tests": [
+        "tests/test_dialogs_feedback_v280.py::test_backend_write_failure_keeps_window_and_reports_the_reason"
+      ],
+      "expect_fail": [
+        "tests/test_dialogs_feedback_v280.py::test_backend_write_failure_keeps_window_and_reports_the_reason"
+      ]
+    },
+    {
+      "id": "M-C-A06",
+      "why": "后端没有 set_remote_base 时给一句人话（点名 set_remote_base），绝不抛异常",
+      "file": "pet_dialogs.py",
+      "old": "        fn = getattr(idx, \"set_remote_base\", None)\n        if not callable(fn):\n            self._source_failed(\"这个版本的后端还没接线（set_remote_base 不存在），改不了索引来源。\")\n            return False\n",
+      "new": "        fn = getattr(idx, \"set_remote_base\", None)\n        if False:  # MUT-A06: 后端没接线也硬调\n            self._source_failed(\"这个版本的后端还没接线（set_remote_base 不存在），改不了索引来源。\")\n            return False\n",
+      "tests": [
+        "tests/test_dialogs_feedback_v280.py::test_backend_without_set_remote_base_degrades_with_a_human_message"
+      ],
+      "expect_fail": [
+        "tests/test_dialogs_feedback_v280.py::test_backend_without_set_remote_base_degrades_with_a_human_message"
+      ]
+    },
+    {
+      "id": "M-C-A07",
+      "why": "用户填的地址去空白之后才交给后端（后端收到的就是归一值）",
+      "file": "pet_dialogs.py",
+      "old": "        raw = pet_config.normalize_plugin_index_url(url)\n",
+      "new": "        raw = str(url or \"\")  # MUT-A07: 不再去空白再交给后端\n",
+      "tests": [
+        "tests/test_dialogs_feedback_v280.py::test_saving_a_good_url_uses_the_backend_and_tells_the_next_step"
+      ],
+      "expect_fail": [
+        "tests/test_dialogs_feedback_v280.py::test_saving_a_good_url_uses_the_backend_and_tells_the_next_step"
+      ]
+    },
+    {
+      "id": "M-C-A08",
+      "why": "对话框现造的索引器注入的 save_cfg 必须**真的写盘**（换成空转 = 配置一个字节都没落）",
+      "file": "pet_dialogs.py",
+      "old": "    save = _get(pet, \"save_config\")\n    if callable(save):\n        return save\n",
+      "new": "    save = _get(pet, \"save_config\")\n    if callable(save):\n        return (lambda cfg: None)  # MUT-A08: 写配置的回调被换成空转\n",
+      "tests": [
+        "tests/test_dialogs_feedback_v280.py::test_dialog_wires_cfg_read_and_write_into_the_backend"
+      ],
+      "expect_fail": [
+        "tests/test_dialogs_feedback_v280.py::test_dialog_wires_cfg_read_and_write_into_the_backend"
+      ]
+    },
+    {
+      "id": "M-C-A09",
+      "why": "统一 (ok, msg) 口径：refresh 回 None 也算失败（不写 is not True）",
+      "file": "pet_dialogs.py",
+      "old": "    if not (isinstance(res, (tuple, list)) and res):\n        return False, \"索引刷新没有拿到结果（详情见数据目录的 error.log）\", 0\n",
+      "new": "    if res is None:\n        return True, \"\", 0  # MUT-A09: None 被当成成功\n    if not (isinstance(res, (tuple, list)) and res):\n        return False, \"索引刷新没有拿到结果（详情见数据目录的 error.log）\", 0\n",
+      "tests": [
+        "tests/test_dialogs_feedback_v280.py::test_refresh_missing_result_is_treated_as_failure"
+      ],
+      "expect_fail": [
+        "tests/test_dialogs_feedback_v280.py::test_refresh_missing_result_is_treated_as_failure"
+      ]
+    },
+    {
+      "id": "M-C-A10",
+      "why": "刷新失败必须保留「恢复默认（随包索引）」这条回退路径（内联状态行里也要有）",
+      "file": "pet_dialogs.py",
+      "old": "        self._set_hint(\"⚠ %s　可点「恢复默认（随包索引）」回到随包索引——它随程序出货，\"\n                       \"离线也能用。\" % text)\n",
+      "new": "        self._set_hint(\"⚠ %s\" % text)  # MUT-A10: 失败提示里不再给出回退的路\n",
+      "tests": [
+        "tests/test_dialogs_feedback_v280.py::test_refresh_failure_shows_the_reason_and_keeps_a_way_back"
+      ],
+      "expect_fail": [
+        "tests/test_dialogs_feedback_v280.py::test_refresh_failure_shows_the_reason_and_keeps_a_way_back"
+      ]
+    },
+    {
+      "id": "M-C-A11",
+      "why": "刷新失败走失败分支（表格一个字节都不动 + 人话原因 + 回退路径）",
+      "file": "pet_dialogs.py",
+      "old": "        ok, msg, count = _source_result(res)\n        if not ok:\n",
+      "new": "        ok, msg, count = _source_result(res)\n        if False:  # MUT-A11: 刷新失败也走成功分支\n",
+      "tests": [
+        "tests/test_dialogs_feedback_v280.py::test_refresh_failure_shows_the_reason_and_keeps_a_way_back"
+      ],
+      "expect_fail": [
+        "tests/test_dialogs_feedback_v280.py::test_refresh_failure_shows_the_reason_and_keeps_a_way_back"
+      ]
+    },
+    {
+      "id": "M-C-A12",
+      "why": "刷新成功后「可安装」列表必须真的重画",
+      "file": "pet_dialogs.py",
+      "old": "                self._apply_index(data, err)\n                self._index_refresh_ok(msg, count)\n",
+      "new": "                pass  # MUT-A12: 刷新成功但不重画列表\n                self._index_refresh_ok(msg, count)\n",
+      "tests": [
+        "tests/test_dialogs_feedback_v280.py::test_refresh_success_reports_count_and_repaints_the_list"
+      ],
+      "expect_fail": [
+        "tests/test_dialogs_feedback_v280.py::test_refresh_success_reports_count_and_repaints_the_list"
+      ]
+    },
+    {
+      "id": "M-C-A13",
+      "why": "远端取数必须在别的线程跑（不许卡界面），结果回主线程槽才动机",
+      "file": "pet_dialogs.py",
+      "old": "                threading.Thread(target=self._source_worker, args=(gen, idx, bool(manual)),\n                                 daemon=True).start()\n",
+      "new": "                self._source_worker(gen, idx, bool(manual))  # MUT-A13: 取数跑在主线程上\n",
+      "tests": [
+        "tests/test_dialogs_feedback_v280.py::test_refresh_runs_off_the_main_thread_and_lands_on_it"
+      ],
+      "expect_fail": [
+        "tests/test_dialogs_feedback_v280.py::test_refresh_runs_off_the_main_thread_and_lands_on_it"
+      ]
+    },
+    {
+      "id": "M-C-A14",
+      "why": "force 口径：手动刷新 force=True 无条件重取、自动补取 force=False 优先用缓存",
+      "file": "pet_dialogs.py",
+      "old": "                threading.Thread(target=self._source_worker, args=(gen, idx, bool(manual)),\n",
+      "new": "                threading.Thread(target=self._source_worker, args=(gen, idx, True),\n",
+      "tests": [
+        "tests/test_dialogs_feedback_v280.py::test_manual_refresh_forces_and_auto_refresh_prefers_cache"
+      ],
+      "expect_fail": [
+        "tests/test_dialogs_feedback_v280.py::test_manual_refresh_forces_and_auto_refresh_prefers_cache"
+      ]
+    },
+    {
+      "id": "M-C-A15",
+      "why": "_toast：show_bubble 如实回报 False 时必须返回 False 并走兜底",
+      "file": "pet_dialogs.py",
+      "old": "    if res is False:\n        _toast_fallback(text, status)\n        return False\n",
+      "new": "    if False:  # MUT-A15: 回调说没显示也当成功\n        _toast_fallback(text, status)\n        return False\n",
+      "tests": [
+        "tests/test_dialogs_feedback_v280.py::test_toast_returns_false_and_logs_when_bubble_is_refused",
+        "tests/test_dialogs_feedback_v280.py::test_toast_falls_back_to_the_dialog_status_line"
+      ],
+      "expect_fail": [
+        "tests/test_dialogs_feedback_v280.py::test_toast_returns_false_and_logs_when_bubble_is_refused",
+        "tests/test_dialogs_feedback_v280.py::test_toast_falls_back_to_the_dialog_status_line"
+      ]
+    },
+    {
+      "id": "M-C-A16",
+      "why": "_toast 兜底第二条出口：调用方给了状态行就写进去（用户仍能在窗口里看到）",
+      "file": "pet_dialogs.py",
+      "old": "    if status is not None:\n        try:\n            status.setText(str(text))\n            return True\n",
+      "new": "    if status is not None:\n        try:\n            return True  # MUT-A16: 有状态行却不写进去\n",
+      "tests": [
+        "tests/test_dialogs_feedback_v280.py::test_toast_falls_back_to_the_dialog_status_line"
+      ],
+      "expect_fail": [
+        "tests/test_dialogs_feedback_v280.py::test_toast_falls_back_to_the_dialog_status_line"
+      ]
+    },
+    {
+      "id": "M-C-A17",
+      "why": "_toast 兜底第一条出口：限流日志（没有状态行时也要留痕）",
+      "file": "pet_dialogs.py",
+      "old": "    pet_log.log_throttled(\"toast:\" + str(text)[:60],\n                          \"气泡回执没能显示（宠物窗口正在退出？）：%s\" % (text,),\n                          gap=TOAST_FALLBACK_LOG_GAP)\n",
+      "new": "    pass  # MUT-A17: 气泡被拒后连日志都不留\n",
+      "tests": [
+        "tests/test_dialogs_feedback_v280.py::test_toast_returns_false_and_logs_when_bubble_is_refused"
+      ],
+      "expect_fail": [
+        "tests/test_dialogs_feedback_v280.py::test_toast_returns_false_and_logs_when_bubble_is_refused"
+      ]
+    },
+    {
+      "id": "M-C-A18",
+      "why": "桌宠.show_bubble 在 _closing 早退分支必须返回 False（不许谎报弹过了）",
+      "file": "桌宠.py",
+      "old": "        if self._closing:\n            return False  # P1-5：退出后不再弹气泡（在途信号守卫）\n",
+      "new": "        if self._closing:\n            return True  # MUT-A18: 退出守卫下谎报弹过了\n",
+      "tests": [
+        "tests/test_dialogs_feedback_v280.py::test_show_bubble_reports_false_while_closing",
+        "tests/test_dialogs_feedback_v280.py::test_toast_returns_false_and_logs_when_bubble_is_refused"
+      ],
+      "expect_fail": [
+        "tests/test_dialogs_feedback_v280.py::test_show_bubble_reports_false_while_closing",
+        "tests/test_dialogs_feedback_v280.py::test_toast_returns_false_and_logs_when_bubble_is_refused"
+      ]
+    },
+    {
+      "id": "M-C-A19",
+      "why": "「＋合成…」内联框必须有「取消」，且取消真的放弃编辑（reject 不留半截）",
+      "file": "pet_dialogs.py",
+      "old": "        cancel = QPushButton(\"取消\")\n        cancel.clicked.connect(dlg.reject)\n",
+      "new": "        cancel = QPushButton(\"确定\")  # MUT-A19: 合成框没有「取消」按钮（只能 Esc / × 退出）\n        cancel.clicked.connect(dlg.accept)\n",
+      "tests": [
+        "tests/test_dialogs_feedback_v280.py::test_compose_dialog_has_cancel_and_reject_adds_nothing"
+      ],
+      "expect_fail": [
+        "tests/test_dialogs_feedback_v280.py::test_compose_dialog_has_cancel_and_reject_adds_nothing"
+      ]
+    },
+    {
+      "id": "M-C-A20",
+      "why": "_ask_item 取消时回 (\"\", False)，不许把手上的选中项当成用户的选择",
+      "file": "pet_dialogs.py",
+      "old": "    dlg.setTextValue(items[idx])\n    dlg.setStyleSheet(DIALOG_QSS)\n    ok = modal(dlg) == QDialog.DialogCode.Accepted\n    return (dlg.textValue() if ok else \"\"), ok\n",
+      "new": "    dlg.setTextValue(items[idx])\n    dlg.setStyleSheet(DIALOG_QSS)\n    return dlg.textValue(), True  # MUT-A20: 取消也当成选了\n",
+      "tests": [
+        "tests/test_dialogs_feedback_v280.py::test_ask_helpers_go_through_modal"
+      ],
+      "expect_fail": [
+        "tests/test_dialogs_feedback_v280.py::test_ask_helpers_go_through_modal"
+      ]
+    },
+    {
+      "id": "M-C-A21",
+      "why": "_ask_text 必须走 modal()（静态 QInputDialog.getText 拿不到置顶 + 抢焦点）",
+      "file": "pet_dialogs.py",
+      "old": "    dlg.setTextValue(str(default or \"\"))\n    dlg.setStyleSheet(DIALOG_QSS)\n    ok = modal(dlg) == QDialog.DialogCode.Accepted\n    return (dlg.textValue() if ok else \"\"), ok\n",
+      "new": "    dlg.setTextValue(str(default or \"\"))\n    dlg.setStyleSheet(DIALOG_QSS)\n    ok = True  # MUT-A21: 不走 modal（静态框的老毛病）\n    return (dlg.textValue() if ok else \"\"), ok\n",
+      "tests": [
+        "tests/test_dialogs_feedback_v280.py::test_ask_helpers_go_through_modal"
+      ],
+      "expect_fail": [
+        "tests/test_dialogs_feedback_v280.py::test_ask_helpers_go_through_modal"
+      ]
+    },
+    {
+      "id": "M-C-A22",
+      "why": "静态 QInputDialog.getText 只剩帧动作那一处（其余 5 处一律走 _ask_text/_ask_item + modal）",
+      "file": "pet_dialogs.py",
+      "old": "        name, ok = _ask_text(self._parent_widget(), \"重命名声音素材\", \"新名字：\",\n                             cur.get(\"name\", \"\"))\n",
+      "new": "        name, ok = QInputDialog.getText(self._parent_widget(), \"重命名声音素材\", \"新名字：\", text=cur.get(\"name\", \"\"))  # MUT-A22: 退回静态 getText\n",
+      "tests": [
+        "tests/test_dialogs_feedback_v280.py::test_static_input_dialogs_are_gone_except_the_frame_action_one"
+      ],
+      "expect_fail": [
+        "tests/test_dialogs_feedback_v280.py::test_static_input_dialogs_are_gone_except_the_frame_action_one"
+      ]
+    },
+    {
+      "id": "M-C-A23",
+      "why": "P3-6 文案对照表：「新建…」与「添加/＋…」各一套措辞，不许混用",
+      "file": "pet_dialogs.py",
+      "old": "    if text.startswith(\"新建\"):\n        btn.setToolTip(BTN_NEW_TIP)\n    elif text.startswith(\"添加\") or text.startswith(\"＋\"):\n        btn.setToolTip(BTN_ADD_TIP)\n",
+      "new": "    if text.startswith(\"新建\"):\n        btn.setToolTip(BTN_ADD_TIP)  # MUT-A23: 新建/添加两套措辞又混用\n",
+      "tests": [
+        "tests/test_dialogs_feedback_v280.py::test_wording_table_is_applied_to_new_and_add_buttons"
+      ],
+      "expect_fail": [
+        "tests/test_dialogs_feedback_v280.py::test_wording_table_is_applied_to_new_and_add_buttons"
+      ]
+    },
+    {
+      "id": "M-C-A24",
+      "why": "_add_form 要如实回报加没加上（被拒的那次不许发「已添加」回执）",
+      "file": "pet_dialogs.py",
+      "old": "        if len(self._form_rows) >= 8:\n            _warn(self, \"形态\", \"最多 8 个形态\")\n            return False\n",
+      "new": "        if len(self._form_rows) >= 8:\n            _warn(self, \"形态\", \"最多 8 个形态\")\n            return True  # MUT-A24: 被拒的那次也回「已添加」\n",
+      "tests": [
+        "tests/test_dialogs_feedback_v280.py::test_import_wizard_add_form_gives_a_receipt_and_construction_stays_quiet"
+      ],
+      "expect_fail": [
+        "tests/test_dialogs_feedback_v280.py::test_import_wizard_add_form_gives_a_receipt_and_construction_stays_quiet"
+      ]
+    },
+    {
+      "id": "M-C-A25",
+      "why": "N14：「＋ 添加形态」成功后要给回执（内联状态行，含名字与总数）",
+      "file": "pet_dialogs.py",
+      "old": "        self._notes.setText(\"已添加「%s」（共 %d 个，最多 8 个）：改好名字、选好图，\"\n                            \"最后点「导入」。\" % (self._form_rows[-1].get(\"name\") or \"\", n))\n",
+      "new": "        pass  # MUT-A25: 加了形态却没有回执\n",
+      "tests": [
+        "tests/test_dialogs_feedback_v280.py::test_import_wizard_add_form_gives_a_receipt_and_construction_stays_quiet"
+      ],
+      "expect_fail": [
+        "tests/test_dialogs_feedback_v280.py::test_import_wizard_add_form_gives_a_receipt_and_construction_stays_quiet"
+      ]
+    },
+    {
+      "id": "M-C-A26",
+      "why": "P3-5/S15：清除事件片段要二次确认（带事件名与后果），取消时一片不动",
+      "file": "pet_dialogs.py",
+      "old": "        label = self._event_label(key)\n        if not _confirm(self, \"清除语音片段\",\n                        \"清除「%s」的事件片段吗？\\n\\n\"\n                        \"· 只清这一行：这个事件以后不再播音效（其它事件不受影响）；\\n\"\n                        \"· **只解除引用，不删磁盘上的音频文件**——文件还在你原来的位置。\" % label):\n            return False\n",
+      "new": "        label = self._event_label(key)  # MUT-A26: 清除片段不再二次确认\n",
+      "tests": [
+        "tests/test_dialogs_feedback_v280.py::test_voice_event_import_receipt_and_clear_confirm"
+      ],
+      "expect_fail": [
+        "tests/test_dialogs_feedback_v280.py::test_voice_event_import_receipt_and_clear_confirm"
+      ]
+    },
+    {
+      "id": "M-C-A27",
+      "why": "S15：清除成功后要有回执（含事件名，并说明没删磁盘上的文件）",
+      "file": "pet_dialogs.py",
+      "old": "        _toast(self._pet, \"已清除「%s」的事件片段（音频文件没删）\" % label)\n",
+      "new": "        pass  # MUT-A27: 清除片段成功零回执\n",
+      "tests": [
+        "tests/test_dialogs_feedback_v280.py::test_voice_event_import_receipt_and_clear_confirm"
+      ],
+      "expect_fail": [
+        "tests/test_dialogs_feedback_v280.py::test_voice_event_import_receipt_and_clear_confirm"
+      ]
+    },
+    {
+      "id": "M-C-A28",
+      "why": "S14：导入事件片段成功后要有回执",
+      "file": "pet_dialogs.py",
+      "old": "        _toast(self._pet, \"「%s」的事件片段已配好（立即生效）\" % self._event_label(key))\n",
+      "new": "        pass  # MUT-A28: 导入片段成功零回执\n",
+      "tests": [
+        "tests/test_dialogs_feedback_v280.py::test_voice_event_import_receipt_and_clear_confirm"
+      ],
+      "expect_fail": [
+        "tests/test_dialogs_feedback_v280.py::test_voice_event_import_receipt_and_clear_confirm"
+      ]
+    },
+    {
+      "id": "M-C-A29",
+      "why": "D9：对白「移除」成员成功后要给回执（含名字与「台词本身不受影响」）",
+      "file": "pet_dialogs.py",
+      "old": "        _toast(self._pet, \"已从对白里移除：%s（台词本身不受影响）\" % (_gone_text[:24] or \"这条台词\"))\n",
+      "new": "        pass  # MUT-A29: 移除对白成员零回执\n",
+      "tests": [
+        "tests/test_dialogs_feedback_v280.py::test_dialogue_remove_member_reports_what_was_removed"
+      ],
+      "expect_fail": [
+        "tests/test_dialogs_feedback_v280.py::test_dialogue_remove_member_reports_what_was_removed"
+      ]
+    },
+    {
+      "id": "M-C-A30",
+      "why": "D14：删自定义动作要二次确认（说明是暂存态、点名动作名），取消时动作还在",
+      "file": "pet_dialogs.py",
+      "old": "        if not _confirm(self, \"删除自定义动作\",\n                        \"把「%s」（%s动作）从当前形态里删掉吗？\\n\\n\"\n                        \"· 这一步只是**暂存**，还没写进角色；\\n\"\n                        \"· 删错了点「取消」或关掉这个窗口，本次全部改动（含这次删除）都会被放弃；\\n\"\n                        \"· 点「保存」才会真的落盘。\" % (name, kind or \"未知\")):\n            return\n",
+      "new": "        if False:  # MUT-A30: 删自定义动作不再二次确认\n            return\n",
+      "tests": [
+        "tests/test_dialogs_feedback_v280.py::test_role_edit_delete_action_needs_confirm_and_reports"
+      ],
+      "expect_fail": [
+        "tests/test_dialogs_feedback_v280.py::test_role_edit_delete_action_needs_confirm_and_reports"
+      ]
+    },
+    {
+      "id": "M-C-A31",
+      "why": "D14：删自定义动作成功后要给回执（含动作名）",
+      "file": "pet_dialogs.py",
+      "old": "            _toast(self._pet, \"已删除自定义动作「%s」（保存后生效）\" % name)\n",
+      "new": "            pass  # MUT-A31: 删自定义动作成功零回执\n",
+      "tests": [
+        "tests/test_dialogs_feedback_v280.py::test_role_edit_delete_action_toasts_with_a_pet"
+      ],
+      "expect_fail": [
+        "tests/test_dialogs_feedback_v280.py::test_role_edit_delete_action_toasts_with_a_pet"
+      ]
+    },
+    {
+      "id": "M-C-A32",
+      "why": "「恢复默认（随包索引）」成功后要给一句回执",
+      "file": "pet_dialogs.py",
+      "old": "            _toast(self.pet, back or \"已恢复为随包索引（不联网）\", status=self._hint)\n",
+      "new": "            pass  # MUT-A32: 恢复默认后不给回执\n",
+      "tests": [
+        "tests/test_dialogs_feedback_v280.py::test_reset_to_bundled_takes_effect_and_reports"
+      ],
+      "expect_fail": [
+        "tests/test_dialogs_feedback_v280.py::test_reset_to_bundled_takes_effect_and_reports"
+      ]
+    },
+    {
+      "id": "M-C-B44",
+      "why": "审计 §5 第 4 行（S20/P3-3）：add_manual_record 的 except 必须给用户一句可见提示（不能只写日志）",
+      "file": "pet_balance.py",
+      "old": "                pet.show_bubble(\"「记一笔」打不开：%s\\n（详情见数据目录的 error.log）\" % (e,))",
+      "new": "                pass  # MUT-B44: 对话框构建失败又变成「点了没反应」\n",
+      "tests": [
+        "tests/test_balance_feedback_v280.py::test_对话框构建失败_有可见提示与日志"
+      ],
+      "expect_fail": [
+        "tests/test_balance_feedback_v280.py::test_对话框构建失败_有可见提示与日志"
+      ]
+    },
+    {
+      "id": "M-C-B45",
+      "why": "审计 §5 第 4 行（S20/P3-3）：金额 <= 0 要说明「这笔没有记」，不许静默",
+      "file": "pet_balance.py",
+      "old": "                    pet.show_bubble(\"金额要大于 0 才记得上哦~（这笔没有记）\")",
+      "new": "                    pass  # MUT-B45: 金额<=0 又变成静默丢弃\n",
+      "tests": [
+        "tests/test_balance_feedback_v280.py::test_金额不大于零_给提示且绝不记账"
+      ],
+      "expect_fail": [
+        "tests/test_balance_feedback_v280.py::test_金额不大于零_给提示且绝不记账"
+      ]
+    },
+    {
+      "id": "M-C-B46",
+      "why": "_read_cache 必须比对 source_url：换过地址之后不许把 A 站的清单当成 B 站的显示给用户",
+      "file": "pet_plugin_index.py",
+      "old": "        if str(data.get(\"source_url\") or \"\") != (index_url_of(base) or str(base or \"\")):\n            return None\n",
+      "new": "        if False:  # MUT-B46: 缓存不认地址（换个站点会串味）\n            return None\n",
+      "tests": [
+        "tests/test_plugin_phase3_v280.py::test_换站点后旧站点的缓存不许冒充新站点"
+      ],
+      "expect_fail": [
+        "tests/test_plugin_phase3_v280.py::test_换站点后旧站点的缓存不许冒充新站点"
+      ]
+    },
+    {
+      "id": "M-C-B47",
+      "why": "index_url_of：配置直接填 .json 地址时原样用，不再往后拼一层 index.json",
+      "file": "pet_plugin_index.py",
+      "old": "    if parts.path.lower().endswith(\".json\"):\n        return text\n    return text.rstrip(\"/\") + \"/\" + INDEX_NAME\n",
+      "new": "    return text.rstrip(\"/\") + \"/\" + INDEX_NAME  # MUT-B47: 去掉 .json 直通分支（会拼成 .../index.json/index.json）\n",
+      "tests": [
+        "tests/test_plugin_phase3_v280.py::test_直接填index_json地址也收_不重复拼路径"
+      ],
+      "expect_fail": [
+        "tests/test_plugin_phase3_v280.py::test_直接填index_json地址也收_不重复拼路径"
+      ]
+    },
+    {
+      "id": "M-C-B48",
+      "why": "远端没缓存、随包也读不出来时，两条原因都要说清（该用例断言原太弱、抓不住这条 —— 代理 C 报出后 B 已收紧）",
+      "file": "pet_plugin_index.py",
+      "old": "                return None, (\"远端索引还没取回来（点「刷新索引」）；%s\"\n                              % (ferr or \"随包索引也读不出来\"))\n",
+      "new": "                return None, \"远端索引还没取回来（点「刷新索引」）\"  # MUT-B48: 组合错误只报一半\n",
+      "tests": [
+        "tests/test_plugin_phase3_v280.py::test_load_index_随包也读不出来时把两条原因都说清"
+      ],
+      "expect_fail": [
+        "tests/test_plugin_phase3_v280.py::test_load_index_随包也读不出来时把两条原因都说清"
+      ]
+    },
+    {
+      "id": "M-C-A33",
+      "why": "N12/N13「视口外」：动作列表限高 80px，新增后必须选中新条目并滚到可见处",
+      "file": "pet_dialogs.py",
+      "old": "        if not select:\n            return\n",
+      "new": "        if True:  # MUT-A33: 新动作不选中也不滚进视口\n            return\n",
+      "tests": [
+        "tests/test_dialogs_feedback_v280.py::test_new_proc_action_is_selected_and_scrolled_into_view"
+      ],
+      "expect_fail": [
+        "tests/test_dialogs_feedback_v280.py::test_new_proc_action_is_selected_and_scrolled_into_view"
+      ]
+    },
+    {
+      "id": "M-C-A34",
+      "why": "闹钟「新建」：表单本来就是默认态时点下去零变化 → 必须给一句即时回执",
+      "file": "pet_dialogs.py",
+      "old": "        self._reset_form()\n        _toast(self.pet, \"已进入新建态：选好时间、填好名字，点「保存」才会加上\")\n",
+      "new": "        self._reset_form()  # MUT-A34: 点「新建」屏幕上零变化、也没有回执\n",
+      "tests": [
+        "tests/test_dialogs_feedback_v280.py::test_alarm_new_gives_a_receipt"
+      ],
+      "expect_fail": [
+        "tests/test_dialogs_feedback_v280.py::test_alarm_new_gives_a_receipt"
+      ]
+    },
+    {
+      "id": "M-C-A35",
+      "why": "「一次用户动作一句反馈」：删除闹钟只能发一条回执（清表必须走静默的 _reset_form）",
+      "file": "pet_dialogs.py",
+      "old": "        self._reset_form()          # 静默清表：回执由下面这一句给（不许一次动作两句）\n",
+      "new": "        self._new()                 # MUT-A35: 删除复用了会发回执的「新建」→ 一次动作两句\n",
+      "tests": [
+        "tests/test_dialogs_feedback_v280.py::test_alarm_delete_reports_exactly_once"
+      ],
+      "expect_fail": [
+        "tests/test_dialogs_feedback_v280.py::test_alarm_delete_reports_exactly_once"
+      ]
+    },
+    {
+      "id": "M-C-A36",
+      "why": "N15/D11：行为「添加步骤」成功后要有回执（并写明要先保存）",
+      "file": "pet_dialogs.py",
+      "old": "        _toast(self.pet, \"已添加步骤：%s（点「保存」才落盘）\" % self._step_text(norm[0])[:28])\n",
+      "new": "        pass  # MUT-A36: 添加步骤零回执\n",
+      "tests": [
+        "tests/test_dialogs_feedback_v280.py::test_behavior_step_receipts"
+      ],
+      "expect_fail": [
+        "tests/test_dialogs_feedback_v280.py::test_behavior_step_receipts"
+      ]
+    },
+    {
+      "id": "M-C-A37",
+      "why": "D11：行为「删除选中步骤」成功后要有回执",
+      "file": "pet_dialogs.py",
+      "old": "        _toast(self.pet, \"已删除步骤%s（点「保存」才落盘）\"\n               % (\"：%s\" % label[:20] if label else \"\"))\n",
+      "new": "        pass  # MUT-A37: 删除步骤零回执\n",
+      "tests": [
+        "tests/test_dialogs_feedback_v280.py::test_behavior_step_receipts"
+      ],
+      "expect_fail": [
+        "tests/test_dialogs_feedback_v280.py::test_behavior_step_receipts"
+      ]
+    },
+    {
+      "id": "M-C-A38",
+      "why": "台词「上移/下移」到顶/到底必须给一句反馈（静默 return 与「点了没反应」长得一样）",
+      "file": "pet_dialogs.py",
+      "old": "            # v2.8.0 第 6 轮：到顶/到底以前是静默 return —— 点了没反应与\"已经到边界\"在\n            # 用户那边长得一模一样，这里按\"轻提示用气泡\"的口径说一句。\n            _toast(self._pet, \"已经是最上面了\" if int(delta) < 0 else \"已经是最下面了\")\n            return\n",
+      "new": "            return  # MUT-A38: 到顶/到底又变成静默 return\n",
+      "tests": [
+        "tests/test_dialogs_feedback_v280.py::test_move_line_at_boundary_tells_the_user"
+      ],
+      "expect_fail": [
+        "tests/test_dialogs_feedback_v280.py::test_move_line_at_boundary_tells_the_user"
+      ]
+    },
+    {
+      "id": "M-C-A39",
+      "why": "P3-6：对白成员排序到边界必须与台词排序用**同一套措辞**（同一个出口）",
+      "file": "pet_dialogs.py",
+      "old": "            # 与台词「上移/下移」同一套措辞（P3-6：同一动作同一批对话框同一套话）\n            _toast(self._pet, \"已经是最上面了\" if int(delta) < 0 else \"已经是最下面了\")\n            return\n",
+      "new": "            _warn(self, \"排序\", \"已经是最上面了\")  # MUT-A39: 同一动作换了一套措辞/通道\n",
+      "tests": [
+        "tests/test_dialogs_feedback_v280.py::test_lines_move_member_at_boundary_uses_the_same_wording"
+      ],
+      "expect_fail": [
+        "tests/test_dialogs_feedback_v280.py::test_lines_move_member_at_boundary_uses_the_same_wording"
+      ]
+    },
+    {
+      "id": "M-C-A40",
+      "why": "新建台词保存后要按 id 选中新行并滚进视口（审计 §4 ① 的实测现在钉在这里）",
+      "file": "pet_dialogs.py",
+      "old": "        self._refresh_all()\n        # N3/S5/P1-8：保存成功后以前零提示、也不选中新行（长列表下等于没保存）\n        self._select_line(self._editing)\n",
+      "new": "        self._refresh_all()\n        pass  # MUT-A40: 保存后不选中新行（长列表下等于没保存）\n",
+      "tests": [
+        "tests/test_dialogs_feedback_v280.py::test_new_line_scrolls_into_view"
+      ],
+      "expect_fail": [
+        "tests/test_dialogs_feedback_v280.py::test_new_line_scrolls_into_view"
+      ]
+    }
+  ],
+  "results": {
+    "title": "变异验证 spec：mutations_agent_c_v280.json",
+    "checked_at": "2026-10-15 21:25:43",
+    "total": 97,
+    "caught": 97,
+    "not_caught": 0,
+    "blocked": 0,
+    "items": [
+      {
+        "id": "M-C-H01",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 0.89s",
+        "failed": [
+          "test_明文http一律拒_只收https"
+        ]
+      },
+      {
+        "id": "M-C-H02",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 0.54s",
+        "failed": [
+          "test_明文http一律拒_只收https"
+        ]
+      },
+      {
+        "id": "M-C-H03",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 0.84s",
+        "failed": [
+          "test_明文http一律拒_只收https"
+        ]
+      },
+      {
+        "id": "M-C-H04",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 0.67s",
+        "failed": [
+          "test_明文http一律拒_只收https"
+        ]
+      },
+      {
+        "id": "M-C-H05",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 0.77s",
+        "failed": [
+          "test_远端索引不许指向本地路径_随包索引不受限"
+        ]
+      },
+      {
+        "id": "M-C-H06",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 0.64s",
+        "failed": [
+          "test_相对地址拒路径穿越与空段"
+        ]
+      },
+      {
+        "id": "M-C-H07",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 0.73s",
+        "failed": [
+          "test_file_url折成本机路径"
+        ]
+      },
+      {
+        "id": "M-C-H08",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 0.65s",
+        "failed": [
+          "test_远端ContentLength自报超限_一个字节都不读"
+        ]
+      },
+      {
+        "id": "M-C-H09",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 0.72s",
+        "failed": [
+          "test_本地取数边读边判_到上限就停手"
+        ]
+      },
+      {
+        "id": "M-C-H10",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 0.71s",
+        "failed": [
+          "test_注入取数也有容量上限_超了不落盘"
+        ]
+      },
+      {
+        "id": "M-C-H11",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 0.71s",
+        "failed": [
+          "test_下载后走校验器与安装器_真装进宿主库"
+        ]
+      },
+      {
+        "id": "M-C-B01",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 0.69s",
+        "failed": [
+          "test_set_remote_base_成功才提交_写失败内存不变"
+        ]
+      },
+      {
+        "id": "M-C-B02",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 0.59s",
+        "failed": [
+          "test_set_remote_base_空串清除远端并丢掉它的缓存"
+        ]
+      },
+      {
+        "id": "M-C-B03",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 0.61s",
+        "failed": [
+          "test_set_remote_base_非https与本地路径一律拒_且不落盘"
+        ]
+      },
+      {
+        "id": "M-C-B04",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 0.62s",
+        "failed": [
+          "test_set_remote_base_没接线时如实报错不假装存下"
+        ]
+      },
+      {
+        "id": "M-C-B05",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 0.65s",
+        "failed": [
+          "test_set_remote_base_非https与本地路径一律拒_且不落盘"
+        ]
+      },
+      {
+        "id": "M-C-B06",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 0.60s",
+        "failed": [
+          "test_set_remote_base_非https与本地路径一律拒_且不落盘"
+        ]
+      },
+      {
+        "id": "M-C-B07",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 0.67s",
+        "failed": [
+          "test_set_remote_base_非https与本地路径一律拒_且不落盘"
+        ]
+      },
+      {
+        "id": "M-C-B08",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 0.65s",
+        "failed": [
+          "test_配置键名两处一致_单一来源"
+        ]
+      },
+      {
+        "id": "M-C-B09",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 0.59s",
+        "failed": [
+          "test_配置键名两处一致_单一来源"
+        ]
+      },
+      {
+        "id": "M-C-B10",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 0.75s",
+        "failed": [
+          "test_refresh_取回校验落地并返回条目数"
+        ]
+      },
+      {
+        "id": "M-C-B11",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 0.66s",
+        "failed": [
+          "test_refresh_取回校验落地并返回条目数"
+        ]
+      },
+      {
+        "id": "M-C-B12",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 0.64s",
+        "failed": [
+          "test_refresh_force语义_命中缓存不联网_force强制重取"
+        ]
+      },
+      {
+        "id": "M-C-B13",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 0.54s",
+        "failed": [
+          "test_refresh_没有远端地址时如实拒绝"
+        ]
+      },
+      {
+        "id": "M-C-B14",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 0.61s",
+        "failed": [
+          "test_refresh_失败不留假象_旧缓存与随包索引都不动"
+        ]
+      },
+      {
+        "id": "M-C-B15",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 0.64s",
+        "failed": [
+          "test_load_index_生产口径绝不联网_没缓存退回随包索引"
+        ]
+      },
+      {
+        "id": "M-C-B16",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 0.59s",
+        "failed": [
+          "test_load_index_生产口径缓存命中就能用远端清单"
+        ]
+      },
+      {
+        "id": "M-C-B17",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 0.65s",
+        "failed": [
+          "test_来源信息_随包与远端两种口径"
+        ]
+      },
+      {
+        "id": "M-C-B18",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 0.59s",
+        "failed": [
+          "test_来源信息_随包与远端两种口径"
+        ]
+      },
+      {
+        "id": "M-C-B19",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 0.62s",
+        "failed": [
+          "test_远端索引体积上限_前置传下去且事后仍判"
+        ]
+      },
+      {
+        "id": "M-C-B20",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 0.60s",
+        "failed": [
+          "test_远端索引体积上限_前置传下去且事后仍判"
+        ]
+      },
+      {
+        "id": "M-C-B21",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 0.63s",
+        "failed": [
+          "test_远端包sha256与bytes不符一律拒收且不留残余"
+        ]
+      },
+      {
+        "id": "M-C-B22",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 0.61s",
+        "failed": [
+          "test_远端包sha256与bytes不符一律拒收且不留残余"
+        ]
+      },
+      {
+        "id": "M-C-B23",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 0.57s",
+        "failed": [
+          "test_非https的远端地址_刷新前就拒且不取数"
+        ]
+      },
+      {
+        "id": "M-C-B24",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 0.61s",
+        "failed": [
+          "test_索引格式不认识_整份拒且不落地"
+        ]
+      },
+      {
+        "id": "M-C-B25",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 0.55s",
+        "failed": [
+          "test_set_remote_base_成功才提交_写失败内存不变"
+        ]
+      },
+      {
+        "id": "M-C-B27",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 0.65s",
+        "failed": [
+          "test_refresh_取回校验落地并返回条目数"
+        ]
+      },
+      {
+        "id": "M-C-B29",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 0.56s",
+        "failed": [
+          "test_配置键名两处一致_单一来源"
+        ]
+      },
+      {
+        "id": "M-C-B30",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 1.27s",
+        "failed": [
+          "test_set_api_key_写失败_内存不变且不说记住了"
+        ]
+      },
+      {
+        "id": "M-C-B31",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 1.06s",
+        "failed": [
+          "test_set_api_key_成功路径与改前逐位等价"
+        ]
+      },
+      {
+        "id": "M-C-B32",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 1.01s",
+        "failed": [
+          "test_set_ai_enabled_写失败_内存不变且不假装生效"
+        ]
+      },
+      {
+        "id": "M-C-B33",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 0.93s",
+        "failed": [
+          "test_set_ai_enabled_无Key回退落盘失败_内存保持已提交值"
+        ]
+      },
+      {
+        "id": "M-C-B34",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 0.95s",
+        "failed": [
+          "test_set_chat_rounds_写失败_内存不变且不报成功"
+        ]
+      },
+      {
+        "id": "M-C-B35",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 1.03s",
+        "failed": [
+          "test_set_chat_rounds_成功路径落盘且内存同步"
+        ]
+      },
+      {
+        "id": "M-C-B36",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 0.99s",
+        "failed": [
+          "test_set_api_key_写失败_内存不变且不说记住了"
+        ]
+      },
+      {
+        "id": "M-C-B37",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 1.12s",
+        "failed": [
+          "test_set_ai_enabled_写失败_内存不变且不假装生效"
+        ]
+      },
+      {
+        "id": "M-C-B38",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 0.96s",
+        "failed": [
+          "test_set_chat_rounds_写失败_内存不变且不报成功"
+        ]
+      },
+      {
+        "id": "M-C-B39",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 0.92s",
+        "failed": [
+          "test_set_ai_enabled_无Key回退落盘失败_内存保持已提交值"
+        ]
+      },
+      {
+        "id": "M-C-B40",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 0.68s",
+        "failed": [
+          "test_配置键默认值不进diff落盘_逐字节回归"
+        ]
+      },
+      {
+        "id": "M-C-B41",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 0.66s",
+        "failed": [
+          "test_配置键真的存得住_读得回来"
+        ]
+      },
+      {
+        "id": "M-C-B42",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 0.68s",
+        "failed": [
+          "test_配置键真的存得住_读得回来"
+        ]
+      },
+      {
+        "id": "M-C-B43",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 0.75s",
+        "failed": [
+          "test_真加载器_老config读入写出不冒出这个键"
+        ]
+      },
+      {
+        "id": "M-C-A01",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 0.73s",
+        "failed": [
+          "test_source_shows_remote_from_config_without_network"
+        ]
+      },
+      {
+        "id": "M-C-A02",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 0.72s",
+        "failed": [
+          "test_source_shows_remote_from_config_without_network"
+        ]
+      },
+      {
+        "id": "M-C-A03",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 0.79s",
+        "failed": [
+          "test_empty_save_is_rejected_and_points_at_reset"
+        ]
+      },
+      {
+        "id": "M-C-A04",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "7 failed in 0.94s",
+        "failed": [
+          "test_bad_source_url_is_rejected_on_the_spot_with_a_reason[http://h.invalid/packs/index.json-https]",
+          "test_bad_source_url_is_rejected_on_the_spot_with_a_reason[file:///C:/packs/index.json-\\u672c\\u5730\\u8def\\u5f84]",
+          "test_bad_source_url_is_rejected_on_the_spot_with_a_reason[C:\\\\packs\\\\index.json-\\u672c\\u5730\\u8def\\u5f84]",
+          "test_bad_source_url_is_rejected_on_the_spot_with_a_reason[/home/me/packs/index.json-\\u672c\\u5730\\u8def\\u5f84]",
+          "test_bad_source_url_is_rejected_on_the_spot_with_a_reason[ftp://h.invalid/index.json-https]",
+          "test_bad_source_url_is_rejected_on_the_spot_with_a_reason[https://-\\u4e3b\\u673a\\u540d]",
+          "test_bad_source_url_is_rejected_on_the_spot_with_a_reason[https://h.invalid/xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx-\\u592a\\u957f]"
+        ]
+      },
+      {
+        "id": "M-C-A05",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 0.68s",
+        "failed": [
+          "test_backend_write_failure_keeps_window_and_reports_the_reason"
+        ]
+      },
+      {
+        "id": "M-C-A06",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 0.73s",
+        "failed": [
+          "test_backend_without_set_remote_base_degrades_with_a_human_message"
+        ]
+      },
+      {
+        "id": "M-C-A07",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 0.67s",
+        "failed": [
+          "test_saving_a_good_url_uses_the_backend_and_tells_the_next_step"
+        ]
+      },
+      {
+        "id": "M-C-A08",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 0.72s",
+        "failed": [
+          "test_dialog_wires_cfg_read_and_write_into_the_backend"
+        ]
+      },
+      {
+        "id": "M-C-A09",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 0.73s",
+        "failed": [
+          "test_refresh_missing_result_is_treated_as_failure"
+        ]
+      },
+      {
+        "id": "M-C-A10",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "4 failed in 0.85s",
+        "failed": [
+          "test_refresh_failure_shows_the_reason_and_keeps_a_way_back[\\u7f51\\u7edc\\u8bf7\\u6c42\\u5931\\u8d25\\uff1a\\u540d\\u79f0\\u89e3\\u6790\\u4e0d\\u4e86\\uff08\\u8fde\\u4e0d\\u4e0a\\u8fdc\\u7aef\\u7d22\\u5f15\\uff09]",
+          "test_refresh_failure_shows_the_reason_and_keeps_a_way_back[HTTP",
+          "test_refresh_failure_shows_the_reason_and_keeps_a_way_back[\\u4e0b\\u8f7d\\u540e\\u6838\\u5bf9",
+          "test_refresh_failure_shows_the_reason_and_keeps_a_way_back[\\u8fdc\\u7aef\\u7d22\\u5f15\\u8fc7\\u5927\\uff088388608"
+        ]
+      },
+      {
+        "id": "M-C-A11",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "4 failed in 0.82s",
+        "failed": [
+          "test_refresh_failure_shows_the_reason_and_keeps_a_way_back[\\u7f51\\u7edc\\u8bf7\\u6c42\\u5931\\u8d25\\uff1a\\u540d\\u79f0\\u89e3\\u6790\\u4e0d\\u4e86\\uff08\\u8fde\\u4e0d\\u4e0a\\u8fdc\\u7aef\\u7d22\\u5f15\\uff09]",
+          "test_refresh_failure_shows_the_reason_and_keeps_a_way_back[HTTP",
+          "test_refresh_failure_shows_the_reason_and_keeps_a_way_back[\\u4e0b\\u8f7d\\u540e\\u6838\\u5bf9",
+          "test_refresh_failure_shows_the_reason_and_keeps_a_way_back[\\u8fdc\\u7aef\\u7d22\\u5f15\\u8fc7\\u5927\\uff088388608"
+        ]
+      },
+      {
+        "id": "M-C-A12",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 0.72s",
+        "failed": [
+          "test_refresh_success_reports_count_and_repaints_the_list"
+        ]
+      },
+      {
+        "id": "M-C-A13",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 0.82s",
+        "failed": [
+          "test_refresh_runs_off_the_main_thread_and_lands_on_it"
+        ]
+      },
+      {
+        "id": "M-C-A14",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 10.96s",
+        "failed": [
+          "test_manual_refresh_forces_and_auto_refresh_prefers_cache"
+        ]
+      },
+      {
+        "id": "M-C-A15",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "2 failed in 0.97s",
+        "failed": [
+          "test_toast_returns_false_and_logs_when_bubble_is_refused",
+          "test_toast_falls_back_to_the_dialog_status_line"
+        ]
+      },
+      {
+        "id": "M-C-A16",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 1.04s",
+        "failed": [
+          "test_toast_falls_back_to_the_dialog_status_line"
+        ]
+      },
+      {
+        "id": "M-C-A17",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 1.38s",
+        "failed": [
+          "test_toast_returns_false_and_logs_when_bubble_is_refused"
+        ]
+      },
+      {
+        "id": "M-C-A18",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "2 failed in 1.08s",
+        "failed": [
+          "test_show_bubble_reports_false_while_closing",
+          "test_toast_returns_false_and_logs_when_bubble_is_refused"
+        ]
+      },
+      {
+        "id": "M-C-A19",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 1.26s",
+        "failed": [
+          "test_compose_dialog_has_cancel_and_reject_adds_nothing"
+        ]
+      },
+      {
+        "id": "M-C-A20",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 1.05s",
+        "failed": [
+          "test_ask_helpers_go_through_modal"
+        ]
+      },
+      {
+        "id": "M-C-A21",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 0.99s",
+        "failed": [
+          "test_ask_helpers_go_through_modal"
+        ]
+      },
+      {
+        "id": "M-C-A22",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 0.82s",
+        "failed": [
+          "test_static_input_dialogs_are_gone_except_the_frame_action_one"
+        ]
+      },
+      {
+        "id": "M-C-A23",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 0.99s",
+        "failed": [
+          "test_wording_table_is_applied_to_new_and_add_buttons"
+        ]
+      },
+      {
+        "id": "M-C-A24",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 1.14s",
+        "failed": [
+          "test_import_wizard_add_form_gives_a_receipt_and_construction_stays_quiet"
+        ]
+      },
+      {
+        "id": "M-C-A25",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 0.95s",
+        "failed": [
+          "test_import_wizard_add_form_gives_a_receipt_and_construction_stays_quiet"
+        ]
+      },
+      {
+        "id": "M-C-A26",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 1.06s",
+        "failed": [
+          "test_voice_event_import_receipt_and_clear_confirm"
+        ]
+      },
+      {
+        "id": "M-C-A27",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 1.01s",
+        "failed": [
+          "test_voice_event_import_receipt_and_clear_confirm"
+        ]
+      },
+      {
+        "id": "M-C-A28",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 1.07s",
+        "failed": [
+          "test_voice_event_import_receipt_and_clear_confirm"
+        ]
+      },
+      {
+        "id": "M-C-A29",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 1.14s",
+        "failed": [
+          "test_dialogue_remove_member_reports_what_was_removed"
+        ]
+      },
+      {
+        "id": "M-C-A30",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 0.68s",
+        "failed": [
+          "test_role_edit_delete_action_needs_confirm_and_reports"
+        ]
+      },
+      {
+        "id": "M-C-A31",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 1.03s",
+        "failed": [
+          "test_role_edit_delete_action_toasts_with_a_pet"
+        ]
+      },
+      {
+        "id": "M-C-A32",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 0.70s",
+        "failed": [
+          "test_reset_to_bundled_takes_effect_and_reports"
+        ]
+      },
+      {
+        "id": "M-C-B44",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 0.68s",
+        "failed": [
+          "test_对话框构建失败_有可见提示与日志"
+        ]
+      },
+      {
+        "id": "M-C-B45",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 0.79s",
+        "failed": [
+          "test_金额不大于零_给提示且绝不记账"
+        ]
+      },
+      {
+        "id": "M-C-B46",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 0.64s",
+        "failed": [
+          "test_换站点后旧站点的缓存不许冒充新站点"
+        ]
+      },
+      {
+        "id": "M-C-B47",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 0.58s",
+        "failed": [
+          "test_直接填index_json地址也收_不重复拼路径"
+        ]
+      },
+      {
+        "id": "M-C-B48",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 0.55s",
+        "failed": [
+          "test_load_index_随包也读不出来时把两条原因都说清"
+        ]
+      },
+      {
+        "id": "M-C-A33",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 1.15s",
+        "failed": [
+          "test_new_proc_action_is_selected_and_scrolled_into_view"
+        ]
+      },
+      {
+        "id": "M-C-A34",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 1.07s",
+        "failed": [
+          "test_alarm_new_gives_a_receipt"
+        ]
+      },
+      {
+        "id": "M-C-A35",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 1.00s",
+        "failed": [
+          "test_alarm_delete_reports_exactly_once"
+        ]
+      },
+      {
+        "id": "M-C-A36",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 1.00s",
+        "failed": [
+          "test_behavior_step_receipts"
+        ]
+      },
+      {
+        "id": "M-C-A37",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 1.02s",
+        "failed": [
+          "test_behavior_step_receipts"
+        ]
+      },
+      {
+        "id": "M-C-A38",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 1.20s",
+        "failed": [
+          "test_move_line_at_boundary_tells_the_user"
+        ]
+      },
+      {
+        "id": "M-C-A39",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 1.01s",
+        "failed": [
+          "test_lines_move_member_at_boundary_uses_the_same_wording"
+        ]
+      },
+      {
+        "id": "M-C-A40",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 1.28s",
+        "failed": [
+          "test_new_line_scrolls_into_view"
+        ]
+      }
+    ],
+    "spec": "mutations_agent_c_v280.json",
+    "tests": [
+      "tests/test_ai_write_first_v280.py::test_set_ai_enabled_写失败_内存不变且不假装生效",
+      "tests/test_ai_write_first_v280.py::test_set_ai_enabled_无Key回退落盘失败_内存保持已提交值",
+      "tests/test_ai_write_first_v280.py::test_set_api_key_写失败_内存不变且不说记住了",
+      "tests/test_ai_write_first_v280.py::test_set_api_key_成功路径与改前逐位等价",
+      "tests/test_ai_write_first_v280.py::test_set_chat_rounds_写失败_内存不变且不报成功",
+      "tests/test_ai_write_first_v280.py::test_set_chat_rounds_成功路径落盘且内存同步",
+      "tests/test_balance_feedback_v280.py::test_对话框构建失败_有可见提示与日志",
+      "tests/test_balance_feedback_v280.py::test_金额不大于零_给提示且绝不记账",
+      "tests/test_dialogs_feedback_v280.py::test_alarm_delete_reports_exactly_once",
+      "tests/test_dialogs_feedback_v280.py::test_alarm_new_gives_a_receipt",
+      "tests/test_dialogs_feedback_v280.py::test_ask_helpers_go_through_modal",
+      "tests/test_dialogs_feedback_v280.py::test_backend_without_set_remote_base_degrades_with_a_human_message",
+      "tests/test_dialogs_feedback_v280.py::test_backend_write_failure_keeps_window_and_reports_the_reason",
+      "tests/test_dialogs_feedback_v280.py::test_bad_source_url_is_rejected_on_the_spot_with_a_reason",
+      "tests/test_dialogs_feedback_v280.py::test_behavior_step_receipts",
+      "tests/test_dialogs_feedback_v280.py::test_compose_dialog_has_cancel_and_reject_adds_nothing",
+      "tests/test_dialogs_feedback_v280.py::test_dialog_wires_cfg_read_and_write_into_the_backend",
+      "tests/test_dialogs_feedback_v280.py::test_dialogue_remove_member_reports_what_was_removed",
+      "tests/test_dialogs_feedback_v280.py::test_empty_save_is_rejected_and_points_at_reset",
+      "tests/test_dialogs_feedback_v280.py::test_import_wizard_add_form_gives_a_receipt_and_construction_stays_quiet",
+      "tests/test_dialogs_feedback_v280.py::test_lines_move_member_at_boundary_uses_the_same_wording",
+      "tests/test_dialogs_feedback_v280.py::test_manual_refresh_forces_and_auto_refresh_prefers_cache",
+      "tests/test_dialogs_feedback_v280.py::test_move_line_at_boundary_tells_the_user",
+      "tests/test_dialogs_feedback_v280.py::test_new_line_scrolls_into_view",
+      "tests/test_dialogs_feedback_v280.py::test_new_proc_action_is_selected_and_scrolled_into_view",
+      "tests/test_dialogs_feedback_v280.py::test_refresh_failure_shows_the_reason_and_keeps_a_way_back",
+      "tests/test_dialogs_feedback_v280.py::test_refresh_missing_result_is_treated_as_failure",
+      "tests/test_dialogs_feedback_v280.py::test_refresh_runs_off_the_main_thread_and_lands_on_it",
+      "tests/test_dialogs_feedback_v280.py::test_refresh_success_reports_count_and_repaints_the_list",
+      "tests/test_dialogs_feedback_v280.py::test_reset_to_bundled_takes_effect_and_reports",
+      "tests/test_dialogs_feedback_v280.py::test_role_edit_delete_action_needs_confirm_and_reports",
+      "tests/test_dialogs_feedback_v280.py::test_role_edit_delete_action_toasts_with_a_pet",
+      "tests/test_dialogs_feedback_v280.py::test_saving_a_good_url_uses_the_backend_and_tells_the_next_step",
+      "tests/test_dialogs_feedback_v280.py::test_show_bubble_reports_false_while_closing",
+      "tests/test_dialogs_feedback_v280.py::test_source_shows_remote_from_config_without_network",
+      "tests/test_dialogs_feedback_v280.py::test_static_input_dialogs_are_gone_except_the_frame_action_one",
+      "tests/test_dialogs_feedback_v280.py::test_toast_falls_back_to_the_dialog_status_line",
+      "tests/test_dialogs_feedback_v280.py::test_toast_returns_false_and_logs_when_bubble_is_refused",
+      "tests/test_dialogs_feedback_v280.py::test_voice_event_import_receipt_and_clear_confirm",
+      "tests/test_dialogs_feedback_v280.py::test_wording_table_is_applied_to_new_and_add_buttons",
+      "tests/test_plugin_market_v252.py::test_file_url折成本机路径",
+      "tests/test_plugin_market_v252.py::test_下载后走校验器与安装器_真装进宿主库",
+      "tests/test_plugin_market_v252.py::test_明文http一律拒_只收https",
+      "tests/test_plugin_market_v252.py::test_本地取数边读边判_到上限就停手",
+      "tests/test_plugin_market_v252.py::test_注入取数也有容量上限_超了不落盘",
+      "tests/test_plugin_market_v252.py::test_相对地址拒路径穿越与空段",
+      "tests/test_plugin_market_v252.py::test_远端ContentLength自报超限_一个字节都不读",
+      "tests/test_plugin_market_v252.py::test_远端索引不许指向本地路径_随包索引不受限",
+      "tests/test_plugin_phase3_v280.py::test_load_index_生产口径绝不联网_没缓存退回随包索引",
+      "tests/test_plugin_phase3_v280.py::test_load_index_生产口径缓存命中就能用远端清单",
+      "tests/test_plugin_phase3_v280.py::test_load_index_随包也读不出来时把两条原因都说清",
+      "tests/test_plugin_phase3_v280.py::test_refresh_force语义_命中缓存不联网_force强制重取",
+      "tests/test_plugin_phase3_v280.py::test_refresh_取回校验落地并返回条目数",
+      "tests/test_plugin_phase3_v280.py::test_refresh_失败不留假象_旧缓存与随包索引都不动",
+      "tests/test_plugin_phase3_v280.py::test_refresh_没有远端地址时如实拒绝",
+      "tests/test_plugin_phase3_v280.py::test_set_remote_base_成功才提交_写失败内存不变",
+      "tests/test_plugin_phase3_v280.py::test_set_remote_base_没接线时如实报错不假装存下",
+      "tests/test_plugin_phase3_v280.py::test_set_remote_base_空串清除远端并丢掉它的缓存",
+      "tests/test_plugin_phase3_v280.py::test_set_remote_base_非https与本地路径一律拒_且不落盘",
+      "tests/test_plugin_phase3_v280.py::test_换站点后旧站点的缓存不许冒充新站点",
+      "tests/test_plugin_phase3_v280.py::test_来源信息_随包与远端两种口径",
+      "tests/test_plugin_phase3_v280.py::test_直接填index_json地址也收_不重复拼路径",
+      "tests/test_plugin_phase3_v280.py::test_真加载器_老config读入写出不冒出这个键",
+      "tests/test_plugin_phase3_v280.py::test_索引格式不认识_整份拒且不落地",
+      "tests/test_plugin_phase3_v280.py::test_远端包sha256与bytes不符一律拒收且不留残余",
+      "tests/test_plugin_phase3_v280.py::test_远端索引体积上限_前置传下去且事后仍判",
+      "tests/test_plugin_phase3_v280.py::test_配置键名两处一致_单一来源",
+      "tests/test_plugin_phase3_v280.py::test_配置键真的存得住_读得回来",
+      "tests/test_plugin_phase3_v280.py::test_配置键默认值不进diff落盘_逐字节回归",
+      "tests/test_plugin_phase3_v280.py::test_非https的远端地址_刷新前就拒且不取数"
+    ],
+    "note": "变异只在 %TEMP% 影子副本里做，真实仓库只读（只写 _dev/.mutation.lock）",
+    "repo_fingerprint": {
+      "桌宠.py": "17b471aa09e6",
+      "pet_export.py": "c01e1593efd2",
+      "pet_lines.py": "5332f60b5f26",
+      "pet_alarm.py": "1149e94deee3",
+      "pet_behaviors.py": "8f57255144f6",
+      "_check_release.py": "e0abfe805849",
+      "pet_balance.py": "66948e5514a4",
+      "pet_plugin.py": "2f7853298fc3",
+      "pet_plugin_host.py": "82fb7b1384c8",
+      "pet_dialogs.py": "2fb2f37a8853",
+      "pet_menu.py": "920daac1b835",
+      "pet_plugin_index.py": "e5e9845785e8"
+    }
+  }
+}

@@ -384,7 +384,13 @@ class BalanceService:
         self.pet.show_bubble("余额预警 %.2f 元%s" % (val, "" if val > 0 else "（提醒已关闭）"))
 
     def add_manual_record(self, amount=None, note=""):
-        """记一笔。v2.3.0（1.2）：工具带上的金额/备注只作对话框**预填**，最终由用户确认。"""
+        """记一笔。v2.3.0（1.2）：工具带上的金额/备注只作对话框**预填**，最终由用户确认。
+
+        v2.8.0 第 6 轮（代理 B · 反馈清账 S20 / P3-3）两处"点了没反应"补上可见提示，
+        口径与 open_ledger 一致（日志 + 宠物气泡，**不 import** pet_dialogs 的私有助手）：
+          · 对话框构建/弹出失败：此前只写日志 —— 用户点了菜单毫无反应；
+          · 金额 <= 0（含清空后确定）：此前静默丢弃 —— 用户以为记上了，账本里却没有。
+        """
         pet = self.pet
         book = self._book()
         if book is None:
@@ -398,8 +404,15 @@ class BalanceService:
                     book.add_manual(amount, note)
                     pet.on_ledger_changed()
                     pet.show_bubble("记好啦：%.2f 元" % amount)
+                else:
+                    # 确凿的"没记"要说出**没记**（否则用户以为已经记上，账本里却找不到）
+                    pet.show_bubble("金额要大于 0 才记得上哦~（这笔没有记）")
         except Exception as e:
             self._log("add_manual_record failed: %r" % (e,))
+            try:
+                pet.show_bubble("「记一笔」打不开：%s\n（详情见数据目录的 error.log）" % (e,))
+            except Exception as e2:
+                self._log("add_manual_record notify failed: %r" % (e2,))
 
     def open_ledger(self):
         """账本对话框入口（菜单「📒 账本…」）。

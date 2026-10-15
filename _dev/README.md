@@ -82,16 +82,18 @@
 缺键）+ `mutation_verdict_notes()`（判定不通过）。
 
 **一条命令跑完整批（v2.7.0 代理 C 落成脚本）**：`python -B _dev/mutate_batch_v270.py` ——
-自动收全 ① 带 `mutations` 段的 `_dev/mutations_*.json`（当前 **20 份 / 270 条锚点** —— 验收员
+自动收全 ① 带 `mutations` 段的 `_dev/mutations_*.json`（当前 **22 份 / 392 条锚点** —— v2.7.0 当时是 20 份 / 270 条，验收员
 定版实测为 20 份 / **269** 条，本轮 P1-1 回执修复新增 `M-R6-P1-1` 一条 → **270**）走 `mutate_check.py`；
 ② 三份**旧形态单脚本驱动**（`mutate_export_slice.py` 5/5 · `mutate_startup_defer.py` 8/8 ·
 `mutate_proc_reset_v26.py` 12/12，**共 25 条**）；③ 两份独立结果（`verify_fastci_slices_v251.py`
 11 组 · `verify_guardrails_can_fail.py` 9/9）。
-**合计 295 条锚点**（270 + 25）—— 这个数字**以 `python -B _dev/mutate_batch_v270.py --scan-only`
-的实测输出为准**（`--scan-only` 末行现为「锚点合计 **295** 条，坏 0 条」；每加/删一条变异它都会变，
+**合计 417 条锚点**（392 + 25）—— 这个数字**以 `python -B _dev/mutate_batch_v270.py --scan-only`
+的实测输出为准**（`--scan-only` 末行现为「锚点合计 **417** 条，坏 0 条」；每加/删一条变异它都会变，
 本行此前写的「18 份 / 203 条」是 v2.7.0 代理 C 落成脚本当天的快照，已过期）。
-本轮三份新 spec 的条数：`mutations_agent_a_v270.json` **31** · `mutations_agent_b_v270.json` **35** ·
+v2.7.0 三份新 spec 的条数：`mutations_agent_a_v270.json` **31** · `mutations_agent_b_v270.json` **35** ·
 `mutations_critic_v270.json` **14**（A/B 由验收员复跑 **31/31 · 35/35 全 CAUGHT**）。
+**v2.8.0 第 6 轮新增两份**：`mutations_agent_c_v280.json` **97** 条 + `mutations_agent_a_v280.json` **25** 条
+（后者是代理 A 那套变异，原本只在 `%TEMP%`，由代理 C 用 ast 原样取出收编入库——见下表与 `_dev/agent_c_v280_report.md`）。
 逐项打印 rc / 用时 / 末行，并把**跑前跑后**的源码指纹一起写进 `_dev/results_batch_v270.json`：
 **跑前跑后指纹不一致 = 这一批不是对着同一棵树测的，必须重跑**——三路并行时这是常态，门禁没红
 不代表证据有效。只要做锚点体检（秒级、不跑 pytest）：`python -B _dev/mutate_batch_v270.py --scan-only`
@@ -193,6 +195,7 @@ pytest 都在影子里跑，真仓只读），或自己在 `%TEMP%` 里复制一
 | `verify_d7a_v250_agent_c.py` | v2.5.0 D7-A 三条改动的定向变异（6 条，旧形态，**不产出结果 JSON**） | `python _dev/verify_d7a_v250_agent_c.py` | —（报告里贴输出） |
 | `verify_services_ast_v250.py` | **AST 实参对照**（不是变异）：旧 `__init__`（git `2a6563c`）vs 新 `pet_services.py` 的每一处构造实参；`--selftest` 现场验"对调两个实参一定报差异" | `python -B _dev/verify_services_ast_v250.py [--selftest]` | —（stdout 的 `compared=` / `mismatches=`） |
 | `mutate_batch_v270.py` | **整批复跑 = 铁律 5 的可执行形态**（v2.7.0 代理 C）：20 份 spec（270 条锚点，条数以 `--scan-only` 为准）+ 3 份旧形态单脚本驱动（25 条）+ 2 份独立结果，一条命令跑完；记录跑前跑后源码指纹，不一致就明确喊"这批不作数" | `python -B _dev/mutate_batch_v270.py [--scan-only]` | `results_batch_v270.json` |
+| `check_mutation_ast.py` | **变异体语法自检（v2.8.0 代理 C）**：逐条在内存里应用 `old → new` 再 `ast.parse` —— 抓"把 `if x:` 的缩进体一起换掉"这类错（pytest 收集期才炸，判定只能落 WRONG TEST，整批白跑）。非 `.py` 目标跳过。秒级，**跑批之前先过一遍** | `python -B _dev/check_mutation_ast.py [_dev/mutations_x.json …]`（不带参数＝自动收全） | —（stdout） |
 | `probe_c_mutation_output_v270.py` | 小账 a~d 的**变异原文证据**：逐条打印"改了什么 / 锚点命中几次 / 失败断言原文 / 还原后是否绿"（`mutate_check.py` 抓到时不打印输出，这份补的就是那段原文） | `python -B _dev/probe_c_mutation_output_v270.py` | —（stdout，贴报告） |
 
 这三条**旧形态**驱动的 2026-10-11 v2.4.4 复跑结果：导出 **5/5**（`E3` 已重锚到"固定时间戳
@@ -266,7 +269,19 @@ spec 清单（**状态列的 CAUGHT 数 = 该文件 `results` 段当前的实测
 | `mutations_plugin_v251.json` | **v2.5.1 代理A新增**：插件包校验器（M-P1 code 一致性 · M-P2 路径穿越 · M-P3 双版本门 · M-P4 禁止项清单 · M-P5 files 覆盖 · M-P6 容量上限复用 · M-P7 执行位 · M-P8 read_installed 不抛）· 发布门反向校验（M-R1 漏件必须报 · M-R2 AST 扫描不许空转 · M-R3 用户插件必须点名）· 安装器（M-H1 P1-1 保留名自保 · M-H2 S1-c already 必须以 landed 为准 · M-H3 S1-a 登记写失败回滚 · M-H4 P2-1 未落地内容必须点名）· M-P9 min_host_version 版本号判据 · L5 设计宽 620（M-L1） | **17/17 CAUGHT**（2026-10-12 第 4 轮复跑：M-H2/M-H3 重锚——v2.6.0 给 `_has_landed` 补了内容指纹参、登记失败的回滚调用收成无条件 `_unland`；2026-10-11 实测；M-P4/M-P8 首轮 NOT CAUGHT——M-P4 的"点名"被扩展名白名单分支同样满足、M-P8 的锚点钉在了走不到的分支上，都已重锚 + 收紧断言后复跑） |
 | `mutations_plugin_gap_v260.json` | **v2.6.0 代理C新增**：校验器与安装器两处口径差收口（M-G1 Windows 非法字符 · M-G2 保留设备名 · M-G3 空 files · M-G4/G5 发布门"缺键"提示与纯函数 · M-G6/G7 文档↔常量双向契约 · M-G8 安装器不再交出校验器那句原因） | **8/8 CAUGHT**（2026-10-12 实测：`python -B _dev/mutate_check.py _dev/mutations_plugin_gap_v260.json`） |
 | `mutations_plugin_c_v270.json` | **v2.7.0 代理 C 新增（插件线小账 a~d）**：M-C-a1 索引条目的 data_kind 与包自报不一致必须拒 · M-C-b1 当前版目录丢失而 .prev 在时保住回滚点 · M-C-b2 没有 .prev 就不留悬空回滚点 · M-C-b3 登记里没这条却留 .prev 则当孤儿清掉 · M-C-b4 登记写失败要回挪上一版目录 · M-C-c1 同内容折叠的回滚文案 · M-C-d1 razor 核对证据原文可查。钉 `tests/test_plugin_market_v270.py` | **7/7 CAUGHT**（2026-10-15 实测；原文证据见 `probe_c_mutation_output_v270.py` 与 `agent_c_v270_report.md`） |
+| `mutations_agent_a_v280.json` | **v2.8.0 第 6 轮 代理 A 新增（25 条，由代理 C 收编入库）**：A1 索引来源区（地址校验/空地址拒/回退路径/重画列表/force 口径/后端结果/接线注入）· A3 `_toast` 行为层（早退返回 False / 兜底返回 / 限流日志）· A2/P2-5/P2-7/D9/D11/D14/N14/N15/P3-5/P3-6（静态输入框、合成框取消与接线、清除片段确认、各处回执、文案 tooltip）。id 沿用代理 A 的 `MA01~MA25`（便于与它的报告对账），`old`/`new` 由 `ast` 从它的 `%TEMP%` 驱动里原样取出 | **25/25 CAUGHT**（2026-10-15 实测：`python -B _dev/mutate_check.py _dev/mutations_agent_a_v280.json`；基线 23 条用例全过） |
+| `mutations_agent_c_v280.json` | **v2.8.0 第 6 轮 代理 C 新增（97 条，三个来源合一）**：① **M-C-H01~H11** v2.6.0 远端硬化回退护栏（只收 https / 远端不许指本地 / Content-Length 前置 / 本地边读边判 / 注入容量兜底 / 解包前走校验器 —— 这 11 条此前**一条变异都没有**，是真空档）钉 `tests/test_plugin_market_v252.py`；② **M-C-B01~B48** B 的插件 Phase 3 / 配置键 / 先写盘再提交（`tests/test_plugin_phase3_v280.py` + `tests/test_ai_write_first_v280.py` + `tests/test_balance_feedback_v280.py`）；③ **M-C-A01~A40** A 的交互面（索引来源区 / 刷新 / `_toast` 行为层 / 合成框取消 / 静态输入框 / 文案对照表 / 各处回执与确认，`tests/test_dialogs_feedback_v280.py`） | **97/97 CAUGHT**（2026-10-15 实测：`python -B _dev/mutate_check.py _dev/mutations_agent_c_v280.json`；基线 70 条用例全过） |
 | `mutations_plugin_market_v260.json` | **v2.6.0 第 2 阶段新增**：插件市场（M-A01..A04 索引层 sha256 / 声明字节数 / 相对 url 解析 / host_min 可装性）· 按内容指纹合并与回滚（M-A05 指纹落账 · M-A06 去重失效 · M-A07 landed 累积 · M-A08 撤销本版新增 · M-A09 保留上一版 payload · M-A10 旧登记补账 · M-A16 同版本重复安装不顶回滚点 · **M-A17 `_fresh` 的 still_there 被摘掉：登记有账就当库里真有，库里缺的内容补不回来**）· 市场界面（M-A11..A15） | **17/17 CAUGHT**（2026-10-12 第 4 轮复跑；M-A17 是本轮**新增**的一条，与 M-A06 锚同一行、方向相反：M-A06 去重失效＝旧内容重复落，M-A17 去重过度＝缺的内容不补） |
+
+**2026-10-15 v2.8.0 第 6 轮（代理 C）中间态记录 —— 不作发布依据。**
+新入库**两份**：`mutations_agent_c_v280.json`（97 条，**97/97 CAUGHT**）与 `mutations_agent_a_v280.json`（25 条，**25/25 CAUGHT**，代理 A 的 `%TEMP%` 驱动由代理 C 收编）；同轮 `--scan-only` 报出 **7 条旧锚点已死**
+（`agent_b_v270` S17-KEY-ERR / S17-TOGGLE-ERR / S17-ROUNDS-ERR · `critic_v270` M-R5-F4 / M-R5-F5 / M-R5-P3-2 ·
+`compat_v243` M-C5），**全部重锚**（原因逐条写在各条的 `note` 字段里）：三处是 B 本轮把 `set_api_key` /
+`set_ai_enabled` / `set_chat_rounds` 改成"先写盘再提交"造成的漂移，两处是 A3 改写 `_toast` docstring 造成的，
+一处是 `new = dict(cfg)` 由 1 处变 3 处造成**命中 2 次**（歧义），一处是 `桌宠.py` 函数数 254→255。
+重锚后 `--scan-only` = **417 条 / 坏 0**，`check_mutation_ast.py` = **392 条 / 0 不过**。
+⚠ A/B 当时仍在改树：**这一批的用途只有"当前源码上每条变异都能被抓住"＋找出断裂锚点**；
+定版必须按铁律 5 在安静窗口再整批跑一次。
 
 **2026-10-12 v2.6.0 第 4 轮（出货修订 `bb73d5b`）整批复跑记录**：整批由人发起，报出 **5 条 SPEC-BAD**
 （`compat_v243` M-C12 · `dialog_fit_v250` M-D09 · `plugin_v251` M-H2/M-H3 · `round3_a` M-A13），
@@ -508,3 +523,28 @@ advance("中") 仍是正常宽度——Qt 自己做字体链接，所以"候选�
 
 > 找东西的捷径：`_dev` 里的 `.py` 都能单独跑（`python _dev/<名字>.py`，Qt 类的会自动 offscreen）；
 > 会写文件的只有三类——`gen_full_idle_frames.py`（素材）、探针的 `--json` 输出、变异验证的结果 JSON。
+
+---
+
+## 记账更正（主代理 2026-10-15，依据 v2.8.0 质量审查）
+
+**① `M-C-A*` 的 97 条不是 97 个独立信息点**：其中 **12 对与 A 的 `MA*` 同锚点**（`M-C-A04/12/14/15/18/19/25/28/29/31/36/37`）——锚点剥空白后逐字节相同、`new` 只差注释、`expect` 集合逐字相同。质量审查独立跑对照对（`MA01 ↔ M-C-A18`）结果**完全一样**。
+**定性更正**：这 12 对**不提供独立验证**（"多一次独立验证"不成立，C 的论证站不住），它们提供的是**运行事故冗余**（本轮 C 真在某条桩上挂死过整批，A 名下那份没崩 → 消掉"一次事故连坐 12 条图钉"的单点故障）。**结论：保留，但账目分开写**——`M-C-A*` = 全新锚点 **28** + 与 A 同锚点 **12**。
+
+**② 挂死风险那条已失效（回填）**：`tests/test_dialogs_feedback_v280.py::test_dialog_wires_cfg_read_and_write_into_the_backend` **已带 `quiet`**（`:475` 签名 `(tmp_path, quiet)`），A 是在自己的变异验证里发现会挂死后补的，当前修订复核**无挂起**。
+**③ `audit_feedback_v270.md` §5.1 登记 1 的定性要改**：原文写"等价变异（后面的『只收 https』判据会把同批样本拒掉）"——**理由说反了**：`pet_plugin_index.py:130` 在 `:134` **之前**，样本**先被 `:130` 拒**；删掉 `:130` 后由 `:134` 兜住，属**兜底等价（fallthrough-equivalent）**。真缺口是**措辞未覆盖**：用例只断言 `"https" in msg or "太长" in msg or "主机" in msg`，**不点名"本地路径"**——而 `:130-133` 存在的唯一意义就是把措辞说具体。**修法**：补一条 `assert "本地路径" in msg`，该分支立刻有能真失败的变异。
+
+**④ 冻结读数**：冻结时 `dirty=29`，事后读数是 31——多出的两条是本轮自己产生的未跟踪件（`_dev/review_task_v280.md` / `_dev/agent_c_v280_report.md`）。**7 个产品文件哈希逐项相符才是"冻结"的实质**。
+---
+
+## 锚点换行口径（2026-10-15 定，两个代理各踩一次反向坑）
+
+**规矩：变异锚点一律用 `\n`，不要用 `\r\n`。**
+
+**原因**：`mutate_check` 读源码走 `io.open(encoding="utf-8")` 的 **universal newlines**——文件里的 `\r\n` 会被**归一成 `\n`** 再与锚点比对。所以即使目标文件是 CRLF（例如 `pet_dialogs.py` 实测 7495 个 CRLF / 0 个裸 LF），**锚点也必须写 `\n`**。
+
+**两次反向踩坑记录（防止第三次）**：
+- 第 5 轮 B：锚点按**文件字节**切（用 `\r\n`）→ 命中 0 次 → 改 `\n` 后通过。**（结论正确）**
+- 第 6 轮修复代理 D：看到 `pet_dialogs.py` 是 CRLF，**建议主代理把多行锚点写成 `\r\n`** → 主代理照做 → **3 条 SPEC-BAD（命中 0 次）**；改成 `\n` 后 **5/5 CAUGHT**。**（结论错误）**
+
+**自查方法**：入库前先 `python -B _dev/mutate_batch_v270.py --scan-only`——锚点命中 0/2 次会当场报出来，不必等整批跑完。

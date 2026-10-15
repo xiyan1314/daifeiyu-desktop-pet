@@ -63,7 +63,7 @@
   ],
   "results": {
     "title": "变异验证 spec：mutations_q_item3.json",
-    "checked_at": "2026-10-15 17:48:48",
+    "checked_at": "2026-10-15 21:35:48",
     "total": 6,
     "caught": 6,
     "not_caught": 0,
@@ -73,7 +73,7 @@
         "id": "M-Q10",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.59s",
+        "tail": "1 failed in 0.54s",
         "failed": [
           "test_error_code_mapping_is_stable"
         ]
@@ -82,7 +82,7 @@
         "id": "M-Q11",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.78s",
+        "tail": "1 failed in 0.56s",
         "failed": [
           "test_voice_events_match"
         ]
@@ -91,7 +91,7 @@
         "id": "M-Q12",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.51s",
+        "tail": "1 failed in 0.48s",
         "failed": [
           "test_voice_events_match"
         ]
@@ -100,7 +100,7 @@
         "id": "M-Q13",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.76s",
+        "tail": "1 failed in 0.65s",
         "failed": [
           "test_lines_corrupt_file_heals_with_bak"
         ]
@@ -109,7 +109,7 @@
         "id": "M-Q14",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.51s",
+        "tail": "1 failed in 0.49s",
         "failed": [
           "test_book_corrupt_ledger_heals_with_bak"
         ]
@@ -118,7 +118,7 @@
         "id": "M-Q15",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.46s",
+        "tail": "1 failed in 0.48s",
         "failed": [
           "test_normalize_defaults"
         ]
@@ -134,18 +134,18 @@
     ],
     "note": "变异只在 %TEMP% 影子副本里做，真实仓库只读（只写 _dev/.mutation.lock）",
     "repo_fingerprint": {
-      "桌宠.py": "7c64914aa083",
+      "桌宠.py": "17b471aa09e6",
       "pet_export.py": "c01e1593efd2",
       "pet_lines.py": "5332f60b5f26",
       "pet_alarm.py": "1149e94deee3",
       "pet_behaviors.py": "8f57255144f6",
       "_check_release.py": "e0abfe805849",
-      "pet_balance.py": "c374984ca058",
+      "pet_balance.py": "66948e5514a4",
       "pet_plugin.py": "2f7853298fc3",
       "pet_plugin_host.py": "82fb7b1384c8",
-      "pet_dialogs.py": "0084f1a6bad7",
+      "pet_dialogs.py": "2fb2f37a8853",
       "pet_menu.py": "920daac1b835",
-      "pet_plugin_index.py": "7e9b4537b98e"
+      "pet_plugin_index.py": "e5e9845785e8"
     }
   }
 }

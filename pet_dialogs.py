@@ -95,7 +95,7 @@ import time
 
 import pet_log
 
-from PySide6.QtCore import QEventLoop, QTime, Qt, QThread, QUrl, Signal
+from PySide6.QtCore import QEventLoop, QTime, QTimer, Qt, QThread, QUrl, Signal
 from PySide6.QtGui import QColor, QImage, QImageReader, QPainter, QPixmap
 from PySide6.QtWidgets import (
     QAbstractItemView,
@@ -138,6 +138,7 @@ import pet_chat  # v2.0.4：服务商预设/错误归类/连通性测试（pet_c
 import pet_alarm  # v2.0.5：闹钟服务（AlarmDialog 共用时间校验/铃声导入口径）
 import pet_lines  # v2.1：台词库（类别/标签单一来源；LinesDialog 直接用服务接口）
 import pet_voice  # v2.1：可插拔配音后端清单（VoiceDialog 用）
+import pet_config  # v2.8.0 · Phase 3：plugin_index_url 的键名/默认值/校验（B 的单一来源）
 import pet_plugin  # v2.6.0：包判据 / 版本比较（市场页按同款四段整数比版本，不自己写一套）
 import pet_plugin_host  # v2.5.1：PetHub 插件宿主（安装/卸载/启用禁用/清单/回滚；Qt-free）
 import pet_plugin_index  # v2.6.0：索引读取与下载（注入式取数；Qt-free）
@@ -256,6 +257,38 @@ _DEFAULT_BUBBLE_STYLE = dict(_BUBBLE_STYLE)
 # QMediaPlayer 保活引用（异步播放期间防 GC 回收，最多保留 4 个）
 _MEDIA_KEEPALIVE = []
 
+# ---------------- v2.8.0 第 6 轮：本轮的时长/曲线与文案令牌（单一来源，不许散落魔法数字） ----------------
+# 口径（任务书「动效时长进令牌」）：本轮出现的任何"时长/间隔"都先在这里集中定义，第 7 轮
+# 再连同别的动效一起抽成 pet_motion.py。**这里只放本轮真要用的**，不做预留（预留常数
+# 会被 _check_static 的"死常量"规则抓，也会变成没人读的摆设）。
+TOAST_FALLBACK_LOG_GAP = 60.0
+"""_toast 兜底日志的限流窗口（秒）：同一句回执在这个窗口内只落一条 error.log。
+
+为什么是 60 秒：与 pet_log.log_throttled 的默认 gap 同量级（那里也是 60），用户连点
+「保存」时日志不会被同一句话刷满；而 60 秒足够让人在事后复盘时看到"这条回执没送到"。
+"""
+# P3-6 文案对照表（同一动作同一套措辞 + 一句"下一步做什么"的 tooltip）：
+#   · 「新建…」= 清空表单进入新建态，**不落盘**，落盘要靠「保存」；
+#   · 「添加…」= 往当前（暂存的）列表里加一项，同样要靠「保存」才写进库。
+# 两个词各管一类动作，不再混用（审计 P3-6：此前「新建」/「添加」混用且不说明要先保存）。
+BTN_NEW_TIP = "清空表单进入新建态（先不落盘）；填好后点「保存」才会写进库里。"
+BTN_ADD_TIP = "加进下面的列表（先不落盘）；点「保存」才会写进库里。"
+
+
+def _btn_tip(btn, label):
+    """按 P3-6 的文案对照表给按钮贴 tooltip（对照表只在这里实现一次）。
+
+    「新建…」= 清空表单进入新建态；「添加…」「＋…」= 往当前列表加一项。两类动作都在
+    本窗口内暂存，要靠「保存」才落盘——这句话必须出现在按钮上，否则用户点完不知道
+    还要再点一次（审计 P3-6 的原话：混用且不说明"要先保存"）。返回按钮本身，便于链式写。
+    """
+    text = str(label or "")
+    if text.startswith("新建"):
+        btn.setToolTip(BTN_NEW_TIP)
+    elif text.startswith("添加") or text.startswith("＋"):
+        btn.setToolTip(BTN_ADD_TIP)
+    return btn
+
 
 # ---------------- 通用助手 ----------------
 def modal(dlg):
@@ -328,6 +361,43 @@ def _confirm(parent, title, text):
     return box.clickedButton() is yes
 
 
+# ---------------- v2.8.0 第 6 轮（P2-5）：文本 / 单选输入框 —— 一律手工建框 + modal() ----------------
+# 为什么不用 QInputDialog.getText/getItem 这类**静态**方法（审计 P2-5）：静态方法自己弹一个
+# 自己的 exec，**不进 modal()**，也就拿不到 WindowStaysOnTopHint + activateWindow；桌宠主窗是
+# WindowDoesNotAcceptFocus，Windows 前台锁下这类框可能起不来（审计列的是"一致性修复"，未实测）。
+# 相同文件里的 SoundPanel._rename / AmountNoteDialog 早就是手工建框 + modal() 的写法，这里把它
+# 抽成两个函数，5 处调用点共用一条路径（口径只有一份）。
+# ⚠ 例外（已报备）：RoleEditDialog._add_frame_action 的「动作名」框仍是静态 getText ——
+#   tests/test_dialogs_more_v24.py 用 monkeypatch(QInputDialog, "getText") 驱动它，
+#   改成真 modal 会让那条既有用例在 offscreen 下 exec 挂死（铁律 4：不许放宽既有断言）。
+def _ask_text(parent, title, label, default=""):
+    """文本输入框 → (文本, 是否点了确定)。取消时文本是空串。"""
+    dlg = QInputDialog(_qt_parent(parent))
+    dlg.setWindowTitle(title)
+    dlg.setLabelText(label)
+    dlg.setTextValue(str(default or ""))
+    dlg.setStyleSheet(DIALOG_QSS)
+    ok = modal(dlg) == QDialog.DialogCode.Accepted
+    return (dlg.textValue() if ok else ""), ok
+
+
+def _ask_item(parent, title, label, items, current=0):
+    """单选下拉框 → (选中文本, 是否点了确定)。items 为空时直接返回 ("", False)，不弹空框。"""
+    items = [str(x) for x in (items or [])]
+    if not items:
+        return "", False
+    idx = max(0, min(int(current or 0), len(items) - 1))
+    dlg = QInputDialog(_qt_parent(parent))
+    dlg.setWindowTitle(title)
+    dlg.setLabelText(label)
+    dlg.setComboBoxEditable(False)
+    dlg.setComboBoxItems(items)
+    dlg.setTextValue(items[idx])
+    dlg.setStyleSheet(DIALOG_QSS)
+    ok = modal(dlg) == QDialog.DialogCode.Accepted
+    return (dlg.textValue() if ok else ""), ok
+
+
 # ---------------- v2.7.0 第 5 轮：反馈口径的公共出口 ----------------
 # 为什么把反馈收进这里（口径见 _dev/audit_feedback_v270.md §1）：
 #   · 面板内轻操作（新建/保存/删除/导出/重命名/导入成功）→ 宠物气泡：5 秒自动隐藏、
@@ -335,16 +405,21 @@ def _confirm(parent, title, text):
 #     气泡仍压在上面，所以面板内也能用气泡。
 #   · 失败 / 需要用户决策 → _warn / _info / _confirm（模态）。
 # 全部调用点都走这两个函数：以后若要换成"内联标签"只需改这一处。
-def _toast(pet, text):
-    """成功回执：宠物气泡。**尽力而为**——返回 False 只表示"这次压根没尝试发"
-    （没有 pet / 没有 show_bubble / 文本为空 / show_bubble 抛异常）。
+def _toast(pet, text, status=None):
+    """成功回执：宠物气泡。**尽力而为**——返回 False 只表示"气泡这条路明确没通"
+    （没有 pet / 没有 show_bubble / 文本为空 / show_bubble 抛异常 / **回调如实回报没显示**）。
 
     v2.7.0 第 5 轮（F5：文档承诺与实现不符）：改前这里写的是"返回是否**真的发出**"，
-    而现网 pet 的 show_bubble 在退出守卫下会**静默早退**（桌宠.show_bubble 的 `_closing`
-    分支直接 return，实测 _toast=True 而气泡可见=False）——回调不抛异常，返回值就是 True。
-    要让这个返回值变成硬承诺，得让生产端回报"到底显示了没有"，而那会改动主窗的公共接口；
-    所以这里取**改动最小且诚实**的一条：把口径说成"尽力而为"，**调用方不得拿返回值当
-    "用户看见了"**（全文件目前也没有任何调用点消费它）。回调自己抛异常仍然记日志 + False。
+    而那时的 桌宠.show_bubble 在退出守卫下会**静默早退**（`_closing` 分支直接 return，
+    实测 _toast=True 而气泡可见=False）——回调不抛异常，返回值就是 True。
+
+    v2.8.0 第 6 轮（A3：行为层收口）：生产端现在**如实回报**——桌宠.show_bubble 在
+    `_closing` 早退分支返回 False、真显示出来才返回 True。于是这里的口径变成：
+      · 回调返回 None（老式替身 / 只记录的 lambda）→ 按"尽力而为"放行（True）；
+      · 回调**明确返回 False** → 这次回执没送到，返回 False，并走**兜底**：
+        status 可写就写进对话框自己的状态行（用户仍能在窗口里看到这句话），
+        否则写一条限流日志（TOAST_FALLBACK_LOG_GAP 秒内同一句只落一条）。
+    调用方仍不得把返回值当"用户看见了"：True 只说明气泡出口没被拒绝。
     """
     if not text:
         return False
@@ -352,11 +427,35 @@ def _toast(pet, text):
     if not callable(fn):
         return False
     try:
-        fn(str(text))
+        res = fn(str(text))
     except Exception as e:
         pet_log.log_error("show_bubble failed: %r" % (e,))
+        _toast_fallback(text, status)
+        return False
+    if res is False:
+        _toast_fallback(text, status)
         return False
     return True
+
+
+def _toast_fallback(text, status=None):
+    """气泡没能显示时的兜底（A3）：先写窗口内状态行，没有状态行就写一条限流日志。
+
+    为什么兜底不能是弹窗：走到这条路径说明宠物窗口正在退出/隐藏，此刻再弹模态框既会抢
+    焦点、又可能撞上正在销毁的对象；而"点了保存却什么都没发生"是审计点名的最差体验
+    （_dev/audit_feedback_v270.md §1 #5/#6：日志不能当用户反馈，但**总比什么都没有强**）。
+    状态行是同一句话的第二个出口：调用方传了 status（一般是对话框自己的提示行）时优先用它。
+    """
+    if status is not None:
+        try:
+            status.setText(str(text))
+            return True
+        except Exception as e:
+            pet_log.log_error("toast status fallback failed: %r" % (e,))
+    pet_log.log_throttled("toast:" + str(text)[:60],
+                          "气泡回执没能显示（宠物窗口正在退出？）：%s" % (text,),
+                          gap=TOAST_FALLBACK_LOG_GAP)
+    return False
 
 
 def _apply_result(res):
@@ -1224,7 +1323,9 @@ class RoleImportDialog(_FitDialog):
         forms_head = QHBoxLayout()
         forms_head.addWidget(QLabel("形态（可改名；喂食依次切换，12 秒后回第一形态）"))
         self._add_form_btn = QPushButton("＋ 添加形态")
-        self._add_form_btn.clicked.connect(self._add_form)
+        # N14：按钮走 _on_add_form（加了才给回执），构造期的默认形态仍直接调 _add_form
+        self._add_form_btn.clicked.connect(self._on_add_form)
+        _btn_tip(self._add_form_btn, "＋ 添加形态")   # P3-6
         forms_head.addStretch(1)
         forms_head.addWidget(self._add_form_btn)
         root.addLayout(forms_head)
@@ -1391,12 +1492,26 @@ class RoleImportDialog(_FitDialog):
             pick.setEnabled(not self._busy_state)  # P1-1：处理中禁改形态，防快照与界面不一致
             rem.setEnabled(not self._busy_state)
 
+    def _on_add_form(self):
+        """「＋ 添加形态」按钮（N14）：加了才给回执——此前只有行数变化，用户看不出成没成。
+
+        回执走窗口内的状态行（_notes）：这一段本来就是"素材处理/失败原因"的说明位，
+        内联、非模态、不抢焦点，正好是审计说的"气泡或内联状态行"里的第二种。
+        """
+        if not self._add_form():
+            return
+        n = len(self._form_rows)
+        self._notes.setText("已添加「%s」（共 %d 个，最多 8 个）：改好名字、选好图，"
+                            "最后点「导入」。" % (self._form_rows[-1].get("name") or "", n))
+
     def _add_form(self, name=""):
+        """加一个形态行。返回**是否真的加了**（按钮回执按它给，见 _on_add_form）。"""
         if len(self._form_rows) >= 8:
             _warn(self, "形态", "最多 8 个形态")
-            return
+            return False
         self._form_rows.append({"name": name or "形态%d" % (len(self._form_rows) + 1), "src": ""})
         self._form_views()
+        return True
 
     def _del_form(self, i):
         if len(self._form_rows) <= 1:
@@ -1707,6 +1822,8 @@ class RoleEditDialog(_FitDialog):
 
     def __init__(self, parent=None, lib=None, role_id=""):
         super().__init__(_qt_parent(parent))
+        # v2.8.0 第 6 轮（D14）：回执走宠物气泡，需要 pet 本体（可能为 None → _toast 静默降级）
+        self._pet = parent
         self._lib = lib
         self._role_id = str(role_id or "")
         self._role = (lib.get(self._role_id) if lib else None) or {}
@@ -1866,6 +1983,8 @@ class RoleEditDialog(_FitDialog):
         b_add_f.clicked.connect(self._add_frame_action)
         b_add_p = QPushButton("＋合成…")
         b_add_p.clicked.connect(self._add_proc_action)
+        _btn_tip(b_add_f, "＋帧动作…")   # P3-6
+        _btn_tip(b_add_p, "＋合成…")     # P3-6
         b_del = QPushButton("删除")
         b_del.clicked.connect(self._del_action)
         act_btns.addWidget(b_add_f)
@@ -2255,8 +2374,14 @@ class RoleEditDialog(_FitDialog):
             self._tmpdir = None
 
     # ---------- v2.0.1：自定义动作（当前形态） ----------
-    def _refresh_act_list(self):
-        """列出当前形态的自定义动作（帧动作 + 程序化合成）。"""
+    def _refresh_act_list(self, select=None):
+        """列出当前形态的自定义动作（帧动作 + 程序化合成）；select=新条目的列表文案。
+
+        v2.8.0 第 6 轮（N12/N13 的"视口外"）：这个列表**限高 80px**，动作一多，新加的那条就
+        落在视口外面——"列表里确实有了"不等于"用户看见了"，用户视角与"点了没反应"完全等价。
+        所以新增成功后，调用方把新条目的文案传进来，这里选中它并滚到可见处（照 v2.7.0 对
+        行为/音效/闹钟/台词那几处"新建后选中"的同款口径）。
+        """
         self._act_list.clear()
         if self._cur_idx is None or self._loading:
             return
@@ -2266,6 +2391,13 @@ class RoleEditDialog(_FitDialog):
                 self._act_list.addItem("%s（帧）" % act)
         for name in sorted(fm.get("procs") or {}):
             self._act_list.addItem("%s（合成）" % name)
+        if not select:
+            return
+        for i in range(self._act_list.count()):
+            if self._act_list.item(i).text() == str(select):
+                self._act_list.setCurrentRow(i)
+                self._act_list.scrollToItem(self._act_list.item(i))
+                break
 
     def _add_frame_action(self):
         """多选图片 → 统一画布管线 → 立即入角色目录（staged，取消时回收）。"""
@@ -2314,7 +2446,7 @@ class RoleEditDialog(_FitDialog):
                 staged.append(s)
                 self._staged.append(s)
             self._forms[idx].setdefault("animations", {})[name] = staged
-            self._refresh_act_list()
+            self._refresh_act_list("%s（帧）" % name)   # 选中 + 滚到可见处（限高 80px）
         except Exception as e:
             # 只回收本次尝试暂存的文件——_cleanup_staged() 会连带删掉同会话先前
             # 已成功添加的动作帧，保存后动作静默变空
@@ -2362,12 +2494,20 @@ class RoleEditDialog(_FitDialog):
             period.setValue(int(d["period_ms"]))
         kind_box.currentIndexChanged.connect(lambda _i: _apply_proc_defaults())
         _apply_proc_defaults()
+        # P2-7 / N13：内联框必须自带「取消」（此前只有「添加」，只能靠 Esc / × 退出）。
+        # 取消走 dlg.reject() → 下面直接 return，一个 procs 都不落（不留半截编辑）。
         ok = QPushButton("添加")
+        ok.setDefault(True)
         ok.clicked.connect(dlg.accept)
+        cancel = QPushButton("取消")
+        cancel.clicked.connect(dlg.reject)
         _btn_row = QHBoxLayout()
+        _btn_row.addStretch(1)
         _btn_row.addWidget(ok)
+        _btn_row.addWidget(cancel)
         stick_buttons(dlg, _btn_row)   # v2.5.0 B：按钮行在滚动区之外
-        if dlg.exec() != QDialog.DialogCode.Accepted:
+        # 与其它子对话框同一条路径：modal() 负责置顶 + 抢焦点（裸 exec() 会被前台锁拦）
+        if modal(dlg) != QDialog.DialogCode.Accepted:
             return
         name = nm.text().strip()
         if not pet_resources.CUSTOM_ACTION_RE.match(name):
@@ -2384,24 +2524,41 @@ class RoleEditDialog(_FitDialog):
             return
         self._forms[self._cur_idx].setdefault("procs", {})[name] = {
             "kind": kind_box.currentData(), "amp": amp.value(), "period_ms": period.value()}
-        self._refresh_act_list()
+        self._refresh_act_list("%s（合成）" % name)   # 选中 + 滚到可见处（限高 80px）
 
     def _del_action(self):
-        """删除选中的自定义动作（按条目后缀只删对应类型：帧/合成同名互不影响）。"""
+        """删除选中的自定义动作（按条目后缀只删对应类型：帧/合成同名互不影响）。
+
+        v2.8.0 第 6 轮（D14）：补二次确认 + 成功回执。**它是暂存态**——删掉的只是本窗口里
+        待提交的动作，点「取消」/关窗会连同这次删除一起丢弃，所以确认文案写清楚"还没落盘、
+        可以整体放弃"，不写成不可逆操作（与审计对 D14 的判定同口径）。
+        """
         item = self._act_list.currentItem()
         if item is None or self._cur_idx is None:
+            _warn(self, "删除动作", "先在「自定义动作」里选中一个动作")
             return
         text = item.text()
+        kind = "帧" if text.endswith("（帧）") else ("合成" if text.endswith("（合成）") else "")
+        name = text[:-(len(kind) + 2)] if kind else text
+        if not _confirm(self, "删除自定义动作",
+                        "把「%s」（%s动作）从当前形态里删掉吗？\n\n"
+                        "· 这一步只是**暂存**，还没写进角色；\n"
+                        "· 删错了点「取消」或关掉这个窗口，本次全部改动（含这次删除）都会被放弃；\n"
+                        "· 点「保存」才会真的落盘。" % (name, kind or "未知")):
+            return
         fm = self._forms[self._cur_idx]
         removed = False
-        if text.endswith("（帧）"):
-            fm.setdefault("animations", {}).pop(text[:-len("（帧）")], None)
+        if kind == "帧":
+            fm.setdefault("animations", {}).pop(name, None)
             removed = True
-        elif text.endswith("（合成）"):
-            fm.setdefault("procs", {}).pop(text[:-len("（合成）")], None)
+        elif kind == "合成":
+            fm.setdefault("procs", {}).pop(name, None)
             removed = True
         if removed:
             self._refresh_act_list()
+            _toast(self._pet, "已删除自定义动作「%s」（保存后生效）" % name)
+        else:
+            _warn(self, "删除动作", "这条动作已经不在列表里了（可能刚被删过）")
 
     def closeEvent(self, event):
         self._cleanup()
@@ -2477,6 +2634,7 @@ class BehaviorDialog(_FitDialog):
         self._param.setPlaceholderText(self._param_hint(self._act_combo.currentData()))
         b_add_step = QPushButton("添加步骤")
         b_add_step.clicked.connect(self._add_step)
+        _btn_tip(b_add_step, "添加步骤")   # P3-6
         add_row.addWidget(self._act_combo)
         add_row.addWidget(self._param, 1)
         add_row.addWidget(b_add_step)
@@ -2497,6 +2655,7 @@ class BehaviorDialog(_FitDialog):
                             ("关闭", self.accept)):
             _b = QPushButton(_label)
             _b.clicked.connect(_cb)
+            _btn_tip(_b, _label)       # P3-6：新建/添加各一套措辞
             btn_row.addWidget(_b)
         stick_buttons(self, btn_row)   # v2.5.0 B：按钮行在滚动区之外
         self._refresh()
@@ -2636,12 +2795,20 @@ class BehaviorDialog(_FitDialog):
         self._list.setCurrentRow(-1)
 
     def _del_step(self):
-        """「删除选中步骤」：没选中时给提示（takeItem(-1) 是静默的）。"""
+        """「删除选中步骤」：没选中时给提示（takeItem(-1) 是静默的）+ 成功回执。
+
+        v2.8.0 第 6 轮（D11）：删掉的那一行从列表里消失是唯一的信号——步骤多/列表矮时
+        很容易看不见，补一句回执（同 N15，同一批对话框同一套口径）。
+        """
         row = self._steps.currentRow()
         if row < 0:
             _warn(self, "删除步骤", "先在「动作序列」里选中要删的步骤")
             return
+        item = self._steps.item(row)
+        label = item.text() if item is not None else ""
         self._steps.takeItem(row)
+        _toast(self.pet, "已删除步骤%s（点「保存」才落盘）"
+               % ("：%s" % label[:20] if label else ""))
 
     def _add_step(self):
         act = self._act_combo.currentData()
@@ -2685,7 +2852,11 @@ class BehaviorDialog(_FitDialog):
         _it = QListWidgetItem(self._step_text(norm[0]))
         _it.setData(Qt.ItemDataRole.UserRole, norm[0])
         self._steps.addItem(_it)
+        self._steps.setCurrentItem(_it)
+        self._steps.scrollToItem(_it)      # 列表长时新步骤会落在视口外（同 N12/N13 口径）
         self._param.clear()
+        # N15：加了一步之后只有列表变化，补一句回执（还没落盘，保存才写进库里）
+        _toast(self.pet, "已添加步骤：%s（点「保存」才落盘）" % self._step_text(norm[0])[:28])
 
     def _pick_from_lines(self):
         """行为步骤「读台词」：从台词库选一条（返回 line_id 或 ""）。"""
@@ -2700,7 +2871,8 @@ class BehaviorDialog(_FitDialog):
         labels = _unique_labels(
             ["[%s] %s" % (pet_lines.CATEGORY_LABELS.get(x["category"], x["category"]),
                           x["text"].replace("\n", " ")[:24]) for x in items])
-        label, ok = QInputDialog.getItem(self, "选择台词", "这条行为要读哪句台词：", labels, 0, False)
+        # P2-5：静态 getItem 改成手工建框 + modal()
+        label, ok = _ask_item(self, "选择台词", "这条行为要读哪句台词：", labels)
         if not ok:
             return ""
         return items[labels.index(label) if label in labels else 0]["id"]
@@ -2716,7 +2888,8 @@ class BehaviorDialog(_FitDialog):
             _warn(self, "行为编辑", "还没有对白，先去「💬 自定义台词… → 对白编排」建一段")
             return ""
         labels = _unique_labels(["%s（%d 条）" % (x["name"], len(x["line_ids"])) for x in items])
-        label, ok = QInputDialog.getItem(self, "选择对白", "这条行为要读哪段对白：", labels, 0, False)
+        # P2-5：静态 getItem 改成手工建框 + modal()
+        label, ok = _ask_item(self, "选择对白", "这条行为要读哪段对白：", labels)
         if not ok:
             return ""
         return items[labels.index(label) if label in labels else 0]["id"]
@@ -2884,6 +3057,7 @@ class AlarmDialog(_FitDialog):
                           ("删除", self._delete), ("关闭", self.accept)):
             _b = QPushButton(_lbl)
             _b.clicked.connect(_cb)
+            _btn_tip(_b, _lbl)         # P3-6：新建/添加各一套措辞
             btn_row.addWidget(_b)
         stick_buttons(self, btn_row)   # v2.5.0 B：按钮行在滚动区之外
         self._time.setTime(self.DEFAULT_TIME)  # 打开即显示默认 07:30（点「新建」同款）
@@ -2918,6 +3092,16 @@ class AlarmDialog(_FitDialog):
                                  else "（默认提示音）")
 
     def _new(self):
+        """「新建」按钮：清空表单进入新建态 + 一句即时回执。
+
+        v2.8.0 第 6 轮：闹钟这处此前**漏了**——表单本来就处于默认状态时（首次打开、刚保存完、
+        刚删完），点「新建」屏幕上零变化，与第 5 轮修掉的 N2/N5 是同一族（那里用气泡解决的）。
+        """
+        self._reset_form()
+        _toast(self.pet, "已进入新建态：选好时间、填好名字，点「保存」才会加上")
+
+    def _reset_form(self):
+        """只清表单（删除成功后复用，**不**重复发回执——一次用户动作只说一句话）。"""
         self._editing_id = None
         self._time.setTime(self.DEFAULT_TIME)
         self._label.clear()
@@ -3002,7 +3186,7 @@ class AlarmDialog(_FitDialog):
         if not _ok:
             _warn(self, "闹钟", _err or "删除失败")
             return
-        self._new()
+        self._reset_form()          # 静默清表：回执由下面这一句给（不许一次动作两句）
         self._refresh()
         _toast(self.pet, "已删除闹钟 %s" % _tlabel)
 
@@ -3902,8 +4086,9 @@ class VoiceAssetPanel(QWidget):
             _warn(self._parent_widget(), "重命名", "先在列表里选中一个声音素材")
             return
         cur = self._lib.get_asset(sid) or {}
-        name, ok = QInputDialog.getText(self._parent_widget(), "重命名", "新名字：",
-                                        text=cur.get("name", ""))
+        # P2-5：静态 getText 改成手工建框 + modal()（前台锁口径与 SoundPanel._rename 一致）
+        name, ok = _ask_text(self._parent_widget(), "重命名声音素材", "新名字：",
+                             cur.get("name", ""))
         if not ok:
             return
         res = self._lib.rename(sid, name)
@@ -4416,6 +4601,7 @@ class LinesDialog(_FitDialog):
                                          ("撤销删除", self._undo))):
             b = QPushButton(label)
             b.clicked.connect(cb)
+            _btn_tip(b, label)         # P3-6：「新建」= 清空表单，「保存」才落盘
             grid.addWidget(b, i // 2, i % 2)
             self._btns[label] = b
         editor.addLayout(grid)
@@ -4479,6 +4665,9 @@ class LinesDialog(_FitDialog):
                for i in range(self._list.count())]
         j = max(0, min(len(ids) - 1, row + int(delta)))
         if j == row:
+            # v2.8.0 第 6 轮：到顶/到底以前是静默 return —— 点了没反应与"已经到边界"在
+            # 用户那边长得一模一样，这里按"轻提示用气泡"的口径说一句。
+            _toast(self._pet, "已经是最上面了" if int(delta) < 0 else "已经是最下面了")
             return
         ids[row], ids[j] = ids[j], ids[row]
         ok, err = self._lib.reorder(ids)
@@ -4614,6 +4803,7 @@ class LinesDialog(_FitDialog):
         r = QHBoxLayout()
         b_new = QPushButton("新建对白")
         b_new.clicked.connect(self._new_dialogue)
+        _btn_tip(b_new, "新建对白")    # P3-6
         b_del = QPushButton("删除对白")
         b_del.clicked.connect(self._delete_dialogue)
         r.addWidget(b_new)
@@ -4639,6 +4829,7 @@ class LinesDialog(_FitDialog):
         ra.addWidget(self._pick_line, 1)
         b_add = QPushButton("添加 →")
         b_add.clicked.connect(self._add_member)
+        _btn_tip(b_add, "添加 →")      # P3-6
         ra.addWidget(b_add)
         right.addLayout(ra)
         rb = QHBoxLayout()
@@ -4756,6 +4947,8 @@ class LinesDialog(_FitDialog):
             return
         if not _confirm(self, "移除台词", "把这条台词从对白里移掉吗？（台词本身不受影响）"):
             return
+        _gone = self._members.item(row)
+        _gone_text = _gone.text() if _gone is not None else ""
         ids = self._member_ids()
         ids.pop(row)
         ok, err = self._lib.save_dialogue(self._editing_dlg, line_ids=ids)
@@ -4764,6 +4957,8 @@ class LinesDialog(_FitDialog):
             return
         self._on_pick_dialogue()
         self._refresh_dialogues()
+        # D9：以前移除后只有列表变化（用户不知道成没成、也不知道台词本身还在不在）
+        _toast(self._pet, "已从对白里移除：%s（台词本身不受影响）" % (_gone_text[:24] or "这条台词"))
 
     def _move_member(self, delta):
         if self._lib is None or not self._editing_dlg:
@@ -4776,6 +4971,8 @@ class LinesDialog(_FitDialog):
         ids = self._member_ids()
         j = max(0, min(len(ids) - 1, row + int(delta)))
         if j == row:
+            # 与台词「上移/下移」同一套措辞（P3-6：同一动作同一批对话框同一套话）
+            _toast(self._pet, "已经是最上面了" if int(delta) < 0 else "已经是最下面了")
             return
         ids[row], ids[j] = ids[j], ids[row]
         ok, _err = self._lib.save_dialogue(self._editing_dlg, line_ids=ids)
@@ -4879,7 +5076,8 @@ class LinesDialog(_FitDialog):
             return
         items = self._role_items()
         labels = _unique_labels([x[1] for x in items])
-        label, ok = QInputDialog.getItem(self, "修复角色", "选择要指向的角色：", labels, 0, False)
+        # P2-5：静态 getItem 改成手工建框 + modal()
+        label, ok = _ask_item(self, "修复角色", "选择要指向的角色：", labels)
         if not ok:
             return
         slot = items[labels.index(label) if label in labels else 0][0]
@@ -4894,7 +5092,8 @@ class LinesDialog(_FitDialog):
             return
         items = self._voice_items()
         labels = _unique_labels([x[1] for x in items])
-        label, ok = QInputDialog.getItem(self, "修复声音", "选择要指向的声音素材：", labels, 0, False)
+        # P2-5：静态 getItem 改成手工建框 + modal()
+        label, ok = _ask_item(self, "修复声音", "选择要指向的声音素材：", labels)
         if not ok:
             return
         slot = items[labels.index(label) if label in labels else 0][0]
@@ -5727,7 +5926,15 @@ class VoiceDialog(_FitDialog):
             cur = voice.clip(key) if voice is not None else None
             lbl.setText("✓ 已配" if cur else "—")
 
+    def _event_label(self, key):
+        """事件 key → 中文事件名（文案里要指名道姓，用户才知道删的是哪一行）。"""
+        for k, label in self.EVENTS:
+            if k == key:
+                return label
+        return str(key or "")
+
     def _import(self, key):
+        """导入事件片段（S14：导入成功也要有回执，否则只有行标记从「—」变「✓ 已配」）。"""
         src, _f = QFileDialog.getOpenFileName(self, "导入语音片段", "", "音频 (*.wav *.mp3)")
         if not src:
             return
@@ -5736,6 +5943,7 @@ class VoiceDialog(_FitDialog):
             _warn(self, "语音片段", err or "导入失败")
             return
         self._refresh_rows()
+        _toast(self._pet, "「%s」的事件片段已配好（立即生效）" % self._event_label(key))
 
     def _test(self, key):
         p = _get(self._pet, "voice").clip(key)
@@ -5746,11 +5954,20 @@ class VoiceDialog(_FitDialog):
             _warn(self, "试听", "播放失败：音频文件可能已损坏")
 
     def _clear(self, key):
+        """清除事件片段（P3-5 / S15）：破坏性 → 二次确认（带事件名与后果）+ 成功回执。"""
+        label = self._event_label(key)
+        if not _confirm(self, "清除语音片段",
+                        "清除「%s」的事件片段吗？\n\n"
+                        "· 只清这一行：这个事件以后不再播音效（其它事件不受影响）；\n"
+                        "· **只解除引用，不删磁盘上的音频文件**——文件还在你原来的位置。" % label):
+            return False
         ok, err = _get(self._pet, "voice").set_clip(key, None)
         if not ok:
             _warn(self, "语音片段", err or "清除失败")
-            return
+            return False
         self._refresh_rows()
+        _toast(self._pet, "已清除「%s」的事件片段（音频文件没删）" % label)
+        return True
 
     # ---------- 保存 ----------
     def _save(self, silent=False):
@@ -6355,6 +6572,44 @@ def _plugin_update_available(rec, entry):
     return pet_plugin.version_key(release.get("version")) > pet_plugin.version_key(cur)
 
 
+def _plugin_cfg_getter(pet):
+    """B 的 PluginIndex 要的 `cfg_getter`：返回主窗**活的** cfg dict（写回要落到同一份）。"""
+    return lambda: _get(pet, "cfg")
+
+
+def _plugin_save_cfg(pet):
+    """B 的 PluginIndex 要的 `save_cfg`：宿主自己的写盘方法优先，其次主模块的 桌宠.save_config。
+
+    为什么宿主优先：对话框的协作对象就是 pet，测试与嵌入方换掉 pet 就该连带换掉写盘路径
+    （否则用例会绕过替身直接写真实 config.json）。生产路径上 PetWindow 没有这个方法，
+    于是落到本模块从 sys.modules 取到的**已加载**主模块函数（全仓唯一的配置写盘处，
+    也就是 _verify_v13 / _check_static 认的那一个）。都没有就返回 None —— B 会如实回报
+    "索引地址没有接线"，而不是假装存下了。
+    """
+    save = _get(pet, "save_config")
+    if callable(save):
+        return save
+    main = sys.modules.get("桌宠")
+    save = getattr(main, "save_config", None) if main is not None else None
+    return save if callable(save) else None
+
+
+def _source_result(res):
+    """B 的 refresh() 返回值 → (ok, msg, count)（统一口径：None / 坏形状一律按失败）。
+
+    判据按任务书的 (ok, msg[, count]) 口径写：`isinstance(res, tuple) and res[0]`——
+    **None 也算失败**，不写 `is not True`（B 明确说过 refresh 永远返回三元组）。
+    """
+    if not (isinstance(res, (tuple, list)) and res):
+        return False, "索引刷新没有拿到结果（详情见数据目录的 error.log）", 0
+    msg = str(res[1]) if len(res) > 1 and res[1] else ""
+    count = res[2] if len(res) > 2 and isinstance(res[2], int) \
+        and not isinstance(res[2], bool) else 0
+    if not res[0]:
+        return False, msg or "索引刷新失败（详情见数据目录的 error.log）", 0
+    return True, msg, count
+
+
 def _plugin_market_state(rec, entry):
     """「是否已装」列：未装 / 已装 vX / 已装 vX（可更新到 vY）。"""
     if not isinstance(rec, dict):
@@ -6389,6 +6644,7 @@ class PluginManagerDialog(_FitDialog):
 
     # 后台取数 → 主线程（gen = 请求代次；参数个数与下面三个槽逐一对应）
     indexReady = Signal(int, object, object)      # gen, 归一索引 | None, err
+    sourceReady = Signal(int, object)             # gen, B 的 refresh() 结果 (ok,msg,count) | None
     packReady = Signal(int, object, object)       # gen, 下载好的临时文件 | None, err
     packProgress = Signal(int, int, int)          # gen, 已下载字节, 总字节（0 = 未知）
 
@@ -6420,6 +6676,29 @@ class PluginManagerDialog(_FitDialog):
                      "「回滚」把插件退回上一版。")
         tip.setWordWrap(True)
         root.addWidget(tip)
+        # ---- v2.8.0 · Phase 3（A1）：「索引来源」区（随包 / 远端；可填、可改、可恢复默认）----
+        # 只做界面与文案：取数、校验、落地全在 B 的 pet_plugin_index（本文件不写第二套判据）。
+        _src_box = QGroupBox("索引来源")
+        _src_lay = QVBoxLayout(_src_box)
+        self._src_label = QLabel("")
+        self._src_label.setWordWrap(True)
+        _src_lay.addWidget(self._src_label)
+        _src_row = QHBoxLayout()
+        self._url_edit = QLineEdit()
+        self._url_edit.setPlaceholderText("https://…/index.json（也可以填目录；留空 = 随包索引）")
+        self._btn_src_save = QPushButton("保存并使用")
+        self._btn_src_save.setToolTip("校验并保存这个地址；远端索引要再点「刷新索引」才会取回来。")
+        self._btn_src_reset = QPushButton("恢复默认（随包索引）")
+        self._btn_src_reset.setToolTip("清掉远端地址，回到随程序出货的随包索引（离线也能用）。")
+        self._btn_src_save.clicked.connect(
+            lambda checked=False: self.set_index_source(self._url_edit.text()))
+        self._btn_src_reset.clicked.connect(
+            lambda checked=False: self.set_index_source("", clearing=True))
+        _src_row.addWidget(self._url_edit, 1)
+        _src_row.addWidget(self._btn_src_save)
+        _src_row.addWidget(self._btn_src_reset)
+        _src_lay.addLayout(_src_row)
+        root.addWidget(_src_box)
         self._tabs = QTabWidget()
         page1 = QWidget()
         lay1 = QVBoxLayout(page1)
@@ -6484,6 +6763,7 @@ class PluginManagerDialog(_FitDialog):
             # 远端索引**不在打开时自动联网**（等用户点「刷新索引」或切到那个页签）——
             # 桌面程序不在用户没要求的时候发网络请求。
             self.refresh_index()
+        self._refresh_source()         # v2.8.0 A1：只读本地，绝不联网（默认零打扰）
 
     def closeEvent(self, event):
         """关窗后不再响应在途结果（_closing 守卫）；已经落库的步骤不受影响。"""
@@ -6497,6 +6777,7 @@ class PluginManagerDialog(_FitDialog):
         都在主线程跑——这正是"网络不卡界面 + 落地在主线程"的实现方式。
         """
         self.indexReady.connect(self._on_index_ready)
+        self.sourceReady.connect(self._on_source_ready)
         self.packReady.connect(self._on_pack_ready)
         self.packProgress.connect(self._on_pack_progress)
 
@@ -6516,7 +6797,12 @@ class PluginManagerDialog(_FitDialog):
             self._index_obj = pet_plugin_index.PluginIndex(
                 host.plugins_dir, host_version=host.host_version,
                 index_url=str(_get(self.pet, "plugin_index_url") or ""),
-                landing_kinds=pet_plugin_host.LANDING_KINDS)
+                landing_kinds=pet_plugin_host.LANDING_KINDS,
+                # v2.8.0 · Phase 3（A1）：把"读写主窗配置"和"日志"注入给 B 的索引器——
+                # set_remote_base 靠这两个回调写盘（失败会如实回报，不假装存下了）。
+                cfg_getter=_plugin_cfg_getter(self.pet),
+                save_cfg=_plugin_save_cfg(self.pet),
+                log=self._index_log)
         return self._index_obj
 
     def refresh(self):
@@ -6554,6 +6840,171 @@ class PluginManagerDialog(_FitDialog):
 
     def _set_hint(self, text):
         self._hint.setText(str(text or ""))
+
+    # ---------- v2.8.0 · Phase 3（A1）：索引来源（随包 / 远端）----------
+    def source_info(self):
+        """当前索引来源 → dict（B 的 `source_info()`）。
+
+        缺方法（后端还没接线 / 测试替身）时按 `index_url` 兜底——它是同一个真源，
+        所以界面不会因为后端版本不同而显示成另一种来源。**只读本地，绝不联网。**
+        """
+        idx = self._index_ref()
+        if idx is None:
+            return {}
+        fn = getattr(idx, "source_info", None)
+        if callable(fn):
+            try:
+                got = fn()
+            except Exception as e:
+                self._index_log("source_info 失败：%r" % (e,))
+                got = None
+            if isinstance(got, dict):
+                return got
+        url = str(getattr(idx, "index_url", "") or "")
+        return {"kind": "remote" if url else "bundled", "url": url, "updated_at": ""}
+
+    def _refresh_source(self):
+        """把「索引来源」区按当前后端状态重画（一句话说清"现在用的是哪一份"）。"""
+        idx = self._index_ref()
+        if idx is None:
+            self._src_label.setText("当前：读不到索引来源（插件宿主未接线）。")
+            return
+        info = self.source_info()
+        url = str(info.get("url") or "")
+        if str(info.get("kind") or "") == "remote" and url:
+            text = "当前：远端索引（%s）" % url
+            extra = []
+            if info.get("cached"):
+                extra.append("本地缓存取回于 %s" % (info.get("fetched_at") or "未知时间"))
+            else:
+                extra.append("还没取回来——点「刷新索引」")
+            if info.get("updated_at"):
+                extra.append("索引自报更新于 %s" % info["updated_at"])
+            if info.get("count"):
+                extra.append("共 %d 个条目" % int(info["count"]))
+            text += "；" + "，".join(extra)
+        else:
+            text = "当前：随包索引（随程序出货，离线也能用）"
+            if info.get("updated_at"):
+                text += "；索引自报更新于 %s" % info["updated_at"]
+        self._src_label.setText(text)
+        self._url_edit.setText(url)
+        self._sync_buttons()
+
+    def set_index_source(self, url, clearing=False):
+        """「保存并使用」/「恢复默认（随包索引）」的唯一出口 → 是否真的换了来源。
+
+        校验分两道，**都不在本文件写第二套判据**：
+          · 界面这一道（当场拒绝、当场说清）：空（保存按钮）/ 非 https / 本地路径 / file:// /
+            超长 → `pet_config.validate_plugin_index_url`（B 的实现，与真正取数时同一个判据）；
+          · 后端这一道：`idx.set_remote_base(url)` —— 它还要写盘，写盘失败会如实回报
+            （失败时盘上与内存都不动，这里照它的话告诉用户，不假装存下了）。
+        **保存本身不取数**（零打扰）：远端要再点「刷新索引」；回随包索引是本地直读，立刻生效。
+        """
+        raw = pet_config.normalize_plugin_index_url(url)
+        if not raw and not clearing:
+            self._source_failed("要填一个 https:// 开头的远端索引地址（填目录或 .json 都行）；"
+                                "想回到随包索引，请点「恢复默认（随包索引）」。")
+            return False
+        ok, reason = pet_config.validate_plugin_index_url(raw)
+        if not ok:
+            self._source_failed(reason)
+            return False
+        idx = self._index_ref()
+        if idx is None:
+            self._source_failed("插件宿主未接线：改不了索引来源（重启一次桌宠即可）。")
+            return False
+        fn = getattr(idx, "set_remote_base", None)
+        if not callable(fn):
+            self._source_failed("这个版本的后端还没接线（set_remote_base 不存在），改不了索引来源。")
+            return False
+        try:
+            res = fn(raw)
+        except Exception as e:
+            self._index_log("set_remote_base 抛异常：%r" % (e,))
+            res = None
+        if not (isinstance(res, (tuple, list)) and res and res[0]):
+            msg = ""
+            if isinstance(res, (tuple, list)) and len(res) > 1 and res[1]:
+                msg = str(res[1])
+            self._source_failed(msg or "索引来源没能保存（详情见数据目录的 error.log）。")
+            return False
+        back = str(res[1]) if len(res) > 1 and res[1] else ""
+        self._refresh_source()
+        if not raw:
+            # 回随包索引：本地直读、毫秒级 → 列表立刻跟上，回执用后端那句话（或兜底文案）
+            self.refresh_index(manual=True)
+            _toast(self.pet, back or "已恢复为随包索引（不联网）", status=self._hint)
+        else:
+            # 换远端：**不在这里联网**（保存 ≠ 取数）。后端那句已经写明下一步是「刷新索引」，
+            # 真正的回执等刷新落地时的那一句（一次用户动作只说一句话）。
+            self._set_hint("✓ " + (back or "已改用远端索引：%s" % raw))
+            _toast(self.pet, back or "已改用远端索引（点「刷新索引」取回列表）", status=self._hint)
+        return True
+
+    def _source_failed(self, reason):
+        """索引来源改不了：**不关窗** + 当场说清为什么（内联状态行 + 一次模态提示）。"""
+        text = str(reason or "索引来源没能保存")
+        self._set_hint("⚠ " + text)
+        _warn(self, "索引来源", text)
+
+    # ---------- 远端索引刷新（后台取数 + 代次守卫；只读本地那次仍在主线程）----------
+    def _source_worker(self, gen, idx, force):
+        """后台线程：取远端索引并落地（B 的 refresh）。**不碰 Qt 控件**，结果交回主线程槽。"""
+        try:
+            res = idx.refresh(bool(force))
+        except Exception as e:
+            res = None
+            self._index_log("refresh 抛异常：%r" % (e,))
+        if not self._emit_safe("sourceReady", gen, res):
+            self._index_retire(gen, "结果没能交给主线程")
+
+    def _on_source_ready(self, gen, res):
+        """远端索引刷新落地（主线程槽）：先消费自己那一代，旧代一律丢弃。
+
+        成功后**只读本地缓存**重画表格（B 的 load_index 不联网），所以一次刷新只有一次网络。
+        """
+        if self._closing_now():
+            self._index_retire(gen, "窗口已关闭，丢弃索引刷新结果")
+            return
+        if not self._index_consume(gen, "refresh"):
+            return
+        pending = self._index_pending
+        self._index_pending = False
+        ok, msg, count = _source_result(res)
+        if not ok:
+            self._index_refresh_failed(msg)
+        else:
+            idx = self._index_ref()
+            data, err = (None, "索引下载器不可用") if idx is None else idx.load_index()
+            if data is None:
+                self._index_refresh_failed("远端索引取回来了，但读不出来：%s" % (err or "原因未知"))
+            else:
+                self._apply_index(data, err)
+                self._index_refresh_ok(msg, count)
+        self._refresh_source()
+        if pending:
+            QTimer.singleShot(0, self, lambda: self.refresh_index(manual=True))   # 补发排队那次
+
+    def _index_refresh_ok(self, msg, count):
+        """刷新成功的一句回执：气泡 + 对话框内的状态行（**同一句话**，不各写一套）。"""
+        text = str(msg or "").strip() or ("远端索引已更新（共 %d 个插件）" % int(count or 0))
+        note = self._hint.text()
+        self._set_hint(("✓ %s。%s" % (text, note)) if note else ("✓ " + text))
+        _toast(self.pet, text, status=self._hint)
+
+    def _index_refresh_failed(self, msg):
+        """刷新失败：**不关窗** + 人话原因 + 明确保留"回退到随包索引"的路（P3-5 同款口径）。
+
+        表格**一个字节都不动**：B 的 refresh 失败时不会碰缓存与随包索引，所以旧列表仍然可用；
+        要换回随包索引只要点「恢复默认（随包索引）」。
+        """
+        text = str(msg or "").strip() or "索引刷新失败（详情见数据目录的 error.log）"
+        self._set_hint("⚠ %s　可点「恢复默认（随包索引）」回到随包索引——它随程序出货，"
+                       "离线也能用。" % text)
+        _warn(self, "刷新索引失败",
+              "%s\n\n可点「恢复默认（随包索引）」回到随包索引：它随程序出货，离线也能用。\n"
+              "（磁盘上原有的索引与缓存一个字节都没动。）" % text)
 
     def _installed_map(self):
         """已装清单 → {id: 记录}（两处对账都用它，免得各写一份）。"""
@@ -6633,6 +7084,11 @@ class PluginManagerDialog(_FitDialog):
         self._btn_uninstall.setEnabled(rec is not None and not busy)
         self._btn_toggle.setEnabled(rec is not None and not busy)
         self._btn_refresh.setEnabled(not busy)
+        # v2.8.0 A1：改来源要写配置（宿主没接线就改不了）——按钮状态跟着真实能力走
+        has_idx = self._index_ref() is not None
+        for _b in (getattr(self, "_btn_src_save", None), getattr(self, "_btn_src_reset", None)):
+            if _b is not None:
+                _b.setEnabled(has_idx and not busy)
 
     # ---------- 可安装列表：读索引（远端走后台线程 + 代次守卫） ----------
     def refresh_index(self, manual=False):
@@ -6642,6 +7098,13 @@ class PluginManagerDialog(_FitDialog):
         毫秒级，没有"卡界面"的问题，也就没必要为它起线程（构造期尤其不该起）。
         代次守卫与 pet_balance 同款：同一时刻只有一个在途取数；在途期间再点一次只置
         pending，等这一代落地后自动补发一次——连点不会起第二个线程。
+
+        v2.8.0 · Phase 3（A1）三条路，别混：
+          · **远端 + 后端有 refresh()** → 后台线程跑 B 的 refresh()（全模块唯一的联网处，
+            force=True 无条件重取 / force=False 优先用同地址缓存），落地后再用 load_index()
+            读**本地缓存**画表（不二次联网）；
+          · **随包（没有远端地址）** → 本地直读，毫秒级，不起线程（与接线前逐位一致）；
+          · **远端但后端没有 refresh**（注入替身 / 更老的后端）→ 保持 v2.7.0 的后台读取口径。
         """
         idx = self._index_ref()
         if idx is None:
@@ -6655,7 +7118,28 @@ class PluginManagerDialog(_FitDialog):
             if manual:
                 self._index_pending = True
             return False
-        if not str(getattr(idx, "index_url", "") or ""):
+        remote = str(getattr(idx, "index_url", "") or "")
+        if remote and callable(getattr(idx, "refresh", None)):
+            gen = int(self._index_gen) + 1
+            self._index_gen = gen
+            self._index_active = gen
+            self._set_hint("正在读取远端索引…" if manual
+                           else "正在读取远端索引（优先用本地缓存）…")
+            self._sync_buttons()
+            try:
+                threading.Thread(target=self._source_worker, args=(gen, idx, bool(manual)),
+                                 daemon=True).start()
+            except Exception as e:
+                # 起不了线程是用户要能从 error.log 追的故障（razor 只认名字带 log/warn/… 的调用，
+                # 自定义的 _index_log 不算）——所以这里用全仓统一的限流日志原语记一条。
+                pet_log.log_throttled("plugin_dialogs.refresh_index",
+                                      "起不了索引取数线程：%r" % (e,))
+                self._index_retire(gen, "线程启动失败：%r" % (e,))
+                self._index_refresh_failed(
+                    "起不了取数线程：%s（详情见数据目录的 error.log）" % e)
+                return False
+            return True
+        if not remote:
             data, err = idx.load_index()
             self._apply_index(data, err)
             return not err

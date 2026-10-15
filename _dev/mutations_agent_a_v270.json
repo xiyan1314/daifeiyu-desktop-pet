@@ -418,7 +418,7 @@
   ],
   "results": {
     "title": "变异验证 spec：mutations_agent_a_v270.json",
-    "checked_at": "2026-10-15 17:36:27",
+    "checked_at": "2026-10-15 21:16:49",
     "total": 31,
     "caught": 31,
     "not_caught": 0,
@@ -428,7 +428,7 @@
         "id": "M-A-01",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "5 failed in 5.52s",
+        "tail": "5 failed in 2.92s",
         "failed": [
           "test_role_meta_ok_button_accepts",
           "test_role_meta_cancel_button_rejects",
@@ -441,7 +441,7 @@
         "id": "M-A-02",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 3.53s",
+        "tail": "1 failed in 1.09s",
         "failed": [
           "test_role_meta_dialog_has_both_buttons"
         ]
@@ -450,7 +450,7 @@
         "id": "M-A-03",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "2 failed in 0.76s",
+        "tail": "2 failed in 0.95s",
         "failed": [
           "test_role_meta_esc_or_close_returns_none",
           "test_role_meta_cancel_button_rejects"
@@ -460,7 +460,7 @@
         "id": "M-A-04",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 1.37s",
+        "tail": "1 failed in 1.49s",
         "failed": [
           "test_ai_settings_save_failure_keeps_window_open"
         ]
@@ -469,7 +469,7 @@
         "id": "M-A-05",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 1.23s",
+        "tail": "1 failed in 1.43s",
         "failed": [
           "test_ai_settings_save_success_closes_and_toasts"
         ]
@@ -478,7 +478,7 @@
         "id": "M-A-06",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 1.04s",
+        "tail": "1 failed in 1.29s",
         "failed": [
           "test_ai_settings_save_exception_stays_open_without_modal"
         ]
@@ -487,7 +487,7 @@
         "id": "M-A-07",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 1.24s",
+        "tail": "1 failed in 1.58s",
         "failed": [
           "test_ai_settings_none_return_is_failure"
         ]
@@ -496,7 +496,7 @@
         "id": "M-A-08",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.75s",
+        "tail": "1 failed in 0.97s",
         "failed": [
           "test_apply_call_normalizes_new_and_old_contracts"
         ]
@@ -505,7 +505,7 @@
         "id": "M-A-09",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 1.14s",
+        "tail": "1 failed in 1.33s",
         "failed": [
           "test_toast_degrades_without_bubble"
         ]
@@ -514,7 +514,7 @@
         "id": "M-A-10",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 1.22s",
+        "tail": "1 failed in 1.27s",
         "failed": [
           "test_behavior_export_ok_toasts_filename"
         ]
@@ -523,7 +523,7 @@
         "id": "M-A-11",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 1.05s",
+        "tail": "1 failed in 1.39s",
         "failed": [
           "test_behavior_export_without_selection_prompts"
         ]
@@ -532,7 +532,7 @@
         "id": "M-A-12",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 1.10s",
+        "tail": "1 failed in 1.31s",
         "failed": [
           "test_behavior_delete_needs_confirm"
         ]
@@ -541,7 +541,7 @@
         "id": "M-A-13",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 1.07s",
+        "tail": "1 failed in 1.29s",
         "failed": [
           "test_behavior_delete_without_selection_prompts"
         ]
@@ -550,7 +550,7 @@
         "id": "M-A-14",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 1.05s",
+        "tail": "1 failed in 1.31s",
         "failed": [
           "test_behavior_delete_step_without_selection_prompts"
         ]
@@ -559,7 +559,7 @@
         "id": "M-A-15",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 1.10s",
+        "tail": "1 failed in 1.34s",
         "failed": [
           "test_behavior_delete_step_removes_selected"
         ]
@@ -568,7 +568,7 @@
         "id": "M-A-16",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 1.03s",
+        "tail": "1 failed in 1.47s",
         "failed": [
           "test_behavior_save_selects_new_row"
         ]
@@ -577,7 +577,7 @@
         "id": "M-A-17",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "2 failed in 1.55s",
+        "tail": "2 failed in 2.15s",
         "failed": [
           "test_physics_save_reports_no_change",
           "test_physics_save_failure_keeps_window_open"
@@ -587,7 +587,7 @@
         "id": "M-A-18",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 1.18s",
+        "tail": "1 failed in 1.63s",
         "failed": [
           "test_bubble_style_save_failure_keeps_window_open"
         ]
@@ -596,7 +596,7 @@
         "id": "M-A-19",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 1.02s",
+        "tail": "1 failed in 1.38s",
         "failed": [
           "test_bubble_style_save_success_toasts"
         ]
@@ -605,7 +605,7 @@
         "id": "M-A-20",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 1.24s",
+        "tail": "1 failed in 1.33s",
         "failed": [
           "test_delete_bad_one_surfaces_failure"
         ]
@@ -614,7 +614,7 @@
         "id": "M-A-21",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 1.32s",
+        "tail": "1 failed in 1.34s",
         "failed": [
           "test_delete_all_bad_surfaces_failure_and_success"
         ]
@@ -623,7 +623,7 @@
         "id": "M-A-22",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 1.04s",
+        "tail": "1 failed in 1.39s",
         "failed": [
           "test_role_set_active_failure_warns_and_success_toasts"
         ]
@@ -632,7 +632,7 @@
         "id": "M-A-23",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 1.14s",
+        "tail": "1 failed in 1.37s",
         "failed": [
           "test_role_reset_default_failure_warns"
         ]
@@ -641,7 +641,7 @@
         "id": "M-A-24",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 1.35s",
+        "tail": "1 failed in 1.23s",
         "failed": [
           "test_bind_empty_state_shows_hint_and_import_entry"
         ]
@@ -650,7 +650,7 @@
         "id": "M-A-25",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 1.05s",
+        "tail": "1 failed in 1.90s",
         "failed": [
           "test_bind_broken_library_logs_and_says_why"
         ]
@@ -659,7 +659,7 @@
         "id": "M-A-26",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 1.06s",
+        "tail": "1 failed in 1.27s",
         "failed": [
           "test_bind_index_unusable_is_not_the_empty_state"
         ]
@@ -668,7 +668,7 @@
         "id": "M-A-27",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 1.10s",
+        "tail": "1 failed in 1.19s",
         "failed": [
           "test_sound_rename_empty_name_warns"
         ]
@@ -677,7 +677,7 @@
         "id": "M-A-28",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 1.40s",
+        "tail": "1 failed in 1.92s",
         "failed": [
           "test_lines_save_new_line_clears_filters_and_toasts"
         ]
@@ -686,7 +686,7 @@
         "id": "M-A-29",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 1.27s",
+        "tail": "1 failed in 1.53s",
         "failed": [
           "test_state_inputs_are_declared_and_actually_read"
         ]
@@ -695,7 +695,7 @@
         "id": "M-A-30",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "2 failed in 0.83s",
+        "tail": "2 failed in 1.13s",
         "failed": [
           "test_scanner_is_not_vacuous",
           "test_every_action_button_is_wired_or_whitelisted"
@@ -705,7 +705,7 @@
         "id": "M-A-31",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 1.61s",
+        "tail": "1 failed in 1.50s",
         "failed": [
           "test_action_whitelist_checker_is_not_vacuous"
         ]
@@ -752,18 +752,18 @@
     ],
     "note": "变异只在 %TEMP% 影子副本里做，真实仓库只读（只写 _dev/.mutation.lock）",
     "repo_fingerprint": {
-      "桌宠.py": "7c64914aa083",
+      "桌宠.py": "17b471aa09e6",
       "pet_export.py": "c01e1593efd2",
       "pet_lines.py": "5332f60b5f26",
       "pet_alarm.py": "1149e94deee3",
       "pet_behaviors.py": "8f57255144f6",
       "_check_release.py": "e0abfe805849",
-      "pet_balance.py": "c374984ca058",
+      "pet_balance.py": "66948e5514a4",
       "pet_plugin.py": "2f7853298fc3",
       "pet_plugin_host.py": "82fb7b1384c8",
-      "pet_dialogs.py": "0084f1a6bad7",
+      "pet_dialogs.py": "2fb2f37a8853",
       "pet_menu.py": "920daac1b835",
-      "pet_plugin_index.py": "7e9b4537b98e"
+      "pet_plugin_index.py": "e5e9845785e8"
     }
   }
 }

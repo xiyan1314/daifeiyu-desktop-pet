@@ -64,8 +64,8 @@
 ## 4. 没做的 / 需要协调的（如实）
 
 1. ~~**L2-2 只完成本路**：A 的 31 条、B 的 16 条变异**没有落成 spec**~~ → **【已更正·原为反向失实】已完成**：A **31** 条（`_dev/mutations_agent_a_v270.json`）、B **35** 条（`_dev/mutations_agent_b_v270.json`）**已落成 spec 并入批量门**；`--scan-only` 收录、独立复跑 **31/31 与 35/35 全 CAUGHT**
-   （grep `_dev/*.json` 只有本路 13 条引用第 5 轮的用例），**他们的变异原文只存在于各自会话里，无法复原**。
-   需要人类/协调者找 A/B 补原始记录。本路 13 条已入库，`mutate_batch_v270.py` 会自动收进整批。
+   **A/B 的变异原文无需补录**：spec 本身就是原文证据（每条 `old` / `new` / `tests` / `expect_fail` 都已落盘在 `_dev/mutations_agent_a_v270.json` 与 `_dev/mutations_agent_b_v270.json`），与本节 §5 及 `_dev/audit_feedback_v270.md` §5 第 14 行「**已闭环，无需补录**」一致。
+   本路 13 条已入库，`mutate_batch_v270.py` 会自动收进整批。
 2. **兼容审查 P3-3 裁决为"不删"**（原建议：删掉 `桌宠.apply_physics` 里那条成功气泡）：
    B 的用例 `tests/test_feedback_host_v270.py::test_apply_physics_no_change_is_not_silent` 明确把
    "值真的变了 → 有可见反馈"钉在**主窗这一层**（`assert bubbles`），删掉它那条既有用例会红，且

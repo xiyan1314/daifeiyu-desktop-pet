@@ -129,16 +129,32 @@ def failed_nodeids(out):
             for ln in (out or "").splitlines() if ln.startswith("FAILED ")]
 
 
-def run_pytest(tree, tests, timeout=1800):
-    """在影子里跑指定用例 → (rc, 失败用例名列表, 完整输出)。"""
+def run_pytest(tree, tests, timeout=600):
+    """在影子里跑指定用例 → (rc, 失败用例名列表, 完整输出)。
+
+    timeout 默认 600s（v2.8.0 第 6 轮 · 代理 C 从 1800 收紧）：一条变异把用例推进不会退出的
+    模态框时，超时是**唯一**的止损点；1800s 会让整批多烧半小时。全量套件本身 2~4 分钟，
+    单条变异跑的只是它的子集，600s 已经非常宽松。超时折成 rc=3（见下面的 except）。
+    """
     cmd = [sys.executable, "-m", "pytest"] + list(tests) + [
         "-o", "addopts=", "-q", "--no-header", "-p", "no:cacheprovider"]
     env = dict(os.environ)
     env.pop("PYTHONPATH", None)      # 别让真实仓库从 PYTHONPATH 漏进影子（会盖住变异）
     env["QT_QPA_PLATFORM"] = "offscreen"
     env["PYTHONIOENCODING"] = "utf-8"
-    p = subprocess.run(cmd, cwd=tree, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                       timeout=timeout, env=env)
+    try:
+        p = subprocess.run(cmd, cwd=tree, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                           timeout=timeout, env=env)
+    except subprocess.TimeoutExpired as e:
+        # v2.8.0 第 6 轮（代理 C）：变异把用例推进一个**不会退出的模态框**时（offscreen 下的
+        # 真 QMessageBox.exec()），这一跑会一直挂到 timeout。此前 TimeoutExpired 直接冒泡 →
+        # 整批 mutate_check 当场崩掉、**后面的变异一条都跑不到**（本轮实测：89 条那批在第 8 条
+        # 报销，白烧 20 分钟）。现在折成 rc=3 + 一句说明：判定自然落 WRONG TEST（= 这条没被
+        # 验证），批次照常跑完，超时那条也不会被误读成"通过"。
+        part = e.stdout if isinstance(e.stdout, bytes) else b""
+        out = part.decode("utf-8", "replace")
+        return 3, [], (out + "\n[MUTATE-HARNESS] 影子里的 pytest 超时（%ss）——这条变异没被"
+                             "验证（多半是变异把用例推进了不会退出的模态框）" % timeout)
     out = p.stdout.decode("utf-8", "replace")
     return p.returncode, failed_nodeids(out), out
 
@@ -151,7 +167,7 @@ def test_error_lines(out):
             if ln.startswith("ERROR ") and "::" in ln]
 
 
-def run_baseline(tree, tests, retries=2, timeout=1800, pause_s=3.0):
+def run_baseline(tree, tests, retries=2, timeout=600, pause_s=3.0):
     """变异前的基线自检：失败时**重跑**再判——时序敏感的用例在冷缓存/并发负载下会偶发抖动。
 
     实测（v2.4.2 第三轮）：test_startup_defer_v242.py::test_startup_task_is_chunked_not_one_shot

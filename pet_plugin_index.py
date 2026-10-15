@@ -45,15 +45,30 @@ import inspect
 import json
 import os
 import re
+import time
 import urllib.parse
 import urllib.request
 
 import pet_export   # 容量上限**单一来源**（索引与包同一口径，防索引炸弹）
 import pet_io       # 全仓共用：原子写（线程里写盘也走它）
+import pet_log      # v2.8.0：缓存/索引读不出来的**留痕**（pet_log 无依赖，安全）
 import pet_plugin   # Phase 0 校验器 + 版本比较（本模块只调它，不抄判据）
 
 INDEX_NAME = "index.json"
 DOWNLOAD_DIRNAME = "_download"
+# ---------------- v2.8.0 · Phase 3：远端索引的配置键与本地缓存 ----------------
+# · 键名的**字面量**只在这里写一次，pet_config.PLUGIN_INDEX_URL_KEY 直接再导出它（不抄第二份）；
+# · 远端索引取回来后落地成 <plugins>/index.remote.json —— **绝不覆盖随包 index.json**：
+#   那份是出货资产，也是"远端挂了 / 没网"时官方内容照样装得上的退路。
+PLUGIN_INDEX_URL_KEY = "plugin_index_url"
+# 缓存放 <plugins>/_index_cache/ 里，与 _download/ 同一个套路：
+#   · 读取侧（pet_plugin.read_installed）对 "_" 开头的名字**显式跳过**，不会报成坏插件；
+#   · .gitignore 里 plugins/*/ 本来就忽略这类运行时目录 → 刷新一次不会把工作树弄脏
+#     （发布门会看 git status，也会看发布包里有没有混进用户数据）。
+REMOTE_CACHE_DIRNAME = "_index_cache"
+REMOTE_CACHE_NAME = "index.remote.json"
+REMOTE_CACHE_FORMAT = 1
+REMOTE_BASE_MAX_LEN = 2048      # 地址本身不许长到离谱（配置被手改成巨型串时当场拒）
 # 索引格式版本：比这更新的索引一律拒（fail-closed——看不懂的索引不许当成"没有新版本"）
 INDEX_VERSION = 1
 # 索引本体的体积上限：索引只是一个清单，超过这个数一定是坏东西
@@ -94,6 +109,73 @@ def insecure_reason(target):
         return ("远端地址必须是 https（明文 http 上的 sha256 拦不住中间人——索引与包会被一起换掉），"
                 "已拒绝取数：%s" % str(target or "").strip())
     return ""
+
+
+def _safe_urlsplit(text):
+    """urlsplit 的**绝不抛**版本（坏地址不该把"校验 / 读索引 / 刷新"整条打断）。
+
+    实测（找茬审查 F2 同批）：`https://[abc/x.json` 这类手改配置会让 urlsplit 抛
+    ValueError（Invalid IPv6 URL）——而校验函数是给界面**当场调用**的（调用方没有 try），
+    抛出去就成了"点了没反应"。解析不了 → None，调用方按"这个地址不合法"处理。
+    """
+    try:
+        return urllib.parse.urlsplit(str(text or ""))
+    except ValueError as e:
+        pet_log.log_throttled("plugin_index.urlsplit", "索引地址解析不了（按非法处理）：%r" % (e,))
+        return None
+
+
+def remote_base_reason(url):
+    """**配置里的远端基址**（plugin_index_url）→ 拒绝理由（"" = 可以用）。
+
+    v2.8.0 · Phase 3：与 resolve_url 的条目判据同源——远端只收 https；本地路径 / file://
+    一律拒（配置里写 C:\\packs 与写在索引条目里是同一件事：远端信任域不许接上本机文件系统）。
+    空串**不算错**（空串 = 清除远端、回到随包索引），由调用方按"有没有内容"分开处理。
+    """
+    text = str(url or "").strip()
+    if not text:
+        return "索引地址是空的（要回到随包索引，请用空地址清除）"
+    if len(text) > REMOTE_BASE_MAX_LEN:
+        return "索引地址太长（%d 个字符，最多 %d）" % (len(text), REMOTE_BASE_MAX_LEN)
+    bad = insecure_reason(text)
+    if bad:
+        return bad
+    low = text.lower()
+    if low.startswith("file:") or _DRIVE_RE.match(text) or text.startswith(("\\\\", "/")) \
+            or os.path.isabs(text):
+        return ("远端索引地址必须是 https 链接（本地路径 / file:// 不行——远端索引是别人给的清单，"
+                "不许指挥桌宠读本机文件）：%s" % text)
+    if not low.startswith("https://"):
+        return "远端索引地址只收 https 链接（当前：%s）" % text
+    # F2（找茬审查）：判据是 **hostname**，不是 netloc —— `https://:8443/x.json`、
+    # `https://user@/x.json`、`https://@/x.json` 这几形的 netloc **非空**（":8443" / "user@"），
+    # 真值判据会把它们放行并写进配置（实测 6 个同形地址全过），而它们的 hostname 都是 None。
+    parts = _safe_urlsplit(text)
+    if parts is None:
+        return "远端索引地址不是合法地址（解析不了）：%s" % text
+    if not parts.hostname:
+        return "远端索引地址缺少主机名：%s" % text
+    return ""
+
+
+def index_url_of(base):
+    """配置里的基址 → **真正要取**的索引地址（两种填法都认，不逼用户背口径）。
+
+      · 以 .json 结尾 → 原样（真源就是它自己，例如官方仓库的 .../plugins/index.json）；
+      · 其余当**目录**，拼上 index.json（https://host/dir → https://host/dir/index.json）；
+      · 带查询串 / 锚点的地址原样用（往它后面拼路径只会把它拼坏）。
+    """
+    text = str(base or "").strip()
+    if not text:
+        return ""
+    parts = _safe_urlsplit(text)
+    if parts is None:
+        return text                  # 解析不了：原样交出去（判据会拒；取数那边给人话错误）
+    if parts.query or parts.fragment:
+        return text
+    if parts.path.lower().endswith(".json"):
+        return text
+    return text.rstrip("/") + "/" + INDEX_NAME
 
 
 def _file_url_to_path(url):
@@ -455,6 +537,17 @@ def parse_index(data, base="", host_version="", landing_kinds=None):
             "entries": entries}, ""
 
 
+def _index_facts(raw):
+    """索引原始对象 → (updated_at, 插件条目数)；读不出来就是 ("", 0)。
+
+    只给**界面显示**用（不校验、不归一）：判据仍然只有 parse_index 那一份。
+    """
+    if not isinstance(raw, dict):
+        return "", 0
+    items = raw.get("plugins")
+    return str(raw.get("updated_at") or ""), (len(items) if isinstance(items, list) else 0)
+
+
 class PluginIndex(object):
     """一个插件目录（= 一套已装插件）对应的索引读取 / 下载器。
 
@@ -466,7 +559,8 @@ class PluginIndex(object):
     """
 
     def __init__(self, plugins_dir="", *, fetch=None, index_url="", host_version="",
-                 landing_kinds=None, progress=None, log=None):
+                 landing_kinds=None, progress=None, log=None,
+                 cfg_getter=None, save_cfg=None):
         self._plugins_dir = str(plugins_dir or "")
         self._fetch = fetch
         self._index_url = str(index_url or "")
@@ -474,6 +568,12 @@ class PluginIndex(object):
         self._kinds = tuple(landing_kinds) if landing_kinds else tuple(pet_plugin.DATA_KINDS)
         self._progress = progress
         self._log = log
+        # v2.8.0 · Phase 3：配置读写**注入**（cfg_getter() -> dict、save_cfg(cfg) -> None|错误串）。
+        # 只给 set_remote_base 用：本模块 Qt-free，所以绝不 import 桌宠.py / pet_config.py。
+        # 不注入也能用（只读索引 / 刷新 / 下载都不需要它们），只是 set_remote_base 会如实报
+        # "没接线"，而不是假装存下了（v2.7.0 的 (ok, msg) 口径）。
+        self._cfg_getter = cfg_getter
+        self._save_cfg = save_cfg
 
     # ---------- 路径 ----------
     @property
@@ -495,15 +595,43 @@ class PluginIndex(object):
         """远端索引地址（空 = 只读**随包**的本地索引；界面按它决定走不走后台线程）。"""
         return self._index_url
 
+    @property
+    def remote_cache_path(self):
+        """远端索引的本地缓存路径（<plugins>/_index_cache/index.remote.json）；没接线时是空串。"""
+        return (os.path.join(self._plugins_dir, REMOTE_CACHE_DIRNAME, REMOTE_CACHE_NAME)
+                if self._plugins_dir else "")
+
+    def _note(self, text):
+        """尽力记一条日志（没接线就不记；日志原语自己保证不抛）。"""
+        if self._log is not None:
+            self._log(text)
+
     # ---------- 读索引 ----------
     def load_index(self):
-        """读索引 → (归一索引 | None, err)。远端（index_url 非空）优先，否则读随包本地那份。"""
+        """读索引 → (归一索引 | None, err)。**只读本地**：联网的边界只在 refresh() 一处。
+
+        远端模式下的取数顺序（v2.8.0 · Phase 3）：
+          ① 本地缓存 <plugins>/index.remote.json 命中（同一个地址留下的、格式认识）→ 用它；
+          ② 没缓存但**注入了 fetch** 的实现 → 仍按老口径去取远端（测试 / 嵌入方驱动整条远端链）；
+          ③ 生产口径（没注入 fetch）→ **绝不联网**：退回随包索引，并在 source 里如实写明
+             "远端还没取回来"（界面照实显示，不假装远端索引就是这一份）。
+        没有远端地址时与接线前**逐位一致**：读 <plugins>/index.json。
+        """
         if self._index_url:
             bad = insecure_reason(self._index_url)
             if bad:                     # v2.6.0（P2-a）：远端索引本身也只收 https
                 return None, bad
-            data, err = self._fetch_bytes(self._index_url, None, INDEX_MAX_BYTES)
-            base = self._index_url
+            cached = self._read_cache(self._index_url)
+            if cached is not None:
+                return self._index_from_cache(cached)
+            if self._fetch is None:
+                fallback, ferr = self._bundled_index_with_note()
+                if fallback is not None:
+                    return fallback, ""
+                return None, ("远端索引还没取回来（点「刷新索引」）；%s"
+                              % (ferr or "随包索引也读不出来"))
+            data, err = self._fetch_bytes(index_url_of(self._index_url), None, INDEX_MAX_BYTES)
+            base = index_url_of(self._index_url)
             source = "远端索引"
         else:
             path = self.local_index_path
@@ -529,6 +657,216 @@ class PluginIndex(object):
         index["source"] = source
         index["base"] = base
         return index, ""
+
+    def _index_from_cache(self, cached):
+        """缓存里的远端索引 → (归一索引 | None, err)；source 里写明它是缓存。"""
+        index, perr = parse_index(cached.get("index"), str(cached.get("source_url") or ""),
+                                  self._host_version, self._kinds)
+        if index is None:
+            return None, ("远端索引缓存用不了（%s）——点「刷新索引」重新取一次"
+                          % (perr or "原因未知"))
+        index["source"] = "远端索引（本地缓存）"
+        index["base"] = str(cached.get("source_url") or "")
+        index["fetched_at"] = str(cached.get("fetched_at") or "")
+        return index, ""
+
+    def _bundled_index_with_note(self):
+        """随包索引（远端模式没缓存时的退路）→ (归一索引 | None, err)，source 写明为什么退回。
+
+        借一个"没有远端地址"的同款实例读同一份文件：随包索引的读法与判据**只此一份**，
+        绝不在这里抄第二套"读 index.json"的代码（抄第二套 = 早晚两处口径漂开）。
+        """
+        plain = PluginIndex(self._plugins_dir, fetch=self._fetch, index_url="",
+                            host_version=self._host_version, landing_kinds=self._kinds,
+                            progress=self._progress, log=self._log)
+        index, err = plain.load_index()
+        if index is None:
+            return None, err
+        index["source"] = "随包索引（远端索引还没取回来：点「刷新索引」）"
+        return index, ""
+
+    # ---------- v2.8.0 · Phase 3：远端索引（配置 / 刷新 / 来源） ----------
+    def set_remote_base(self, url):
+        """校验并保存 / 清除远端基址 → (ok, msg)。空串 = 回到随包索引。
+
+        写盘走注入的 save_cfg（桌宠.save_config），且**先写盘、成功才改内存**——
+        与 AIService.apply_settings 同一口径：失败时内存里一个字符都不动，也不假装存下了。
+        校验走 remote_base_reason（与索引条目的取数判据同源：只收 https、不接本机路径）。
+        """
+        text = str(url or "").strip()
+        if text:
+            bad = remote_base_reason(text)
+            if bad:
+                return False, bad
+        if self._cfg_getter is None or self._save_cfg is None:
+            return False, ("索引地址没有接线（构造 PluginIndex 时要传 cfg_getter / save_cfg）——"
+                           "这次改动一个字节都没落盘")
+        try:
+            cfg = self._cfg_getter()
+        except Exception as e:
+            pet_log.log_throttled("plugin_index.set_remote_base.read",
+                                  "读配置失败：%r" % (e,))
+            return False, "读配置失败：%r" % (e,)
+        if not isinstance(cfg, dict):
+            return False, "读回来的配置不是 dict，没法保存索引地址"
+        new = dict(cfg)                     # 先改副本（失败时内存不变）
+        new[PLUGIN_INDEX_URL_KEY] = text
+        try:
+            err = self._save_cfg(new)
+        except Exception as e:
+            pet_log.log_throttled("plugin_index.set_remote_base.save",
+                                  "写配置异常：%r" % (e,))
+            err = "配置写盘异常：%r" % (e,)
+        if err is False or (isinstance(err, str) and err.strip()):
+            why = err if isinstance(err, str) and err.strip() else "落盘回调报了失败"
+            self._note("plugin_index.set_remote_base 写配置失败：%s" % (why,))
+            return False, "索引地址没能保存：%s（盘上还是原值，这次改动没有生效）" % (why,)
+        cfg.update(new)                     # 写盘成功才提交进内存（键顺序与原地写逐位相同）
+        self._index_url = text
+        if not text:
+            self._drop_cache()              # 回随包索引：连这份缓存一起清（免得换个地址后串味）
+            return True, "已恢复为随包索引（%s，不联网）" % INDEX_NAME
+        return True, "已改用远端索引：%s（点「刷新索引」取回列表）" % text
+
+    def refresh(self, force=False):
+        """取远端 index.json → 校验 → 落地成本地缓存 → (ok, msg, count)。
+
+        **本模块唯一联网的一处**（联网也只经注入的 fetch；没注入时才用 default_fetch）。
+        失败一律 (False, 人话原因, 0)，而且**磁盘上原有的缓存与随包索引一个字节都不动**：
+        刷新失败永远不破坏"东西还装得上"这件事（这就是"可回退"的物证）。
+        force=False：已有同一个地址留下的可用缓存就直接用它（不联网）；force=True 无条件重取。
+        count = 索引里**列出**的插件条目数（可安装几个由 msg 说清）。
+        """
+        base = self._index_url
+        if not base:
+            return False, "当前用的是随包索引（没有设置远端地址），没有可刷新的远端索引", 0
+        bad = insecure_reason(base)
+        if bad:
+            return False, bad, 0
+        target = index_url_of(base)
+        if not force:
+            cached = self._read_cache(base)
+            if cached is not None:
+                index, perr = self._index_from_cache(cached)
+                if index is not None:
+                    return True, ("远端索引已是本地缓存里这一份（取回于 %s，共 %d 个插件）"
+                                  % (cached.get("fetched_at") or "未知时间",
+                                     len(index["entries"]))), len(index["entries"])
+                self._note("plugin_index.refresh 缓存用不了，改为重新取数：%s" % (perr,))
+        data, err = self._fetch_bytes(target, self._progress, INDEX_MAX_BYTES)
+        if data is None:
+            return False, err or "远端索引取数失败", 0
+        if len(data) > INDEX_MAX_BYTES:     # 上限前置只是止损；这条事后判据仍是唯一口径
+            return False, ("远端索引过大（%d 字节，上限 %d）"
+                           % (len(data), INDEX_MAX_BYTES)), 0
+        try:
+            raw = json.loads(data.decode("utf-8-sig"))
+        except Exception as e:
+            pet_log.log_throttled("plugin_index.remote_json",
+                                  "远端索引不是合法的 UTF-8 JSON：%r" % (e,))
+            return False, "远端索引不是合法的 UTF-8 JSON：%s" % e, 0
+        index, perr = parse_index(raw, target, self._host_version, self._kinds)
+        if index is None:
+            return False, "远端索引用不了：%s" % (perr or "原因未知"), 0
+        werr = self._write_cache(target, raw)
+        if werr:
+            return False, "远端索引取回来了，但本地缓存写盘失败：%s" % werr, 0
+        entries = index["entries"]
+        ready = len([one for one in entries if one.get("installable")])
+        return True, ("远端索引已更新（共 %d 个插件，其中 %d 个可安装）"
+                      % (len(entries), ready)), len(entries)
+
+    def source_info(self):
+        """界面显示用的来源信息 → {"kind": "bundled"|"remote", "url": str, "updated_at": str}。
+
+        额外键都是**只读事实**，界面可用可不用：index_url（真正取数的地址，配置是目录时
+        会补上 index.json）、cache_path、fetched_at（本地取回时间）、count、cached。
+        **只读本地、不联网**（联网的边界只在 refresh）：远端模式下 url 是配置值，updated_at
+        取本地缓存里那份索引自报的更新时间；随包模式取随包索引自报的时间。
+        """
+        base = self._index_url
+        info = {"kind": "remote" if base else "bundled", "url": base,
+                "index_url": index_url_of(base), "updated_at": "",
+                "cache_path": self.remote_cache_path, "fetched_at": "",
+                "count": 0, "cached": False}
+        if base:
+            cached = self._read_cache(base)
+            if cached is not None:
+                info["cached"] = True
+                info["fetched_at"] = str(cached.get("fetched_at") or "")
+                info["updated_at"], info["count"] = _index_facts(cached.get("index"))
+            return info
+        info["updated_at"], info["count"] = _index_facts(self._local_raw())
+        return info
+
+    def _local_raw(self):
+        """读**随包**索引的原始 JSON（读不出来 → None）。只读本地文件，不联网、不校验。"""
+        path = self.local_index_path
+        if not path or not os.path.isfile(path):
+            return None
+        try:
+            with open(path, "r", encoding="utf-8-sig") as fh:
+                return json.load(fh)
+        except Exception as e:
+            pet_log.log_throttled("plugin_index.local_raw",
+                                  "随包索引读不出来（%s）：%r" % (path, e))
+            return None
+
+    def _read_cache(self, base):
+        """本地缓存里**属于这个地址**的远端索引 → {"source_url", "fetched_at", "index"} | None。
+
+        解析不了 / 格式不认识 / 地址对不上 → None（调用方照"没有缓存"那条路走）：
+        换过地址之后宁可重新取一次，也不能把 A 站点的清单当成 B 站点的显示给用户。
+
+        比对用的是**解析后**的取数地址（index_url_of）：配置写目录时缓存里记的是
+        .../index.json，拿原样的目录去比会永远比不上（于是"缓存命中"这条路径形同虚设）。
+        """
+        path = self.remote_cache_path
+        if not path or not os.path.isfile(path):
+            return None
+        try:
+            with open(path, "r", encoding="utf-8-sig") as fh:
+                data = json.load(fh)
+        except Exception as e:
+            pet_log.log_throttled("plugin_index.remote_cache",
+                                  "远端索引缓存读不出来（按没有缓存处理）：%s：%r" % (path, e))
+            return None
+        if not isinstance(data, dict) or data.get("cache_format") != REMOTE_CACHE_FORMAT:
+            return None
+        if str(data.get("source_url") or "") != (index_url_of(base) or str(base or "")):
+            return None
+        if not isinstance(data.get("index"), dict):
+            return None
+        return data
+
+    def _write_cache(self, source_url, raw):
+        """把刚取回来的远端索引**原子**落成本地缓存 → "" 或错误串。
+
+        缓存自带 source_url：它记的是"这份清单是从哪个地址取回来的"，不是"现在配置的是哪个"。
+        """
+        path = self.remote_cache_path
+        if not path:
+            return "插件目录不可用（宿主未接线），没地方放索引缓存"
+        made = self._ensure_dir(os.path.dirname(path))
+        err = pet_io.atomic_write_json(path, {"cache_format": REMOTE_CACHE_FORMAT,
+                                              "source_url": str(source_url or ""),
+                                              "fetched_at": time.strftime("%Y-%m-%d %H:%M:%S"),
+                                              "index": raw}, log=self._log)
+        if err:
+            self._cleanup_dirs(made)
+            return str(err)
+        return ""
+
+    def _drop_cache(self):
+        """删掉远端索引缓存（清除远端地址时用）。删不掉只会留一个文件，不改变任何结论。"""
+        path = self.remote_cache_path
+        if not path or not os.path.isfile(path):
+            return
+        try:
+            os.remove(path)
+        except OSError as e:
+            pet_log.log_throttled("plugin_index.drop_cache", "远端索引缓存删不掉：%r" % (e,))
+        self._drop_empty_dir(os.path.dirname(path))     # 空目录也一并撤掉（不留空壳）
 
     # ---------- 下载 ----------
     def download(self, entry, progress=None):

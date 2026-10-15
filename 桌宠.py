@@ -69,7 +69,7 @@ from pet_plugin_host import PluginHost as _PluginHost  # v2.5.1：PetHub 插件�
 
 
 APP_NAME = "大肥鱼桌宠"
-VERSION = "2.7.0"
+VERSION = "2.8.0"
 PAD = 1.25  # 窗口相对角色的透明边距（为压扁/回弹预留空间）
 IDLE_FRAME_MS = 140      # 待机帧间隔
 IDLE_FORM_HOLD_SECS = 8  # v2.1.3：只有形态、没有动作可播时的展示期上限（到期回用户形态）
@@ -206,6 +206,11 @@ DEFAULT_CONFIG = {
     "ai_tools_confirm": True,   # v2.3.0（1.2）：写入类工具（记账/预算/闹钟/提醒）先问用户
     "click_through": False,   # P3-1：透明区点击穿透（只命中身体，默认关闭）
     "role_frame_max": 24,     # P3-5+：帧动画帧数上限（2~60，用户可调）
+    # v2.8.0 · Phase 3：远端插件索引地址（空 = 只读**随包**索引，不联网也装得上官方内容）。
+    # 键名/默认值/校验的真源在 pet_plugin_index + pet_config（PLUGIN_INDEX_URL_KEY），
+    # 这一行是**加载白名单**：load_config 只合并它认识的键，漏了这行配置就永远存不住，
+    # 而且不会报错（v2.8.0 联调时 B 点名的坑）。
+    "plugin_index_url": "",
     # P1-手感：甩抛物理（默认关闭=行为与旧版逐像素一致；参数与 pet_physics.DEFAULT_PHYSICS 同构）
     "physics": {"enabled": False, "gravity": 1400.0, "restitution": 0.78,
                 "groundFriction": 2.5, "ceilingBounce": True, "throwPower": 1.0},
@@ -1543,6 +1548,15 @@ class PetWindow(QWidget):
             if _f.get(flag):
                 out.append(_k)
         return out
+
+    @property
+    def plugin_index_url(self):
+        """v2.8.0 · Phase 3：远端插件索引地址（空 = 只读**随包**索引）。
+
+        真源就是 cfg 的那一个键（加载白名单见 DEFAULT_CONFIG 里的同名条目，键名与
+        pet_plugin_index.PLUGIN_INDEX_URL_KEY 同一个字面量）；插件管理对话框据此现造索引器。
+        """
+        return pet_config.normalize_plugin_index_url(self.cfg.get(pet_config.PLUGIN_INDEX_URL_KEY))
 
     @property
     def has_transform_form(self):
@@ -3740,15 +3754,24 @@ class PetWindow(QWidget):
         return int((self.height() - self.base_h * self.scale) / 2)
 
     def show_bubble(self, text):
+        """弹一条气泡 → **是否真的显示出来了**（v2.8.0 第 6 轮 A3：返回值变成实报）。
+
+        改前这里两条早退路径都是裸 `return`（返回 None），而 pet_dialogs._toast 只看"回调没抛
+        异常"就报 True —— 实测 _toast=True 而气泡可见=False（退出守卫下什么都不弹）。
+        现在：早退一律 False，真的交给气泡窗口显示（且它确实可见）才 True；_toast 据此走兜底。
+        """
         if self._closing:
-            return  # P1-5：退出后不再弹气泡（在途信号守卫）
+            return False  # P1-5：退出后不再弹气泡（在途信号守卫）
         if not text:
-            return
+            return False
         pad_top = self._pad_top()
         gp = QPoint(self.x() + self.width() // 2, self.y() + pad_top)
         if self.badge.isVisible():
             gp = QPoint(self.badge.x() + self.badge.width() // 2, self.badge.y())
         self.bubble.show_text(text, gp)
+        # 气泡窗口在"没有可用屏幕"时会自己放弃（Bubble.show_text 的早退），所以这里按
+        # 可见性如实回报——调用方（_toast）要的就是"用户到底看没看到"这个事实。
+        return bool(self.bubble.isVisible())
 
     def _cycle_line(self):
         """戳一戳随机台词：v2.1 起来自台词库（用户可增删改），空池兜中性句子。

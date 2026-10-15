@@ -19,14 +19,52 @@ _CFG_WRITE_LOCK = threading.Lock()
 
 import pet_io  # v2.3.1：全仓共用原子写（分锁 + 线程唯一临时名 + replace 重试）
 import pet_log  # P1-手感：物理参数非法时记日志（pet_log 无任何依赖，安全）
+import pet_plugin_index  # v2.8.0：远端索引地址的判据**单一来源**（Qt-free，无环：
+                         #   pet_plugin_index → pet_export / pet_io / pet_plugin，都不回头 import 本模块）
 import pet_physics  # P1-手感：默认值单一来源（pet_physics 无 Qt 依赖，无环）
 import pet_voice  # v2.0：语音配置归一化（pet_voice 无环）
 import pet_behaviors  # v2.0.2：行为配置默认值单一来源（pet_behaviors 无环）
 import pet_chat  # v2.0.4：AI 默认接口/模型单一来源（pet_chat 无 Qt、无环）
 
+# ---------------- v2.8.0 · Phase 3：远端插件索引地址（plugin_index_url） ----------------
+# 键名/默认值在这里**再导出**（字面量只有 pet_plugin_index 那一份），远端地址的判据也只有
+# 那一份（remote_base_reason：只收 https、本地路径/file:// 一律拒、超长拒）——本模块只把它
+# 包成 (ok, msg) 给界面用，绝不抄第二套判断（两套判据 = 早晚漂开）。
+PLUGIN_INDEX_URL_KEY = pet_plugin_index.PLUGIN_INDEX_URL_KEY
+PLUGIN_INDEX_URL_DEFAULT = ""      # 空 = 只读**随包**索引（不联网、离线也装得上官方内容）
+
 # 上界与设置对话框同口径（pet_dialogs.PhysicsDialog 的 spinbox 范围）
 _PHYS_MAX = {"gravity": 10000.0, "restitution": 1.0,
              "groundFriction": 50.0, "throwPower": 10.0}
+
+
+def normalize_plugin_index_url(value):
+    """配置里的 plugin_index_url → 归一值（null / 空白 → ""＝随包索引）。
+
+    只管**类型与空白**：非字符串按全仓 string 键同款折成字符串（手改 config.json 写成 123
+    时不会崩，也不会凭空消失），**地址合法性一律交给 validate_plugin_index_url /
+    remote_base_reason 判**——归一管"长什么样"，判据管"能不能用"，两件事不混。
+    """
+    if value is None:
+        return PLUGIN_INDEX_URL_DEFAULT
+    if isinstance(value, str):
+        return value.strip()
+    return str(value).strip()
+
+
+def validate_plugin_index_url(url):
+    """远端索引地址 → (ok, msg)。**空串算合法**（= 清除远端、回到随包索引）。
+
+    给界面"当场拒绝 + 说清为什么"用；判据本身在 pet_plugin_index.remote_base_reason
+    （与真正取数时**同一个**函数，不存在"界面放行、取数时才发现不对"的两套口径）。
+    """
+    text = normalize_plugin_index_url(url)
+    if not text:
+        return True, ""
+    bad = pet_plugin_index.remote_base_reason(text)
+    if bad:
+        return False, bad
+    return True, ""
 
 
 def normalize_physics(ph):
@@ -271,6 +309,11 @@ def normalize_cfg(cfg, defaults, persona_ids):
         le = {}
     cfg["lines_extra"] = {k: [str(x).strip() for x in (v or []) if str(x).strip()]
                           for k, v in le.items() if isinstance(v, list)}
+    # v2.8.0 · Phase 3：远端插件索引地址（默认空 = 随包索引）。**只在键已存在时**归一：
+    # 这个键由 桌宠.DEFAULT_CONFIG 声明（本模块不往 cfg 里增添量未知键——write_config 的
+    # diff 存储本来就只认 defaults 里的键，凭空加进去只会让人以为它存得住）。
+    if PLUGIN_INDEX_URL_KEY in cfg:
+        cfg[PLUGIN_INDEX_URL_KEY] = normalize_plugin_index_url(cfg[PLUGIN_INDEX_URL_KEY])
     return cfg
 
 

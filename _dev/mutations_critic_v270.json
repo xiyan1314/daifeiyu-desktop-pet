@@ -31,28 +31,30 @@
       "id": "M-R5-F4",
       "why": "F4：apply_settings 先改副本、落盘成功才提交（失败不许改内存 cfg）",
       "file": "pet_ai.py",
-      "old": "            new = dict(cfg)\n",
-      "new": "            new = cfg  # MUT: 恢复\"先原地改 cfg 再 save\"（F4 的修复被拿掉）\n",
+      "old": "            new = dict(cfg)\n            for k, v in data.items():\n",
+      "new": "            new = cfg  # MUT: 恢复\"先原地改 cfg 再 save\"（F4 的修复被拿掉）\n            for k, v in data.items():\n",
       "tests": [
         "tests/test_dialogs_feedback_v270.py::test_ai_apply_settings_failure_leaves_memory_untouched",
         "tests/test_dialogs_feedback_v270.py::test_ai_apply_settings_success_commit_is_bit_identical"
       ],
       "expect_fail": [
         "tests/test_dialogs_feedback_v270.py::test_ai_apply_settings_failure_leaves_memory_untouched"
-      ]
+      ],
+      "note": "v2.8.0 第 6 轮（代理 C）重锚：B 给三处 set_* 也加了 `new = dict(cfg)`，旧锚点（单行）命中 2 次（歧义）→ 补上下文钉回 apply_settings"
     },
     {
       "id": "M-R5-F5",
       "why": "F5：_toast 的文档口径必须写「尽力而为」（第一行摘要不许再承诺「真的发出」）",
       "file": "pet_dialogs.py",
-      "old": "    \"\"\"成功回执：宠物气泡。**尽力而为**——返回 False 只表示\"这次压根没尝试发\"\n    （没有 pet / 没有 show_bubble / 文本为空 / show_bubble 抛异常）。\n\n    v2.7.0 第 5 轮（F5：文档承诺与实现不符）：改前这里写的是\"返回是否**真的发出**\"，\n    而现网 pet 的 show_bubble 在退出守卫下会**静默早退**（桌宠.show_bubble 的 `_closing`\n    分支直接 return，实测 _toast=True 而气泡可见=False）——回调不抛异常，返回值就是 True。\n    要让这个返回值变成硬承诺，得让生产端回报\"到底显示了没有\"，而那会改动主窗的公共接口；\n    所以这里取**改动最小且诚实**的一条：把口径说成\"尽力而为\"，**调用方不得拿返回值当\n    \"用户看见了\"**（全文件目前也没有任何调用点消费它）。回调自己抛异常仍然记日志 + False。\n    \"\"\"\n",
-      "new": "    \"\"\"成功回执：宠物气泡。返回是否真的发出（没有 pet / 没有气泡能力时静默降级）。\"\"\"\n",
+      "old": "    \"\"\"成功回执：宠物气泡。**尽力而为**——返回 False 只表示\"气泡这条路明确没通\"\n    （没有 pet / 没有 show_bubble / 文本为空 / show_bubble 抛异常 / **回调如实回报没显示**）。\n",
+      "new": "    \"\"\"成功回执：宠物气泡。返回是否真的发出（没有 pet / 没有气泡能力时静默降级）。\n",
       "tests": [
         "tests/test_dialogs_feedback_v270.py::test_toast_is_best_effort_not_a_delivery_receipt"
       ],
       "expect_fail": [
         "tests/test_dialogs_feedback_v270.py::test_toast_is_best_effort_not_a_delivery_receipt"
-      ]
+      ],
+      "note": "v2.8.0 第 6 轮（代理 C）重锚：A3 把 _toast 的 docstring 整段改写（本轮行为层收口），旧锚点命中 0"
     },
     {
       "id": "M-R5-L2-1a",
@@ -137,14 +139,15 @@
       "id": "M-R5-P3-2",
       "why": "P3-2：「没 Key 就把开关退回关」那次落盘失败也要上报",
       "file": "pet_ai.py",
-      "old": "                if _err2 is False or (isinstance(_err2, str) and _err2.strip()):\n",
-      "new": "                if False:  # MUT: 第二次落盘的返回值又丢掉（P3-2 的修复被拿掉）\n",
+      "old": "                if _bad2:\n                    self.pet.show_bubble(\"要先填 DeepSeek API Key 才能开 AI 对话哦~\\n\"\n                                         \"（另外：AI 开关也没能保存：%s）\" % (_err2,))\n",
+      "new": "                if False:  # MUT: 第二次落盘的返回值又丢掉（P3-2 的修复被拿掉）\n                    self.pet.show_bubble(\"要先填 DeepSeek API Key 才能开 AI 对话哦~\\n\"\n                                         \"（另外：AI 开关也没能保存：%s）\" % (_err2,))\n",
       "tests": [
         "tests/test_dialogs_feedback_v270.py::test_ai_toggle_second_save_failure_is_reported"
       ],
       "expect_fail": [
         "tests/test_dialogs_feedback_v270.py::test_ai_toggle_second_save_failure_is_reported"
-      ]
+      ],
+      "note": "v2.8.0 第 6 轮（代理 C）重锚：B 把第二次落盘也改成『先写副本』，判据变量 _err2 改成 _bad2；旧锚点命中 0"
     },
     {
       "id": "M-R5-P1-1",
@@ -192,7 +195,7 @@
   ],
   "results": {
     "title": "变异验证 spec：mutations_critic_v270.json",
-    "checked_at": "2026-10-15 17:41:48",
+    "checked_at": "2026-10-15 21:29:13",
     "total": 14,
     "caught": 14,
     "not_caught": 0,
@@ -202,7 +205,7 @@
         "id": "M-R5-F1",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 1.62s",
+        "tail": "1 failed in 1.34s",
         "failed": [
           "test_bind_hint_quiet_on_healthy_library"
         ]
@@ -211,7 +214,7 @@
         "id": "M-R5-F2",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "2 failed in 1.07s",
+        "tail": "2 failed in 0.93s",
         "failed": [
           "test_apply_result_treats_bare_error_string_as_failure",
           "test_physics_dialog_keeps_window_open_on_bare_error_string"
@@ -221,7 +224,7 @@
         "id": "M-R5-F4",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed, 1 passed in 1.56s",
+        "tail": "1 failed, 1 passed in 0.86s",
         "failed": [
           "test_ai_apply_settings_failure_leaves_memory_untouched"
         ]
@@ -230,7 +233,7 @@
         "id": "M-R5-F5",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 1.14s",
+        "tail": "1 failed in 0.97s",
         "failed": [
           "test_toast_is_best_effort_not_a_delivery_receipt"
         ]
@@ -239,7 +242,7 @@
         "id": "M-R5-L2-1a",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed, 1 passed in 1.43s",
+        "tail": "1 failed, 1 passed in 0.95s",
         "failed": [
           "test_sound_panel_treats_none_return_as_failure"
         ]
@@ -248,7 +251,7 @@
         "id": "M-R5-L2-1b",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 1.18s",
+        "tail": "1 failed in 0.97s",
         "failed": [
           "test_sound_panel_backend_failure_does_not_claim_success"
         ]
@@ -257,7 +260,7 @@
         "id": "M-R5-P2-4",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 1.36s",
+        "tail": "1 failed in 0.99s",
         "failed": [
           "test_frame_action_cancel_is_not_reported_as_too_few"
         ]
@@ -266,7 +269,7 @@
         "id": "M-R5-P2-1",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 1.12s",
+        "tail": "1 failed in 1.18s",
         "failed": [
           "test_clear_api_key_save_failure_keeps_key_and_says_so"
         ]
@@ -275,7 +278,7 @@
         "id": "M-R5-P3-1a",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 1.44s",
+        "tail": "1 failed in 0.94s",
         "failed": [
           "test_bubble_style_and_physics_roll_back_cfg_on_write_failure"
         ]
@@ -284,7 +287,7 @@
         "id": "M-R5-P3-1b",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 1.16s",
+        "tail": "1 failed in 1.05s",
         "failed": [
           "test_bubble_style_and_physics_roll_back_cfg_on_write_failure"
         ]
@@ -293,7 +296,7 @@
         "id": "M-R5-P3-2",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 1.13s",
+        "tail": "1 failed in 0.96s",
         "failed": [
           "test_ai_toggle_second_save_failure_is_reported"
         ]
@@ -302,7 +305,7 @@
         "id": "M-R5-P1-1",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 1.26s",
+        "tail": "1 failed in 1.19s",
         "failed": [
           "test_bundle_import_reports_bubble_style_write_failure"
         ]
@@ -311,7 +314,7 @@
         "id": "M-R6-P1-1",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "3 failed in 1.44s",
+        "tail": "3 failed in 1.09s",
         "failed": [
           "test_import_receipt_keeps_bubble_style_failure_behind_two_other_warnings",
           "test_import_receipt_never_silently_drops_warnings",
@@ -322,7 +325,7 @@
         "id": "M-R5-F6",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 1.09s",
+        "tail": "1 failed in 0.95s",
         "failed": [
           "test_menu_export_role_item_runs_full_path"
         ]
@@ -350,18 +353,18 @@
     ],
     "note": "变异只在 %TEMP% 影子副本里做，真实仓库只读（只写 _dev/.mutation.lock）",
     "repo_fingerprint": {
-      "桌宠.py": "7c64914aa083",
+      "桌宠.py": "17b471aa09e6",
       "pet_export.py": "c01e1593efd2",
       "pet_lines.py": "5332f60b5f26",
       "pet_alarm.py": "1149e94deee3",
       "pet_behaviors.py": "8f57255144f6",
       "_check_release.py": "e0abfe805849",
-      "pet_balance.py": "c374984ca058",
+      "pet_balance.py": "66948e5514a4",
       "pet_plugin.py": "2f7853298fc3",
       "pet_plugin_host.py": "82fb7b1384c8",
-      "pet_dialogs.py": "0084f1a6bad7",
+      "pet_dialogs.py": "2fb2f37a8853",
       "pet_menu.py": "920daac1b835",
-      "pet_plugin_index.py": "7e9b4537b98e"
+      "pet_plugin_index.py": "e5e9845785e8"
     }
   }
 }
