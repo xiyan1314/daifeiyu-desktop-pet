@@ -78,10 +78,16 @@ class _Pet(object):
         return str(self.cfg.get(pet_config.PLUGIN_INDEX_URL_KEY) or "")
 
     def save_config(self, cfg):
+        """**只记录调用**（v2.9.0 A12 替身治理：以前额外镜像了一份"成功才更新内存 cfg"）。
+
+        真 `桌宠.save_config(cfg)` 只做一件事：把 cfg 写盘并返回错误串/None ——
+        它**从不**改任何内存里的 cfg（cfg 是调用方的对象）。替身以前自己补了
+        `self.cfg = dict(cfg)`，等于替被测对象实现了一条它根本没有的契约：真实现若改口径，
+        这几条用例照样绿。现在唯一的事实来源是 `self.saved`（记录后端递过来的那份配置）。
+        """
         if self.fail_save:
             return self.fail_save
         self.saved.append(dict(cfg))
-        self.cfg = dict(cfg)
         return None
 
     def show_bubble(self, text):
@@ -143,12 +149,22 @@ def _real_index(tmp_path, fetcher, index_url="", pet=None):
 
 
 class _FakeIndex(object):
-    """A 侧消费端的替身：只实现对话框用到的四个入口（**不联网**）。"""
+    """A 侧消费端的替身：只实现对话框用到的四个入口（**不联网**）。
+
+    v2.9.0（A12 / B8 替身治理）：`source_info()` 以前**自己算 kind**（"remote" if
+    self._index_url else "bundled"）——那是在替身里镜像真 PluginIndex 的规则：真规则一改，
+    这几条用例照样绿（B 的实测：把真 source_info 的 kind 钉死成 "bundled"，抓到它的只有
+    走真后端的两条 :379/:508，依赖本替身的三条 :430/:456/:490 抓不住）。
+    现在 kind 由**构造参数 source_kind 原样给出**（默认 "remote"），替身不推导任何东西。
+    真规则的覆盖由 :379/:395/:508/:522（真 _real_index）+ B 的
+    `test_set_remote_base_成功才提交_写失败内存不变` 承担——**这里不是漏测**。
+    """
 
     def __init__(self, index_url="", entries=None, set_result=(True, "已改用远端索引"),
                  refresh_result=(True, "远端索引已更新（共 2 个插件，其中 2 个可安装）", 2),
-                 with_set=True):
+                 with_set=True, source_kind="remote"):
         self._index_url = index_url
+        self.source_kind = source_kind     # 死值：替身不推导 kind（见类注释）
         self.entries = list(entries or [])
         self.set_result = set_result
         self.refresh_result = refresh_result
@@ -168,7 +184,8 @@ class _FakeIndex(object):
         return {"source": "远端索引", "entries": list(self.entries), "problems": []}, ""
 
     def source_info(self):
-        return {"kind": "remote" if self._index_url else "bundled", "url": self._index_url,
+        # 死值：kind 由用例显式给定（不镜像真 PluginIndex 的推导规则，见类注释）
+        return {"kind": self.source_kind, "url": self._index_url,
                 "updated_at": "2026-01-01", "count": len(self.entries), "cached": True,
                 "fetched_at": "2026-01-02"}
 
@@ -177,9 +194,13 @@ class _FakeIndex(object):
 
 
 def _fake_set(self, url):
+    """记录调用并**无条件**改内存（v2.9.0 A12：以前镜像"成功才提交"）。
+
+    "写失败就不改内存"这条语义现在只由 set_result 表达（要测失败路径就把 set_result
+    设成 (False, 原因)）——替身不再替被测对象"实现"这条规则。
+    """
     self.set_calls.append(url)
-    if self.set_result and self.set_result[0]:
-        self._index_url = url
+    self._index_url = url
     return self.set_result
 
 
@@ -419,7 +440,7 @@ def test_bad_source_url_is_rejected_on_the_spot_with_a_reason(tmp_path, quiet, u
     拒绝必须发生在**写配置之前**：pet.saved 为空、cfg 里一个字符都没变。
     """
     pet = _Pet(_host(tmp_path))
-    idx = _FakeIndex(index_url="")
+    idx = _FakeIndex(index_url="", source_kind="bundled")   # 显式：后端此刻报"随包"
     dlg = pet_dialogs.PluginManagerDialog(pet, index=idx)
     try:
         assert dlg.set_index_source(url) is False, "非法地址被放行了：%r" % (url,)
@@ -435,7 +456,8 @@ def test_bad_source_url_is_rejected_on_the_spot_with_a_reason(tmp_path, quiet, u
 def test_empty_save_is_rejected_and_points_at_reset(tmp_path, quiet):
     """空地址点「保存并使用」→ 当场拒绝，并指明"要回随包索引请点恢复默认"。"""
     pet = _Pet(_host(tmp_path))
-    dlg = pet_dialogs.PluginManagerDialog(pet, index=_FakeIndex(index_url=""))
+    dlg = pet_dialogs.PluginManagerDialog(
+        pet, index=_FakeIndex(index_url="", source_kind="bundled"))
     try:
         assert dlg.set_index_source("") is False
         assert "恢复默认" in quiet.warns_text(), quiet.warns_text()
@@ -485,6 +507,9 @@ def test_reset_to_bundled_takes_effect_and_reports(tmp_path, quiet):
                      set_result=(True, "已恢复为随包索引（index.json，不联网）"))
     dlg = pet_dialogs.PluginManagerDialog(pet, index=idx)
     try:
+        # 显式摆好「恢复默认之后后端会报什么」：kind 是死值、替身不再自己推导，
+        # 所以这条断言测的是「对话框在重置后**重新读了** source_info」，不是替身算得对不对
+        idx.source_kind = "bundled"
         assert dlg.set_index_source("", clearing=True) is True
         assert idx.set_calls == [""], "恢复默认没有把空地址交给后端：%r" % (idx.set_calls,)
         assert "随包索引" in dlg._src_label.text(), dlg._src_label.text()
@@ -880,21 +905,24 @@ def test_compose_dialog_accept_still_adds(pet, ui, monkeypatch):
         dlg._cleanup()
 
 
-def test_static_input_dialogs_are_gone_except_the_frame_action_one():
-    """P2-5：静态 QInputDialog **只剩帧动作那一处**（裁决保留），其余 5 处已走 modal()。
+def test_static_input_dialogs_are_gone():
+    """P2-5 + v2.9.0（A10）：pet_dialogs.py 里静态 QInputDialog **一处不剩**。
 
-    静态门（源码级）：这条用例同时是"其余 5 处不许退回去"的护栏。
+    上一轮这里是"只剩帧动作那一处（裁决保留）"。本轮把最后那一处也并进了 _ask_text ——
+    帧动作在**素材导入路径**上，静态框不进 modal()、拿不到置顶与抢焦点（Windows 前台锁）。
+    静态门（源码级）：同时是"不许退回去"的护栏。
     变异：把任意一处改回 QInputDialog.getText/getItem 静态调用 → 本用例红。
     """
     src = _read_src()
     gets = [i for i in range(len(src)) if src.startswith("QInputDialog.getText(", i)]
     items = [i for i in range(len(src)) if src.startswith("QInputDialog.getItem(", i)]
-    assert len(gets) == 1, ("静态 getText 只剩帧动作那一处，实际 %d 处" % len(gets))
+    assert gets == [], ("还有静态 getText 调用：%r" % (
+        [_enclosing_def_name(src, i) for i in gets],))
     assert items == [], "还有静态 getItem 调用：%r" % (
         [_enclosing_def_name(src, i) for i in items],)
-    assert _enclosing_def_name(src, gets[0]) == "_add_frame_action", \
-        "留下的那一处不是帧动作（既有用例靠 monkeypatch 静态方法驱动它）：%s" % (
-            _enclosing_def_name(src, gets[0]),)
+    # 反向：帧动作的命名框必须真的在走统一入口（否则上面两条可以靠"谁都不问名字"骗过）
+    assert "_ask_action_name(" in src, "帧动作的命名框没有走统一入口 _ask_action_name"
+    assert "_ask_text(parent, \"帧动作\"" in src, "帧动作的命名框没有真的走 _ask_text"
 
 
 def test_ask_helpers_go_through_modal(pet, monkeypatch):
@@ -1081,8 +1109,23 @@ def test_dialogue_remove_member_reports_what_was_removed(pet, ui):
         lib.delete(ln["id"])
 
 
-def test_role_edit_delete_action_needs_confirm_and_reports():
-    """D14：删自定义动作要二次确认（说明是暂存态）+ 回执；取消时动作还在。"""
+def test_role_edit_delete_action_needs_no_confirm_and_is_undoable():
+    """A6（v2.9.0）——**有意撤销上一轮的决定**：删自定义动作**不再**二次确认。
+
+    上一轮（v2.8.0 D14）在这里加了确认框，理由写在它自己的文案里：「这一步只是**暂存**，
+    点「取消」或关掉这个窗口，本次全部改动都会被放弃」——**给可撤销操作套不可撤销确认**
+    = 多一步 + 误导（审计 C.1-#14 / D#11；同仓反例：导入向导删形态行同为暂存态、不加确认）。
+
+    这条用例是**加强式改写**，不是删断言：原来断言「弹了确认」（现已不成立），现在断言
+    两件事，其中第二件原来根本没有：
+      ① 直接删掉，**不调用 _confirm**（变异：把确认加回来 → 红）；
+      ② 删掉之后列表里**真的没了**（不是"点了没反应"）。
+    **注意**：「删掉后可取消恢复（暂存态语义）」这条**不在本用例里** —— 它这句用
+    `RoleEditDialog(None, None, "")`，`_lib` 恒为 None，写在这里只会是**恒真断言**
+    （质量审 F4 实测抓到）。真覆盖在
+    `tests/test_dialogs_behavior_v290.py::test_delete_custom_action_can_be_undone_by_cancelling`：
+    那边用**真 RoleLibrary** 比对删除前后 roles 的 json。
+    """
     dlg = pet_dialogs.RoleEditDialog(None, None, "")
     try:
         dlg._cur_idx = 0
@@ -1093,25 +1136,22 @@ def test_role_edit_delete_action_needs_confirm_and_reports():
         dlg._act_list.setCurrentRow(0)
 
         confirms = []
+        # 三件套一起换（v2.9.0 规矩：被测路径可能弹真框就先全 stub —— 否则"本该红"会变成"挂住"）
         orig_warn, orig_confirm = pet_dialogs._warn, pet_dialogs._confirm
+        orig_info = pet_dialogs._info
         pet_dialogs._warn = lambda _p, t, x: None
-        pet_dialogs._confirm = lambda _p, t, x: (confirms.append((t, x)), False)[1]
+        pet_dialogs._info = lambda _p, t, x: None
+        pet_dialogs._confirm = lambda _p, t, x: (confirms.append((t, x)), True)[1]
         try:
             dlg._del_action()
         finally:
             pet_dialogs._warn, pet_dialogs._confirm = orig_warn, orig_confirm
-        assert confirms, "删自定义动作没有二次确认"
-        assert "v280_del" in confirms[-1][1], "确认文案里没有动作名：%r" % (confirms[-1],)
-        assert "暂存" in confirms[-1][1], "没有说明它是暂存态（可整体放弃）：%r" % (confirms[-1],)
-        assert "v280_del" in (dlg._forms[0].get("procs") or {}), "取消确认却把动作删了"
-
-        # 确认 → 真删 + 回执（回执走 _toast；pet=None 时它静默返回 False，不影响删除）
-        pet_dialogs._confirm = lambda _p, t, x: True
-        try:
-            dlg._del_action()
-        finally:
-            pet_dialogs._confirm = orig_confirm
-        assert "v280_del" not in (dlg._forms[0].get("procs") or {}), "确认之后没删掉"
+            pet_dialogs._info = orig_info
+        assert confirms == [], "删自定义动作还在弹二次确认（A6 有意撤销了它）：%r" % (confirms,)
+        assert "v280_del" not in (dlg._forms[0].get("procs") or {}), "不确认之后反而没删掉"
+        assert dlg._act_list.count() == 0, "列表里还留着那一行（看着像没删）"
+        # 「暂存态里的删除不会落盘」这条**故意不在这里断言**：本用例的 _lib 恒为 None，
+        # `_lib is None or ...` 是恒真断言（质量审 F4）。真覆盖见 v290 那条（真 RoleLibrary）。
     finally:
         dlg._cleanup()
 
@@ -1221,24 +1261,34 @@ def test_new_proc_action_is_selected_and_scrolled_into_view(pet, ui, monkeypatch
 
 
 def test_behavior_step_receipts(pet, ui):
-    """N15 / D11：行为「添加步骤」「删除选中步骤」都要有成功回执（此前只有列表变化）。"""
+    """A4（v2.9.0）：添加/删除步骤的回执走**窗口内状态行**，且**不再**弹宠物气泡。
+
+    v2.8.0（N15 / D11）把回执加成了宠物气泡；实测「建一个 5 步行为弹 7 条气泡」，而气泡是
+    单窗口覆盖式、无队列 —— 连点时前面的根本看不见、最后一条还滞留 5 秒（审计 C.1-#15②）。
+    这条是**加强式改写**：原来只断言气泡里有那句话，现在还断言**气泡一次都没弹**。
+    变异：把 _note(...) 改回 _toast(...) → 第二条断言红。
+    """
     dlg = pet_dialogs.BehaviorDialog(pet, pet.behaviors)
     dlg.show()
     try:
         dlg._steps.clear()
+        dlg._notes.setText("")
         dlg._act_combo.setCurrentIndex(dlg._act_combo.findData("say"))
         dlg._param.setText("V280 步骤回执")
         ui["toast"].clear()
         dlg._add_step()
         assert dlg._steps.count() == 1, "用例前提：步骤没加上"
-        assert ui["toast"] and "已添加步骤" in ui["toast"][-1], "添加步骤零回执：%r" % (ui["toast"],)
+        assert "已添加步骤" in dlg._notes.text(), \
+            "添加步骤后状态行没有回执：%r" % (dlg._notes.text(),)
         assert dlg._steps.currentItem() is dlg._steps.item(0), "新步骤没有选中"
 
         dlg._steps.setCurrentRow(0)
-        ui["toast"].clear()
         dlg._del_step()
         assert dlg._steps.count() == 0, "步骤没删掉"
-        assert ui["toast"] and "已删除步骤" in ui["toast"][-1], "删除步骤零回执：%r" % (ui["toast"],)
+        assert "已删除步骤" in dlg._notes.text(), \
+            "删除步骤后状态行没有回执：%r" % (dlg._notes.text(),)
+        assert ui["toast"] == [], \
+            "列表内的连续操作弹了宠物气泡（气泡覆盖式，连点时前面的看不见）：%r" % (ui["toast"],)
     finally:
         dlg.hide()
 

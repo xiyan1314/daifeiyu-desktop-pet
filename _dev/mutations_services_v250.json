@@ -88,7 +88,7 @@
   ],
   "results": {
     "title": "变异验证 spec：mutations_services_v250.json",
-    "checked_at": "2026-10-15 21:38:19",
+    "checked_at": "2026-10-16 02:27:57",
     "total": 6,
     "caught": 6,
     "not_caught": 0,
@@ -98,7 +98,7 @@
         "id": "M-S1",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed, 1 passed in 1.09s",
+        "tail": "1 failed, 1 passed in 2.50s",
         "failed": [
           "test_service_construction_order_and_types_match_the_old_init"
         ]
@@ -107,7 +107,7 @@
         "id": "M-S2",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.71s",
+        "tail": "1 failed in 2.13s",
         "failed": [
           "test_service_construction_order_and_types_match_the_old_init"
         ]
@@ -116,7 +116,7 @@
         "id": "M-S3",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.76s",
+        "tail": "1 failed in 1.15s",
         "failed": [
           "test_service_construction_order_and_types_match_the_old_init"
         ]
@@ -125,7 +125,7 @@
         "id": "M-S4",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "2 failed in 0.86s",
+        "tail": "2 failed in 0.91s",
         "failed": [
           "test_init_keeps_only_the_three_documented_constructions",
           "test_service_construction_order_and_types_match_the_old_init"
@@ -135,7 +135,7 @@
         "id": "M-S5",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "2 failed, 1 passed in 0.85s",
+        "tail": "2 failed, 1 passed in 1.00s",
         "failed": [
           "test_custom_role_petting_does_not_decode_default_frame_sets",
           "test_petting_ensure_uses_the_role_scope"
@@ -145,7 +145,7 @@
         "id": "M-S6",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.70s",
+        "tail": "1 failed in 0.74s",
         "failed": [
           "test_pet_services_is_in_the_release_sync_list"
         ]
@@ -162,18 +162,20 @@
     ],
     "note": "变异只在 %TEMP% 影子副本里做，真实仓库只读（只写 _dev/.mutation.lock）",
     "repo_fingerprint": {
-      "桌宠.py": "17b471aa09e6",
+      "桌宠.py": "6b20873532c6",
       "pet_export.py": "c01e1593efd2",
       "pet_lines.py": "5332f60b5f26",
       "pet_alarm.py": "1149e94deee3",
-      "pet_behaviors.py": "8f57255144f6",
-      "_check_release.py": "e0abfe805849",
+      "pet_behaviors.py": "99f7dff343e4",
+      "_check_release.py": "5b25dd0d243d",
       "pet_balance.py": "66948e5514a4",
       "pet_plugin.py": "2f7853298fc3",
       "pet_plugin_host.py": "82fb7b1384c8",
-      "pet_dialogs.py": "2fb2f37a8853",
+      "pet_dialogs.py": "4bc0e8c868bb",
       "pet_menu.py": "920daac1b835",
-      "pet_plugin_index.py": "e5e9845785e8"
+      "pet_plugin_index.py": "e5e9845785e8",
+      "pet_ai.py": "a5989e7fe646",
+      "pet_config.py": "7a4ad883d4e8"
     }
   }
 }

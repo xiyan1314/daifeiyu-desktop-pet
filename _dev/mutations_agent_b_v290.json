@@ -1,0 +1,730 @@
+{
+  "title": "v2.9.0 第 7 轮 · 代理 B 变异验证（B1 动作候选 + B4 待机引用清理 + B5 待机下拉 + B6 试播 + B7 勾选回读，共 23 条 = B 的 18 条 + 代理 C 独立补的 5 条）",
+  "note": "来源：① **B 的正式原料**（%TEMP%\\b_mutations_v290.json，18 条：B1 七 / B4 三 / B5 五 / B6 一 / B7 二），id、why、expect_fail 逐字保留——**唯一例外**：B7-M1 的 expect_fail 里那个中文 nodeid 在传递过程中被非 UTF-8 管道写成了乱码（U+FFFD），代理 C 按 tests 字段与现树核对后**改正为正确 nodeid**并在此登记（不改的话这条会永远判 WRONG TEST）；② 代理 C 独立补的 5 条（M-B290-*），其中 2 条与 B 同失败点（运行事故冗余，账目分开写）、3 条覆盖 B 没覆盖的机制。锚点一律 \\n。expect_fail 一律由代理 C 在**全新影子副本**里独立复跑核对（不照抄 B 的自述）。",
+  "mutations": [
+    {
+      "id": "B1-M1-empty-candidate-source",
+      "file": "pet_behaviors.py",
+      "old": "    names = set(pet_resources.ANIM_ACTIONS)\n    names.update(BUILTIN_PLAY_ACTIONS)\n",
+      "new": "    names = set()\n",
+      "tests": [
+        "tests/test_behavior_v290.py::test_action_choices_always_has_builtins_even_without_custom_actions",
+        "tests/test_behavior_v290.py::test_action_choices_includes_custom_actions",
+        "tests/test_behavior_v290.py::test_action_choices_is_deduped_and_stably_sorted",
+        "tests/test_behavior_v290.py::test_action_choices_tolerates_missing_pet_and_odd_shapes",
+        "tests/test_behavior_v290.py::test_action_choices_excludes_the_noop_name",
+        "tests/test_behavior_v290.py::test_unknown_action_name_survives_read_and_write",
+        "tests/test_behavior_v290.py::test_action_choices_against_real_pet_window"
+      ],
+      "why": "把候选来源整个换成空列表（动作下拉会一条候选都没有；审计要求「默认角色也有候选」）。",
+      "expect_fail": [
+        "tests/test_behavior_v290.py::test_action_choices_always_has_builtins_even_without_custom_actions",
+        "tests/test_behavior_v290.py::test_action_choices_includes_custom_actions",
+        "tests/test_behavior_v290.py::test_action_choices_tolerates_missing_pet_and_odd_shapes",
+        "tests/test_behavior_v290.py::test_action_choices_against_real_pet_window"
+      ]
+    },
+    {
+      "id": "B1-M2-missing-custom-actions",
+      "file": "pet_behaviors.py",
+      "old": "    _getter = getattr(pet, \"custom_actions\", None)\n    if callable(_getter):",
+      "new": "    _getter = None\n    if callable(_getter):",
+      "tests": [
+        "tests/test_behavior_v290.py::test_action_choices_always_has_builtins_even_without_custom_actions",
+        "tests/test_behavior_v290.py::test_action_choices_includes_custom_actions",
+        "tests/test_behavior_v290.py::test_action_choices_is_deduped_and_stably_sorted",
+        "tests/test_behavior_v290.py::test_action_choices_tolerates_missing_pet_and_odd_shapes",
+        "tests/test_behavior_v290.py::test_action_choices_excludes_the_noop_name",
+        "tests/test_behavior_v290.py::test_unknown_action_name_survives_read_and_write",
+        "tests/test_behavior_v290.py::test_action_choices_against_real_pet_window"
+      ],
+      "why": "候选漏掉 pet.custom_actions() 这一支（自定义帧动作/合成动作选不到）。",
+      "expect_fail": [
+        "tests/test_behavior_v290.py::test_action_choices_includes_custom_actions",
+        "tests/test_behavior_v290.py::test_action_choices_tolerates_missing_pet_and_odd_shapes",
+        "tests/test_behavior_v290.py::test_action_choices_against_real_pet_window"
+      ]
+    },
+    {
+      "id": "B1-M3-no-dedup-no-sort",
+      "file": "pet_behaviors.py",
+      "old": "    return sorted(names)",
+      "new": "    return list(names)",
+      "tests": [
+        "tests/test_behavior_v290.py::test_action_choices_always_has_builtins_even_without_custom_actions",
+        "tests/test_behavior_v290.py::test_action_choices_includes_custom_actions",
+        "tests/test_behavior_v290.py::test_action_choices_is_deduped_and_stably_sorted",
+        "tests/test_behavior_v290.py::test_action_choices_tolerates_missing_pet_and_odd_shapes",
+        "tests/test_behavior_v290.py::test_action_choices_excludes_the_noop_name",
+        "tests/test_behavior_v290.py::test_unknown_action_name_survives_read_and_write",
+        "tests/test_behavior_v290.py::test_action_choices_against_real_pet_window"
+      ],
+      "why": "不去重/不排序（同一来源出现多次、顺序每次随机 → 可编辑下拉不稳定）。",
+      "expect_fail": [
+        "tests/test_behavior_v290.py::test_action_choices_is_deduped_and_stably_sorted",
+        "tests/test_behavior_v290.py::test_action_choices_tolerates_missing_pet_and_odd_shapes",
+        "tests/test_behavior_v290.py::test_action_choices_against_real_pet_window"
+      ]
+    },
+    {
+      "id": "B1-M4-candidates-become-whitelist",
+      "file": "pet_behaviors.py",
+      "old": "            item[\"name\"] = name\n",
+      "new": "            if name not in action_choices(None):\n                return None, \"第 %d 步动作名不在候选里\" % (i + 1)\n            item[\"name\"] = name\n",
+      "tests": [
+        "tests/test_behavior_v290.py::test_action_choices_always_has_builtins_even_without_custom_actions",
+        "tests/test_behavior_v290.py::test_action_choices_includes_custom_actions",
+        "tests/test_behavior_v290.py::test_action_choices_is_deduped_and_stably_sorted",
+        "tests/test_behavior_v290.py::test_action_choices_tolerates_missing_pet_and_odd_shapes",
+        "tests/test_behavior_v290.py::test_action_choices_excludes_the_noop_name",
+        "tests/test_behavior_v290.py::test_unknown_action_name_survives_read_and_write",
+        "tests/test_behavior_v290.py::test_action_choices_against_real_pet_window"
+      ],
+      "why": "把「候选」当白名单用：老行为文件里候选外的动作名被吃掉（B1 验收③ 的负例）。",
+      "expect_fail": [
+        "tests/test_behavior_v290.py::test_unknown_action_name_survives_read_and_write"
+      ]
+    },
+    {
+      "id": "B1-M5-keep-none-in-candidates",
+      "file": "pet_behaviors.py",
+      "old": "    names.discard(\"none\")\n",
+      "new": "",
+      "tests": [
+        "tests/test_behavior_v290.py::test_action_choices_always_has_builtins_even_without_custom_actions",
+        "tests/test_behavior_v290.py::test_action_choices_includes_custom_actions",
+        "tests/test_behavior_v290.py::test_action_choices_is_deduped_and_stably_sorted",
+        "tests/test_behavior_v290.py::test_action_choices_tolerates_missing_pet_and_odd_shapes",
+        "tests/test_behavior_v290.py::test_action_choices_excludes_the_noop_name",
+        "tests/test_behavior_v290.py::test_unknown_action_name_survives_read_and_write",
+        "tests/test_behavior_v290.py::test_action_choices_against_real_pet_window"
+      ],
+      "why": "不排除 none（play_action 的显式空操作）→ 下拉里出现一个「什么都不做」的候选。",
+      "expect_fail": [
+        "tests/test_behavior_v290.py::test_action_choices_excludes_the_noop_name"
+      ]
+    },
+    {
+      "id": "B1-M6-no-getattr-guard",
+      "file": "pet_behaviors.py",
+      "old": "    _getter = getattr(pet, \"custom_actions\", None)",
+      "new": "    _getter = pet.custom_actions",
+      "tests": [
+        "tests/test_behavior_v290.py::test_action_choices_always_has_builtins_even_without_custom_actions",
+        "tests/test_behavior_v290.py::test_action_choices_includes_custom_actions",
+        "tests/test_behavior_v290.py::test_action_choices_is_deduped_and_stably_sorted",
+        "tests/test_behavior_v290.py::test_action_choices_tolerates_missing_pet_and_odd_shapes",
+        "tests/test_behavior_v290.py::test_action_choices_excludes_the_noop_name",
+        "tests/test_behavior_v290.py::test_unknown_action_name_survives_read_and_write",
+        "tests/test_behavior_v290.py::test_action_choices_against_real_pet_window"
+      ],
+      "why": "去掉替身/缺属性兜底：pet=None 或老替身直接 AttributeError → 整个「选动作」打不开。",
+      "expect_fail": [
+        "tests/test_behavior_v290.py::test_action_choices_tolerates_missing_pet_and_odd_shapes"
+      ]
+    },
+    {
+      "id": "B1-M7-drop-anim-actions-source",
+      "file": "pet_behaviors.py",
+      "old": "    names = set(pet_resources.ANIM_ACTIONS)\n    names.update(BUILTIN_PLAY_ACTIONS)\n",
+      "new": "    names = set(BUILTIN_PLAY_ACTIONS)\n",
+      "tests": [
+        "tests/test_behavior_v290.py::test_action_choices_always_has_builtins_even_without_custom_actions",
+        "tests/test_behavior_v290.py::test_action_choices_includes_custom_actions",
+        "tests/test_behavior_v290.py::test_action_choices_is_deduped_and_stably_sorted",
+        "tests/test_behavior_v290.py::test_action_choices_tolerates_missing_pet_and_odd_shapes",
+        "tests/test_behavior_v290.py::test_action_choices_excludes_the_noop_name",
+        "tests/test_behavior_v290.py::test_unknown_action_name_survives_read_and_write",
+        "tests/test_behavior_v290.py::test_action_choices_against_real_pet_window"
+      ],
+      "why": "只留 jump/emote、丢掉 pet_resources.ANIM_ACTIONS 这一支（idle/eat/poke/sleep 选不到）。",
+      "expect_fail": [
+        "tests/test_behavior_v290.py::test_action_choices_always_has_builtins_even_without_custom_actions",
+        "tests/test_behavior_v290.py::test_action_choices_includes_custom_actions",
+        "tests/test_behavior_v290.py::test_action_choices_tolerates_missing_pet_and_odd_shapes"
+      ]
+    },
+    {
+      "id": "B4-M1-dead-branch-legacy-key",
+      "file": "pet_behaviors.py",
+      "old": "    removed = [dict(a) for a in idle[\"idle_actions\"] if a[\"behavior_id\"] == bid]\n",
+      "new": "    removed = [dict(a) for a in idle[\"idle_actions\"] if str(cfg.get(\"idle_behavior\") or \"\").strip() == bid]\n",
+      "tests": [
+        "tests/test_behavior_v290.py::test_remove_idle_refs_clears_the_reference",
+        "tests/test_behavior_v290.py::test_remove_idle_refs_is_idempotent_and_touches_nothing_when_no_hit",
+        "tests/test_behavior_v290.py::test_remove_idle_refs_does_not_hurt_other_entries",
+        "tests/test_behavior_v290.py::test_remove_idle_refs_clears_legacy_key_too",
+        "tests/test_behavior_v290.py::test_delete_behavior_then_clear_idle_refs_end_to_end"
+      ],
+      "why": "把清理判据改回审计实测的死分支（拿恒为 \"\" 的 cfg[\"idle_behavior\"] 去比；pet_config.py:270 每次 normalize 都置空它）→ 删了行为、待机列表原样残留。",
+      "expect_fail": [
+        "tests/test_behavior_v290.py::test_remove_idle_refs_clears_the_reference",
+        "tests/test_behavior_v290.py::test_remove_idle_refs_does_not_hurt_other_entries",
+        "tests/test_behavior_v290.py::test_delete_behavior_then_clear_idle_refs_end_to_end"
+      ]
+    },
+    {
+      "id": "B4-M2-rewrite-with-normalized-entries",
+      "file": "pet_behaviors.py",
+      "old": "    raw = cfg.get(\"idle_actions\")\n    left = []\n    if isinstance(raw, list):\n        for a in raw:\n            if isinstance(a, dict) and str(a.get(\"behavior_id\") or \"\").strip() == bid:\n                continue\n            left.append(a)\n",
+      "new": "    left = [a for a in idle[\"idle_actions\"] if a[\"behavior_id\"] != bid]\n",
+      "tests": [
+        "tests/test_behavior_v290.py::test_remove_idle_refs_clears_the_reference",
+        "tests/test_behavior_v290.py::test_remove_idle_refs_is_idempotent_and_touches_nothing_when_no_hit",
+        "tests/test_behavior_v290.py::test_remove_idle_refs_does_not_hurt_other_entries",
+        "tests/test_behavior_v290.py::test_remove_idle_refs_clears_legacy_key_too",
+        "tests/test_behavior_v290.py::test_delete_behavior_then_clear_idle_refs_end_to_end"
+      ],
+      "why": "拿归一化结果整份覆盖写回：别的条目里用户手加的未知键被冲掉（「不误伤其它条目」被破坏）。",
+      "expect_fail": [
+        "tests/test_behavior_v290.py::test_remove_idle_refs_does_not_hurt_other_entries"
+      ]
+    },
+    {
+      "id": "B4-M3-write-back-even-without-hit",
+      "file": "pet_behaviors.py",
+      "old": "    if not removed and not legacy_hit:\n        return [], \"\"                   # 没有引用：原样返回，不碰 cfg\n",
+      "new": "    if not removed and not legacy_hit:\n        cfg[\"idle_actions\"] = idle[\"idle_actions\"]\n        return [], \"\"\n",
+      "tests": [
+        "tests/test_behavior_v290.py::test_remove_idle_refs_clears_the_reference",
+        "tests/test_behavior_v290.py::test_remove_idle_refs_is_idempotent_and_touches_nothing_when_no_hit",
+        "tests/test_behavior_v290.py::test_remove_idle_refs_does_not_hurt_other_entries",
+        "tests/test_behavior_v290.py::test_remove_idle_refs_clears_legacy_key_too",
+        "tests/test_behavior_v290.py::test_delete_behavior_then_clear_idle_refs_end_to_end"
+      ],
+      "why": "没有引用要清时也回写一遍 → 幂等被破坏（无操作却改了 cfg）。",
+      "expect_fail": [
+        "tests/test_behavior_v290.py::test_remove_idle_refs_is_idempotent_and_touches_nothing_when_no_hit"
+      ]
+    },
+    {
+      "id": "B5-M1-hardcoded-not-enabled",
+      "file": "pet_behaviors.py",
+      "old": "    if count == 0:\n        state.update({\"mode\": \"off\", \"label\": IDLE_COMBO_OFF_LABEL})\n        return state\n",
+      "new": "    if not (play_mode == \"single\" and count == 1):\n        state.update({\"mode\": \"off\", \"label\": IDLE_COMBO_OFF_LABEL})\n        return state\n",
+      "tests": [
+        "tests/test_behavior_v290.py::test_idle_combo_state_two_entries_is_not_off",
+        "tests/test_behavior_v290.py::test_idle_combo_state_single_and_first_only",
+        "tests/test_behavior_v290.py::test_idle_single_change_dry_run_does_not_touch_cfg",
+        "tests/test_behavior_v290.py::test_idle_single_change_apply_reports_every_entry_it_drops",
+        "tests/test_behavior_v290.py::test_idle_single_change_clears_legacy_key_so_dropped_do_not_resurrect",
+        "tests/test_behavior_v290.py::test_idle_single_change_enables_the_chosen_entry_and_keeps_its_fields"
+      ],
+      "why": "复现现状 pet_dialogs._refresh 的硬编码：2 条 + sequential 显示成「（不启用 → 默认待机）」（审计实测 4 号）。",
+      "expect_fail": [
+        "tests/test_behavior_v290.py::test_idle_combo_state_two_entries_is_not_off",
+        "tests/test_behavior_v290.py::test_idle_combo_state_single_and_first_only"
+      ]
+    },
+    {
+      "id": "B5-M2-silent-drop",
+      "file": "pet_behaviors.py",
+      "old": "    dropped = [dict(a) for a in actions if a[\"behavior_id\"] != bid]\n",
+      "new": "    dropped = []\n",
+      "tests": [
+        "tests/test_behavior_v290.py::test_idle_combo_state_two_entries_is_not_off",
+        "tests/test_behavior_v290.py::test_idle_combo_state_single_and_first_only",
+        "tests/test_behavior_v290.py::test_idle_single_change_dry_run_does_not_touch_cfg",
+        "tests/test_behavior_v290.py::test_idle_single_change_apply_reports_every_entry_it_drops",
+        "tests/test_behavior_v290.py::test_idle_single_change_clears_legacy_key_so_dropped_do_not_resurrect",
+        "tests/test_behavior_v290.py::test_idle_single_change_enables_the_chosen_entry_and_keeps_its_fields"
+      ],
+      "why": "丢弃量不报告 = 用户点一下下拉，2 条变 1 条却只看到一句通用气泡（审计实测的数据损失面）。",
+      "expect_fail": [
+        "tests/test_behavior_v290.py::test_idle_single_change_dry_run_does_not_touch_cfg",
+        "tests/test_behavior_v290.py::test_idle_single_change_apply_reports_every_entry_it_drops",
+        "tests/test_behavior_v290.py::test_idle_single_change_clears_legacy_key_so_dropped_do_not_resurrect"
+      ]
+    },
+    {
+      "id": "B5-M3-keep-legacy-key-on-apply",
+      "file": "pet_behaviors.py",
+      "old": "        cfg[\"idle_play_mode\"] = \"single\"\n        cfg[\"idle_behavior\"] = \"\"\n    return dropped, \"\"",
+      "new": "        cfg[\"idle_play_mode\"] = \"single\"\n    return dropped, \"\"",
+      "tests": [
+        "tests/test_behavior_v290.py::test_idle_combo_state_two_entries_is_not_off",
+        "tests/test_behavior_v290.py::test_idle_combo_state_single_and_first_only",
+        "tests/test_behavior_v290.py::test_idle_single_change_dry_run_does_not_touch_cfg",
+        "tests/test_behavior_v290.py::test_idle_single_change_apply_reports_every_entry_it_drops",
+        "tests/test_behavior_v290.py::test_idle_single_change_clears_legacy_key_so_dropped_do_not_resurrect",
+        "tests/test_behavior_v290.py::test_idle_single_change_enables_the_chosen_entry_and_keeps_its_fields"
+      ],
+      "why": "apply 时不清旧键 idle_behavior → normalize_idle_cfg 把它迁回 idle_actions，被丢掉的条目自己复活。",
+      "expect_fail": [
+        "tests/test_behavior_v290.py::test_idle_single_change_clears_legacy_key_so_dropped_do_not_resurrect"
+      ]
+    },
+    {
+      "id": "B5-M4-dry-run-also-writes",
+      "file": "pet_behaviors.py",
+      "old": "    if apply:\n        keep = None",
+      "new": "    if True:\n        keep = None",
+      "tests": [
+        "tests/test_behavior_v290.py::test_idle_combo_state_two_entries_is_not_off",
+        "tests/test_behavior_v290.py::test_idle_combo_state_single_and_first_only",
+        "tests/test_behavior_v290.py::test_idle_single_change_dry_run_does_not_touch_cfg",
+        "tests/test_behavior_v290.py::test_idle_single_change_apply_reports_every_entry_it_drops",
+        "tests/test_behavior_v290.py::test_idle_single_change_clears_legacy_key_so_dropped_do_not_resurrect",
+        "tests/test_behavior_v290.py::test_idle_single_change_enables_the_chosen_entry_and_keeps_its_fields"
+      ],
+      "why": "apply=False 的「只算不写」被破坏 → UI 没法先算清丢弃量再决定（先算后写失效）。",
+      "expect_fail": [
+        "tests/test_behavior_v290.py::test_idle_single_change_dry_run_does_not_touch_cfg"
+      ]
+    },
+    {
+      "id": "B5-M5-chosen-entry-stays-disabled",
+      "file": "pet_behaviors.py",
+      "old": "        keep[\"enabled\"] = True              # 用户在下拉里明确选了它 → 它必须真的会播\n",
+      "new": "",
+      "tests": [
+        "tests/test_behavior_v290.py::test_idle_combo_state_two_entries_is_not_off",
+        "tests/test_behavior_v290.py::test_idle_combo_state_single_and_first_only",
+        "tests/test_behavior_v290.py::test_idle_single_change_dry_run_does_not_touch_cfg",
+        "tests/test_behavior_v290.py::test_idle_single_change_apply_reports_every_entry_it_drops",
+        "tests/test_behavior_v290.py::test_idle_single_change_clears_legacy_key_so_dropped_do_not_resurrect",
+        "tests/test_behavior_v290.py::test_idle_single_change_enables_the_chosen_entry_and_keeps_its_fields"
+      ],
+      "why": "用户在下拉里明确选了一条，但那条仍是 enabled=False → 选了却不播。",
+      "expect_fail": [
+        "tests/test_behavior_v290.py::test_idle_single_change_enables_the_chosen_entry_and_keeps_its_fields"
+      ]
+    },
+    {
+      "id": "B6-M1-play-even-if-save-failed",
+      "file": "pet_behaviors.py",
+      "old": "    if not save_ok:\n",
+      "new": "    if False:\n",
+      "tests": [
+        "tests/test_behavior_v290.py::test_test_play_target_refuses_when_save_failed",
+        "tests/test_behavior_v290.py::test_test_play_target_plays_only_after_successful_save",
+        "tests/test_behavior_v290.py::test_test_play_target_needs_a_saved_behavior",
+        "tests/test_behavior_v290.py::test_test_play_target_never_plays_a_stale_id",
+        "tests/test_behavior_v290.py::test_test_play_target_reason_is_human_readable"
+      ],
+      "why": "恢复「保存失败也播」：_editing_id 还指向上一次成功保存的旧行为 → 用户点了试播，播的是旧内容还以为在看自己的修改（审计实测 3 号）。",
+      "expect_fail": [
+        "tests/test_behavior_v290.py::test_test_play_target_refuses_when_save_failed",
+        "tests/test_behavior_v290.py::test_test_play_target_never_plays_a_stale_id",
+        "tests/test_behavior_v290.py::test_test_play_target_reason_is_human_readable"
+      ]
+    },
+    {
+      "id": "B7-M1-checkbox-hardcoded-false",
+      "file": "pet_ai.py",
+      "old": "                    self.pet._ai_act.setChecked(bool(self._cfg().get(\"ai_enabled\")))\n",
+      "new": "                    self.pet._ai_act.setChecked(False)\n",
+      "tests": [
+        "tests/test_ai_write_first_v280.py::test_set_ai_enabled_无Key回退写盘失败_菜单勾选必须回读cfg"
+      ],
+      "why": "pet_ai.py:78 的「勾选回读 cfg」改回硬写 False（上一轮零覆盖：改回去 58 passed/rc=0 无人报警）→ 内存 True 而界面未勾选，同一件事两个真相。 ※记账：代理 C 在 B 的原料到之前**独立**写下过同一条（id M-B290-B7-setChecked-hardwired-false，已实测 CAUGHT）；B 的正式原料到后合并为这一条，**不重复计数**（它也不是运行事故冗余——两条逐字同锚点同 new，保留两份没有信息量）。",
+      "expect_fail": [
+        "tests/test_ai_write_first_v280.py::test_set_ai_enabled_无Key回退写盘失败_菜单勾选必须回读cfg"
+      ]
+    },
+    {
+      "id": "B7-M2-no-blocksignals",
+      "file": "pet_ai.py",
+      "old": "                _was = pet._ai_act.blockSignals(True)\n                try:\n                    pet._ai_act.setChecked(bool(self._cfg().get(\"ai_enabled\")))\n                finally:\n                    pet._ai_act.blockSignals(_was)\n",
+      "new": "                pet._ai_act.setChecked(bool(self._cfg().get(\"ai_enabled\")))\n",
+      "tests": [
+        "tests/test_ai_write_first_v280.py::test_talk_自动开开关_写失败_内存不变且如实告知但对话照常",
+        "tests/test_ai_write_first_v280.py::test_talk_自动开开关_成功路径落盘且勾选跟上"
+      ],
+      "why": "talk() 的程序化同步勾选不再屏蔽信号 → 多走一次 set_ai_enabled（多写一次盘；没 Key 时还会再弹一次输入框）。**上一轮这条变异抓不到**：失败路径用例里 QAction 本来就没勾选，setChecked(False) 是恒等操作 → emitted==[] 恒真（已在影子副本里实测对照：旧写法 rc=0 通过、新写法 rc=1 红）。 ※代理 C 复核登记（2026-10-15）：B 交来的这条 `expect_fail` 两个中文 nodeid 都被非 UTF-8 管道写成了乱码（U+FFFD）。代理 C 第一遍用『凡乱码就填 B7-M1 的 nodeid』的粗略办法修，结果这条判成 **WRONG TEST**（红的是两条 talk 用例，而 expect_fail 指的是另一条）——**判据本身工作正常，是修复方式错了**。现在按 `tests` 字段逐条对齐（两条 `test_talk_自动开开关_*`），复跑应为 CAUGHT。这条也说明：**乱码 nodeid 必须逐条对齐，不能批量兜底**。",
+      "expect_fail": [
+        "tests/test_ai_write_first_v280.py::test_talk_自动开开关_写失败_内存不变且如实告知但对话照常",
+        "tests/test_ai_write_first_v280.py::test_talk_自动开开关_成功路径落盘且勾选跟上"
+      ]
+    },
+    {
+      "id": "M-B290-01",
+      "file": "pet_behaviors.py",
+      "old": "    names.discard(\"none\")\n    names.discard(\"\")\n    return sorted(names)",
+      "new": "    names.discard(\"none\")\n    names.discard(\"\")\n    return []",
+      "tests": [
+        "tests/test_behavior_v290.py::test_action_choices_always_has_builtins_even_without_custom_actions",
+        "tests/test_behavior_v290.py::test_action_choices_includes_custom_actions",
+        "tests/test_behavior_v290.py::test_action_choices_is_deduped_and_stably_sorted",
+        "tests/test_behavior_v290.py::test_action_choices_tolerates_missing_pet_and_odd_shapes",
+        "tests/test_behavior_v290.py::test_action_choices_excludes_the_noop_name",
+        "tests/test_behavior_v290.py::test_unknown_action_name_survives_read_and_write",
+        "tests/test_behavior_v290.py::test_action_choices_against_real_pet_window"
+      ],
+      "expect_fail": [
+        "tests/test_behavior_v290.py::test_action_choices_always_has_builtins_even_without_custom_actions",
+        "tests/test_behavior_v290.py::test_action_choices_includes_custom_actions",
+        "tests/test_behavior_v290.py::test_action_choices_is_deduped_and_stably_sorted",
+        "tests/test_behavior_v290.py::test_action_choices_tolerates_missing_pet_and_odd_shapes",
+        "tests/test_behavior_v290.py::test_action_choices_against_real_pet_window"
+      ],
+      "why": "代理 C 独立补（与 B1-M1 不同：连 custom_actions 一起杀掉，候选恒空）——『候选来源换成空列表』的字面版本，5 条断言同时红 ※与 B 的 B1-M1 不重复：B1-M1 只清内建两支、custom_actions 仍留着；这条把候选**恒置空**（含自定义），5 条断言同时红。"
+    },
+    {
+      "id": "M-B290-03",
+      "file": "pet_behaviors.py",
+      "old": "    names = set(pet_resources.ANIM_ACTIONS)\n    names.update(BUILTIN_PLAY_ACTIONS)",
+      "new": "    names = set()\n    names.update(BUILTIN_PLAY_ACTIONS)",
+      "tests": [
+        "tests/test_behavior_v290.py::test_action_choices_always_has_builtins_even_without_custom_actions",
+        "tests/test_behavior_v290.py::test_action_choices_includes_custom_actions",
+        "tests/test_behavior_v290.py::test_action_choices_is_deduped_and_stably_sorted",
+        "tests/test_behavior_v290.py::test_action_choices_tolerates_missing_pet_and_odd_shapes",
+        "tests/test_behavior_v290.py::test_action_choices_excludes_the_noop_name",
+        "tests/test_behavior_v290.py::test_unknown_action_name_survives_read_and_write",
+        "tests/test_behavior_v290.py::test_action_choices_against_real_pet_window"
+      ],
+      "expect_fail": [
+        "tests/test_behavior_v290.py::test_action_choices_always_has_builtins_even_without_custom_actions",
+        "tests/test_behavior_v290.py::test_action_choices_tolerates_missing_pet_and_odd_shapes"
+      ],
+      "why": "代理 C 独立补：只拿掉内建帧动作来源（jump/emote 留着）→ 单独隔离 pet_resources.ANIM_ACTIONS 这一支（B1-M1 把两支一起拿掉，分不出是哪一支）。⚠ 校正记录（实测）：本条第一遍跑成 WRONG TEST——原先 expect_fail 多点名了 includes_custom_actions 与 against_real_pet_window 两条，实测它们**不会红**：替身 _StubPet(sets={'idle': [], 'dance': []}) 与真 PetWindow 的 anim._sets 都把 idle 又供了一遍，所以『内建动作被挤掉』那句断言测不到 ANIM_ACTIONS 这一支来源。实红集合 = {always_has_builtins, tolerates_missing_pet}，已按实测改正。这**不是**放宽断言（一个用例/一行断言都没动），是把 spec 的预期改成结构事实；同时作为『假覆盖』线索报给 B。 ※与 B 的 **B1-M7-drop-anim-actions-source 同失败点**（同一支来源、同一后果，写法略不同：B 用 set(BUILTIN_PLAY_ACTIONS)，这条用 set() 再 update）——按本仓 v2.8.0『记账更正①』的口径保留两条：提供的是**运行事故冗余**（一条挂死不至于让这个失败点没有证据），账目分开写。"
+    },
+    {
+      "id": "M-B290-06",
+      "file": "pet_behaviors.py",
+      "old": "        except Exception as e:\n            # 读角色索引失败不该让\"选动作\"整条路打不开：退回内建候选并留痕",
+      "new": "        except ValueError as e:\n            # 读角色索引失败不该让\"选动作\"整条路打不开：退回内建候选并留痕",
+      "tests": [
+        "tests/test_behavior_v290.py::test_action_choices_always_has_builtins_even_without_custom_actions",
+        "tests/test_behavior_v290.py::test_action_choices_includes_custom_actions",
+        "tests/test_behavior_v290.py::test_action_choices_is_deduped_and_stably_sorted",
+        "tests/test_behavior_v290.py::test_action_choices_tolerates_missing_pet_and_odd_shapes",
+        "tests/test_behavior_v290.py::test_action_choices_excludes_the_noop_name",
+        "tests/test_behavior_v290.py::test_unknown_action_name_survives_read_and_write",
+        "tests/test_behavior_v290.py::test_action_choices_against_real_pet_window"
+      ],
+      "expect_fail": [
+        "tests/test_behavior_v290.py::test_action_choices_tolerates_missing_pet_and_odd_shapes"
+      ],
+      "why": "代理 C 独立补：读自定义动作失败的兜底从 Exception 收窄成 ValueError → RuntimeError 穿透，『选动作』整条路打断（B1-M6 测的是 getattr 那一层，这条测 except 这一层） ※独立覆盖：B 的 B1-M6 测的是 getattr 那一层，这条测 except 兜底那一层（收窄成 ValueError → RuntimeError 穿透）。"
+    },
+    {
+      "id": "M-B290-07",
+      "file": "pet_behaviors.py",
+      "old": "    return sorted(names)",
+      "new": "    return sorted(names, reverse=True)",
+      "tests": [
+        "tests/test_behavior_v290.py::test_action_choices_always_has_builtins_even_without_custom_actions",
+        "tests/test_behavior_v290.py::test_action_choices_includes_custom_actions",
+        "tests/test_behavior_v290.py::test_action_choices_is_deduped_and_stably_sorted",
+        "tests/test_behavior_v290.py::test_action_choices_tolerates_missing_pet_and_odd_shapes",
+        "tests/test_behavior_v290.py::test_action_choices_excludes_the_noop_name",
+        "tests/test_behavior_v290.py::test_unknown_action_name_survives_read_and_write",
+        "tests/test_behavior_v290.py::test_action_choices_against_real_pet_window"
+      ],
+      "expect_fail": [
+        "tests/test_behavior_v290.py::test_action_choices_is_deduped_and_stably_sorted",
+        "tests/test_behavior_v290.py::test_action_choices_against_real_pet_window"
+      ],
+      "why": "代理 C 独立补（断言有效性探针）：稳定升序改成降序 → 证明 `got == sorted(got)` 不是恒真断言；与 B1-M3 同一判据，但**确定性**红（B1-M3 的红依赖 set 迭代顺序） ※与 B 的 B1-M3 同一判据（稳定排序）的**确定性**版本：B1-M3 的红依赖 list(set) 的迭代顺序（实测红 3 条，残留不确定性约 (1/k!)³），这条改成降序 → 必红。"
+    },
+    {
+      "id": "M-B290-08",
+      "file": "pet_behaviors.py",
+      "old": "        if act == \"play_action\":\n            name = str(st.get(\"name\") or \"\").strip()\n            if not name:\n                return None, \"第 %d 步缺少动作名\" % (i + 1)\n            item[\"name\"] = name",
+      "new": "        if act == \"play_action\":\n            name = str(st.get(\"name\") or \"\").strip()\n            if not name:\n                return None, \"第 %d 步缺少动作名\" % (i + 1)\n            if name not in BUILTIN_PLAY_ACTIONS and name not in pet_resources.ANIM_ACTIONS:\n                return None, \"第 %d 步动作不存在：%s\" % (i + 1, name)\n            item[\"name\"] = name",
+      "tests": [
+        "tests/test_behavior_v290.py::test_action_choices_always_has_builtins_even_without_custom_actions",
+        "tests/test_behavior_v290.py::test_action_choices_includes_custom_actions",
+        "tests/test_behavior_v290.py::test_action_choices_is_deduped_and_stably_sorted",
+        "tests/test_behavior_v290.py::test_action_choices_tolerates_missing_pet_and_odd_shapes",
+        "tests/test_behavior_v290.py::test_action_choices_excludes_the_noop_name",
+        "tests/test_behavior_v290.py::test_unknown_action_name_survives_read_and_write",
+        "tests/test_behavior_v290.py::test_action_choices_against_real_pet_window"
+      ],
+      "expect_fail": [
+        "tests/test_behavior_v290.py::test_unknown_action_name_survives_read_and_write"
+      ],
+      "why": "代理 C 独立补（与 B1-M4 **同失败点、不同机制**：一条用 action_choices(None) 白名单、一条用内建名集合）——按仓内 v2.8.0 记账口径，这类重复提供的是『运行事故冗余』，账目分开写 ※与 B 的 B1-M4 **同失败点、不同机制**（一条用 action_choices(None) 白名单、一条用内建名集合）——同上按『运行事故冗余』记账。"
+    }
+  ],
+  "results": {
+    "title": "变异验证 spec：mutations_agent_b_v290.json",
+    "checked_at": "2026-10-16 02:13:48",
+    "total": 23,
+    "caught": 23,
+    "not_caught": 0,
+    "blocked": 0,
+    "items": [
+      {
+        "id": "B1-M1-empty-candidate-source",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "4 failed, 3 passed in 1.15s",
+        "failed": [
+          "test_action_choices_always_has_builtins_even_without_custom_actions",
+          "test_action_choices_includes_custom_actions",
+          "test_action_choices_tolerates_missing_pet_and_odd_shapes",
+          "test_action_choices_against_real_pet_window"
+        ]
+      },
+      {
+        "id": "B1-M2-missing-custom-actions",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "3 failed, 4 passed in 0.83s",
+        "failed": [
+          "test_action_choices_includes_custom_actions",
+          "test_action_choices_tolerates_missing_pet_and_odd_shapes",
+          "test_action_choices_against_real_pet_window"
+        ]
+      },
+      {
+        "id": "B1-M3-no-dedup-no-sort",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "3 failed, 4 passed in 0.86s",
+        "failed": [
+          "test_action_choices_is_deduped_and_stably_sorted",
+          "test_action_choices_tolerates_missing_pet_and_odd_shapes",
+          "test_action_choices_against_real_pet_window"
+        ]
+      },
+      {
+        "id": "B1-M4-candidates-become-whitelist",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed, 6 passed in 0.81s",
+        "failed": [
+          "test_unknown_action_name_survives_read_and_write"
+        ]
+      },
+      {
+        "id": "B1-M5-keep-none-in-candidates",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed, 6 passed in 0.82s",
+        "failed": [
+          "test_action_choices_excludes_the_noop_name"
+        ]
+      },
+      {
+        "id": "B1-M6-no-getattr-guard",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed, 6 passed in 0.81s",
+        "failed": [
+          "test_action_choices_tolerates_missing_pet_and_odd_shapes"
+        ]
+      },
+      {
+        "id": "B1-M7-drop-anim-actions-source",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "3 failed, 4 passed in 0.82s",
+        "failed": [
+          "test_action_choices_always_has_builtins_even_without_custom_actions",
+          "test_action_choices_includes_custom_actions",
+          "test_action_choices_tolerates_missing_pet_and_odd_shapes"
+        ]
+      },
+      {
+        "id": "B4-M1-dead-branch-legacy-key",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "3 failed, 2 passed in 0.57s",
+        "failed": [
+          "test_remove_idle_refs_clears_the_reference",
+          "test_remove_idle_refs_does_not_hurt_other_entries",
+          "test_delete_behavior_then_clear_idle_refs_end_to_end"
+        ]
+      },
+      {
+        "id": "B4-M2-rewrite-with-normalized-entries",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed, 4 passed in 0.54s",
+        "failed": [
+          "test_remove_idle_refs_does_not_hurt_other_entries"
+        ]
+      },
+      {
+        "id": "B4-M3-write-back-even-without-hit",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed, 4 passed in 0.56s",
+        "failed": [
+          "test_remove_idle_refs_is_idempotent_and_touches_nothing_when_no_hit"
+        ]
+      },
+      {
+        "id": "B5-M1-hardcoded-not-enabled",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "2 failed, 4 passed in 0.55s",
+        "failed": [
+          "test_idle_combo_state_two_entries_is_not_off",
+          "test_idle_combo_state_single_and_first_only"
+        ]
+      },
+      {
+        "id": "B5-M2-silent-drop",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "3 failed, 3 passed in 0.58s",
+        "failed": [
+          "test_idle_single_change_dry_run_does_not_touch_cfg",
+          "test_idle_single_change_apply_reports_every_entry_it_drops",
+          "test_idle_single_change_clears_legacy_key_so_dropped_do_not_resurrect"
+        ]
+      },
+      {
+        "id": "B5-M3-keep-legacy-key-on-apply",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed, 5 passed in 0.58s",
+        "failed": [
+          "test_idle_single_change_clears_legacy_key_so_dropped_do_not_resurrect"
+        ]
+      },
+      {
+        "id": "B5-M4-dry-run-also-writes",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed, 5 passed in 0.57s",
+        "failed": [
+          "test_idle_single_change_dry_run_does_not_touch_cfg"
+        ]
+      },
+      {
+        "id": "B5-M5-chosen-entry-stays-disabled",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed, 5 passed in 0.56s",
+        "failed": [
+          "test_idle_single_change_enables_the_chosen_entry_and_keeps_its_fields"
+        ]
+      },
+      {
+        "id": "B6-M1-play-even-if-save-failed",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "3 failed, 2 passed in 0.66s",
+        "failed": [
+          "test_test_play_target_refuses_when_save_failed",
+          "test_test_play_target_never_plays_a_stale_id",
+          "test_test_play_target_reason_is_human_readable"
+        ]
+      },
+      {
+        "id": "B7-M1-checkbox-hardcoded-false",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 0.88s",
+        "failed": [
+          "test_set_ai_enabled_无Key回退写盘失败_菜单勾选必须回读cfg"
+        ]
+      },
+      {
+        "id": "B7-M2-no-blocksignals",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "2 failed in 0.84s",
+        "failed": [
+          "test_talk_自动开开关_写失败_内存不变且如实告知但对话照常",
+          "test_talk_自动开开关_成功路径落盘且勾选跟上"
+        ]
+      },
+      {
+        "id": "M-B290-01",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "5 failed, 2 passed in 0.82s",
+        "failed": [
+          "test_action_choices_always_has_builtins_even_without_custom_actions",
+          "test_action_choices_includes_custom_actions",
+          "test_action_choices_is_deduped_and_stably_sorted",
+          "test_action_choices_tolerates_missing_pet_and_odd_shapes",
+          "test_action_choices_against_real_pet_window"
+        ]
+      },
+      {
+        "id": "M-B290-03",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "3 failed, 4 passed in 0.83s",
+        "failed": [
+          "test_action_choices_always_has_builtins_even_without_custom_actions",
+          "test_action_choices_includes_custom_actions",
+          "test_action_choices_tolerates_missing_pet_and_odd_shapes"
+        ]
+      },
+      {
+        "id": "M-B290-06",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed, 6 passed in 0.84s",
+        "failed": [
+          "test_action_choices_tolerates_missing_pet_and_odd_shapes"
+        ]
+      },
+      {
+        "id": "M-B290-07",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "3 failed, 4 passed in 0.82s",
+        "failed": [
+          "test_action_choices_is_deduped_and_stably_sorted",
+          "test_action_choices_tolerates_missing_pet_and_odd_shapes",
+          "test_action_choices_against_real_pet_window"
+        ]
+      },
+      {
+        "id": "M-B290-08",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed, 6 passed in 0.80s",
+        "failed": [
+          "test_unknown_action_name_survives_read_and_write"
+        ]
+      }
+    ],
+    "spec": "mutations_agent_b_v290.json",
+    "tests": [
+      "tests/test_ai_write_first_v280.py::test_set_ai_enabled_无Key回退写盘失败_菜单勾选必须回读cfg",
+      "tests/test_ai_write_first_v280.py::test_talk_自动开开关_写失败_内存不变且如实告知但对话照常",
+      "tests/test_ai_write_first_v280.py::test_talk_自动开开关_成功路径落盘且勾选跟上",
+      "tests/test_behavior_v290.py::test_action_choices_against_real_pet_window",
+      "tests/test_behavior_v290.py::test_action_choices_always_has_builtins_even_without_custom_actions",
+      "tests/test_behavior_v290.py::test_action_choices_excludes_the_noop_name",
+      "tests/test_behavior_v290.py::test_action_choices_includes_custom_actions",
+      "tests/test_behavior_v290.py::test_action_choices_is_deduped_and_stably_sorted",
+      "tests/test_behavior_v290.py::test_action_choices_tolerates_missing_pet_and_odd_shapes",
+      "tests/test_behavior_v290.py::test_delete_behavior_then_clear_idle_refs_end_to_end",
+      "tests/test_behavior_v290.py::test_idle_combo_state_single_and_first_only",
+      "tests/test_behavior_v290.py::test_idle_combo_state_two_entries_is_not_off",
+      "tests/test_behavior_v290.py::test_idle_single_change_apply_reports_every_entry_it_drops",
+      "tests/test_behavior_v290.py::test_idle_single_change_clears_legacy_key_so_dropped_do_not_resurrect",
+      "tests/test_behavior_v290.py::test_idle_single_change_dry_run_does_not_touch_cfg",
+      "tests/test_behavior_v290.py::test_idle_single_change_enables_the_chosen_entry_and_keeps_its_fields",
+      "tests/test_behavior_v290.py::test_remove_idle_refs_clears_legacy_key_too",
+      "tests/test_behavior_v290.py::test_remove_idle_refs_clears_the_reference",
+      "tests/test_behavior_v290.py::test_remove_idle_refs_does_not_hurt_other_entries",
+      "tests/test_behavior_v290.py::test_remove_idle_refs_is_idempotent_and_touches_nothing_when_no_hit",
+      "tests/test_behavior_v290.py::test_test_play_target_needs_a_saved_behavior",
+      "tests/test_behavior_v290.py::test_test_play_target_never_plays_a_stale_id",
+      "tests/test_behavior_v290.py::test_test_play_target_plays_only_after_successful_save",
+      "tests/test_behavior_v290.py::test_test_play_target_reason_is_human_readable",
+      "tests/test_behavior_v290.py::test_test_play_target_refuses_when_save_failed",
+      "tests/test_behavior_v290.py::test_unknown_action_name_survives_read_and_write"
+    ],
+    "note": "变异只在 %TEMP% 影子副本里做，真实仓库只读（只写 _dev/.mutation.lock）",
+    "repo_fingerprint": {
+      "桌宠.py": "6b20873532c6",
+      "pet_export.py": "c01e1593efd2",
+      "pet_lines.py": "5332f60b5f26",
+      "pet_alarm.py": "1149e94deee3",
+      "pet_behaviors.py": "99f7dff343e4",
+      "_check_release.py": "5b25dd0d243d",
+      "pet_balance.py": "66948e5514a4",
+      "pet_plugin.py": "2f7853298fc3",
+      "pet_plugin_host.py": "82fb7b1384c8",
+      "pet_dialogs.py": "4bc0e8c868bb",
+      "pet_menu.py": "920daac1b835",
+      "pet_plugin_index.py": "e5e9845785e8",
+      "pet_ai.py": "a5989e7fe646",
+      "pet_config.py": "7a4ad883d4e8"
+    }
+  }
+}

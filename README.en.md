@@ -179,7 +179,7 @@ AST, counting return annotations per module):
 | `pet_io.py` | ✅ 25/28 | every public API and pure function; the 3 missing are `_MergeGuard.__init__/__enter__/__exit__` |
 | `pet_book.py` | ⚠️ 25/34 | missing: 8 private helpers (`_load`/`_save_all`/`_archive_day`…) plus module-level `esc` |
 | `pet_chat.py` / `pet_balance.py` / `pet_widgets.py` / `pet_export.py` / `pet_config.py` / `pet_alarm.py` / `pet_behaviors.py` | ❌ 0 | unchanged this round |
-| `桌宠.py` (255 funcs) / `pet_dialogs.py` (337) / `pet_voice.py` (87) / `pet_resources.py` (80) / `pet_anim.py` (9) / `pet_actions.py` (7) | ❌ 0 | **tracked separately**, outside the "82/82" claim |
+| `桌宠.py` (255 funcs) / `pet_dialogs.py` (392) / `pet_voice.py` (87) / `pet_resources.py` (80) / `pet_anim.py` (9) / `pet_actions.py` (7) | ❌ 0 | **tracked separately**, outside the "82/82" claim |
 
 So: annotations exist for the Qt-free modules `pet_tools` / `pet_lines` / `pet_io` / `pet_book`
 (fully for the first two); the three core files and the other GUI modules still have none.

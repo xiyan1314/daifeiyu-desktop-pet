@@ -729,10 +729,17 @@ def mutation_lock_problems(root=None, now=None):
 # M-A01~M-A04 四条变异锚全在它上面，而它在清单里缺席。缺了它，改索引模块（含那四条锚点）
 # 不会有任何"证据过期"提示，且 C 新加的 missing_fingerprint_keys 也点不到它
 # （那个函数只比"树里有、记录里没有"的键，树里没收录的键它无从谈起）。
+# v2.9.0 第 7 轮（代理 C · 任务 C-2）：**同一个盲区第 4 次**——pet_ai.py 与 pet_config.py 是
+# AI 设置与配置读写的全部实现，实测**全库 40 条**变异的锚点落在它们上面（pet_ai.py 31 条 /
+# pet_config.py 9 条，含 B 的 M-B10~B14/B20/B21 与 C 的 M-C-B30~B39、M-C-B08/09/29/40/41/42），
+# 而两处清单里都没有它们 → 改这两个文件发布门**一条「证据过期」提示都不会有**。
+# 与 _dev/_mutate_lib.repo_fingerprint **逐项一致**（顺序也一致），由 tests/test_release_check.py
+# 的 test_fingerprint_file_list_matches_the_mutation_lib 钉住。复现探针：
+# python -B _dev/probe_fingerprint_gap_v290.py（补前：20 个锚点文件 / 84 条变异零提示）。
 MUTATION_FINGERPRINT_FILES = ("桌宠.py", "pet_export.py", "pet_lines.py", "pet_alarm.py",
                               "pet_behaviors.py", "_check_release.py", "pet_balance.py",
                               "pet_plugin.py", "pet_plugin_host.py", "pet_dialogs.py",
-                              "pet_menu.py", "pet_plugin_index.py")
+                              "pet_menu.py", "pet_plugin_index.py", "pet_ai.py", "pet_config.py")
 
 
 def file_fingerprint(path):

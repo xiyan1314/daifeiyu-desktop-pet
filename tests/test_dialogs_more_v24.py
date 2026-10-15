@@ -790,8 +790,9 @@ def _two_form_lib(tmp_path):
 def _add_frames(dlg, monkeypatch, paths, name):
     monkeypatch.setattr(pet_dialogs.QFileDialog, "getOpenFileNames",
                         staticmethod(lambda *a, **k: ([str(p) for p in paths], "")))
-    monkeypatch.setattr(pet_dialogs.QInputDialog, "getText",
-                        staticmethod(lambda *a, **k: (name, True)))
+    # v2.9.0（A10）：帧动作的命名框已并入统一入口 _ask_text（静态 QInputDialog 归零），
+    # 这里改成给**真入口**注入替身 —— 断言一条没减，驱动的东西更接近生产路径。
+    monkeypatch.setattr(pet_dialogs, "_ask_text", lambda *a, **k: (name, True))
     dlg._add_frame_action()
 
 
@@ -922,8 +923,8 @@ def test_role_edit_illegal_inputs_rejected_not_saved(tmp_path, monkeypatch, ui):
         # 帧数不足
         monkeypatch.setattr(pet_dialogs.QFileDialog, "getOpenFileNames",
                             staticmethod(lambda *a, **k: ([str(f1)], "")))
-        monkeypatch.setattr(pet_dialogs.QInputDialog, "getText",
-                            staticmethod(lambda *a, **k: ("onlyone", True)))
+        monkeypatch.setattr(pet_dialogs, "_ask_text",
+                            lambda *a, **k: ("onlyone", True))
         dlg._add_frame_action()
         assert dlg._staged == [] and not (dlg._forms[0].get("animations") or {}), \
             "单帧也被当成了帧动作"
@@ -1719,11 +1720,11 @@ def test_role_edit_frame_action_guards(pet, tmp_path, monkeypatch, ui):
         monkeypatch.setattr(pet_dialogs.QFileDialog, "getOpenFileNames",
                             staticmethod(lambda *a, **k: ([str(f1), str(f2)], "")))
         n_warn = len(ui["warn"])
-        monkeypatch.setattr(pet_dialogs.QInputDialog, "getText",
-                            staticmethod(lambda *a, **k: ("", False)))    # 用户取消
+        monkeypatch.setattr(pet_dialogs, "_ask_text",
+                            lambda *a, **k: ("", False))    # 用户取消
         dlg._add_frame_action()
-        monkeypatch.setattr(pet_dialogs.QInputDialog, "getText",
-                            staticmethod(lambda *a, **k: ("   ", True)))  # 只有空白
+        monkeypatch.setattr(pet_dialogs, "_ask_text",
+                            lambda *a, **k: ("   ", True))  # 只有空白
         dlg._add_frame_action()
         assert len(ui["warn"]) == n_warn, "取消/空名不该弹提示：%r" % (ui["warn"],)
         assert dlg._staged == []

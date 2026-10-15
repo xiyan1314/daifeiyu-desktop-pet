@@ -30,6 +30,15 @@ v2.1 待机系统（本模块负责"数据与选择规则"，执行仍在 PetWin
 - idle_play_mode：sequential（默认，轮流）/ random / weighted / single。
 - idle_form：待机展示形态（""=不改形态，保持用户选定形态）。
 - pick_idle_action()：纯函数选动作（避免连播同一条）。
+
+v2.9.0（代理 B 的后端与契约，全部 Qt-free 纯逻辑）：
+- action_choices(pet)：行为步骤「动作」参数的**候选动作名**（可编辑下拉的唯一来源；
+  **候选 ≠ 白名单**——候选之外的老动作名照样读入/保存）。
+- remove_idle_actions_for_behavior(cfg, bid)：删除行为时清掉待机列表里的引用
+  （幂等；没有引用时一个字节都不动 cfg）。
+- idle_combo_state(cfg, name_getter=None)：待机下拉该显示什么**由配置推导**（取代硬编码）。
+- idle_single_change(cfg, bid, apply=False)：把「换成单条」先算后写，返回值如实报告会丢几条。
+- test_play_target(save_ok, bid)：「试播」的判据——保存没成功就不许播（播的必须是刚保存的内容）。
 """
 
 import copy
@@ -41,6 +50,10 @@ import uuid
 
 import pet_io   # v2.3.1：全仓共用原子写/安全读（分锁 + 线程唯一临时名 + replace 重试）
 import pet_log
+# v2.9.0（B1）：行为步骤「动作」候选的**内建帧动作**来源（单一来源 = pet_resources.ANIM_ACTIONS，
+# 不在本模块抄第二份）。pet_resources 是 Qt-free 无环模块（只依赖 pet_io/pet_log），
+# 不会把本模块变成 Qt 依赖，也不会与 pet_config（它 import 本模块）成环。
+import pet_resources
 
 # v2.0.2：行为动作类型白名单（单一来源：校验 / 编辑对话框共用）
 # v2.1：新增 speak_line / speak_dialogue（经 PetWindow 转交语言系统，模块间不互相 import）
@@ -58,6 +71,12 @@ _LEGACY_ACT_ALIASES = {
 # 语音事件白名单（与 pet_voice.VOICE_EVENTS 同值；pet_behaviors 不依赖 pet_voice 的私有实现）
 BEHAVIOR_VOICE_EVENTS = ("reply", "feed", "poke", "sleep", "wake")
 BEHAVIOR_EMOTES = ("note", "sparkle", "heart", "zzz")
+# v2.9.0（B1）：play_action 的**内建点播分支**（与 桌宠.PetWindow._action_exists 的第一个分支
+# 同源）。内建帧动作 idle/eat/poke/sleep 不在这里抄第二份——单一来源是 pet_resources.ANIM_ACTIONS。
+# "none" 是 ActionService.play_action 里的**显式空操作**，它是 _action_exists 的合法值、
+# 但**不是"可播动作"**，所以不进候选清单（下拉里列一个"什么都不做"只会让用户困惑）；
+# 用户手填 "none" 依旧能保存（validate_steps 不校验名字存在性）。
+BUILTIN_PLAY_ACTIONS = ("jump", "emote")
 NAME_RE = re.compile(r"^[A-Za-z][A-Za-z0-9_]{0,23}$")
 WAIT_MIN_MS, WAIT_MAX_MS = 100, 30000
 STEPS_MAX = 20  # 单个行为最多 20 步
@@ -385,6 +404,226 @@ def validate_steps(steps):
     return out, ""
 
 
+def action_choices(pet):
+    """v2.9.0（B1）：行为步骤「动作」参数的**候选动作名**（单一来源，去重 + 稳定排序）。
+
+    = pet_resources.ANIM_ACTIONS（内建帧动作 idle/eat/poke/sleep）
+      ∪ BUILTIN_PLAY_ACTIONS（内建点播分支 jump/emote）
+      ∪ pet.custom_actions()（当前角色当前形态的命名帧动作 / 程序化合成动作）
+      ∪ 运行期已注册帧集 pet.anim._sets 的键（"此刻真的能播"的最强证据）
+
+    **这是候选，不是白名单**：调用方（行为设置把参数改成"可编辑下拉"）必须允许用户手填
+    候选之外的任何名字——老行为文件里的动作名不在候选里，也必须原样读入、原样保存。
+    本模块 validate_steps 对 play_action 只校验"非空"，从不校验名字是否存在
+    （存在性校验在**播放时**，见桌宠._behavior_step 的"动作不见了"气泡）。
+    本函数只读不写、不改 pet 的任何状态，也不过问调用方手里的值。
+
+    默认角色（无自定义角色 → custom_actions() 返回 []）也有候选：内建动作恒在。
+    pet 为 None / 缺属性（测试替身、无角色场景）按空处理，不抛异常。
+    """
+    names = set(pet_resources.ANIM_ACTIONS)
+    names.update(BUILTIN_PLAY_ACTIONS)
+    _getter = getattr(pet, "custom_actions", None)
+    if callable(_getter):
+        try:
+            _custom = _getter() or []
+        except Exception as e:
+            # 读角色索引失败不该让"选动作"整条路打不开：退回内建候选并留痕
+            _custom = []
+            pet_log.log_error("action_choices: 读取自定义动作失败，只列内建动作（%s）" % e)
+        for _item in _custom:
+            # custom_actions() 的条目是 (name, kind)；也容忍直接给字符串的替身
+            _name = _item[0] if isinstance(_item, (tuple, list)) and _item else _item
+            _name = str(_name or "").strip()
+            if _name:
+                names.add(_name)
+    _sets = getattr(getattr(pet, "anim", None), "_sets", None)
+    if isinstance(_sets, dict):
+        for _k in _sets:
+            _k = str(_k or "").strip()
+            if _k:
+                names.add(_k)
+    names.discard("none")
+    names.discard("")
+    return sorted(names)
+
+
+def remove_idle_actions_for_behavior(cfg, behavior_id):
+    """v2.9.0（B4）：删除/失效某行为时，清掉待机列表里对它的引用（就地改 cfg）。
+
+    与 add_idle_action / remove_idle_action / move_idle_action 同族（同样就地改 cfg、
+    同样返回 (值, err)）。返回 (removed, err)：removed = 被清掉的待机动作条目
+    （深拷贝 list[dict]，顺序即原顺序），调用方据此给回执（"已同时从待机列表移除 N 条"）。
+    err 只在 cfg 不是 dict 时非空。
+
+    语义（三条硬保证）：
+      1. **幂等**：没有引用时返回 ([], "") 且**一个字节都不动 cfg**；连调两次第二次必为 ([], "")。
+      2. **不误伤**：只按 behavior_id 精确匹配，其它条目**原样保留**（不重写它们的字段，
+         包括用户手加的未知键）；被清掉后剩余的 order 重排为 1..N（只改 order）。
+      3. **顺带清旧键**：cfg["idle_behavior"] == 该 id 时一并清空——它是 v2.0.2 的单条旧键，
+         normalize_idle_cfg 会把它迁进 idle_actions；不清就会"复活"被删的行为。
+        （pet_config.normalize_cfg 每次加载都把该键置空 → 只判这个旧键的清理分支是死分支。）
+
+    这就是 pet_dialogs.BehaviorDialog._delete 里那条死分支的正确语义（旧写法只判恒为 "" 的
+    cfg["idle_behavior"]，永远判不中）。
+    """
+    if not isinstance(cfg, dict):
+        return [], "配置不可用"
+    bid = str(behavior_id or "").strip()
+    if not bid:
+        return [], ""
+    idle = normalize_idle_cfg(cfg)      # 归一化视图：只用来判"到底有没有引用"
+    removed = [dict(a) for a in idle["idle_actions"] if a["behavior_id"] == bid]
+    legacy_hit = str(cfg.get("idle_behavior") or "").strip() == bid
+    if not removed and not legacy_hit:
+        return [], ""                   # 没有引用：原样返回，不碰 cfg
+    # 从**原始**列表重建（不是拿归一化结果覆盖），保证别的条目连未知键都不变
+    raw = cfg.get("idle_actions")
+    left = []
+    if isinstance(raw, list):
+        for a in raw:
+            if isinstance(a, dict) and str(a.get("behavior_id") or "").strip() == bid:
+                continue
+            left.append(a)
+    _n = 0
+    for a in left:
+        if isinstance(a, dict):
+            _n += 1
+            a["order"] = _n
+    cfg["idle_actions"] = left
+    if legacy_hit:
+        cfg["idle_behavior"] = ""
+    return removed, ""
+
+
+# v2.9.0（B5）：待机下拉的"不启用"档文案（UI 文案的**单一来源**，不许在对话框里硬编码第二份）
+IDLE_COMBO_OFF_LABEL = "（不启用 → 默认待机）"
+
+
+def idle_combo_state(cfg, name_getter=None):
+    """v2.9.0（B5）：**由配置推导**「待机行为」下拉此刻该显示什么（取代硬编码"不启用"）。
+
+    返回 dict：
+      mode          "off" | "single" | "list"
+                    off    = 待机列表为空（真的不启用）
+                    single = 只播指定的一条（play_mode == "single" 且列表正好 1 条）
+                    list   = 按待机设置的多条（顺序/随机/权重，或 single 但列表不止 1 条）
+      behavior_id   mode == "single" 时那条的 behavior_id，否则 ""
+      count         归一化后条目数（不被 enabled 过滤）
+      enabled_count 其中 enabled 的条数
+      play_mode     归一化后的播放模式（原样给出，供 UI 显示"顺序轮流/随机/…"）
+      plays_first_only  True = play_mode == "single" 但列表不止一条（**只有第一条会播**，
+                        这是个真实的配置状态，不该被显示成"不启用"）
+      label         可直接放进下拉的文案（UI 不必自己拼）
+      show_list_hint True = 该显示成"去待机设置里改"的只读态，而不是一个可选项
+
+    name_getter：可选，签名 name_getter(behavior_id) -> 行为名；给了就用「空闲时：<名>」，
+    没给/返回空/抛异常一律回落到「空闲时：<id>」（**绝不因为查名字失败而让下拉打不开**）。
+    """
+    idle = normalize_idle_cfg(cfg)
+    actions = idle["idle_actions"]
+    count = len(actions)
+    enabled_count = len([a for a in actions if a.get("enabled", True)])
+    play_mode = idle["idle_play_mode"]
+    state = {"behavior_id": "", "count": count, "enabled_count": enabled_count,
+             "play_mode": play_mode, "plays_first_only": False, "show_list_hint": False}
+    if count == 0:
+        state.update({"mode": "off", "label": IDLE_COMBO_OFF_LABEL})
+        return state
+    if play_mode == "single" and count == 1:
+        bid = actions[0]["behavior_id"]
+        name = ""
+        if callable(name_getter):
+            try:
+                name = str(name_getter(bid) or "").strip()
+            except Exception as e:
+                name = ""
+                pet_log.log_error("idle_combo_state: 查行为名失败，回落显示 id（%s）" % e)
+        state.update({"mode": "single", "behavior_id": bid, "label": "空闲时：" + (name or bid)})
+        return state
+    first_only = (play_mode == "single")
+    state.update({"mode": "list", "plays_first_only": first_only, "show_list_hint": True,
+                  "label": ("只播第一条（列表里共 %d 条）" % count) if first_only
+                           else ("按待机设置（%d 条动作）" % count)})
+    return state
+
+
+def idle_single_change(cfg, behavior_id, apply=False):
+    """v2.9.0（B5）：把「待机 = 只播这一条」这件事**先算清楚再动手**（不许静默丢条目）。
+
+    行为设置里那个「待机行为」下拉的语义就是"换成单条"；列表里原本有多条时，它是**数据
+    损失面**——所以这里把"会丢什么"变成返回值：
+
+      返回 (dropped, err)：dropped = 会被丢弃的其它条目（深拷贝 list[dict]）。
+      apply=False（默认）：**只算不写**，cfg 一个字节都不动 → UI 拿它做确认文案；
+      apply=True        ：就地改 cfg（idle_actions=[这一条]，idle_play_mode="single"）。
+
+    behavior_id 为空 = 下拉里的「不启用」那一档：dropped = 现有全部条目，
+    apply 时清空 idle_actions 并把模式回落 sequential。
+
+    两条硬保证：
+      1. **条目数只在用户明确选"换成单条/不启用"时才减少**，且减少量必然等于 len(dropped)
+         （UI 只要把 dropped 报出去，就不存在"静默"丢条目）；
+      2. apply 时**同时清掉旧键 cfg["idle_behavior"]** —— 不清的话 normalize_idle_cfg 会把
+         它迁回 idle_actions，被"丢掉"的那条会自己复活（条目数不减反增）。
+    """
+    if not isinstance(cfg, dict):
+        return [], "配置不可用"
+    idle = normalize_idle_cfg(cfg)
+    actions = idle["idle_actions"]
+    bid = str(behavior_id or "").strip()
+    if not bid:
+        dropped = [dict(a) for a in actions]
+        if apply:
+            cfg["idle_actions"] = []
+            cfg["idle_play_mode"] = "sequential"
+            cfg["idle_behavior"] = ""
+        return dropped, ""
+    dropped = [dict(a) for a in actions if a["behavior_id"] != bid]
+    if apply:
+        keep = None
+        raw = cfg.get("idle_actions")
+        if isinstance(raw, list):
+            for a in raw:
+                if isinstance(a, dict) and str(a.get("behavior_id") or "").strip() == bid:
+                    keep = dict(a)          # 原条目照搬（含用户手加的未知键）
+                    break
+        if keep is None:
+            keep = {"id": bid, "behavior_id": bid, "enabled": True, "weight": 1.0}
+        keep["behavior_id"] = bid
+        keep["enabled"] = True              # 用户在下拉里明确选了它 → 它必须真的会播
+        keep["order"] = 1
+        cfg["idle_actions"] = [keep]
+        cfg["idle_play_mode"] = "single"
+        cfg["idle_behavior"] = ""
+    return dropped, ""
+
+
+def test_play_target(save_ok, behavior_id):
+    """v2.9.0（B6）：「试播」到底该播哪一条（纯函数，单一来源）。
+
+    返回 (bid|None, reason)：bid 非空 = 可以播它；bid 为空 = **不许播**，reason 是给用户的
+    中文原因（调用方放进内联状态行，不弹气泡）。
+
+    规则只有一条：**试播播的必须是"刚保存成功的内容"**。
+      · save_ok 不为真 → (None, 中文原因)
+      · save_ok 为真但没有可播的 id → (None, "先保存一个行为，再点「试播」")
+      · 否则 → (str(behavior_id), "")
+
+    为什么需要它：改前 BehaviorDialog._test_play 的判据是"只要有 _editing_id 就播"，而
+    _editing_id 在**保存失败时仍指向上一次成功保存的那条**（保存失败只弹了警告、没有清 id）
+    → 用户点了「试播」，播的却是旧内容，还以为在看自己的修改（审计实测 3 号）。
+    **save_ok 传 None/未知一律按"没成功"处理**（fail-safe：宁可这次不播，也不播没验证过的内容）。
+    """
+    if not save_ok:
+        return None, ("保存没成功，这次不试播——试播的永远是刚保存的内容，"
+                      "不是上一次保存下来的旧内容")
+    bid = str(behavior_id or "").strip()
+    if not bid:
+        return None, "先保存一个行为，再点「试播」"
+    return bid, ""
+
+
 class BehaviorService:
     """行为库：behaviors.json 持久化 + 增删改查 + 导入导出。主线程调用。"""
 
@@ -674,4 +913,20 @@ if __name__ == "__main__":
     assert pick_idle_action(_acts, "single")["id"] == "a"
     assert pick_idle_action(_acts, "random")["id"] in ("a", "b")
     assert pick_idle_action(_acts, "weighted")["id"] in ("a", "b")
+    # v2.9.0：候选动作 / 待机引用清理 / 下拉状态推导
+    assert "jump" in action_choices(None) and "idle" in action_choices(None)
+    _c2 = {"idle_actions": [{"behavior_id": "aaa", "order": 1},
+                            {"behavior_id": "bbb", "order": 2}]}
+    assert remove_idle_actions_for_behavior(_c2, "aaa")[0][0]["behavior_id"] == "aaa"
+    assert [a["behavior_id"] for a in _c2["idle_actions"]] == ["bbb"]
+    assert remove_idle_actions_for_behavior(_c2, "aaa") == ([], "")   # 幂等
+    assert idle_combo_state(_c2)["mode"] == "list"
+    _c3 = {"idle_actions": [{"behavior_id": "aaa", "order": 1},
+                            {"behavior_id": "bbb", "order": 2}],
+           "idle_play_mode": "sequential"}
+    assert [a["behavior_id"] for a in idle_single_change(_c3, "bbb")[0]] == ["aaa"]  # 只算不写
+    assert len(_c3["idle_actions"]) == 2, "apply=False 不许改 cfg"
+    idle_single_change(_c3, "bbb", apply=True)
+    assert [a["behavior_id"] for a in _c3["idle_actions"]] == ["bbb"]
+    assert _c3["idle_play_mode"] == "single" and idle_combo_state(_c3)["mode"] == "single"
     print("SMOKE OK")

@@ -370,6 +370,13 @@ def test_talk_自动开开关_写失败_内存不变且如实告知但对话照�
     变异：把 `new = dict(cfg)` 改回 `new = cfg`（= 原地改）→ 第一条断言红。
     """
     act, sent, emitted = _prep_talk(pet, monkeypatch)
+    # v2.9.0（B7 牙齿弱点）：先让菜单勾选**真的处于"已勾选"**——否则产品代码那句
+    # setChecked(False) 是恒等操作（本来就没勾），"未 emit"就成了**恒真断言**，
+    # 把 blockSignals 整段删掉也照样绿（实测：改回不屏蔽信号，旧写法 0 报警）。
+    # 现在这里制造一次**真实的状态翻转**（True→False）：不屏蔽信号就必然 emit。
+    act.setChecked(True)
+    emitted[:] = []                 # 前置动作本身 emit 的那一次不算这次调用
+    assert act.isChecked() is True, "前置没摆好：勾选没有真的变成已勾选"
     disk_before = _disk_bytes()
     bubbles = []
     monkeypatch.setattr(pet, "show_bubble", lambda t: bubbles.append(t))
@@ -385,6 +392,9 @@ def test_talk_自动开开关_写失败_内存不变且如实告知但对话照�
     assert sent == ["你好呀"], "落盘失败把对话也掐掉了：%r" % (sent,)
     assert act.isChecked() is False, "勾选与 cfg 不一致（界面必须 = cfg）"
     assert "talk auto-enable save failed" in _log_text(tmp_path), "写失败没有留痕"
+    # 这是一次**真实的翻转**（前置已勾选 → 这里必须打回未勾选），所以下面这条不是恒真断言：
+    # 去掉 blockSignals 就会 emit 一次 toggled → 再走一次 set_ai_enabled（多写一次盘，
+    # 没 Key 时还会再弹一次输入框）。
     assert emitted == [], \
         "程序化同步勾选 emit 了 toggled（会再走一次 set_ai_enabled：多写一次盘，没 Key 时还会再弹一次输入框）"
 
@@ -404,3 +414,43 @@ def test_talk_自动开开关_成功路径落盘且勾选跟上(pet, cfg_back, m
         "程序化同步勾选 emit 了 toggled（会再走一次 set_ai_enabled：多写一次盘，没 Key 时还会再弹一次输入框）"
     assert "talk auto-enable save failed" not in _log_text()[len(log_before):], \
         "成功路径写了失败日志：%r" % (_log_text()[len(log_before):],)
+
+# ================= v2.9.0（B7）：set_ai_enabled 的"勾选回读 cfg"必须真能被测到 =================
+
+def test_set_ai_enabled_无Key回退写盘失败_菜单勾选必须回读cfg(pet, cfg_back, tmp_path, monkeypatch):
+    """pet_ai.py:74-78 的"界面 = cfg"：第二次写盘（没 Key 把开关退回关）**失败**时，
+    内存里仍是**已提交的 True**，菜单勾选就**必须也是 True**。
+
+    改前硬写 setChecked(False)：内存 True / 界面未勾选 —— 同一件事两个真相
+    （用户看到开关被打回，重启后却又是开的）。
+    变异：把 `setChecked(bool(self._cfg().get("ai_enabled")))` 改回 `setChecked(False)` → 本条红。
+    （上一轮这条零覆盖：改回去 58 passed / rc=0 无人报警。）
+    """
+    from PySide6.QtGui import QAction
+    pet.cfg["api_key"] = ""            # 没 Key → 走"第二次落盘把开关退回关"那条路
+    pet.cfg["ai_enabled"] = False
+    assert main.save_config(pet.cfg) is None
+    monkeypatch.setattr(pet.ai, "set_api_key", lambda: None)   # 不弹输入框 = 用户没填 Key
+
+    calls = []
+
+    def save(cfg):
+        calls.append(dict(cfg))
+        return None if len(calls) == 1 else "磁盘只读（注入）"
+
+    bubbles = []
+    monkeypatch.setattr(pet, "show_bubble", lambda t: bubbles.append(t))
+    monkeypatch.setattr(pet.ai, "_save_cfg", save)
+    act = QAction(pet)                 # 真 QAction：产品代码只对它用 setChecked/isChecked
+    act.setCheckable(True)
+    act.setChecked(False)
+    monkeypatch.setattr(pet, "_ai_act", act, raising=False)
+
+    pet.ai.set_ai_enabled(True)
+
+    assert len(calls) == 2, "第二次落盘（把开关退回关）没有被调用：%r" % (calls,)
+    assert pet.cfg["ai_enabled"] is True, \
+        "前置没摆好：第二次写盘失败时内存应保持**已提交的 True**（见上一条用例）"
+    assert act.isChecked() is True, \
+        "内存里 ai_enabled=True，菜单勾选却是 False —— 同一件事两个真相（界面必须 = cfg）"
+    assert "rollback save failed" in _log_text(tmp_path), "第二次失败没有留痕"

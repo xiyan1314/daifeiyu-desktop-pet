@@ -1,0 +1,498 @@
+{
+  "title": "v2.8.0 第 6 轮 · 代理 B 后端/契约变异验证（23 条；由代理 C 从 %TEMP% 收编入库）",
+  "note": "来源：上一轮 B 自己的驱动把 23 条只写进了 %TEMP%\\b_mutations_v280.json（v2.9.0 第 7 轮任务书 C-1 点名补录），本文件是**逐字收编**（id/why/file/old/new/tests 一行没改），只加 title/note 两个头部字段。旁证：%TEMP%\\b_mut_out.txt 是 B 当时的原始运行输出，23 条全部 rc=1 且 FAILED 的用例就是本文件 tests 里点的那条。锚点口径遵循铁律：old 一律带 \\n（运行器 universal newlines）。由代理 C 用 _dev/mutate_check.py 复跑并回写 results（含 repo_fingerprint）；变异只在 %TEMP% 影子副本里做，真仓只读（铁律 6）。",
+  "mutations": [
+    {
+      "id": "M-B01",
+      "file": "pet_plugin_index.py",
+      "old": "        new = dict(cfg)                     # 先改副本（失败时内存不变）\n        new[PLUGIN_INDEX_URL_KEY] = text",
+      "new": "        new = cfg\n        new[PLUGIN_INDEX_URL_KEY] = text",
+      "tests": [
+        "tests/test_plugin_phase3_v280.py::test_set_remote_base_成功才提交_写失败内存不变"
+      ],
+      "why": "set_remote_base 必须『先写盘、成功才 cfg.update』；改成原地改 = 写失败也改了内存"
+    },
+    {
+      "id": "M-B02",
+      "file": "pet_plugin_index.py",
+      "old": "        text = str(url or \"\").strip()\n        if text:\n            bad = remote_base_reason(text)\n            if bad:\n                return False, bad",
+      "new": "        text = str(url or \"\").strip()\n        pass",
+      "tests": [
+        "tests/test_plugin_phase3_v280.py::test_set_remote_base_非https与本地路径一律拒_且不落盘"
+      ],
+      "why": "远端基址校验（只收 https / 拒本地路径）被拿掉",
+      "note": "（v2.8.0 重锚：原锚点少切一行，替换后剩一条悬空 return → IndentationError，判成 WRONG TEST）"
+    },
+    {
+      "id": "M-B03",
+      "file": "pet_plugin_index.py",
+      "old": "            if self._fetch is None:\n                fallback, ferr = self._bundled_index_with_note()\n                if fallback is not None:",
+      "new": "            if False:\n                fallback, ferr = self._bundled_index_with_note()\n                if fallback is not None:",
+      "tests": [
+        "tests/test_plugin_phase3_v280.py::test_load_index_生产口径绝不联网_没缓存退回随包索引"
+      ],
+      "why": "load_index 的『没注入 fetch 就不联网、退随包』这条退路被拿掉 → 会去取远端"
+    },
+    {
+      "id": "M-B04",
+      "file": "pet_plugin_index.py",
+      "old": "            cached = self._read_cache(self._index_url)\n            if cached is not None:\n                return self._index_from_cache(cached)",
+      "new": "            cached = None\n            if cached is not None:\n                return self._index_from_cache(cached)",
+      "tests": [
+        "tests/test_plugin_phase3_v280.py::test_load_index_生产口径缓存命中就能用远端清单"
+      ],
+      "why": "load_index 的缓存命中路径被短路 → 已刷新的远端清单读不到"
+    },
+    {
+      "id": "M-B05",
+      "file": "pet_plugin_index.py",
+      "old": "        if not force:\n            cached = self._read_cache(base)",
+      "new": "        if True:\n            cached = None",
+      "tests": [
+        "tests/test_plugin_phase3_v280.py::test_refresh_force语义_命中缓存不联网_force强制重取"
+      ],
+      "why": "refresh(force=False) 的缓存短路被拿掉 → 每次都联网"
+    },
+    {
+      "id": "M-B06",
+      "file": "pet_plugin_index.py",
+      "old": "        werr = self._write_cache(target, raw)",
+      "new": "        werr = \"\"",
+      "tests": [
+        "tests/test_plugin_phase3_v280.py::test_refresh_取回校验落地并返回条目数"
+      ],
+      "why": "refresh 不再把远端索引落地成缓存"
+    },
+    {
+      "id": "M-B07",
+      "file": "pet_plugin_index.py",
+      "old": "        data, err = self._fetch_bytes(target, self._progress, INDEX_MAX_BYTES)",
+      "new": "        data, err = self._fetch_bytes(target, self._progress)",
+      "tests": [
+        "tests/test_plugin_phase3_v280.py::test_远端索引体积上限_前置传下去且事后仍判"
+      ],
+      "why": "索引取数的上限不再前置传进取数实现（回到『先取回来再判』）"
+    },
+    {
+      "id": "M-B08",
+      "file": "pet_config.py",
+      "old": "    if PLUGIN_INDEX_URL_KEY in cfg:\n        cfg[PLUGIN_INDEX_URL_KEY] = normalize_plugin_index_url(cfg[PLUGIN_INDEX_URL_KEY])",
+      "new": "    if False:\n        cfg[PLUGIN_INDEX_URL_KEY] = normalize_plugin_index_url(cfg[PLUGIN_INDEX_URL_KEY])",
+      "tests": [
+        "tests/test_plugin_phase3_v280.py::test_配置键真的存得住_读得回来"
+      ],
+      "why": "normalize_cfg 不再归一 plugin_index_url（值两侧空白留着）"
+    },
+    {
+      "id": "M-B09",
+      "file": "桌宠.py",
+      "old": "    \"plugin_index_url\": \"\",",
+      "new": "    # (mutation) DEFAULT_CONFIG 里这一行被移除",
+      "tests": [
+        "tests/test_plugin_phase3_v280.py::test_真加载器_老config读入写出不冒出这个键"
+      ],
+      "why": "DEFAULT_CONFIG 里少一行 → load_config 丢掉这个键（键存不住）"
+    },
+    {
+      "id": "M-B10",
+      "file": "pet_ai.py",
+      "old": "            new = dict(cfg)\n            new[\"api_key\"] = key",
+      "new": "            new = cfg\n            new[\"api_key\"] = key",
+      "tests": [
+        "tests/test_ai_write_first_v280.py::test_set_api_key_写失败_内存不变且不说记住了"
+      ],
+      "why": "set_api_key 回到『先改内存再写盘』"
+    },
+    {
+      "id": "M-B11",
+      "file": "pet_ai.py",
+      "old": "        new = dict(cfg)\n        new[\"ai_enabled\"] = bool(on)",
+      "new": "        new = cfg\n        new[\"ai_enabled\"] = bool(on)",
+      "tests": [
+        "tests/test_ai_write_first_v280.py::test_set_ai_enabled_写失败_内存不变且不假装生效"
+      ],
+      "why": "set_ai_enabled 回到『先改内存再写盘』"
+    },
+    {
+      "id": "M-B12",
+      "file": "pet_ai.py",
+      "old": "        new = dict(cfg)\n        new[\"chat_memory_rounds\"] = val",
+      "new": "        new = cfg\n        new[\"chat_memory_rounds\"] = val",
+      "tests": [
+        "tests/test_ai_write_first_v280.py::test_set_chat_rounds_写失败_内存不变且不报成功"
+      ],
+      "why": "set_chat_rounds 回到『先改内存再写盘』"
+    },
+    {
+      "id": "M-B13",
+      "file": "pet_ai.py",
+      "old": "            self._log(\"ai set_chat_rounds save failed: %s\" % (err,))",
+      "new": "            pass",
+      "tests": [
+        "tests/test_ai_write_first_v280.py::test_set_chat_rounds_写失败_内存不变且不报成功"
+      ],
+      "why": "写失败不再留痕（error.log 里查不到）"
+    },
+    {
+      "id": "M-B14",
+      "file": "pet_ai.py",
+      "old": "                if not _bad2:",
+      "new": "                if True:",
+      "tests": [
+        "tests/test_ai_write_first_v280.py::test_set_ai_enabled_无Key回退落盘失败_内存保持已提交值"
+      ],
+      "why": "第二次落盘（把开关退回关）不再『成功才提交』"
+    },
+    {
+      "id": "M-B15",
+      "file": "pet_balance.py",
+      "old": "                pet.show_bubble(\"「记一笔」打不开：%s\\n（详情见数据目录的 error.log）\" % (e,))",
+      "new": "                pass",
+      "tests": [
+        "tests/test_balance_feedback_v280.py::test_对话框构建失败_有可见提示与日志"
+      ],
+      "why": "add_manual_record 的 except 回到『只写日志』（点了没反应）"
+    },
+    {
+      "id": "M-B16",
+      "file": "pet_balance.py",
+      "old": "                    pet.show_bubble(\"金额要大于 0 才记得上哦~（这笔没有记）\")",
+      "new": "                    pass",
+      "tests": [
+        "tests/test_balance_feedback_v280.py::test_金额不大于零_给提示且绝不记账"
+      ],
+      "why": "金额 <= 0 的静默丢弃回来了（用户以为记上了）"
+    },
+    {
+      "id": "M-B17",
+      "file": "pet_plugin_index.py",
+      "old": "        if str(data.get(\"source_url\") or \"\") != (index_url_of(base) or str(base or \"\")):\n            return None",
+      "new": "        if False:\n            return None",
+      "tests": [
+        "tests/test_plugin_phase3_v280.py::test_换站点后旧站点的缓存不许冒充新站点"
+      ],
+      "why": "_read_cache 不再比 source_url → 换站点后拿 A 站的缓存冒充 B 站"
+    },
+    {
+      "id": "M-B18",
+      "file": "pet_plugin_index.py",
+      "old": "    if parts.path.lower().endswith(\".json\"):\n        return text\n    return text.rstrip(\"/\") + \"/\" + INDEX_NAME",
+      "new": "    return text.rstrip(\"/\") + \"/\" + INDEX_NAME",
+      "tests": [
+        "tests/test_plugin_phase3_v280.py::test_直接填index_json地址也收_不重复拼路径"
+      ],
+      "why": "index_url_of 去掉 .json 直通分支 → .json 地址被再拼一层 /index.json"
+    },
+    {
+      "id": "M-B19",
+      "file": "pet_plugin_index.py",
+      "old": "                return None, (\"远端索引还没取回来（点「刷新索引」）；%s\"\n                              % (ferr or \"随包索引也读不出来\"))",
+      "new": "                return None, \"远端索引还没取回来（点「刷新索引」）\"",
+      "tests": [
+        "tests/test_plugin_phase3_v280.py::test_load_index_随包也读不出来时把两条原因都说清"
+      ],
+      "why": "组合错误只报一半（把随包那半的原因吞掉）"
+    },
+    {
+      "id": "M-B20",
+      "file": "pet_ai.py",
+      "old": "            new = dict(cfg)\n            new[\"ai_enabled\"] = True",
+      "new": "            new = cfg\n            new[\"ai_enabled\"] = True",
+      "tests": [
+        "tests/test_ai_write_first_v280.py::test_talk_自动开开关_写失败_内存不变且如实告知但对话照常"
+      ],
+      "why": "talk() 的自动开开关回到『先改内存再写盘』（写失败也把内存改了）"
+    },
+    {
+      "id": "M-B21",
+      "file": "pet_ai.py",
+      "old": "                _was = pet._ai_act.blockSignals(True)\n                try:\n                    pet._ai_act.setChecked(bool(self._cfg().get(\"ai_enabled\")))\n                finally:\n                    pet._ai_act.blockSignals(_was)",
+      "new": "                pet._ai_act.setChecked(bool(self._cfg().get(\"ai_enabled\")))",
+      "tests": [
+        "tests/test_ai_write_first_v280.py::test_talk_自动开开关_写失败_内存不变且如实告知但对话照常",
+        "tests/test_ai_write_first_v280.py::test_talk_自动开开关_成功路径落盘且勾选跟上"
+      ],
+      "why": "程序化同步勾选不再屏蔽信号 → emit toggled → 再走一次 set_ai_enabled（多写一次盘 / 没 Key 时再弹一次输入框）"
+    },
+    {
+      "id": "M-B22",
+      "file": "pet_plugin_index.py",
+      "old": "    if not parts.hostname:",
+      "new": "    if not parts.netloc:",
+      "tests": [
+        "tests/test_plugin_phase3_v280.py::test_无主机名地址两层都当场拒"
+      ],
+      "why": "F2：主机名判据退回 netloc（真值即放行）→ https://:8443/x.json 被写进配置"
+    },
+    {
+      "id": "M-B23",
+      "file": "pet_plugin_index.py",
+      "old": "    parts = _safe_urlsplit(text)\n    if parts is None:\n        return \"远端索引地址不是合法地址（解析不了）：%s\" % text",
+      "new": "    parts = urllib.parse.urlsplit(text)\n    if parts is None:\n        return \"远端索引地址不是合法地址（解析不了）：%s\" % text",
+      "tests": [
+        "tests/test_plugin_phase3_v280.py::test_解析不了的地址只拒不抛"
+      ],
+      "why": "校验里不再用绝不抛的 _safe_urlsplit → 坏地址（非法 IPv6）直接抛 ValueError"
+    }
+  ],
+  "results": {
+    "title": "变异验证 spec：mutations_agent_b_v280.json",
+    "checked_at": "2026-10-16 02:12:47",
+    "total": 23,
+    "caught": 23,
+    "not_caught": 0,
+    "blocked": 0,
+    "items": [
+      {
+        "id": "M-B01",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 0.61s",
+        "failed": [
+          "test_set_remote_base_成功才提交_写失败内存不变"
+        ]
+      },
+      {
+        "id": "M-B02",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 0.51s",
+        "failed": [
+          "test_set_remote_base_非https与本地路径一律拒_且不落盘"
+        ]
+      },
+      {
+        "id": "M-B03",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 0.53s",
+        "failed": [
+          "test_load_index_生产口径绝不联网_没缓存退回随包索引"
+        ]
+      },
+      {
+        "id": "M-B04",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 0.54s",
+        "failed": [
+          "test_load_index_生产口径缓存命中就能用远端清单"
+        ]
+      },
+      {
+        "id": "M-B05",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 0.55s",
+        "failed": [
+          "test_refresh_force语义_命中缓存不联网_force强制重取"
+        ]
+      },
+      {
+        "id": "M-B06",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 0.49s",
+        "failed": [
+          "test_refresh_取回校验落地并返回条目数"
+        ]
+      },
+      {
+        "id": "M-B07",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 0.49s",
+        "failed": [
+          "test_远端索引体积上限_前置传下去且事后仍判"
+        ]
+      },
+      {
+        "id": "M-B08",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 0.51s",
+        "failed": [
+          "test_配置键真的存得住_读得回来"
+        ]
+      },
+      {
+        "id": "M-B09",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 0.90s",
+        "failed": [
+          "test_真加载器_老config读入写出不冒出这个键"
+        ]
+      },
+      {
+        "id": "M-B10",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 0.98s",
+        "failed": [
+          "test_set_api_key_写失败_内存不变且不说记住了"
+        ]
+      },
+      {
+        "id": "M-B11",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 0.86s",
+        "failed": [
+          "test_set_ai_enabled_写失败_内存不变且不假装生效"
+        ]
+      },
+      {
+        "id": "M-B12",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 0.74s",
+        "failed": [
+          "test_set_chat_rounds_写失败_内存不变且不报成功"
+        ]
+      },
+      {
+        "id": "M-B13",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 0.73s",
+        "failed": [
+          "test_set_chat_rounds_写失败_内存不变且不报成功"
+        ]
+      },
+      {
+        "id": "M-B14",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 0.72s",
+        "failed": [
+          "test_set_ai_enabled_无Key回退落盘失败_内存保持已提交值"
+        ]
+      },
+      {
+        "id": "M-B15",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 0.53s",
+        "failed": [
+          "test_对话框构建失败_有可见提示与日志"
+        ]
+      },
+      {
+        "id": "M-B16",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 0.54s",
+        "failed": [
+          "test_金额不大于零_给提示且绝不记账"
+        ]
+      },
+      {
+        "id": "M-B17",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 0.49s",
+        "failed": [
+          "test_换站点后旧站点的缓存不许冒充新站点"
+        ]
+      },
+      {
+        "id": "M-B18",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 0.48s",
+        "failed": [
+          "test_直接填index_json地址也收_不重复拼路径"
+        ]
+      },
+      {
+        "id": "M-B19",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 0.49s",
+        "failed": [
+          "test_load_index_随包也读不出来时把两条原因都说清"
+        ]
+      },
+      {
+        "id": "M-B20",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 0.78s",
+        "failed": [
+          "test_talk_自动开开关_写失败_内存不变且如实告知但对话照常"
+        ]
+      },
+      {
+        "id": "M-B21",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "2 failed in 0.82s",
+        "failed": [
+          "test_talk_自动开开关_写失败_内存不变且如实告知但对话照常",
+          "test_talk_自动开开关_成功路径落盘且勾选跟上"
+        ]
+      },
+      {
+        "id": "M-B22",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 0.48s",
+        "failed": [
+          "test_无主机名地址两层都当场拒"
+        ]
+      },
+      {
+        "id": "M-B23",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 0.52s",
+        "failed": [
+          "test_解析不了的地址只拒不抛"
+        ]
+      }
+    ],
+    "spec": "mutations_agent_b_v280.json",
+    "tests": [
+      "tests/test_ai_write_first_v280.py::test_set_ai_enabled_写失败_内存不变且不假装生效",
+      "tests/test_ai_write_first_v280.py::test_set_ai_enabled_无Key回退落盘失败_内存保持已提交值",
+      "tests/test_ai_write_first_v280.py::test_set_api_key_写失败_内存不变且不说记住了",
+      "tests/test_ai_write_first_v280.py::test_set_chat_rounds_写失败_内存不变且不报成功",
+      "tests/test_ai_write_first_v280.py::test_talk_自动开开关_写失败_内存不变且如实告知但对话照常",
+      "tests/test_ai_write_first_v280.py::test_talk_自动开开关_成功路径落盘且勾选跟上",
+      "tests/test_balance_feedback_v280.py::test_对话框构建失败_有可见提示与日志",
+      "tests/test_balance_feedback_v280.py::test_金额不大于零_给提示且绝不记账",
+      "tests/test_plugin_phase3_v280.py::test_load_index_生产口径绝不联网_没缓存退回随包索引",
+      "tests/test_plugin_phase3_v280.py::test_load_index_生产口径缓存命中就能用远端清单",
+      "tests/test_plugin_phase3_v280.py::test_load_index_随包也读不出来时把两条原因都说清",
+      "tests/test_plugin_phase3_v280.py::test_refresh_force语义_命中缓存不联网_force强制重取",
+      "tests/test_plugin_phase3_v280.py::test_refresh_取回校验落地并返回条目数",
+      "tests/test_plugin_phase3_v280.py::test_set_remote_base_成功才提交_写失败内存不变",
+      "tests/test_plugin_phase3_v280.py::test_set_remote_base_非https与本地路径一律拒_且不落盘",
+      "tests/test_plugin_phase3_v280.py::test_换站点后旧站点的缓存不许冒充新站点",
+      "tests/test_plugin_phase3_v280.py::test_无主机名地址两层都当场拒",
+      "tests/test_plugin_phase3_v280.py::test_直接填index_json地址也收_不重复拼路径",
+      "tests/test_plugin_phase3_v280.py::test_真加载器_老config读入写出不冒出这个键",
+      "tests/test_plugin_phase3_v280.py::test_解析不了的地址只拒不抛",
+      "tests/test_plugin_phase3_v280.py::test_远端索引体积上限_前置传下去且事后仍判",
+      "tests/test_plugin_phase3_v280.py::test_配置键真的存得住_读得回来"
+    ],
+    "note": "变异只在 %TEMP% 影子副本里做，真实仓库只读（只写 _dev/.mutation.lock）",
+    "repo_fingerprint": {
+      "桌宠.py": "6b20873532c6",
+      "pet_export.py": "c01e1593efd2",
+      "pet_lines.py": "5332f60b5f26",
+      "pet_alarm.py": "1149e94deee3",
+      "pet_behaviors.py": "99f7dff343e4",
+      "_check_release.py": "5b25dd0d243d",
+      "pet_balance.py": "66948e5514a4",
+      "pet_plugin.py": "2f7853298fc3",
+      "pet_plugin_host.py": "82fb7b1384c8",
+      "pet_dialogs.py": "4bc0e8c868bb",
+      "pet_menu.py": "920daac1b835",
+      "pet_plugin_index.py": "e5e9845785e8",
+      "pet_ai.py": "a5989e7fe646",
+      "pet_config.py": "7a4ad883d4e8"
+    }
+  }
+}

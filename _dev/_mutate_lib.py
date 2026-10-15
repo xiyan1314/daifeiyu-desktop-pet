@@ -250,9 +250,18 @@ def repo_fingerprint(root=None):
     # v2.6.0（找茬审查 C-5）：补进 pet_plugin_index.py —— 本轮新模块、M-A01~M-A04 的锚点全在
     # 它上面，而它在清单里缺席（与 _check_release.MUTATION_FINGERPRINT_FILES **逐项一致**、
     # 顺序也一致；tests/test_release_check.py 有一条用例钉住两处不许漂）。
+    # v2.9.0 第 7 轮（代理 C · 任务 C-2）：补进 pet_ai.py 与 pet_config.py —— 实测**全库 40 条**
+    # 变异的锚点落在这两个文件上（pet_ai.py **31** 条 = agent_b_v270 的 9 条 + agent_b_v280 的
+    # 7 条（M-B10~B14/B20/B21）+ agent_b_v290 的 2 条（B7-M1/M2）+ critic_v270 的 3 条 +
+    # agent_c_v280 的 10 条（M-C-B30~B39）；pet_config.py **9** 条 = agent_b_v270 的 CFG-RETERR
+    # 1 条 + agent_b_v280 的 M-B08 1 条 + agent_c_v280 的 6 条（M-C-B08/09/29/40/41/42）+
+    # silent_except 的 M-S1 1 条），
+    # 而两处清单里都没有它们 → 改这两个文件**一条「证据过期」提示都不会有**（同一盲区第 4 次）。
+    # 复现：python -B _dev/probe_fingerprint_gap_v290.py（补前 20 个文件 / 84 条变异零提示）。
+    # 补完 14 个键，与 _check_release.MUTATION_FINGERPRINT_FILES 仍逐项一致（同一条用例钉住）。
     for rel in ("桌宠.py", "pet_export.py", "pet_lines.py", "pet_alarm.py", "pet_behaviors.py",
                 "_check_release.py", "pet_balance.py", "pet_plugin.py", "pet_plugin_host.py",
-                "pet_dialogs.py", "pet_menu.py", "pet_plugin_index.py"):
+                "pet_dialogs.py", "pet_menu.py", "pet_plugin_index.py", "pet_ai.py", "pet_config.py"):
         p = os.path.join(base, rel)
         if os.path.isfile(p):
             with open(p, "rb") as f:

@@ -231,7 +231,7 @@
   ],
   "results": {
     "title": "变异验证 spec：mutations_plugin_v251.json",
-    "checked_at": "2026-10-15 21:34:51",
+    "checked_at": "2026-10-16 02:23:41",
     "total": 17,
     "caught": 17,
     "not_caught": 0,
@@ -250,7 +250,7 @@
         "id": "M-P2",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed, 6 passed in 0.56s",
+        "tail": "1 failed, 6 passed in 0.57s",
         "failed": [
           "test_条目名含双点拒"
         ]
@@ -259,7 +259,7 @@
         "id": "M-P3",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.58s",
+        "tail": "1 failed in 0.53s",
         "failed": [
           "test_min_host_version_99_拒且_err_含要求与当前"
         ]
@@ -268,7 +268,7 @@
         "id": "M-P4",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.46s",
+        "tail": "1 failed in 0.48s",
         "failed": [
           "test_payload_里有_evil_py_点名拒绝"
         ]
@@ -277,7 +277,7 @@
         "id": "M-P5",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.57s",
+        "tail": "1 failed in 0.48s",
         "failed": [
           "test_某_payload_文件不在_files_里拒"
         ]
@@ -286,7 +286,7 @@
         "id": "M-P6",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.46s",
+        "tail": "1 failed in 0.47s",
         "failed": [
           "test_条目数与解压总量上限走_pet_export_同一来源"
         ]
@@ -295,7 +295,7 @@
         "id": "M-P7",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.48s",
+        "tail": "1 failed in 0.49s",
         "failed": [
           "test_外部属性执行位与符号链接拒"
         ]
@@ -304,7 +304,7 @@
         "id": "M-P8",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.46s",
+        "tail": "1 failed in 0.47s",
         "failed": [
           "test_plugins_目录不存在返回空不抛"
         ]
@@ -313,7 +313,7 @@
         "id": "M-R1",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "2 failed in 1.14s",
+        "tail": "2 failed in 1.41s",
         "failed": [
           "test_反向校验_从清单删掉真模块必须报",
           "test_反向校验_合成仓库能认出漏件"
@@ -323,7 +323,7 @@
         "id": "M-R2",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "2 failed in 0.53s",
+        "tail": "2 failed in 0.54s",
         "failed": [
           "test_本仓被导入的运行时模块都在发货清单里",
           "test_反向校验_合成仓库能认出漏件"
@@ -333,7 +333,7 @@
         "id": "M-R3",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "2 failed in 0.50s",
+        "tail": "2 failed in 0.51s",
         "failed": [
           "test_发布包里的用户插件必须点名",
           "test_官方插件资产不会被当成用户数据"
@@ -343,7 +343,7 @@
         "id": "M-L1",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "2 failed, 14 passed in 1.75s",
+        "tail": "2 failed, 14 passed in 1.69s",
         "failed": [
           "test_每个对话框的设计尺寸就是它自己的契约[RoleEditDialog]",
           "test_每个对话框的设计尺寸都写在源码里"
@@ -353,7 +353,7 @@
         "id": "M-P9",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "5 failed in 0.61s",
+        "tail": "5 failed in 0.64s",
         "failed": [
           "test_min_host_version不是版本号一律拒[abc]",
           "test_min_host_version不是版本号一律拒[latest]",
@@ -366,7 +366,7 @@
         "id": "M-H1",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.80s",
+        "tail": "1 failed in 0.76s",
         "failed": [
           "test_P1_1_写入方自保_绕过校验器也拦得住_packs"
         ]
@@ -375,7 +375,7 @@
         "id": "M-H2",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.69s",
+        "tail": "1 failed in 0.67s",
         "failed": [
           "test_S1_c_手工拷进来的插件目录_装同id的真包必须真的落地"
         ]
@@ -384,7 +384,7 @@
         "id": "M-H3",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.81s",
+        "tail": "1 failed in 0.82s",
         "failed": [
           "test_S1_a_登记写失败必须回滚已落地内容"
         ]
@@ -393,7 +393,7 @@
         "id": "M-H4",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.63s",
+        "tail": "1 failed in 0.62s",
         "failed": [
           "test_P2_1_role包里没落地的东西必须让用户看见"
         ]
@@ -425,18 +425,20 @@
     ],
     "note": "变异只在 %TEMP% 影子副本里做，真实仓库只读（只写 _dev/.mutation.lock）",
     "repo_fingerprint": {
-      "桌宠.py": "17b471aa09e6",
+      "桌宠.py": "6b20873532c6",
       "pet_export.py": "c01e1593efd2",
       "pet_lines.py": "5332f60b5f26",
       "pet_alarm.py": "1149e94deee3",
-      "pet_behaviors.py": "8f57255144f6",
-      "_check_release.py": "e0abfe805849",
+      "pet_behaviors.py": "99f7dff343e4",
+      "_check_release.py": "5b25dd0d243d",
       "pet_balance.py": "66948e5514a4",
       "pet_plugin.py": "2f7853298fc3",
       "pet_plugin_host.py": "82fb7b1384c8",
-      "pet_dialogs.py": "2fb2f37a8853",
+      "pet_dialogs.py": "4bc0e8c868bb",
       "pet_menu.py": "920daac1b835",
-      "pet_plugin_index.py": "e5e9845785e8"
+      "pet_plugin_index.py": "e5e9845785e8",
+      "pet_ai.py": "a5989e7fe646",
+      "pet_config.py": "7a4ad883d4e8"
     }
   }
 }

@@ -341,3 +341,36 @@
 - **修法**：补 `assert "本地路径" in msg`（针对 `file://` 与 `C:` 两个样本）→ 该分支立刻可构造出能真失败的变异。
 
 **登记 3（那条用例没有 `quiet` 会挂死）→ 已修，回填**：`tests/test_dialogs_feedback_v280.py:475` 现为 `(tmp_path, quiet)`；A 在自己的变异验证（MA10）里发现挂死后补的，当前修订复核无挂起。
+
+---
+
+### 5.2 第 7 轮（v2.9.0）清账：本轮做掉的条目（代理 C 收尾追加）
+
+> **口径**：与 §5.1 一致——每条点名**用例**与**变异 ID**。变异原文与判定见
+> `_dev/mutations_agent_a_v290.json` / `_dev/mutations_agent_b_v290.json`（结果回写在各自的 `results` 段）。
+> **本节的"是否真能失败"一律以代理 C 在全新影子副本里的独立复跑为准**，不采信任何人的自述。
+
+| 项 | 本轮状态（v2.9.0） | 用例（新/改写） | 变异 |
+|---|---|---|---|
+| **A1** 行为步骤「动作」= 可选可输入下拉（候选来自 B1 唯一来源） | **已做**：`_ActionParamCombo`（setEditable + NoInsert）、`_action_choices()` 只吃 `pet_behaviors.action_choices`；**手填与老文件里的未知名字原样保留**（`set_choices(keep=…)`，刻意不做"找不到回落第一条"） | `test_dialogs_behavior_v290.py::test_action_param_is_an_editable_combo_with_candidates` / `…test_typed_action_name_that_is_not_a_candidate_is_kept` / `…test_unknown_action_name_survives_load_and_save` / `…test_action_choices_come_from_the_single_source` | **A1-M1**（候选恒空）· **A1-M2**（回落第一条＝把未知名改掉） |
+| **A2** 行为设置里就地「＋导入图片做动作…」（抽公共实现复用） | **已做**：实现抽成模块级 `pet_dialogs.add_frame_action(pet, parent, sink=…)`，两个入口共用（不许两份实现）；行为设置那侧**当场落 roles.json**（那里没有"保存角色"这一步） | `…test_import_images_makes_an_action_on_the_current_role` / `…test_import_images_cancel_leaves_nothing_behind` / `…test_role_edit_frame_action_is_a_thin_wrapper` / `…test_frame_action_default_role_says_why_instead_of_failing_silently` | **A2-M1**（落点假装成功）· **A2-M2**（取消也当确定）· M-R5-P2-4（重锚） |
+| **A3** 步骤补上移/下移 + 边界回执 + 选中跟随 | **已做** | `…test_step_move_up_and_down_reorders_and_follows_selection` / `…test_step_move_at_boundary_says_so` / `…test_step_move_without_selection_prompts` | （原料待收，见回报"没做到"一节） |
+| **A4** 添加/删除步骤回执 → 窗口内联状态行 | **已做**：`_note(...)`（`_toast` 的落点判定同步更新）；v280 那条既有用例改写成"断言状态行" | `…test_step_receipts_use_the_inline_status_line_not_the_bubble` + `test_dialogs_feedback_v280.py::test_behavior_step_receipts`（改写） | **A4-M1**（改回气泡）· **MA22/MA23**（重锚，改走 `_note`） |
+| **A5** 「关闭」→ 取消 + 未保存确认（无改动直接关） | **已做**：`_form_signature`/`_is_dirty` + `_confirm_discard`（**只问一次**）；`reject` 与 `closeEvent` 两条路径都走它 | `…test_cancel_with_unsaved_edits_asks_and_keeps_the_window` / `…test_cancel_without_edits_does_not_ask` | **A5-M1**（去掉确认）· **A5-M2 ★反向**（没改动也问） |
+| **A6** **复盘**：删自定义动作的二次确认 → 去掉（有意撤销上一轮） | **已做**（方向与 v2.8.0 相反，已在报告里明写） | `…test_delete_custom_action_can_be_undone_by_cancelling` + `test_dialogs_feedback_v280.py::test_role_edit_delete_action_needs_no_confirm_and_is_undoable`（改写） | **A6-M1**（把确认加回来）· **MA18/M-C-A30**（语义反转重锚） |
+| **A7** 「导入…」改名 + 非 JSON 给人话 | **已做**：`_human_import_error()`（codec/JSON 两类给人话，原文只进 error.log）+ 扩展名预检 | `…test_import_button_says_it_is_a_json_file` / `…test_import_non_json_gives_a_human_reason` / `…test_raw_import_errors_are_translated_to_human_reasons` | （原料待收） |
+| **A8/B3** 统一提交模型（按 B3 清单） | **已做**（按 B3 清单：面板型不关窗 / 表单型关窗） | `…test_save_does_not_close_and_the_second_button_is_cancel` / `…test_voice_save_keeps_the_window_and_second_button_is_cancel` / `…test_idle_save_still_closes_and_second_button_is_cancel` | （原料待收） |
+| **A9/A11** 关键信息**可见**（不再只写在 tooltip）+「新建中」**常驻**标签 | **已做** | `…test_key_information_is_visible_not_only_in_a_tooltip` / `…test_new_state_is_a_resident_label_not_a_one_shot_bubble` | （原料待收） |
+| **A10** 帧动作命名框并入统一入口（全仓静态 `QInputDialog` 归零） | **已做**：`_ask_action_name()` 走 `_ask_text`；既有用例改成给 `_ask_text` 注入替身（**加强式**） | `test_dialogs_feedback_v280.py::test_static_input_dialogs_are_gone`（**改名**并加强成"一处不剩"+反向断言） | **M-A290-04**（定义退回静态）· **M-A290-05**（调用点绕过入口） |
+| **A11/D16** 清除长期记忆 → 统一确认框 + 回执 | **已做**：`_confirm`/`_info`/`_warn`（不再裸 `QMessageBox`） | `test_dialogs_v24.py::test_ai_settings_clear_long_term_keeps_history`（**加强式**：新增"必须真的问"与"取消不许动数据"两条断言） | **M-A290-01**（不问了）· **M-A290-02**（问但不认取消）· **M-A290-03**（清完零回执） |
+| **A11** `open_idle` 给真实入口 | **已做**：行为设置的「待机行为」区加真入口（选"给入口"而不是删/合并，理由写在 `_open_idle_settings` docstring） | `…test_idle_settings_has_a_real_entry_from_the_behavior_dialog` | （原料待收） |
+| **B1** 动作候选的唯一来源 | **已做**：`pet_behaviors.action_choices(pet)`（内建帧 ∪ jump/emote ∪ custom ∪ anim._sets，去重稳定排序，`none` 排除） | `test_behavior_v290.py` 七条（含真 PetWindow 那条） | **B1-M1~M7**（7 条，全 CAUGHT）· M-B290-01/03/06/07/08（代理 C 补） |
+| **B4** 删行为时真清 `idle_actions`（死分支修正） | **已做**：`remove_idle_actions_for_behavior`（幂等 / 不误伤 / 顺带清旧键） | `…test_remove_idle_refs_*`（4 条）+ `…test_delete_behavior_then_clear_idle_refs_end_to_end` | **B4-M1/M2/M3** |
+| **B5** 待机下拉由配置推导 + 不许静默丢条目 | **已做**：`idle_combo_state` / `idle_single_change`（dry-run 只算不写；减少量必然等于 `dropped`） | `…test_idle_combo_*`（2 条）+ `…test_idle_single_change_*`（3 条） | **B5-M1~M5** |
+| **B6** 试播：保存失败不许播旧内容 | **已做**（后端语义在 `pet_behaviors`，UI 接线在 A 侧） | `…test_test_play_target_*`（5 条）+ A 侧 `…test_test_play_*`（2 条） | **B6-M1** |
+| **B7** 两条牙齿弱点（`emitted == []` 恒真 / `pet_ai` 勾选回读零覆盖） | **已做**：失败路径用例先制造**真实翻转**（True→False）再断言未 emit；新增"内存 True ⇒ 勾选必须 True"用例 | `test_ai_write_first_v280.py::test_talk_自动开开关_写失败_内存不变且如实告知但对话照常`（加强）+ `…::test_set_ai_enabled_无Key回退写盘失败_菜单勾选必须回读cfg`（新） | **B7-M1**（硬写 False）· **B7-M2**（不屏蔽信号；与 `agent_b_v280` M-B21 同锚点＝跨轮冗余） |
+
+**本轮没做/未验证的（如实登记）**：
+- **A3 / A7 / A8 / A9 / A11 的变异原料在收尾时尚未收齐**（A 说全量跑完给第二批）——它们的**用例已落盘且全绿**，
+  但**变异证据缺**（＝"这条护栏还没被证明能真失败"）。清单见 `_dev/agent_c_v290_report.md`"没做到"一节。
+- **A12 / B8（替身治理）**：按任务书口径**只报不改**，清单在 `_dev/audit_behavior_assets_v290.md` 与计划 §11。

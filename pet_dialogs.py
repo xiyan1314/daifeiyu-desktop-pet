@@ -367,9 +367,10 @@ def _confirm(parent, title, text):
 # WindowDoesNotAcceptFocus，Windows 前台锁下这类框可能起不来（审计列的是"一致性修复"，未实测）。
 # 相同文件里的 SoundPanel._rename / AmountNoteDialog 早就是手工建框 + modal() 的写法，这里把它
 # 抽成两个函数，5 处调用点共用一条路径（口径只有一份）。
-# ⚠ 例外（已报备）：RoleEditDialog._add_frame_action 的「动作名」框仍是静态 getText ——
-#   tests/test_dialogs_more_v24.py 用 monkeypatch(QInputDialog, "getText") 驱动它，
-#   改成真 modal 会让那条既有用例在 offscreen 下 exec 挂死（铁律 4：不许放宽既有断言）。
+# v2.9.0 第 7 轮（A10）：上一轮「按裁决保留」的那一处例外已并入这里 —— 帧动作的「动作名」框
+#   现在也走 _ask_text，pet_dialogs.py 里静态 QInputDialog.getText / getItem **归零**。
+#   既有用例的驱动方式同步改成 monkeypatch `_ask_text`（**加强式**：从「钉住必须用静态方法」
+#   这个实现细节，改成驱动真正的生产路径；断言一条没减）。
 def _ask_text(parent, title, label, default=""):
     """文本输入框 → (文本, 是否点了确定)。取消时文本是空串。"""
     dlg = QInputDialog(_qt_parent(parent))
@@ -1811,6 +1812,337 @@ class RoleImportDialog(_FitDialog):
         return self._result
 
 
+# ---------------- v2.9.0 第 7 轮（A1/A2/A7/A10）：动作候选下拉 + 「从图片做动作」的公共实现 ----------------
+class _ActionParamCombo(QComboBox):
+    """A1：行为步骤的「参数」框 = **可编辑下拉**（能从候选里挑，也能手打）。
+
+    为什么保留 text() / setText() / setPlaceholderText() 三个与 QLineEdit 同名的薄壳：
+    调用点与既有用例（v2.7.0 的 `dlg._param.setText(...)`）写的是「一个文本框」，那与
+    「换成下拉」这件事无关，没必要连带改一片；而 QComboBox 自带的 clear() 是**清候选**
+    （不是清输入），语义撞车，所以清输入另叫 clear_text()。
+
+    **手填永远允许**：setInsertPolicy(NoInsert) 保证敲进去的字不会被候选顶掉、也不会被
+    悄悄塞进候选列表。刷新候选时**原样保留用户已经敲进去的字**（set_choices(keep=…)）
+    ——「未知名被下拉吃掉」是本轮点名的反模式（审计 E.4-1 / 任务书 A1 验收③）。
+    """
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setEditable(True)
+        self.setInsertPolicy(QComboBox.InsertPolicy.NoInsert)
+
+    def text(self):
+        return self.currentText()
+
+    def setText(self, value):
+        self.setEditText(str(value or ""))
+
+    def clear_text(self):
+        self.setEditText("")
+
+    def setPlaceholderText(self, value):
+        le = self.lineEdit()
+        if le is not None:
+            le.setPlaceholderText(str(value or ""))
+
+    def set_choices(self, items, keep=""):
+        """换一批候选，**不碰用户已经敲进去的字**（keep = 刷新前的文本）。
+
+        刻意不做「找不到就回落第一条」：那正是把未知名吃掉。找不到就保持空选中 +
+        原样回填，用户看到的就是他文件里那个名字。
+        """
+        keep = str(keep or "")
+        self.blockSignals(True)
+        try:
+            self.clear()          # 清的是**候选**，不是输入
+            for it in (items or []):
+                self.addItem(str(it))
+            self.setCurrentIndex(-1)
+            self.setEditText(keep)
+        finally:
+            self.blockSignals(False)
+
+
+def _ask_action_name(parent):
+    """A10：帧动作的「动作名」框 —— 全仓最后一处静态 QInputDialog 并入统一入口。
+
+    走 `_ask_text`（手工建框 + modal()，与其余 5 处同一口径）。既有用例改成
+    monkeypatch `_ask_text`：驱动的是真入口，不再钉住「必须用静态方法」这个实现细节。
+    """
+    return _ask_text(parent, "帧动作", "动作名（英文字母开头，字母/数字/下划线 ≤24 字符）", "")
+
+
+def _human_import_error(err, path=""):
+    """把导入失败的原始异常翻成用户能懂的一句话（A7）。
+
+    为什么不能原样显示：审计实测用户强选一张 PNG 时，界面弹出的是
+    `'utf-8' codec can't decode byte 0x89 in position 0: invalid start byte`、
+    选 wav 时是 `Expecting value: line 1 column 1 (char 0)` —— 英文异常对用户零信息。
+    原文只进 error.log（排查要用），界面只给人话 + 下一步。
+    """
+    txt = str(err or "").strip()
+    low = txt.lower()
+    name = os.path.basename(str(path or "")) or "这个文件"
+    if ("codec" in low) or ("decode" in low) or ("unicode" in low) or ("encoding" in low):
+        pet_log.log_error("import behavior failed (encoding): %s <- %s" % (txt, path))
+        return ("「%s」不是文本行为文件：按文本读的时候编码不对（多半是图片/音频）。\n"
+                "行为设置只导入「导出…」出来的 .json。" % name)
+    if ("expecting value" in low) or ("json" in low) or ("delimiter" in low):
+        pet_log.log_error("import behavior failed (json): %s <- %s" % (txt, path))
+        return ("「%s」不是有效的 JSON：内容坏了，或者它根本不是行为文件。\n"
+                "行为设置只导入「导出…」出来的 .json。" % name)
+    return txt or "导入失败"
+
+
+class _StagedActionSink(object):
+    """落点①：角色编辑（RoleEditDialog）——写进**内存里的暂存表单**，点「保存」才落盘。
+
+    这一路的行为与 v2.8.0 逐位相同（含「出错时只回收本次暂存的文件」：_cleanup_staged()
+    会连带删掉同会话先前已成功添加的动作帧）。
+    """
+
+    def __init__(self, dlg):
+        self._dlg = dlg
+
+    def ready(self):
+        # 与改前同口径：没有库 / 没有形态时**静默**放弃（改前也是 return，没有提示）
+        if self._dlg._cur_idx is None or self._dlg._lib is None:
+            return False, ""
+        return True, ""
+
+    def describe(self):
+        idx, nm = self._dlg._cur_idx, ""
+        try:
+            nm = str((self._dlg._forms[idx] or {}).get("name") or "")
+        except Exception as e:
+            # 不新造静默 except（本仓静默 except 有白名单 razor：新加的必须留痕）
+            nm = ""
+            pet_log.log_error("frame action sink: 取形态名失败，回执里用序号（%s）" % e)
+        return "角色编辑·形态「%s」（暂存，点「保存」才写进角色）" % (nm or ("#%s" % idx))
+
+    def conflict(self, name):
+        fm = self._dlg._forms[self._dlg._cur_idx] or {}
+        if name in (fm.get("procs") or {}):
+            return "该形态已有同名合成动作，帧动作会被遮蔽，换一个名字"
+        return ""
+
+    def stage(self, src):
+        return self._dlg._lib.stage_file(src)
+
+    def put(self, name, frames):
+        fm = self._dlg._forms[self._dlg._cur_idx]
+        fm.setdefault("animations", {})[name] = list(frames)
+        self._dlg._staged.extend(frames)   # 登记进对话框的待回收表（取消/关窗时删）
+        return True, ""
+
+    def rollback(self, frames):
+        lib = self._dlg._lib
+        for s in frames:
+            try:
+                if lib is not None:
+                    p = lib.resolve(s)
+                    if os.path.isfile(p):
+                        os.remove(p)
+            except Exception as e:
+                # 与改前同语义（尽力而为），但**不新造静默 except**：留一条限流日志
+                pet_log.log_throttled("role.act.rollback",
+                                      "本次帧动作导入的残留清理失败：%r" % (e,))
+            if s in self._dlg._staged:
+                self._dlg._staged.remove(s)
+
+    def finish(self, name):
+        self._dlg._refresh_act_list("%s（帧）" % name)   # 选中 + 滚到可见处（限高 80px）
+
+
+class _LiveRoleActionSink(object):
+    """落点②：行为设置（BehaviorDialog）——**当场写进当前角色当前形态**（roles.json）。
+
+    为什么这里必须真落盘：行为设置里没有「保存角色」这一步。若照角色编辑那样只写内存，
+    用户一关窗动作就没了——「看起来成了、其实没成」比「没有入口」更坏（审计 A.1-P5）。
+    落盘走既有 API `RoleLibrary.update(rid, {"forms": …})`，**不新增库接口**。
+    写成功后与 RolePanel._edit 同口径：改的是当前角色 → apply_role 立即重载帧集。
+    """
+
+    def __init__(self, pet):
+        self._pet = pet
+        self._lib = _get(pet, "role_lib")
+        _cfg = getattr(pet, "cfg", None)
+        self._rid = str((_cfg or {}).get("role") or "") if isinstance(_cfg, dict) else ""
+        keys = list(getattr(pet, "form_keys", None) or [])
+        form = str(getattr(pet, "form", "") or "")
+        self._idx = keys.index(form) if form in keys else 0
+        self.last_added = None   # (name, frames)：刚写进角色的那个动作（撤销入口用）
+
+    def ready(self):
+        if self._lib is None or not self._rid:
+            return False, ("现在用的是内置默认角色，加不了动作。\n"
+                           "先在「📦 资源管理… → 角色」里导入一个角色，再回来加图片动作。")
+        if self._lib.get(self._rid) is None:
+            return False, "当前角色在角色库里找不到了（可能刚被删）。先换一个角色再试。"
+        forms = (self._lib.get(self._rid) or {}).get("forms") or []
+        if not (0 <= self._idx < len(forms)):
+            return False, "当前角色没有可编辑的形态。"
+        return True, ""
+
+    def _form(self):
+        r = (self._lib.get(self._rid) if self._lib is not None else None) or {}
+        forms = r.get("forms") or []
+        return forms[self._idx] if 0 <= self._idx < len(forms) else {}
+
+    def describe(self):
+        r = (self._lib.get(self._rid) if self._lib is not None else None) or {}
+        role = str(r.get("name") or self._rid or "")
+        form = str((self._form() or {}).get("name") or ("形态%d" % (self._idx + 1)))
+        return "角色「%s」· 形态「%s」" % (role, form)
+
+    def conflict(self, name):
+        fm = self._form() or {}
+        if name in (fm.get("procs") or {}):
+            return "该形态已有同名合成动作，帧动作会被遮蔽，换一个名字"
+        if name in (fm.get("animations") or {}):
+            return "%s已经有同名帧动作了，换一个名字（或先去角色编辑里删掉它）" % self.describe()
+        return ""
+
+    def stage(self, src):
+        return self._lib.stage_file(src)
+
+    def put(self, name, frames):
+        r = self._lib.get(self._rid) or {}
+        forms = [dict(f) for f in (r.get("forms") or [])]
+        if not (0 <= self._idx < len(forms)):
+            return False, "这个角色没有可编辑的形态"
+        anims = dict(forms[self._idx].get("animations") or {})
+        anims[name] = list(frames)
+        forms[self._idx]["animations"] = anims
+        ok, err = self._lib.update(self._rid, {"forms": forms})
+        if not ok:
+            return False, err or "写入角色失败"
+        # v2.9.0（质量审 6）：这个落点是**立即写盘**的，调用方需要"刚加了什么"才能给撤销入口
+        self.last_added = (name, list(frames))
+        return True, ""
+
+    def undo(self, name, frames):
+        """把刚加进去的动作摘掉（撤销入口用）：**先改索引，成功再删帧文件**。
+
+        为什么必须有它：行为设置这个入口是立即落盘的（与角色编辑里的暂存态相反），
+        对话框的「取消」撤不掉它 —— 不给撤销入口就等于"看起来能取消、其实不能"。
+        """
+        r = self._lib.get(self._rid) or {}
+        forms = [dict(f) for f in (r.get("forms") or [])]
+        if not (0 <= self._idx < len(forms)):
+            return False, "这个角色没有可编辑的形态"
+        anims = dict(forms[self._idx].get("animations") or {})
+        if name not in anims:
+            return False, "它已经不在这个形态上了"
+        anims.pop(name, None)
+        forms[self._idx]["animations"] = anims
+        ok, err = self._lib.update(self._rid, {"forms": forms})
+        if not ok:
+            return False, err or "写入角色失败"
+        for s in (frames or []):
+            try:
+                p = self._lib.resolve(s)
+                if os.path.isfile(p):
+                    os.remove(p)
+            except Exception as e:
+                pet_log.log_throttled("role.act.undo", "撤销后删帧文件失败：%r" % (e,))
+        if self._lib is not None and self._lib.active_id() == self._rid:
+            _call(self._pet, "apply_role", self._rid)
+        return True, ""
+
+    def rollback(self, frames):
+        for s in frames:
+            try:
+                p = self._lib.resolve(s)
+                if os.path.isfile(p):
+                    os.remove(p)
+            except Exception as e:
+                pet_log.log_throttled("role.act.rollback.live",
+                                      "帧动作写盘失败后的残留清理失败：%r" % (e,))
+
+    def finish(self, name):
+        # 同 RolePanel._edit：改的是**当前角色** → 立即重载（否则 roles.json 有了、
+        # anim._sets 里还没有 → 候选里选得到但播不了）
+        if self._lib is not None and self._lib.active_id() == self._rid:
+            _call(self._pet, "apply_role", self._rid)
+
+
+def add_frame_action(pet=None, parent=None, sink=None):
+    """把一组图片做成一个「帧动作」（A2：行为设置与角色编辑**共用这一份实现**）。
+
+    返回 (ok, msg)。msg 的三个语义要分清（调用方据此决定要不要再补一句回执）：
+      · ok=False + msg==""  → 用户**取消**（文件框没选 / 名字框取消）→ 静默，不留半截；
+      · ok=False + msg!=""  → 失败，msg 是**中文原因**（照它提示，别自己编）；
+      · ok=True              → 已加好，msg 形如「已添加动作「X」（落在哪）」。
+
+    **取消是干净的**：命名框取消时一个文件都还没暂存；所有失败路径都把本次已暂存的文件
+    回收（sink.rollback），不会留下半截动作（任务书 A2 验收②）。
+    """
+    parent = _qt_parent(parent if parent is not None else pet)
+    if sink is None:
+        sink = _LiveRoleActionSink(pet)
+    _ok, why = sink.ready()
+    if not _ok:
+        if why:
+            _warn(parent, "导入图片做动作", why)
+        return False, why
+    files, _f = QFileDialog.getOpenFileNames(
+        parent, "选择动作帧图片（2 张起）", "", "图片 (*.png *.jpg *.jpeg *.bmp *.webp)")
+    if not files:
+        # v2.7.0 第 5 轮（P2-4）：**取消**（文件框回空表）不是「选少了」——静默返回，
+        # 与其它文件框取消路径同口径。
+        return False, ""
+    if len(files) < 2:
+        _warn(parent, "帧动作", "帧动作至少 2 张图")
+        return False, "帧动作至少 2 张图"
+    max_frames = int(pet_resources.FRAME_MAX)
+    if len(files) > max_frames:
+        _msg = "最多 %d 帧（可在设置里调整）" % max_frames
+        _warn(parent, "帧动作", _msg)
+        return False, _msg
+    name, asked = _ask_action_name(parent)
+    name = (name or "").strip()
+    if not asked or not name:
+        return False, ""   # 取消命名 = 一个文件都还没暂存（干净）
+    if not pet_resources.CUSTOM_ACTION_RE.match(name):
+        _msg = "动作名不合法（英文字母开头，字母/数字/下划线）"
+        _warn(parent, "帧动作", _msg)
+        return False, _msg
+    if name in pet_resources.ANIM_ACTIONS or name in pet_resources.ACTION_RESERVED:
+        _msg = ("动作名与内建动作/保留名重名（%s），换一个名字"
+                % "、".join(pet_resources.ANIM_ACTIONS + pet_resources.ACTION_RESERVED))
+        _warn(parent, "帧动作", _msg)
+        return False, _msg
+    _clash = sink.conflict(name)
+    if _clash:
+        _warn(parent, "帧动作", _clash)
+        return False, _clash
+    tmpdir = tempfile.mkdtemp(prefix="role_act_")
+    made = []
+    try:
+        outs, notes = _prepare_role_frames(files, tmpdir, same_size=False)
+        if outs is None:
+            _msg = "处理失败：%s" % (notes,)
+            _warn(parent, "帧动作", _msg)
+            return False, _msg
+        for o in outs:
+            s = sink.stage(o)
+            if s is None:
+                raise RuntimeError("写入角色目录失败")
+            made.append(s)
+        _ok2, _err2 = sink.put(name, made)
+        if not _ok2:
+            raise RuntimeError(_err2 or "保存失败")
+    except Exception as e:
+        sink.rollback(made)
+        _msg = "导入失败：%s" % e
+        _warn(parent, "帧动作", _msg)
+        return False, _msg
+    finally:
+        shutil.rmtree(tmpdir, ignore_errors=True)
+    sink.finish(name)
+    return True, "已添加动作「%s」（%s）" % (name, sink.describe())
+
 class RoleEditDialog(_FitDialog):
     """P1-7 轻量角色编辑：改名 / 形态改名+调序 / 换图（重新处理，不换 id）/
     渲染参数（anchor/scale/offset）/ 帧间隔 / 正面图（front）/ 状态图（states）。
@@ -2400,68 +2732,13 @@ class RoleEditDialog(_FitDialog):
                 break
 
     def _add_frame_action(self):
-        """多选图片 → 统一画布管线 → 立即入角色目录（staged，取消时回收）。"""
-        files, _f = QFileDialog.getOpenFileNames(
-            self, "选择动作帧图片（2 张起）", "", "图片 (*.png *.jpg *.jpeg *.bmp *.webp)")
-        if not files:
-            # v2.7.0 第 5 轮（P2-4）：**取消**（文件框回空表）不是"选少了"——改前它和
-            # "只选 1 张"一起命中下面那条警告，用户点了取消却被训一句"至少 2 张图"。
-            # 取消 = 用户什么都没选：静默返回（与其它文件框取消路径同口径）。
-            return
-        if len(files) < 2:
-            _warn(self, "帧动作", "帧动作至少 2 张图")
-            return
-        max_frames = int(pet_resources.FRAME_MAX)
-        if len(files) > max_frames:
-            _warn(self, "帧动作", "最多 %d 帧（可在设置里调整）" % max_frames)
-            return
-        name, ok = QInputDialog.getText(self, "帧动作", "动作名（英文字母开头，字母/数字/下划线 ≤24 字符）")
-        name = (name or "").strip()
-        if not ok or not name:
-            return
-        if not pet_resources.CUSTOM_ACTION_RE.match(name):
-            _warn(self, "帧动作", "动作名不合法（英文字母开头，字母/数字/下划线）")
-            return
-        if name in pet_resources.ANIM_ACTIONS or name in pet_resources.ACTION_RESERVED:
-            _warn(self, "帧动作", "动作名与内建动作/保留名重名（%s），换一个名字"
-                  % "、".join(pet_resources.ANIM_ACTIONS + pet_resources.ACTION_RESERVED))
-            return
-        idx = self._cur_idx
-        if idx is None or self._lib is None:
-            return
-        if name in (self._forms[idx].get("procs") or {}):
-            _warn(self, "帧动作", "该形态已有同名合成动作，帧动作会被遮蔽，换一个名字")
-            return
-        tmpdir = tempfile.mkdtemp(prefix="role_act_")
-        staged = []
-        try:
-            outs, notes = _prepare_role_frames(files, tmpdir, same_size=False)
-            if outs is None:
-                _warn(self, "帧动作", "处理失败：%s" % (notes,))
-                return
-            for o in outs:
-                s = self._lib.stage_file(o)
-                if s is None:
-                    raise RuntimeError("写入角色目录失败")
-                staged.append(s)
-                self._staged.append(s)
-            self._forms[idx].setdefault("animations", {})[name] = staged
-            self._refresh_act_list("%s（帧）" % name)   # 选中 + 滚到可见处（限高 80px）
-        except Exception as e:
-            # 只回收本次尝试暂存的文件——_cleanup_staged() 会连带删掉同会话先前
-            # 已成功添加的动作帧，保存后动作静默变空
-            for s in staged:
-                p = self._lib.resolve(s)
-                try:
-                    if os.path.isfile(p):
-                        os.remove(p)
-                except Exception:
-                    pass  # 有意忽略：本次导入残留清理尽力而为
-                if s in self._staged:
-                    self._staged.remove(s)
-            _warn(self, "帧动作", "导入失败：%s" % e)
-        finally:
-            shutil.rmtree(tmpdir, ignore_errors=True)
+        """多选图片 → 统一画布管线 → 立即入角色目录（staged，取消时回收）。
+
+        v2.9.0（A2/B2）：实现搬到模块级 `add_frame_action()` —— 行为设置里的
+        「＋导入图片做动作…」调的是**同一个函数**（不许两份实现）。这里只描述
+        「落点是本窗口的暂存表单」这一件事。
+        """
+        add_frame_action(self._pet, self, sink=_StagedActionSink(self))
 
     def _add_proc_action(self):
         """添加程序化合成动作（呼吸/摇摆/点头，用角色自身贴图合成，无需素材）。"""
@@ -2529,9 +2806,14 @@ class RoleEditDialog(_FitDialog):
     def _del_action(self):
         """删除选中的自定义动作（按条目后缀只删对应类型：帧/合成同名互不影响）。
 
-        v2.8.0 第 6 轮（D14）：补二次确认 + 成功回执。**它是暂存态**——删掉的只是本窗口里
-        待提交的动作，点「取消」/关窗会连同这次删除一起丢弃，所以确认文案写清楚"还没落盘、
-        可以整体放弃"，不写成不可逆操作（与审计对 D14 的判定同口径）。
+        v2.9.0 第 7 轮（A6）——**有意撤销上一轮（v2.8.0 D14）加的那个二次确认**。
+        理由：它是**暂存态**，删掉的只是本窗口里待提交的动作，点「取消」/关窗会连同这次
+        删除一起丢弃，**本来就是可撤销的**；给可撤销操作套不可逆确认 = 多一步 + 误导
+        （旧确认文案自己都写着「这一步只是暂存…取消会放弃全部改动」）。同仓口径：导入
+        向导删形态行同为暂存态、**不加**确认（审计 C.1-#14 / D#11）。
+        保留的是「删掉之后能取消恢复」这条**可用性事实**——由 closeEvent/取消路径保证，
+        也由 tests/test_dialogs_feedback_v280.py 的**加强式**用例钉住（改成断言「删掉后
+        可取消恢复」，不是把断言删掉）。
         """
         item = self._act_list.currentItem()
         if item is None or self._cur_idx is None:
@@ -2540,12 +2822,6 @@ class RoleEditDialog(_FitDialog):
         text = item.text()
         kind = "帧" if text.endswith("（帧）") else ("合成" if text.endswith("（合成）") else "")
         name = text[:-(len(kind) + 2)] if kind else text
-        if not _confirm(self, "删除自定义动作",
-                        "把「%s」（%s动作）从当前形态里删掉吗？\n\n"
-                        "· 这一步只是**暂存**，还没写进角色；\n"
-                        "· 删错了点「取消」或关掉这个窗口，本次全部改动（含这次删除）都会被放弃；\n"
-                        "· 点「保存」才会真的落盘。" % (name, kind or "未知")):
-            return
         fm = self._forms[self._cur_idx]
         removed = False
         if kind == "帧":
@@ -2556,7 +2832,9 @@ class RoleEditDialog(_FitDialog):
             removed = True
         if removed:
             self._refresh_act_list()
-            _toast(self._pet, "已删除自定义动作「%s」（保存后生效）" % name)
+            # 回执里带上「可以撤销」这条事实（轻量提示 = 替代确认框的那一步）
+            _toast(self._pet, "已删除自定义动作「%s」（点「取消」或关掉这个窗口，本次删除会被放弃）"
+                   % name)
         else:
             _warn(self, "删除动作", "这条动作已经不在列表里了（可能刚被删过）")
 
@@ -2568,7 +2846,96 @@ class RoleEditDialog(_FitDialog):
 
 
 # ---------------- v2.0.2：行为自定义 ----------------
-class BehaviorDialog(_FitDialog):
+class _DiscardGuard(object):
+    """「有未保存改动就先问一次」的公共实现（A5 口径；BehaviorDialog / AlarmDialog 共用）。
+
+    为什么要抽出来（v2.9.0 质量审查 F1）：同一种病当时只治了 BehaviorDialog —— 闹钟的第二枚
+    按钮还叫「关闭」、且丢弃未保存编辑时零提示，正是 R4 点名的硬反例。**同一语义只写一份**，
+    以后再加"表单型对话框"直接混入即可。
+
+    子类只要给两样：`_form_signature()`（当前表单的指纹）与 `_discard_prompt(why)`（问什么），
+    并在**每次载入新基线**（打开/选中/新建/保存完）时更新 `self._baseline`。
+    """
+
+    _baseline = None
+    # v2.9.0（找茬 delta 复跑 M15）：**一次性令牌**，不是"置位后一直有效"的闩。
+    # 它只在 closeEvent →(Qt 内部)→ reject 这**一跳**内有效，用完（或被 finally）即失效。
+    # 为什么必须这样：曾经的设计是"用户确认过一次就永远不问"，于是任何一次"换条目确认"
+    # 只要漏清一次闩，之后【编辑 → 点标题栏 ×】就会**零确认直接关窗、改动静默丢**
+    # （M15 实测：全量 1339 passed、无人抓）。令牌把这条长路径从设计上封死：
+    # 令牌永远不会跨过用户的下一次操作存活。
+    _close_confirmed = False
+
+    def _form_signature(self):
+        raise NotImplementedError
+
+    def _discard_prompt(self, why="close"):
+        return "表单里还有没保存的改动。"
+
+    def _row_of(self, bid):
+        """按 id 找列表行（换条目被拒时要拨回去）。没有列表/找不到 → -1。"""
+        lst = getattr(self, "_list", None)
+        if lst is None or not bid:
+            return -1
+        for _i in range(lst.count()):
+            if lst.item(_i).data(Qt.ItemDataRole.UserRole) == bid:
+                return _i
+        return -1
+
+    def _is_dirty(self):
+        """有未保存的改动吗（A5）。没有改动就不该多问一步（原则 1）。"""
+        return self._form_signature() != self._baseline
+
+    def _confirm_discard(self, why="close"):
+        """A5：有未保存改动才问；没改动直接放行。
+
+        **没有 latch 参数**（delta 复跑 M15 的教训）：这个函数只负责"该问就问"，
+        "同一跳里不重复问"由 `closeEvent` 的一次性令牌负责（见 `_close_confirmed`）。
+        """
+        if not self._is_dirty():
+            return True
+        return bool(_confirm(self, "取消编辑", self._discard_prompt(why)))
+
+    def _on_close_confirmed(self):
+        """子类钩子：确认关窗之后、真正 close 之前要做的收尾（默认什么都不做）。"""
+        return None
+
+    def _cancel(self):
+        """「取消」按钮：等同关窗（有未保存改动时先问一次）。"""
+        self.reject()
+
+    def reject(self):
+        """A5：Esc / 「取消」都走这里 —— 有未保存改动先问一次。
+
+        唯一不问的情况是"**这一次关窗刚刚问过**"（`_close_confirmed`，由 closeEvent 设、
+        这里消费掉）—— 标题栏 × 会走 closeEvent →(Qt)→ reject，不这样做就是连问两遍。
+        """
+        if self._close_confirmed:
+            self._close_confirmed = False       # 消费掉：令牌只活这一跳
+            super().reject()
+            return
+        if not self._confirm_discard():
+            return
+        super().reject()
+
+    def closeEvent(self, event):
+        """A5：标题栏 × 的路径。
+
+        确认之后设一次性令牌，只为紧随其后的那一跳（Qt 从 closeEvent 调到的 reject）放行；
+        `finally` 保证无论走哪条路令牌都会失效 —— 它**不会**留给用户的下一次操作。
+        """
+        if not self._confirm_discard():
+            event.ignore()
+            return
+        self._on_close_confirmed()
+        self._close_confirmed = True
+        try:
+            super().closeEvent(event)
+        finally:
+            self._close_confirmed = False
+
+
+class BehaviorDialog(_DiscardGuard, _FitDialog):
     """行为自定义对话框：列表 + 新建/编辑/删除 + 步骤编辑 + 试播 + 导入/导出。
 
     待机行为 / 触发秒数 / 变身时长也在这里配置（写 pet.cfg 并 save_cfg 持久化）。
@@ -2580,6 +2947,13 @@ class BehaviorDialog(_FitDialog):
         self.svc = svc or getattr(pet, "behaviors", None)
         self._save_cfg = save_cfg or (lambda cfg: None)
         self._editing_id = None
+        # v2.9.0（A11/P2-8）：常驻「新建中」状态标签的状态位
+        self._new_state = False
+        # v2.9.0（A5）：「取消」/关窗的未保存判据 = 表单与它被载入时是否一样
+        self._baseline = ("", ())
+        # v2.9.0（A5）：确认只问一次（标题栏 × 会先走 closeEvent、再由 Qt 调到 reject）
+        # v2.9.0（质量审 6）：上一次「＋导入图片做动作…」加了什么（撤销入口用）
+        self._last_pic_import = None
         self.setWindowTitle("行为自定义")
         self.setStyleSheet(DIALOG_QSS)
         clamp_dialog(self, 640, 500)   # v2.5.0 B
@@ -2602,10 +2976,27 @@ class BehaviorDialog(_FitDialog):
                                       pet_behaviors.TRANSFORM_SECS_MAX)
         self._transform_secs.setSuffix(" 秒")
         idle_row.addWidget(self._transform_secs)
+        # v2.9.0（A11 / 按钮审计 P3-5）：`pet_dialogs.open_idle` 以前**没有 UI 入口**
+        # （挂了两轮）。这里给它一个真实入口：这个下拉与「待机设置」改的是同一份
+        # cfg["idle_actions"]，两套视图之间本来就该有一道能走的门（审计 D#4 流程断裂）。
+        self._idle_btn = QPushButton("待机设置…")
+        self._idle_btn.setToolTip("打开「待机设置」：多动作列表、播放模式、待机形态都在那里；"
+                                  "这个下拉只表示「空闲时只播某一条」")
+        self._idle_btn.clicked.connect(self._open_idle_settings)
+        idle_row.addWidget(self._idle_btn)
         lay.addLayout(idle_row)
         self._idle_combo.currentIndexChanged.connect(self._on_idle_pick)
         self._idle_secs.valueChanged.connect(lambda _v: self._save_cfg_vals())
         self._transform_secs.valueChanged.connect(lambda _v: self._save_cfg_vals())
+
+        # ---- v2.9.0（A9/P2-8）：常驻状态标签 ----
+        # 「点「保存」才落盘」这条决定成败的信息，改前**只写在 tooltip 里**（tooltip 不可
+        # 发现、键盘/触屏没有 hover）；而 P2-8 的原口径本来就是「表单区顶部常驻的内联状态
+        # 标签」，v2.8.0 只做了一次性气泡＝修法不符。这里合并成一行常驻文字：既说清「现在
+        # 是什么状态」，也说清「要保存才落盘」。
+        self._state_label = QLabel("")
+        self._state_label.setWordWrap(True)
+        lay.addWidget(self._state_label)
 
         # ---- 行为列表 ----
         lay.addWidget(QLabel("已有行为（双击试播）"))
@@ -2628,10 +3019,10 @@ class BehaviorDialog(_FitDialog):
         self._act_combo = QComboBox()
         for act in pet_behaviors.BEHAVIOR_ACTS:
             self._act_combo.addItem(self._act_label(act), act)
-        self._param = QLineEdit()
-        self._act_combo.currentIndexChanged.connect(
-            lambda _i: self._param.setPlaceholderText(self._param_hint(self._act_combo.currentData())))
-        self._param.setPlaceholderText(self._param_hint(self._act_combo.currentData()))
+        # v2.9.0（A1）：参数框从裸 QLineEdit 改成**可编辑下拉** —— 候选来自 B1 的
+        # pet_behaviors.action_choices()（只给候选；手填永远允许，见 _ActionParamCombo）
+        self._param = _ActionParamCombo()
+        self._act_combo.currentIndexChanged.connect(lambda _i: self._sync_param())
         b_add_step = QPushButton("添加步骤")
         b_add_step.clicked.connect(self._add_step)
         _btn_tip(b_add_step, "添加步骤")   # P3-6
@@ -2639,28 +3030,234 @@ class BehaviorDialog(_FitDialog):
         add_row.addWidget(self._param, 1)
         add_row.addWidget(b_add_step)
         lay.addLayout(add_row)
-        del_row = QHBoxLayout()
+        step_row = QHBoxLayout()
+        # v2.9.0（A3）：标签写着「按顺序执行」却**没有排序按钮**（审计 B.2 缺失项）
+        b_up = QPushButton("上移")
+        b_up.clicked.connect(lambda: self._move_step(-1))
+        b_down = QPushButton("下移")
+        b_down.clicked.connect(lambda: self._move_step(1))
         b_del_step = QPushButton("删除选中步骤")
         # P1-6：以前是 lambda 直接 takeItem(currentRow())——没选中时 takeItem(-1) 只往
         # qWarning 打一行，界面上什么都没发生、也没有任何提示
         b_del_step.clicked.connect(self._del_step)
-        del_row.addWidget(b_del_step)
-        del_row.addStretch(1)
-        lay.addLayout(del_row)
+        b_up.setToolTip("把选中的步骤往上挪一格（顺序就是执行顺序）")
+        b_down.setToolTip("把选中的步骤往下挪一格")
+        b_del_step.setToolTip("删掉选中的那一步（点「保存」才落盘）")
+        step_row.addWidget(b_up)
+        step_row.addWidget(b_down)
+        step_row.addWidget(b_del_step)
+        step_row.addStretch(1)
+        # v2.9.0（A2）：就地入口——从图片做一个动作；加完立刻出现在上面的「动作」候选里
+        self._pic_btn = QPushButton("＋导入图片做动作…")
+        self._pic_btn.setToolTip("选 2 张以上图片做成一个帧动作；加完就能在上面的「动作」参数里选它")
+        self._pic_btn.clicked.connect(self._import_frame_action)
+        step_row.addWidget(self._pic_btn)
+        lay.addLayout(step_row)
+        # A2：按钮旁**明写**这次动作会加在哪儿（不是加进行为库）——不指望用户去悬停
+        self._act_target = QLabel("")
+        self._act_target.setWordWrap(True)
+        lay.addWidget(self._act_target)
+        # ---- v2.9.0（A4）：窗口内状态行 ----
+        # 列表内的连续操作（添加/删除/排序步骤）的回执走这里：内联、可累积、不覆盖、
+        # 不需要宠物窗口在场。改前这些走宠物气泡，实测「建一个 5 步行为弹 7 条气泡」，
+        # 而气泡是**单窗口覆盖式**（无队列）→ 连点时前面的根本看不见、最后一条还滞留 5 秒。
+        # 同仓正例：RoleImportDialog._on_add_form 的 self._notes.setText(...)。
+        self._notes = QLabel("")
+        self._notes.setWordWrap(True)
+        lay.addWidget(self._notes)
+        # v2.9.0（质量审 6）：A2 的入口是**立即写盘**的（与角色编辑里的暂存态相反），所以
+        # 必须给一个真的能收回的入口 —— 只有"刚导入过"时才亮，平时不占注意力。
+        self._undo_pic_btn = QPushButton("撤销这次导入")
+        self._undo_pic_btn.setToolTip("把上一次「＋导入图片做动作…」加进去的动作从角色里移除"
+                                      "（帧文件一起删掉）")
+        self._undo_pic_btn.clicked.connect(self._undo_pic_import)
+        self._undo_pic_btn.setVisible(False)
+        lay.addWidget(self._undo_pic_btn)
 
         # ---- 按钮 ----
+        # v2.9.0（A5）：第二枚按钮从「关闭」改名「取消」——它执行的是「丢弃未保存编辑 +
+        # 关窗」，叫「关闭」是标签在说谎（B3 的 R4 不变量）。有未保存改动时会先问一次；
+        # **没有改动直接关**（原则 1：不给熟路加一步）。保存仍然不关窗（B3：面板型）。
         btn_row = QHBoxLayout()
-        for _label, _cb in (("新建", self._new), ("保存", self._save), ("删除", self._delete),
-                            ("试播", self._test_play), ("导入…", self._import), ("导出…", self._export),
-                            ("关闭", self.accept)):
+        for _label, _cb, _tip in (
+                ("新建", self._new, BTN_NEW_TIP),
+                ("保存", self._save, "把当前表单写进行为库（写进库里窗口不关，可以接着改）"),
+                ("删除", self._delete, "删掉列表里选中的那条行为（会先问一次，删了不可撤销）"),
+                ("试播", self._test_play, "先保存再播一遍；保存没成功就不播（免得你看到的是旧内容）"),
+                ("导入行为文件（.json）…", self._import, "导入别人分享的行为文件（.json）"),
+                ("导出…", self._export, "把选中的行为导出成 .json 文件"),
+                ("取消", self._cancel, "关掉这个窗口；表单里有没保存的改动时会先问一次")):
             _b = QPushButton(_label)
             _b.clicked.connect(_cb)
             _btn_tip(_b, _label)       # P3-6：新建/添加各一套措辞
+            _b.setToolTip(_tip)        # A9：tooltip 只作**补充**，关键那句在常驻标签里
             btn_row.addWidget(_b)
         stick_buttons(self, btn_row)   # v2.5.0 B：按钮行在滚动区之外
+        self._sync_param()
         self._refresh()
+    # ---------- v2.9.0（A1/A2/A3/A4/A5/A9/A11）：状态行 / 常驻标签 / 动作候选 / 排序 / 取消 ----------
+
+    def _note(self, text):
+        """窗口内状态行（A4）：列表内连续操作的回执走这里，不用宠物气泡。
+
+        为什么不是气泡：Bubble 是**单窗口覆盖式**（pet_widgets.py 直接 setText + show +
+        5 秒定时器，无队列）——连点三次只有最后一条可见，而前面那几条用户根本没看到；
+        而这一步是「列表内连续操作」，用户的眼睛在窗口里，不在宠物身上。
+        """
+        try:
+            self._notes.setText(str(text or ""))
+        except Exception as e:
+            pet_log.log_error("behavior notes failed: %r" % (e,))
+
+    def _refresh_state_label(self):
+        """常驻状态标签（A11/P2-8 + A9）：新建态一直可见，直到保存或取消。
+
+        三态（同一行文字同时承载「现在处于什么状态」与「要保存才落盘」这条决定成败的信息）：
+          · 新建态     → ● 新建中（未保存）
+          · 选中了某条 → ● 编辑中：<名字>
+          · 都没选中   → 中性提示（刚打开窗口时）
+        """
+        name = self._name.text().strip()
+        if self._new_state:
+            txt = "● 新建中（未保存）：填好行为名与步骤后点「保存」才会写进库里"
+        elif self._editing_id:
+            txt = "● 编辑中：%s —— 改完点「保存」才写进库里" % (name or self._editing_id)
+        else:
+            txt = "点「新建」开始建一条新行为；表单里的内容点「保存」才会写进库里"
+        self._state_label.setText(txt)
+
+    def _target_text(self):
+        """A2：按钮旁明写这次动作会加在哪儿（**不是加进行为库**）。"""
+        sink = _LiveRoleActionSink(self.pet)
+        ok, why = sink.ready()
+        if not ok:
+            return "（现在加不了图片动作：%s）" % ((why or "当前没有可编辑的角色").splitlines()[0])
+        return ("（图片会做成 %s 的帧动作，**立即写进角色**——这个入口没有「取消」能撤销它，"
+                "加完可以用「撤销这次导入」收回；它不会加进行为库）") % sink.describe()
+
+    def _action_choices(self):
+        """A1：动作候选的**唯一来源** = pet_behaviors.action_choices(pet)（B1 接口）。
+
+        刻意**不做本地兜底**（不自己再算一份）：两份候选一旦漂移，下拉里就会出现
+        「选得到、但播不了」的名字，而本轮要修的正是这条路。接口缺失/抛异常 → 空候选 +
+        日志；**手填永远不受影响**（下拉是「给候选」，不是「白名单」）。
+        """
+        fn = getattr(pet_behaviors, "action_choices", None)
+        if not callable(fn):
+            pet_log.log_error("pet_behaviors.action_choices 缺失：动作候选为空（手填仍可用）")
+            return []
+        try:
+            return [str(x) for x in (fn(self.pet) or []) if str(x or "").strip()]
+        except Exception as e:
+            pet_log.log_error("action_choices failed: %r" % (e,))
+            return []
+
+    def _sync_param(self):
+        """按当前步骤类型刷新参数框：只有「动作」有候选，其余仍是纯文本。
+
+        **不吞用户输入**：换类型 / 换候选时原样保留已经敲进去的字——老行为文件里的动作名
+        不在候选里，也必须原样显示、原样保存（A1 验收③）。
+        """
+        act = self._act_combo.currentData()
+        keep = self._param.text()
+        self._param.setPlaceholderText(self._param_hint(act))
+        self._param.set_choices(self._action_choices() if act == "play_action" else [], keep=keep)
+
+    def _form_signature(self):
+        """当前表单的指纹（A5：判断有没有未保存的改动）。"""
+        steps = []
+        for st in self._collect_steps():
+            try:
+                steps.append(tuple(sorted((str(k), str(v)) for k, v in st.items())))
+            except Exception as e:
+                steps.append((("act", str(st.get("act"))),))
+                pet_log.log_error("behavior form signature: 步骤指纹回退（%s）" % e)
+        return (self._name.text().strip(), tuple(steps))
+
+    def _discard_prompt(self, why="close"):
+        """A5：问什么（关窗与换条目两种措辞 —— 后者窗口不关，别写「并关窗」）。"""
+        if why == "switch":
+            return ("表单里还有没保存的改动（行为名或步骤）。\n"
+                    "点「确定」= 放弃这些改动、切到另一条；点「取消」= 留在这一条接着改。")
+        return ("表单里还有没保存的改动（行为名或步骤）。\n"
+                "点「确定」= 放弃这些改动并关窗；点「取消」= 回去接着改。")
+
+    def _open_idle_settings(self):
+        """A11 / 按钮审计 P3-5：给 open_idle 一个**真实入口**。
+
+        选的是「给入口」而不是「删掉/合并」：这个下拉与待机设置改的是同一份
+        cfg["idle_actions"]，审计 D#4 判的是**流程断裂**（两套视图之间没有门）；
+        而删掉 open_idle 还得改既有用例（tests/test_dialogs_more_v24.py 在调它），
+        收益只是少一个函数名。开门既修了断裂，又让这个入口真的有人走。
+        """
+        open_idle(self.pet)
+        self._refresh()      # 待机设置里可能改了 idle_actions → 回来把下拉重算一遍
+
+    def _import_frame_action(self):
+        """A2：「＋导入图片做动作…」——落在**当前角色的当前形态**，**立即写盘**。
+
+        v2.9.0（质量审 6）：它和角色编辑里那个入口**语义相反**（那边是暂存态、取消即放弃）。
+        这里选了「立即生效」（用户就是要快速加个动作），那就必须**把话说清**（按钮旁的常驻
+        文案 + 状态行）**并给撤销入口**（`_undo_pic_import`），不能让它"看起来能取消"。
+        """
+        sink = _LiveRoleActionSink(self.pet)
+        ok, msg = add_frame_action(self.pet, self, sink=sink)
+        if not ok:
+            # msg=="" 是「用户取消」（静默）；其它失败都已经由 add_frame_action 用中文
+            # 提示过了，这里只在状态行留一句（不重复弹框）
+            if msg:
+                self._note(msg)
+            return
+        self._last_pic_import = getattr(sink, "last_added", None)
+        self._undo_pic_btn.setVisible(bool(self._last_pic_import))
+        self._note(msg + "：上面的「动作」候选里现在能选到它了"
+                   "（立即生效；要收回就点「撤销这次导入」）")
+        self._sync_param()
+
+    def _undo_pic_import(self):
+        """撤销上一次「＋导入图片做动作…」：把刚加的动作从角色里摘掉，帧文件一起删。
+
+        这是"立即生效"这个选择必须配的代价项（质量审 6 的 ② 方案）：不给它，用户会以为
+        对话框的「取消」能撤销这次导入。
+        """
+        rec = self._last_pic_import
+        self._last_pic_import = None
+        self._undo_pic_btn.setVisible(False)
+        if not rec:
+            return
+        name, frames = rec
+        ok, err = _LiveRoleActionSink(self.pet).undo(name, frames)
+        if not ok:
+            self._note("撤销失败：%s" % (err or "写入角色失败"))
+            return
+        self._sync_param()
+        self._note("已撤销：动作「%s」已从角色里移除（帧文件也删了，候选里也没它了）" % name)
+
+    def _move_step(self, delta):
+        """A3：步骤上移 / 下移（标签写着「按顺序执行」，顺序就是语义）。
+
+        回执走**窗口内状态行**（不是宠物气泡）：这是列表内的操作，用户在盯着列表
+        （口径见任务书原则 2 与 A4；A3 那句「照 LinesDialog._move_line 的做法」指的是
+        **到顶/到底也要说一句**这件事——措辞照抄，渠道按原则 2 走内联）。
+        移动后选中项跟着走（否则连点两下就不知道动的是谁）。
+        """
+        row = self._steps.currentRow()
+        if row < 0:
+            _warn(self, "排序", "先在「动作序列」里选中要移动的步骤")
+            return
+        j = max(0, min(self._steps.count() - 1, row + int(delta)))
+        if j == row:
+            self._note("已经是最上面了" if int(delta) < 0 else "已经是最下面了")
+            return
+        item = self._steps.takeItem(row)
+        self._steps.insertItem(j, item)
+        self._steps.setCurrentRow(j)
+        self._steps.scrollToItem(item)
+        self._note("已把「%s」%s（点「保存」才落盘）"
+                   % (item.text()[:24], "上移" if int(delta) < 0 else "下移"))
 
     # ---------- 展示辅助 ----------
+
     @staticmethod
     def _act_label(act):
         return {"play_action": "动作", "say": "台词", "voice": "语音",
@@ -2704,6 +3301,7 @@ class BehaviorDialog(_FitDialog):
         return "未知步骤：%s" % act
 
     # ---------- 待机/时长设置 ----------
+
     def _save_cfg_vals(self):
         """写回行为/待机时长。v2.1：空闲秒数写新键 idle_trigger_delay（旧键只是兼容别名，
         写入旧键不会生效——M1 修复）。"""
@@ -2715,41 +3313,113 @@ class BehaviorDialog(_FitDialog):
         cfg["transform_seconds"] = self._transform_secs.value()
         self._save_cfg(cfg)
 
+    def _idle_action_labels(self, dropped):
+        """把「会被丢掉」的待机条目列成人看得懂的名字（B5 的确认文案用）。"""
+        lines = []
+        for a in (dropped or []):
+            bid = str((a or {}).get("behavior_id") or "")
+            name = ""
+            if self.svc is not None and bid:
+                try:
+                    name = str((self.svc.get(bid) or {}).get("name") or "")
+                except Exception as e:
+                    name = ""
+                    pet_log.log_error("behavior idle labels: 查行为名失败，回落显示 id（%s）" % e)
+            lines.append("· %s" % (name or bid or "（空条目）"))
+        return "\n".join(lines)
+
     def _on_idle_pick(self, _idx):
-        """待机行为下拉（旧控件）：v2.1 起改写成**新待机配置**（idle_actions + single 模式），
-        不再写旧键 idle_behavior —— 否则旧键会把用户在待机设置里删掉的行为"复活"（M2）。"""
+        """待机行为下拉：把「空闲时只播这一条」写进新待机配置（idle_actions + single）。
+
+        v2.1：不再写旧键 idle_behavior —— 否则旧键会把用户在待机设置里删掉的行为「复活」（M2）。
+        v2.9.0（B5）：改前这里是**硬编码** data = {idle_actions: [], sequential}：只要用户碰
+        一下下拉，配置里原有的多条待机动作就被静默清空/覆盖成 1 条（审计实测 2 条 → 1 条，
+        只有一句通用气泡）——**数据损失面**。现在「会丢什么」先由
+        pet_behaviors.idle_single_change(..., apply=False) 算出来；
+        **F-2（找茬）修正了确认的开关**：判据不是"dropped 非空"（那只表示"有别的条目"），
+        而是**"条目数真的会减少"**（len(现在) > 1/0）——换一条（1→1）不问，
+        只有会丢条目时才问，并且说清"剩几条、丢掉哪几条"。
+        """
         cfg = getattr(self.pet, "cfg", None)
         if not isinstance(cfg, dict):
             return
         bid = self._idle_combo.currentData() or ""
-        data = {"idle_actions": [], "idle_play_mode": "sequential"}
-        if bid:
-            data = {"idle_actions": [{"id": bid, "behavior_id": bid, "enabled": True,
-                                      "weight": 1.0, "order": 1}],
-                    "idle_play_mode": "single"}
-        if _call(self.pet, "apply_idle_settings", data) is None:
+        _before = pet_behaviors.normalize_idle_cfg(cfg)["idle_actions"]
+        dropped, err = pet_behaviors.idle_single_change(cfg, bid, apply=False)
+        if err:
+            _warn(self, "待机设置", err)
+            self._refresh()
+            return
+        # F-2（找茬审查）：**只有条目数真的会减少**才值得问一句。
+        # 改前判的是 `if dropped`，而 dropped 的定义是「所有 behavior_id ≠ 选中项的条目」
+        # —— 配置里只有 1 条待机、用户改选另一条时 dropped 也非空，于是弹一句
+        # 「还有另外 1 条动作…」，**而条目数 1 变 1 根本没减少**、被丢的正是他要换掉的那条，
+        # 还被文案说成「另外」。这就是用户抱怨的「多一步」。口径回到 B5 自己那句：
+        # 任何一次下拉操作后条目数不减少（除非用户明确选择丢弃且有确认）—— 没减少就不该问。
+        _after = 1 if bid else 0        # 选完之后列表里会剩几条（""=不启用 → 0 条）
+        _shrinks = len(_before) > _after
+        if _shrinks and not _confirm(
+                self, "待机行为",
+                "这个下拉的语义是「空闲时只播这一条」。\n"
+                "当前待机列表里有 %d 条动作，继续只会剩下 %d 条，被丢掉的：\n%s\n\n"
+                "想保留多条（顺序/随机/权重），请点旁边的「待机设置…」在那里改。"
+                % (len(_before), _after, self._idle_action_labels(dropped))):
+            self._refresh()   # 拒绝 → 拨回配置的真实状态，不留半截界面
+            return
+        pet_behaviors.idle_single_change(cfg, bid, apply=True)
+        if _call(self.pet, "apply_idle_settings",
+                 {"idle_actions": cfg["idle_actions"],
+                  "idle_play_mode": cfg["idle_play_mode"]}) is None:
             self._save_cfg(cfg)  # 兜底：老 pet 没有新入口时仍保存（不崩）
+        self._refresh()
+        if _shrinks:
+            self._note("已把待机行为设为「%s」，并按你的确认丢掉了 %d 条"
+                       % (self._idle_combo.currentText(), len(dropped)))
+        else:
+            # 条目数没变（换了一条）= 用户意图完全达成，不该留"丢掉了"的措辞
+            self._note("已把待机行为设为「%s」" % self._idle_combo.currentText())
 
     # ---------- 列表 ----------
+
     def _refresh(self):
         self._list.clear()
         _cfg = getattr(self.pet, "cfg", {}) or {}
-        # 待机行为下拉：不启用 + 全部行为
-        self._idle_combo.blockSignals(True)
-        self._idle_combo.clear()
-        self._idle_combo.addItem("（不启用 → 默认待机）", "")
+        _behaviors = []
         if self.svc is not None:
             for b in self.svc.list():
+                _behaviors.append(b)
                 self._list.addItem("%s（%d 步）" % (b["name"], len(b["steps"])))
                 self._list.item(self._list.count() - 1).setData(Qt.ItemDataRole.UserRole, b["id"])
-                self._idle_combo.addItem("空闲时：" + b["name"], b["id"])
-        # 当前待机取自新配置：idle_actions 只有一条且模式 single 时显示它
-        _acts = _cfg.get("idle_actions") or []
-        _cur = str(_acts[0].get("behavior_id") or "") if (
-            _cfg.get("idle_play_mode") == "single" and len(_acts) == 1) else ""
-        _found = self._idle_combo.findData(_cur)
-        self._idle_combo.setCurrentIndex(_found if _found >= 0 else 0)
-        self._idle_combo.blockSignals(False)
+        # v2.9.0（B5）：下拉状态**由配置推导**（pet_behaviors.idle_combo_state 是文案与判据
+        # 的单一来源），不再硬编码「（不启用 → 默认待机）」——改前配置里明明有 2 条待机动作，
+        # 下拉却显示「不启用」，用户点一下就把 2 条覆盖成 1 条（数据损失面）。
+        # 多条（或 single 但不止一条）时下拉**只读**：它是「如实显示」，改多条请走旁边的
+        # 「待机设置…」（审计给的两个方案里的 (a)：如实显示 + 跳转）。
+        _st = pet_behaviors.idle_combo_state(
+            _cfg if isinstance(_cfg, dict) else {},
+            name_getter=lambda _bid: {b["id"]: b["name"] for b in _behaviors}.get(_bid, ""))
+        self._idle_combo.blockSignals(True)
+        try:
+            self._idle_combo.clear()
+            self._idle_combo.setEnabled(_st["mode"] != "list")
+            if _st["mode"] == "list":
+                self._idle_combo.addItem(_st["label"], "")
+                self._idle_combo.setToolTip(
+                    "待机列表里有 %d 条动作，顺序/随机/权重请在「待机设置…」里改" % _st["count"])
+            else:
+                self._idle_combo.setToolTip(
+                    "空闲时只播这一条（要让多条轮流/随机，请点「待机设置…」）")
+                self._idle_combo.addItem(pet_behaviors.IDLE_COMBO_OFF_LABEL, "")
+                for b in _behaviors:
+                    self._idle_combo.addItem("空闲时：" + b["name"], b["id"])
+                if (_st["mode"] == "single"
+                        and self._idle_combo.findData(_st["behavior_id"]) < 0):
+                    # 配置指向的行为已经不在库里：也要如实显示（否则界面又比配置更乐观）
+                    self._idle_combo.addItem(_st["label"], _st["behavior_id"])
+                _found = self._idle_combo.findData(_st["behavior_id"])
+                self._idle_combo.setCurrentIndex(_found if _found >= 0 else 0)
+        finally:
+            self._idle_combo.blockSignals(False)
         try:
             self._idle_secs.blockSignals(True)
             self._idle_secs.setValue(int(_cfg.get("idle_behavior_seconds",
@@ -2765,40 +3435,67 @@ class BehaviorDialog(_FitDialog):
             self._idle_secs.blockSignals(False)
             self._transform_secs.blockSignals(False)
 
+        # v2.9.0（A9/A11/A2）：每次重画都把这两处**可见文字**同步一遍（它们承载的是
+        # 「要保存才落盘」「动作会加在哪儿」这两条决定成败的信息）
+        self._refresh_state_label()
+        self._act_target.setText(self._target_text())
+        self._sync_param()
+
     def _on_sel(self, row):
         if row < 0 or self.svc is None:
+            return
+        # A5（质量审查 F2）：**换列表条目**同样会丢掉未保存的表单 —— 与关窗是同一种病，
+        # 改前这条路静默丢弃（实测 0 弹框）。拒绝时把选中行拨回原来那条，不留
+        # 「选中看着变了、内容还是旧的」这种半截状态。
+        if not self._confirm_discard(why="switch"):
+            _back = self._row_of(self._editing_id)
+            self._list.blockSignals(True)
+            try:
+                self._list.setCurrentRow(_back)
+            finally:
+                self._list.blockSignals(False)
             return
         _b = self.svc.get(self._list.item(row).data(Qt.ItemDataRole.UserRole))
         if _b is None:
             return
         self._editing_id = _b["id"]
+        self._new_state = False     # A11：选中已有行为 = 离开新建态
         self._name.setText(_b["name"])
         self._steps.clear()
         for _st in _b["steps"]:
             _it = QListWidgetItem(self._step_text(_st))
             _it.setData(Qt.ItemDataRole.UserRole, _st)
             self._steps.addItem(_it)
+        # A5：载入即基线——之后的改动才算「未保存」
+        self._baseline = self._form_signature()
+        self._refresh_state_label()
 
     def _new(self):
-        """「新建」按钮：清空表单进入新建态，并给一句即时回执。
+        """「新建」按钮：清空表单进入新建态 + 常驻状态标签立刻变成「新建中」。
 
-        以前这里是"表单本来就空时屏幕上零变化"（最典型的"像没效果"）——现在有气泡。
+        v2.9.0（A11/P2-8）：v2.8.0 只发了一次性**气泡**（修法不符）——现在起是表单上方的
+        **常驻**标签：新建态一直可见，直到保存或取消。同一个意思不再说两遍（撤掉气泡）。
         """
         self._reset_form()
-        _toast(self.pet, "已进入新建态：填好行为名与步骤后点「保存」")
+        self._new_state = True
+        self._refresh_state_label()
+        self._note("已进入新建态：填好行为名与步骤后点「保存」才会写进库里")
 
     def _reset_form(self):
         """只清表单（删除成功后复用，不重复发回执）。"""
         self._editing_id = None
+        self._new_state = False
         self._name.clear()
         self._steps.clear()
         self._list.setCurrentRow(-1)
+        self._baseline = self._form_signature()   # A5：清空即基线（此时没有未保存改动）
+        self._refresh_state_label()
 
     def _del_step(self):
         """「删除选中步骤」：没选中时给提示（takeItem(-1) 是静默的）+ 成功回执。
 
-        v2.8.0 第 6 轮（D11）：删掉的那一行从列表里消失是唯一的信号——步骤多/列表矮时
-        很容易看不见，补一句回执（同 N15，同一批对话框同一套口径）。
+        v2.8.0 第 6 轮（D11）补了回执，但走的是**宠物气泡**；v2.9.0（A4）改成窗口内
+        **状态行**：列表内的连续操作不该弹气泡（气泡覆盖式、无队列，连点时前面的看不见）。
         """
         row = self._steps.currentRow()
         if row < 0:
@@ -2807,8 +3504,9 @@ class BehaviorDialog(_FitDialog):
         item = self._steps.item(row)
         label = item.text() if item is not None else ""
         self._steps.takeItem(row)
-        _toast(self.pet, "已删除步骤%s（点「保存」才落盘）"
-               % ("：%s" % label[:20] if label else ""))
+        self._refresh_state_label()
+        self._note("已删除步骤%s（点「保存」才落盘）"
+                   % ("：%s" % label[:20] if label else ""))
 
     def _add_step(self):
         act = self._act_combo.currentData()
@@ -2854,9 +3552,11 @@ class BehaviorDialog(_FitDialog):
         self._steps.addItem(_it)
         self._steps.setCurrentItem(_it)
         self._steps.scrollToItem(_it)      # 列表长时新步骤会落在视口外（同 N12/N13 口径）
-        self._param.clear()
-        # N15：加了一步之后只有列表变化，补一句回执（还没落盘，保存才写进库里）
-        _toast(self.pet, "已添加步骤：%s（点「保存」才落盘）" % self._step_text(norm[0])[:28])
+        self._param.clear_text()          # A1：清**输入**（不是清候选）
+        self._refresh_state_label()
+        # A4：回执走**窗口内状态行**（列表内连续操作不弹宠物气泡——气泡是覆盖式的，
+        # 连点时前面的看不见、最后一条还滞留 5 秒）
+        self._note("已添加步骤：%s（点「保存」才落盘）" % self._step_text(norm[0])[:28])
 
     def _pick_from_lines(self):
         """行为步骤「读台词」：从台词库选一条（返回 line_id 或 ""）。"""
@@ -2902,9 +3602,17 @@ class BehaviorDialog(_FitDialog):
                 out.append(_st)
         return out
 
-    def _save(self):
+    def _save(self, quiet=False):
+        """保存表单。返回**是否真的写进库里**（「试播」按它决定播不播，见 B6）。
+
+        quiet=True 时不发「已保存」气泡：「试播」用它——一次用户动作只说一句话，
+        而「试播顺带弹一句已保存」会让用户以为这是保存按钮干的（审计 #8）。
+        保存**不关窗**（B3 的 R1：面板型），保存完还能接着改。
+        """
         if self.svc is None:
-            return
+            # 审计实测：svc 不可用时点保存是**彻底静默**（warn/info/toast 全空）
+            self._note("行为库不可用：这次保存没做（检查数据目录是否可写）")
+            return False
         _steps = self._collect_steps()
         if self._editing_id:
             _ok, _err = self.svc.update(self._editing_id, self._name.text(), _steps)
@@ -2915,14 +3623,25 @@ class BehaviorDialog(_FitDialog):
                 self._editing_id = _b["id"]  # 新建成功后进入编辑态（试播/再保存走 update）
         if not _ok:
             _warn(self, "行为编辑", _err or "保存失败")
-            return
+            self._note(_err or "保存失败")
+            return False
         _saved_id = self._editing_id
         _saved_name = (self.svc.get(_saved_id) or {}).get("name") or self._name.text().strip()
         self._refresh()
+        # F-A（独立验收实测）：**基线必须先于 `_select_behavior` 对齐** —— 后者会显式调
+        # `_on_sel` → `_confirm_discard(why="switch")`；基线没跟上的话，
+        # "刚保存的内容"对上"上一条的旧基线" → 判成脏 → **点一次「保存」反而被问一句
+        # 要不要放弃**（这就是用户抱怨的"多一步"，也是最刺眼的一种）。
+        self._new_state = False           # A11：保存完就离开新建态（常驻标签随之变「编辑中」）
+        self._baseline = self._form_signature()   # A5：保存即新基线（此时没有未保存改动）
         # P1-9：新建时 _row = currentRow() == -1 → 以前既不选中也不滚动，新行为落在列表
         # 末尾看不见（"保存了像没保存"）。现在按 id 定位新条目并滚到可见处。
         self._select_behavior(_saved_id)
-        _toast(self.pet, "行为「%s」已保存" % _saved_name)
+        self._refresh_state_label()
+        self._note("行为「%s」已保存（已在库里；可以接着改，或者点「试播」看一遍）" % _saved_name)
+        if not quiet:
+            _toast(self.pet, "行为「%s」已保存" % _saved_name)
+        return True
 
     def _select_behavior(self, bid):
         """按 id 选中并滚到可见处（正例照抄 AlarmDialog._save）。返回是否找到。"""
@@ -2931,8 +3650,15 @@ class BehaviorDialog(_FitDialog):
         for _i in range(self._list.count()):
             _it = self._list.item(_i)
             if _it.data(Qt.ItemDataRole.UserRole) == bid:
-                self._list.setCurrentRow(_i)
+                # 程序化选中**不走**未保存确认（_save/_import 之后表单与新条目本来就一致，
+                # 走信号会被误判成脏 → 保存完反而弹一个"要不要放弃"）；显式重载一次表单。
+                self._list.blockSignals(True)
+                try:
+                    self._list.setCurrentRow(_i)
+                finally:
+                    self._list.blockSignals(False)
                 self._list.scrollToItem(_it)
+                self._on_sel(_i)
                 return True
         return False
 
@@ -2953,31 +3679,70 @@ class BehaviorDialog(_FitDialog):
         if not _ok:
             _warn(self, "行为编辑", _err or "删除失败")
             return
-        # 删除的若是当前待机行为 → 同步清配置（防悬挂引用静默失效）
+        # B4：**真的**清掉待机列表里对它的引用。
+        # 改前这里判的是 cfg["idle_behavior"]（pet_config.normalize_cfg 每次加载都把它置空）
+        # → 恒不命中的**死分支**；实测删掉被待机列表引用的行为后 idle_actions 原样残留，
+        # 待机设置里留一条「（行为已删除：xxx）」。清理逻辑走 pet_behaviors 的单一来源。
         _cfg = getattr(self.pet, "cfg", None)
-        if isinstance(_cfg, dict) and str(_cfg.get("idle_behavior") or "") == _bid:
-            _cfg["idle_behavior"] = ""
+        _removed, _cerr = pet_behaviors.remove_idle_actions_for_behavior(_cfg, _bid)
+        if _removed:
             self._save_cfg(_cfg)
         self._reset_form()
         self._refresh()
         _toast(self.pet, "已删除行为「%s」" % _label)
+        if _removed:
+            # 这条不是重复回执：它说的是**另一个事实**（这次删除顺带动了待机设置），
+            # 用户不看到它，就会在待机设置里发现「少了一条」而不知道是谁干的。
+            self._note("已同时从待机列表里移除 %d 条引用（它不会再被待机播到）" % len(_removed))
+        elif _cerr:
+            self._note("行为删掉了，但待机列表没清成：%s" % _cerr)
 
     def _test_play(self):
-        self._save()  # 先保存再试播（试播内容 = 已保存内容）
-        if self._editing_id:
-            _runner = getattr(self.pet, "_run_behavior", None)
-            if _runner is not None:
-                _runner(self._editing_id)
+        """先保存再试播；**保存失败就不播**（B6 / 审计 #8）。
+
+        改前：保存失败（比如行为名非法）仍然调 _run_behavior → 播的是**上次保存的旧内容**
+        （_editing_id 还指向上一次成功保存的那条），用户以为在试播自己的修改。
+        规则本身在 pet_behaviors.test_play_target 里（单一来源，逻辑侧用例钉它）：
+        这里只负责「把结论放到内联状态行」与「调真正的播放器」。
+        保存走 quiet=True：这次用户动作的回执只有一句（不再顺带弹「已保存」）。
+        """
+        _ok = self._save(quiet=True)
+        _bid, _why = pet_behaviors.test_play_target(_ok, self._editing_id)
+        if _bid is None:
+            self._note(_why)
+            return
+        _runner = getattr(self.pet, "_run_behavior", None)
+        if _runner is not None:
+            self._note("正在试播「%s」（内容 = 刚保存的这一份）"
+                       % ((self.svc.get(_bid) or {}).get("name") or ""))
+            _runner(_bid)
 
     def _import(self):
+        """A7：按钮只认行为文件（.json），选错了给**人话**原因。
+
+        审计 A.1-P3 实测：文件框过滤器写死「行为 JSON (*.json)」，用户强选一张 PNG →
+        界面弹出 `'utf-8' codec can't decode byte 0x89 in position 0`（英文异常）。
+        两层防护：① 选完先在对话框层按扩展名预检（到这一步都还没碰库）；
+        ② 真进了库还失败（比如 .json 里装的是别的东西）→ 把原因翻成人话再显示。
+        """
         if self.svc is None:
+            self._note("行为库不可用：这次导入没做")
             return
-        _path, _f = QFileDialog.getOpenFileName(self, "导入行为资源", "", "行为 JSON (*.json)")
+        _path, _f = QFileDialog.getOpenFileName(self, "导入行为文件", "", "行为文件 (*.json)")
         if not _path:
+            return
+        _ext = os.path.splitext(str(_path))[1].lower()
+        if _ext != ".json":
+            _msg = ("这个文件不是行为文件（%s）。行为设置只导入 .json —— "
+                    "想用图片做动作，请点「＋导入图片做动作…」。" % (_ext or "没有扩展名"))
+            _warn(self, "导入行为", _msg)
+            self._note(_msg)
             return
         _b, _err = self.svc.import_file(_path)
         if _b is None:
-            _warn(self, "行为编辑", _err or "导入失败")
+            _msg = _human_import_error(_err, _path)   # A7：不把英文异常端给用户
+            _warn(self, "导入行为", _msg)
+            self._note(_msg)
             return
         self._refresh()
         self._select_behavior(_b.get("id"))
@@ -3003,8 +3768,13 @@ class BehaviorDialog(_FitDialog):
 
 
 # ---------------- v2.0.5：闹钟 ----------------
-class AlarmDialog(_FitDialog):
-    """闹钟设置：列表 + 新建/编辑/删除 + 自定义铃声（wav/mp3）+ 启用开关 + 试听。"""
+class AlarmDialog(_DiscardGuard, _FitDialog):
+    """闹钟设置：列表 + 新建/编辑/删除 + 自定义铃声（wav/mp3）+ 启用开关 + 试听。
+
+    v2.9.0（质量审 F1 / 兼容审）：它和 BehaviorDialog 一样是**面板型**（保存不关窗、
+    表单有暂存态 `_pending_ringtone`），但第二枚按钮当时还叫「关闭」且丢弃草稿零提示 ——
+    R4 点名的硬反例。现在改叫「取消」并混入 `_DiscardGuard`（无改动直接关，零额外一步）。
+    """
 
     DEFAULT_TIME = QTime(7, 30)  # 新建闹钟默认时间（唯一来源）
 
@@ -3015,6 +3785,7 @@ class AlarmDialog(_FitDialog):
         self._editing_id = None
         self._pending_ringtone = ""  # 本次导入的新铃声文件名（保存时写入）
         self._ring_dirty = False
+        self._baseline = None        # A5：打开时的表单指纹（_refresh 之后填）
         self.setWindowTitle("闹钟")
         self.setStyleSheet(DIALOG_QSS)
         clamp_dialog(self, 540, 470)   # v2.5.0 B
@@ -3053,8 +3824,10 @@ class AlarmDialog(_FitDialog):
         self._ring_label.setWordWrap(True)
         lay.addWidget(self._ring_label)
         btn_row = QHBoxLayout()
+        # v2.9.0（R4）：第二枚按钮执行的是「丢弃未保存编辑 + 关窗」，叫「关闭」是标签在
+        # 说谎 —— 改名「取消」并走 _cancel（有未保存改动时先问一次；没改动直接关）。
         for _lbl, _cb in (("新建", self._new), ("保存", self._save),
-                          ("删除", self._delete), ("关闭", self.accept)):
+                          ("删除", self._delete), ("取消", self._cancel)):
             _b = QPushButton(_lbl)
             _b.clicked.connect(_cb)
             _btn_tip(_b, _lbl)         # P3-6：新建/添加各一套措辞
@@ -3062,6 +3835,20 @@ class AlarmDialog(_FitDialog):
         stick_buttons(self, btn_row)   # v2.5.0 B：按钮行在滚动区之外
         self._time.setTime(self.DEFAULT_TIME)  # 打开即显示默认 07:30（点「新建」同款）
         self._refresh()
+        self._baseline = self._form_signature()   # A5：打开即基线（此时没有未保存改动）
+
+    # ---------- A5：未保存判据（与 BehaviorDialog 同一套口径，见 _DiscardGuard） ----------
+    def _form_signature(self):
+        """当前草稿的指纹：时间 / 文案 / 启用 / 待写入的铃声。"""
+        return (self._time.time().toString("HH:mm"), self._label.text().strip(),
+                bool(self._ck_enabled.isChecked()), str(self._pending_ringtone or ""))
+
+    def _discard_prompt(self, why="close"):
+        if why == "switch":
+            return ("表单里还有没保存的闹钟草稿（时间/文案/铃声）。\n"
+                    "点「确定」= 放弃它、切到另一个闹钟；点「取消」= 留在这一条接着改。")
+        return ("表单里还有没保存的闹钟草稿（时间/文案/铃声）。\n"
+                "点「确定」= 放弃它并关窗；点「取消」= 回去接着改。")
 
     # ---------- 列表 ----------
     def _refresh(self):
@@ -3078,6 +3865,16 @@ class AlarmDialog(_FitDialog):
     def _on_sel(self, row):
         if row < 0 or self.svc is None:
             return
+        # A5（与 BehaviorDialog 同一种病，同一轮修）：换列表条目也会丢草稿 —— 拒绝时
+        # 把选中行拨回原来那条，不留「选中看着变了、内容还是旧的」。
+        if not self._confirm_discard(why="switch"):
+            _back = self._row_of(self._editing_id)
+            self._list.blockSignals(True)
+            try:
+                self._list.setCurrentRow(_back)
+            finally:
+                self._list.blockSignals(False)
+            return
         _a = self.svc.get(self._list.item(row).data(Qt.ItemDataRole.UserRole))
         if _a is None:
             return
@@ -3090,6 +3887,7 @@ class AlarmDialog(_FitDialog):
         self._ring_dirty = False
         self._ring_label.setText("铃声：" + self._pending_ringtone if self._pending_ringtone
                                  else "（默认提示音）")
+        self._baseline = self._form_signature()   # A5：载入即基线
 
     def _new(self):
         """「新建」按钮：清空表单进入新建态 + 一句即时回执。
@@ -3110,6 +3908,7 @@ class AlarmDialog(_FitDialog):
         self._ring_dirty = True  # 新建：保存时把「默认提示音」作为初始值落盘（add 走 ringtone=""）
         self._ring_label.setText("（默认提示音）")
         self._list.setCurrentRow(-1)
+        self._baseline = self._form_signature()   # A5：清空即基线（点「新建」后关窗不该问）
 
     # ---------- 铃声 ----------
     def _pick_ringtone(self):
@@ -3162,11 +3961,21 @@ class AlarmDialog(_FitDialog):
             _warn(self, "闹钟", _err or "保存失败")
             return
         self._refresh()
+        # F-A（独立验收实测）：**基线必须先于 `_on_sel` 对齐** —— 后者会走
+        # `_confirm_discard(why="switch")`；基线没跟上的话，「刚保存的内容」
+        # 对上"上一条的旧基线" → 判成脏 → **点一次「保存」反而被问一句要不要放弃**。
+        self._baseline = self._form_signature()   # A5：保存即新基线
         # 恢复选中到刚保存的闹钟（_on_sel 回填保存后的规范化值，表单状态干净）
+        # A5：程序化选中**不许**触发未保存确认（保存完表单与新条目一致，走信号会误判成脏）
         for _i in range(self._list.count()):
             if self._list.item(_i).data(Qt.ItemDataRole.UserRole) == _saved_id:
-                self._list.setCurrentRow(_i)
+                self._list.blockSignals(True)
+                try:
+                    self._list.setCurrentRow(_i)
+                finally:
+                    self._list.blockSignals(False)
                 self._list.scrollToItem(self._list.item(_i))
+                self._on_sel(_i)
                 break
         _toast(self.pet, "闹钟已保存~（到点气泡提醒）")
 
@@ -3418,18 +4227,23 @@ class AISettingsDialog(_FitDialog):
         super().closeEvent(event)
 
     def _clear_long_term(self):
-        """v2.3.0（1.1/兼容 M2）：清除长期记忆（memory.json 的 long_term 段，对话历史保留）。"""
-        from PySide6.QtWidgets import QMessageBox
-        if QMessageBox.question(
-                self, "清除长期记忆",
-                "确定要让它忘掉你的称呼、别名、喜好、不喜欢和近况吗？\n"
-                "（对话历史不受影响；此操作不可撤销）") != QMessageBox.StandardButton.Yes:
+        """v2.3.0（1.1/兼容 M2）：清除长期记忆（memory.json 的 long_term 段，对话历史保留）。
+
+        v2.9.0（A11/D16）：改走统一口径 _confirm / _info / _warn —— 裸 QMessageBox.question
+        / information / warning 不带 DIALOG_QSS（深色主题下与别处不一致），也不进 modal()
+        （拿不到置顶 + 抢焦点）。**确认语义一字不动**：不可撤销 ⇒ 这个确认该有。
+        既有用例的驱动方式同步改成给 _confirm/_info/_warn 注入替身（**加强式**：从
+        「monkeypatch 静态方法」改成驱动真入口，断言一条没减）。
+        """
+        if not _confirm(self, "清除长期记忆",
+                        "确定要让它忘掉你的称呼、别名、喜好、不喜欢和近况吗？\n"
+                        "（对话历史不受影响；此操作不可撤销）"):
             return
         ok = _call(self._pet, "clear_long_term_memory")
         if ok:
-            QMessageBox.information(self, "清除长期记忆", "已经忘掉啦~")
+            _info(self, "清除长期记忆", "已经忘掉啦~")
         else:
-            QMessageBox.warning(self, "清除长期记忆", "清除失败，详情见 error.log")
+            _warn(self, "清除长期记忆", "清除失败，详情见 error.log")
 
     def _save(self):
         data = {
@@ -4457,7 +5271,11 @@ class BubbleStyleDialog(_FitDialog):
 
 
 # ---------------- f) 台词设置对话框（v2.1：独立台词自定义模块 UI） ----------------
-class LinesDialog(_FitDialog):
+class LinesDialog(_DiscardGuard, _FitDialog):
+    """v2.9.0（兼容审）：它的第二枚按钮原来叫「关闭」→ `self.accept()`，而「台词库」页签的
+    编辑器**有暂存态**（改了文本/类别/角色/声音/喂食对象不点「保存」就没了）—— R4 反例。
+    现在改名「取消」并混入 `_DiscardGuard`（无改动直接关，零额外一步）。
+    """
     """台词自定义：台词库（增删改查/排序/批量/清空/撤销）/ 对白编排 / 失效引用。
 
     v2.1：内置台词也可删（真删不留正文，只记 id 防复活）；条数不限，
@@ -4487,11 +5305,30 @@ class LinesDialog(_FitDialog):
         self._count = QLabel("")
         row.addWidget(self._count)
         row.addStretch(1)
-        close_btn = QPushButton("关闭")
-        close_btn.clicked.connect(self.accept)
+        # v2.9.0（R4）：「关闭」执行的是「丢弃未保存的编辑器草稿 + 关窗」——改名「取消」，
+        # 走 _cancel（有未保存改动时先问一次；没有改动直接关）。
+        close_btn = QPushButton("取消")
+        close_btn.clicked.connect(self._cancel)
         row.addWidget(close_btn)
         stick_buttons(self, row)   # v2.5.0 B：按钮行在滚动区之外
         self._refresh_all()
+        self._baseline = self._form_signature()   # A5：打开即基线
+
+    # ---------- A5：未保存判据（与 BehaviorDialog / AlarmDialog 同一套口径） ----------
+    def _form_signature(self):
+        """台词编辑器草稿的指纹（只有「台词库」页签的编辑器有暂存态）。"""
+        return (str(self._editing or ""), self._text.toPlainText().strip(),
+                str(self._cat.currentData() or ""),
+                str(self._role.currentData() or ""),
+                str(self._voice.currentData() or ""),
+                str(self._food.currentData() or ""))
+
+    def _discard_prompt(self, why="close"):
+        if why == "switch":
+            return ("编辑器里还有没保存的台词改动。\n"
+                    "点「确定」= 放弃这些改动、切到另一条；点「取消」= 留在这一条接着改。")
+        return ("编辑器里还有没保存的台词改动。\n"
+                "点「确定」= 放弃这些改动并关窗；点「取消」= 回去接着改。")
 
     # ---------- 公共数据 ----------
     def _role_items(self):
@@ -4630,6 +5467,16 @@ class LinesDialog(_FitDialog):
         it = self._list.currentItem()
         if it is None or self._lib is None:
             return
+        # A5（同一种病，同一轮修）：换一条台词会把编辑器内容整块换掉 —— 有未保存改动时
+        # 先问，拒绝就把选中项拨回原来那条（信号挡住，避免递归进来）。
+        if not self._confirm_discard(why="switch"):
+            _back = self._row_of(self._editing)
+            self._list.blockSignals(True)
+            try:
+                self._list.setCurrentRow(_back)
+            finally:
+                self._list.blockSignals(False)
+            return
         ln = self._lib.get(it.data(Qt.ItemDataRole.UserRole))
         if ln is None:
             return
@@ -4652,6 +5499,7 @@ class LinesDialog(_FitDialog):
             self._food.addItem("（已失效：%s）" % _food_val, _food_val)
             _fi = self._food.count() - 1
         self._food.setCurrentIndex(_fi if _fi >= 0 else 0)
+        self._baseline = self._form_signature()   # A5：载入即基线
 
     def _move_line(self, delta):
         """台词排序（上移/下移）：按当前列表顺序整体重排，立即落盘。"""
@@ -4684,6 +5532,7 @@ class LinesDialog(_FitDialog):
         self._fill_combo(self._voice, self._voice_items(), "")
         self._food.setCurrentIndex(0)  # v2.2.5：新建台词时重置喂食对象（防上一轮编辑残留）
         self._list.setCurrentRow(-1)
+        self._baseline = self._form_signature()   # A5：清空即基线
         self._text.setFocus()
         # N2：表单本来就空时，点「新建」屏幕上零变化——给一句"已进入新建态"的即时回执
         _toast(self._pet, "已进入新建态：写完台词点「保存」")
@@ -4718,6 +5567,9 @@ class LinesDialog(_FitDialog):
             # 新台词根本不出现，用户以为没建成。新建落库后把这两个过滤条件复位。
             self._clear_line_filters(cat)
         self._refresh_all()
+        # A5：**先**把基线对齐到"刚保存的内容"，再 _select_line —— 否则它会触发
+        # _on_pick_line 的未保存检查，把"保存成功"误判成"有未保存改动"（凭空多一步）。
+        self._baseline = self._form_signature()
         # N3/S5/P1-8：保存成功后以前零提示、也不选中新行（长列表下等于没保存）
         self._select_line(self._editing)
         _toast(self._pet, "台词已保存~")
@@ -5281,7 +6133,9 @@ class VoiceDialog(_FitDialog):
         root.addWidget(tabs, 1)
         btns = QHBoxLayout()
         ok = QPushButton("保存")
-        cancel = QPushButton("关闭")
+        # v2.9.0（A8 / B3 的 R4 不变量）：它执行的是 reject（丢弃未保存编辑 + 关窗），
+        # 叫「关闭」是标签在说谎 —— 改名「取消」。保存**不关窗**（见 _save）。
+        cancel = QPushButton("取消")
         ok.setDefault(True)
         ok.clicked.connect(self._save)
         cancel.clicked.connect(self.reject)
@@ -6010,7 +6864,11 @@ class VoiceDialog(_FitDialog):
         except Exception:
             pass  # 有意忽略：缓存刷新失败不影响已保存的配置
         if not silent:
-            self.accept()
+            # v2.9.0（A8 / B3 清单）：保存**不关窗** —— 这个窗口是工作台（窗内已有 5 处
+            # _save(silent=True) 就地落盘：拉起后端、试听、朗读前都要先落配置），
+            # 保存一次就关窗等于把它当一次性表单用，改几条设置要重开好几次。
+            # 回执走气泡：这是「一次动作一句、用户会看宠物」的场合（口径见 _toast）。
+            _toast(self._pet, "语音设置已保存")
 
 
 def _app_events():
@@ -6100,6 +6958,12 @@ class IdleDialog(_FitDialog):
         self._perf_hint = QLabel("")
         self._perf_hint.setWordWrap(True)
         v3.addWidget(self._perf_hint)
+        # v2.9.0（质量审 5 / 审计清单 #11）：上移/下移**到顶/到底**以前是静默 return ——
+        # 「点了没反应」与「已经在边界」在用户那边长得一模一样。回执走窗口内状态行
+        # （与 A3/A4 同一口径），措辞照抄台词库那句。
+        self._move_note = QLabel("")
+        self._move_note.setWordWrap(True)
+        v3.addWidget(self._move_note)
         root.addWidget(box3, 1)
 
         # 模式
@@ -6118,7 +6982,10 @@ class IdleDialog(_FitDialog):
 
         btns = QHBoxLayout()
         ok = QPushButton("保存")
-        cancel = QPushButton("关闭")
+        # v2.9.0（A8 / B3 清单 + R4）：它执行的是 reject（丢弃未保存编辑 + 关窗），
+        # 叫「关闭」是标签在说谎 —— 改名「取消」。**保存仍然关窗**（表单型），
+        # 所以这次改名是零额外点击（用户路径一步没多）。
+        cancel = QPushButton("取消")
         ok.setDefault(True)
         ok.clicked.connect(self._save)
         cancel.clicked.connect(self.reject)
@@ -6246,14 +7113,24 @@ class IdleDialog(_FitDialog):
     def _move(self, delta):
         aid = self._selected_action()
         if not aid:
+            # 未选中 = 空操作，**故意不提示**：
+            # tests/test_dialogs_more_v24.py::test_idle_dialog_empty_library_and_no_selection
+            # 明确断言"未选中时上移/下移不弹提示"（既有断言不动，铁律 4）。
             return
         self._collect()
+        _before = [a["id"] for a in self._idle["idle_actions"]]
         pet_behaviors.move_idle_action(self._idle, aid, delta)
         self._refresh_table()
         for row in range(self._table.rowCount()):
             if self._table.item(row, 0).data(Qt.ItemDataRole.UserRole) == aid:
                 self._table.setCurrentCell(row, 0)
                 break
+        if [a["id"] for a in self._idle["idle_actions"]] == _before:
+            # 到顶/到底：顺序没变**不是**"没反应"，说一句（措辞与台词库同一句）
+            self._move_note.setText("已经是最上面了" if int(delta) < 0 else "已经是最下面了")
+        else:
+            self._move_note.setText("已%s（顺序就是待机时的轮流顺序）"
+                                    % ("上移" if int(delta) < 0 else "下移"))
 
     def _save(self):
         self._collect()
@@ -6352,7 +7229,15 @@ def open_bubble_style(pet):
 
 
 def open_idle(pet):
-    """v2.1：待机设置对话框入口（菜单也走 pet._open_idle_dialog）。"""
+    """v2.1：待机设置对话框入口。
+
+    v2.9.0（A11 / 按钮审计 P3-5）：此前**没有 UI 入口**（菜单走的是另一条路
+    pet._open_idle_dialog，本函数只有测试在调）。现在行为设置的「待机设置…」按钮
+    走这里（见 BehaviorDialog._open_idle_settings）。**选的是「给入口」而不是「删掉/
+    合并」**：那个下拉与待机设置改的是同一份 cfg["idle_actions"]，审计 D#4 判的是
+    流程断裂（两套视图之间没有门），开门既修了断裂、又让这个入口真的有人走；
+    而删掉它还得改既有用例（tests/test_dialogs_more_v24.py 在调它），收益只是少一个名字。
+    """
     try:
         dlg = IdleDialog(pet)
         modal(dlg)
@@ -6620,7 +7505,11 @@ def _plugin_market_state(rec, entry):
     return "已装 v%s" % cur
 
 
-class PluginManagerDialog(_FitDialog):
+class PluginManagerDialog(_DiscardGuard, _FitDialog):
+    """v2.9.0（找茬 F-4）：它的「关闭」原来走 `reject()`，而地址框只由「保存并使用」落盘
+    → 手填地址静默丢弃（第三处 R4 反例）。现在按钮改叫「取消」，并按 A5 口径在**有改动时**
+    先问一句；没有改动仍然直接关（零额外一步）。
+    """
     """插件管理（v2.6.0 Phase 2）：两个页签 + 安装 / 更新 / 回滚 / 卸载 / 启用禁用 / 刷新索引。
 
     页签：
@@ -6739,7 +7628,9 @@ class PluginManagerDialog(_FitDialog):
         self._btn_uninstall = QPushButton("卸载")
         self._btn_toggle = QPushButton("启用 / 禁用")
         self._btn_refresh = QPushButton("刷新索引")
-        close_btn = QPushButton("关闭")
+        # v2.9.0（R4）：它执行的是 reject（丢弃地址框里没保存的编辑 + 关窗），叫「关闭」
+        # 是标签在说谎 —— 改名「取消」；有改动时 `_cancel` 会先问一句。
+        close_btn = QPushButton("取消")
         close_btn.setDefault(True)
         self._btn_install.clicked.connect(lambda checked=False: self._install_selected())
         self._btn_install_file.clicked.connect(lambda checked=False: self._install())
@@ -6748,7 +7639,7 @@ class PluginManagerDialog(_FitDialog):
         self._btn_uninstall.clicked.connect(lambda checked=False: self._uninstall())
         self._btn_toggle.clicked.connect(lambda checked=False: self._toggle())
         self._btn_refresh.clicked.connect(lambda checked=False: self.refresh_index(manual=True))
-        close_btn.clicked.connect(self.reject)
+        close_btn.clicked.connect(self._cancel)   # A5：有未保存的地址改动时先问一句
         for btn in (self._btn_install, self._btn_install_file, self._btn_update,
                     self._btn_rollback, self._btn_uninstall, self._btn_toggle,
                     self._btn_refresh):
@@ -6764,11 +7655,27 @@ class PluginManagerDialog(_FitDialog):
             # 桌面程序不在用户没要求的时候发网络请求。
             self.refresh_index()
         self._refresh_source()         # v2.8.0 A1：只读本地，绝不联网（默认零打扰）
+        # （_refresh_source 里已经记好基线；这里只是让"打开即干净"这件事不依赖调用顺序）
+        self._baseline = self._form_signature()
 
-    def closeEvent(self, event):
-        """关窗后不再响应在途结果（_closing 守卫）；已经落库的步骤不受影响。"""
+    # ---------- A5：未保存判据（地址框是这个窗口唯一有暂存态的控件） ----------
+    def _form_signature(self):
+        """「索引来源」地址框的指纹。"""
+        return self._url_edit.text().strip()
+
+    def _discard_prompt(self, why="close"):
+        return ("地址框里填的索引地址还没保存（要按「保存并使用」才会生效）。\n"
+                "点「确定」= 放弃它并关窗；点「取消」= 回去接着编辑。")
+
+    def _on_close_confirmed(self):
+        """关窗后不再响应在途结果（_closing 守卫）；已经落库的步骤不受影响。
+
+        v2.9.0（找茬 F-4 / 父代理裁决）：标题栏 × 与「取消」是**同一道门**（都会丢掉地址框里
+        没保存的编辑），所以 × 也要走 A5 的未保存确认 —— 只修按钮等于留了另一条路能走到
+        同样的坏结果。**这里不再自己写 closeEvent**：守卫在 `_DiscardGuard.closeEvent` 里
+        （确认 → 设一次性令牌 → 真正 close），子类只提供这一句收尾钩子。
+        """
         self._closing = True
-        super().closeEvent(event)
 
     def _wire_signals(self):
         """把三个后台信号接到主线程槽上（**必须在 __init__ 里调**）。
@@ -6868,6 +7775,7 @@ class PluginManagerDialog(_FitDialog):
         idx = self._index_ref()
         if idx is None:
             self._src_label.setText("当前：读不到索引来源（插件宿主未接线）。")
+            self._mark_source_clean()
             return
         info = self.source_info()
         url = str(info.get("url") or "")
@@ -6890,6 +7798,14 @@ class PluginManagerDialog(_FitDialog):
         self._src_label.setText(text)
         self._url_edit.setText(url)
         self._sync_buttons()
+        self._mark_source_clean()
+
+    def _mark_source_clean(self):
+        """A5：重画之后地址框里就是"后端此刻的真实值" —— 记成新基线（不该再问）。
+
+        保存成功、恢复默认、以及每次重画都会走到这里，所以"保存完关窗"永远不会多一步。
+        """
+        self._baseline = self._form_signature()
 
     def set_index_source(self, url, clearing=False):
         """「保存并使用」/「恢复默认（随包索引）」的唯一出口 → 是否真的换了来源。

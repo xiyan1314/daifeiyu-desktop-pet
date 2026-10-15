@@ -1,0 +1,696 @@
+{
+  "title": "v2.9.0 第 7 轮 · 代理 A 交互面变异验证（A1 候选下拉 · A2 图片做动作 · A3 上移下移 · A4 回执内联 · A5 未保存确认 · A6 撤销上一轮确认 · A7 导入人话 · A8 提交模型 · A9/P2-8 常驻标签 · A10 静态输入框归零 · A11/D16 统一确认与 open_idle · B4/B5/B6 的 UI 侧；共 28 条）",
+  "note": "口径：old = 当前树（已修好）的源码片段、new = 把它改坏的版本；锚点一律 \\n（运行器 universal newlines）。来源：A 这轮落地的两处改动 + 它自己做的**加强式**用例改写（静态门用例改名并加强成「一处不剩」；清除长期记忆用例从 monkeypatch 静态方法改成给 _confirm/_info 注入替身，并新增「必须真的问」与「取消不许动数据」两条断言）。⚠ 本 spec 的 tests 只列源码级/注入替身的那两条用例：**不把 _add_frame_action 的驱动用例放进 tests** —— 那些用例靠 monkeypatch _ask_text 驱动，一旦变异把命名框退回静态 QInputDialog.getText，它们会在 offscreen 下 exec 一个**真模态框**并挂死（rc=3 折成 WRONG TEST，白烧一整批）。这是本轮踩过的坑，写在这里防止下一个人放大 tests 面。 ※v2.9.0 第二批（15 条）：父代理转述 A 的意图，**锚点全部由代理 C 按现树自取并逐条验证命中 1 次**（A 本轮改写了 pet_dialogs.py 约 894 行，锚点以现树为准）。expect_fail 取该变异的主判据；附属判据写在 why 里。判定待安静窗口复跑（2026-10-15 落盘）。",
+  "mutations": [
+    {
+      "id": "M-A290-01-clear-long-term-no-confirm",
+      "file": "pet_dialogs.py",
+      "old": "        if not _confirm(self, \"清除长期记忆\",\n                        \"确定要让它忘掉你的称呼、别名、喜好、不喜欢和近况吗？\\n\"\n                        \"（对话历史不受影响；此操作不可撤销）\"):\n            return\n",
+      "new": "        pass   # (mutation) 不可撤销的操作不再问\n",
+      "tests": [
+        "tests/test_dialogs_v24.py::test_ai_settings_clear_long_term_keeps_history"
+      ],
+      "expect_fail": [
+        "tests/test_dialogs_v24.py::test_ai_settings_clear_long_term_keeps_history"
+      ],
+      "why": "A11/D16：清除长期记忆**不再二次确认**（裸清）。这条用例本轮从「确认框永远 Yes 的静态 stub」改成真入口替身，并新增断言『confirms 必须非空』——所以这条变异现在真能失败（改前：把确认整段删掉照样绿）。 ⚠ **实测 WRONG TEST（rc=3 · 600s 超时折叠）**：这条变异把确认整段拿掉 → 代码走到真 `_info` → `modal(QMessageBox)` 在 offscreen 下永久阻塞。**harness 按设计折成 rc=3 + 说明（＝这条没被验证），整批不崩。** 根因是**用例不够健壮**（第一段只 stub 了 `_confirm`，没 stub `_info`/`_warn`）——已立为 `_dev/README.md` 的**测试健壮性第一条**，并请 A 补两行（加强式）。A 补完即可复跑转 CAUGHT。"
+    },
+    {
+      "id": "M-A290-02-clear-long-term-ignores-cancel",
+      "file": "pet_dialogs.py",
+      "old": "        if not _confirm(self, \"清除长期记忆\",\n                        \"确定要让它忘掉你的称呼、别名、喜好、不喜欢和近况吗？\\n\"\n                        \"（对话历史不受影响；此操作不可撤销）\"):\n            return\n",
+      "new": "        _confirm(self, \"清除长期记忆\",\n                 \"确定要让它忘掉你的称呼、别名、喜好、不喜欢和近况吗？\\n\"\n                 \"（对话历史不受影响；此操作不可撤销）\")\n",
+      "tests": [
+        "tests/test_dialogs_v24.py::test_ai_settings_clear_long_term_keeps_history"
+      ],
+      "expect_fail": [
+        "tests/test_dialogs_v24.py::test_ai_settings_clear_long_term_keeps_history"
+      ],
+      "why": "A11/D16：问是问了，但**不认取消**——点取消照样清。这条钉的是新断言②『确认框点了取消，长期记忆却被清掉了』（改前那条用例把静态方法 stub 成永远 Yes，取消路径完全没覆盖）。 ⚠ **实测 WRONG TEST（rc=3 · 600s 超时折叠）**：与 M-A290-01 同一根因（走到真 `_info`）——**同一个测试健壮性缺陷的第二个受害者**。"
+    },
+    {
+      "id": "M-A290-03-clear-long-term-no-receipt",
+      "file": "pet_dialogs.py",
+      "old": "            _info(self, \"清除长期记忆\", \"已经忘掉啦~\")\n",
+      "new": "            pass   # (mutation) 清完零回执\n",
+      "tests": [
+        "tests/test_dialogs_v24.py::test_ai_settings_clear_long_term_keeps_history"
+      ],
+      "expect_fail": [
+        "tests/test_dialogs_v24.py::test_ai_settings_clear_long_term_keeps_history"
+      ],
+      "why": "A11/D16：清完之后**一句回执都没有**（不可撤销的操作做完了却零可见结果）。钉新断言③『清完之后一句回执都没有』。"
+    },
+    {
+      "id": "M-A290-04-frame-action-name-back-to-static",
+      "file": "pet_dialogs.py",
+      "old": "    return _ask_text(parent, \"帧动作\", \"动作名（英文字母开头，字母/数字/下划线 ≤24 字符）\", \"\")\n",
+      "new": "    return QInputDialog.getText(parent, \"帧动作\", \"动作名（英文字母开头，字母/数字/下划线 ≤24 字符）\")\n",
+      "tests": [
+        "tests/test_dialogs_feedback_v280.py::test_static_input_dialogs_are_gone"
+      ],
+      "expect_fail": [
+        "tests/test_dialogs_feedback_v280.py::test_static_input_dialogs_are_gone"
+      ],
+      "why": "A10：把帧动作的命名框**退回静态 QInputDialog.getText**（全仓最后一处）。静态门用例本轮已加强成『一处不剩』+『必须真的走 _ask_action_name/_ask_text』，所以这条现在有两条独立的红路径。"
+    },
+    {
+      "id": "M-A290-05-frame-action-call-site-bypasses-entry",
+      "file": "pet_dialogs.py",
+      "old": "    name, asked = _ask_action_name(parent)\n",
+      "new": "    name, asked = QInputDialog.getText(parent, \"帧动作\", \"动作名\"), True\n",
+      "tests": [
+        "tests/test_dialogs_feedback_v280.py::test_static_input_dialogs_are_gone"
+      ],
+      "expect_fail": [
+        "tests/test_dialogs_feedback_v280.py::test_static_input_dialogs_are_gone"
+      ],
+      "why": "A10：**定义还在统一入口里**，但调用点绕过它直接弹静态框（换个位置复发同一类病）。与 M-A290-04 不是同一处失败点：那条改定义、这条改调用点。"
+    },
+    {
+      "id": "A1-M1-candidates-empty",
+      "file": "pet_dialogs.py",
+      "old": "        try:\n            return [str(x) for x in (fn(self.pet) or []) if str(x or \"\").strip()]\n        except Exception as e:\n",
+      "new": "        try:\n            return []\n        except Exception as e:\n",
+      "tests": [
+        "tests/test_dialogs_behavior_v290.py::test_action_param_is_an_editable_combo_with_candidates",
+        "tests/test_dialogs_behavior_v290.py::test_import_images_makes_an_action_on_the_current_role"
+      ],
+      "expect_fail": [
+        "tests/test_dialogs_behavior_v290.py::test_action_param_is_an_editable_combo_with_candidates",
+        "tests/test_dialogs_behavior_v290.py::test_import_images_makes_an_action_on_the_current_role"
+      ],
+      "why": "A1：候选取数函数**返回空列表** → 下拉里一条候选都没有（『默认角色不能加动作』那条功能缺失的原样复活）。"
+    },
+    {
+      "id": "A1-M2-fallback-to-first-item",
+      "file": "pet_dialogs.py",
+      "old": "            self.setCurrentIndex(-1)\n            self.setEditText(keep)\n",
+      "new": "            self.setCurrentIndex(0)\n            self.setEditText(self.itemText(0))\n",
+      "tests": [
+        "tests/test_dialogs_behavior_v290.py::test_typed_action_name_that_is_not_a_candidate_is_kept",
+        "tests/test_dialogs_behavior_v290.py::test_unknown_action_name_survives_load_and_save"
+      ],
+      "expect_fail": [
+        "tests/test_dialogs_behavior_v290.py::test_unknown_action_name_survives_load_and_save"
+      ],
+      "why": "A1：★UI 侧最要紧的一条——下拉回填时**『找不到就回落第一条』**：老行为文件里那个候选外的动作名会被**改掉**（静默数据损失）。与 B 的 B1-M4（数据侧把候选当白名单）**不是同一个失败点**：那条拒收、这条改写。 ※实测校正（代理 C）：expect_fail 原先按 A 的意图点了两条，实测**只有 `test_unknown_action_name_survives_load_and_save` 红**，`test_typed_action_name_that_is_not_a_candidate_is_kept` **不红**——因为那条用例是\"先设好候选、再手填\"，而这条变异改的是 `set_choices` 的**回填**分支（`keep` 找不到时回落第一条），手填路径根本不经过它。已按实测改正（一个用例、一行断言都没动）。**副产品：那条用例的 docstring 说\"变异：让 set_choices 在找不到时回落第一条 → 本用例红\"，实测不成立**——它抓的是另一种写法（例如 `set_choices` 把 `keep` 丢掉）。已报 A 知情，建议改文案或补一条\"载入老文件时回填\"的断言。"
+    },
+    {
+      "id": "A2-M1-sink-pretends-success",
+      "file": "pet_dialogs.py",
+      "old": "        ok, err = self._lib.update(self._rid, {\"forms\": forms})\n        if not ok:\n            return False, err or \"写入角色失败\"\n        # v2.9.0（质量审 6）：这个落点是**立即写盘**的，调用方需要\"刚加了什么\"才能给撤销入口\n        self.last_added = (name, list(frames))\n        return True, \"\"\n",
+      "new": "        # (mutation) 假装写成功，其实一个字节都没落盘\n        self.last_added = (name, list(frames))\n        return True, \"\"\n",
+      "tests": [
+        "tests/test_dialogs_behavior_v290.py::test_import_images_makes_an_action_on_the_current_role"
+      ],
+      "expect_fail": [
+        "tests/test_dialogs_behavior_v290.py::test_import_images_makes_an_action_on_the_current_role"
+      ],
+      "why": "A2：行为设置那侧「导入图片做动作」的**落点**改成假装成功（不写 roles.json）——动作看着加上了、重启就没了。 ⚠ v2.9.0 第 7 轮重锚：**这是 A 有意改写源码造成的**（原意仍在，只是位置/判据漂移）——原意=「落点不写盘＝动作看着加上了、重启就没了」；现锚点=含新增的 `self.last_added = (name, list(frames))` 整块；变异方向不变。"
+    },
+    {
+      "id": "A2-M2-cancel-counts-as-confirm",
+      "file": "pet_dialogs.py",
+      "old": "    name, asked = _ask_action_name(parent)\n    name = (name or \"\").strip()\n    if not asked or not name:\n        return False, \"\"   # 取消命名 = 一个文件都还没暂存（干净）\n",
+      "new": "    name, asked = _ask_action_name(parent)\n    name = (name or \"\").strip() or \"untitled\"\n    if False:\n        return False, \"\"   # (mutation) 取消命名也当确定\n",
+      "tests": [
+        "tests/test_dialogs_behavior_v290.py::test_import_images_cancel_leaves_nothing_behind"
+      ],
+      "expect_fail": [
+        "tests/test_dialogs_behavior_v290.py::test_import_images_cancel_leaves_nothing_behind"
+      ],
+      "why": "A2：**取消命名也当确定**（名字兜成 untitled）→ 用户点了取消，却留下一批暂存文件/半截动作。"
+    },
+    {
+      "id": "A5-M1-no-unsaved-confirm",
+      "file": "pet_dialogs.py",
+      "old": "        return bool(_confirm(self, \"取消编辑\", self._discard_prompt(why)))\n",
+      "new": "        return True   # (mutation) 未保存也直接放行（不弹确认）\n",
+      "tests": [
+        "tests/test_dialogs_behavior_v290.py::test_cancel_with_unsaved_edits_asks_and_keeps_the_window",
+        "tests/test_dialogs_behavior_v290.py::test_cancel_without_edits_does_not_ask"
+      ],
+      "expect_fail": [
+        "tests/test_dialogs_behavior_v290.py::test_cancel_with_unsaved_edits_asks_and_keeps_the_window"
+      ],
+      "why": "A5：**去掉未保存确认**（草稿静默丢弃）——审计实测 3 号那条病。 ⚠ v2.9.0 第 7 轮重锚：**这是 A 有意改写源码造成的**（原意仍在，只是位置/判据漂移）——原意=「有未保存改动却直接放行」；现锚点=`if not _confirm(self, \"取消编辑\", self._discard_prompt(why)):`（逻辑搬进 `_DiscardGuard`、文案外提）；变异方向不变。 **expect_fail 同步收窄**：`test_cancel_without_edits_does_not_ask` 断言的是「没改动不许问」，这条变异不改那个行为，它**仍会绿**——按实测口径只留真正会红的那一条（这不是放宽断言，是让 spec 的预期与结构事实一致）。 ⚠ v2.9.0 第 7 轮重锚：**这是 A 有意改写源码造成的**（原意仍在、只是位置/判据漂移）——原意=「有未保存改动却直接放行（不弹确认）」；现锚点=`return bool(_confirm(self, \"取消编辑\", self._discard_prompt(why)))`——A 把 latch 机制整个换掉（`_discard_ok` 删除、改成 `closeEvent` 的一次性令牌 `_close_confirmed`），`_confirm_discard` 收成\"该问就问\"两行；变异方向不变（A 说这是它最后一次改源码）。"
+    },
+    {
+      "id": "A5-M2-ask-even-when-clean",
+      "file": "pet_dialogs.py",
+      "old": "        if not self._is_dirty():\n            return True\n",
+      "new": "        if False:   # (mutation) 没有改动也要问\n            return True\n",
+      "tests": [
+        "tests/test_dialogs_behavior_v290.py::test_cancel_with_unsaved_edits_asks_and_keeps_the_window",
+        "tests/test_dialogs_behavior_v290.py::test_cancel_without_edits_does_not_ask"
+      ],
+      "expect_fail": [
+        "tests/test_dialogs_behavior_v290.py::test_cancel_without_edits_does_not_ask"
+      ],
+      "why": "A5 ★**反向**变异：**没改动也弹确认**——防『把多一步又加回来』（原则 1：不要给常规关闭加一步）。这是 A 按用户反馈补的反向判据。 ⚠ v2.9.0 第 7 轮重锚：**这是 A 有意改写源码造成的**（原意仍在、只是位置/判据漂移）——原意=「没改动也要问一句」（反向变异：防\"把多一步加回来\"）；现锚点=`if not self._is_dirty(): return True`（`_discard_ok` 那半句已随 latch 机制删除）；变异方向不变（A 说这是它最后一次改源码）。"
+    },
+    {
+      "id": "A6-M1-confirm-comes-back",
+      "file": "pet_dialogs.py",
+      "old": "        item = self._act_list.currentItem()\n        if item is None or self._cur_idx is None:",
+      "new": "        if not _confirm(self, \"删除自定义动作\", \"确定删掉这个自定义动作吗？\"):\n            return\n        item = self._act_list.currentItem()\n        if item is None or self._cur_idx is None:",
+      "tests": [
+        "tests/test_dialogs_behavior_v290.py::test_delete_custom_action_can_be_undone_by_cancelling",
+        "tests/test_dialogs_feedback_v280.py::test_role_edit_delete_action_needs_no_confirm_and_is_undoable"
+      ],
+      "expect_fail": [
+        "tests/test_dialogs_behavior_v290.py::test_delete_custom_action_can_be_undone_by_cancelling",
+        "tests/test_dialogs_feedback_v280.py::test_role_edit_delete_action_needs_no_confirm_and_is_undoable"
+      ],
+      "why": "A6（**有意撤销上一轮的决定**）：把删自定义动作的二次确认**加回来** → 给可撤销的暂存态操作套上不可逆语义（多一步且误导）。这条同时钉 v290 新用例与 v280 改写后的用例——本轮方向与上一轮相反，两边的断言都必须能把它抓回来。（与本轮 MA18 / M-C-A30 重锚后**同一个失败点**，跨 spec 冗余，按『运行事故冗余』记账。）"
+    },
+    {
+      "id": "A4-M1-receipt-back-to-bubble",
+      "file": "pet_dialogs.py",
+      "old": "        self._note(\"已添加步骤：%s（点「保存」才落盘）\" % self._step_text(norm[0])[:28])\n",
+      "new": "        _toast(self.pet, \"已添加步骤：%s（点「保存」才落盘）\" % self._step_text(norm[0])[:28])\n",
+      "tests": [
+        "tests/test_dialogs_behavior_v290.py::test_step_receipts_use_the_inline_status_line_not_the_bubble",
+        "tests/test_dialogs_feedback_v280.py::test_behavior_step_receipts"
+      ],
+      "expect_fail": [
+        "tests/test_dialogs_behavior_v290.py::test_step_receipts_use_the_inline_status_line_not_the_bubble"
+      ],
+      "why": "A4：把「添加步骤」的回执**从窗口内联状态行改回宠物气泡** → 气泡是单窗口覆盖式的（连点时前面的看不见、最后一条滞留 5 秒），列表内连续操作等于没有回执。expect_fail 只钉 v290 那条新用例：v280 的 test_behavior_step_receipts 本轮被改写成『断言状态行』，两条都会红，但先只把 v290 那条写进 expect_fail（多写一条若实测不红就会判 WRONG TEST）。"
+    },
+    {
+      "id": "A3-M1-boundary-silent",
+      "file": "pet_dialogs.py",
+      "old": "            self._note(\"已经是最上面了\" if int(delta) < 0 else \"已经是最下面了\")\n",
+      "new": "            pass   # (mutation) 到顶/到底静默\n",
+      "tests": [
+        "tests/test_dialogs_behavior_v290.py::test_step_move_at_boundary_says_so"
+      ],
+      "expect_fail": [
+        "tests/test_dialogs_behavior_v290.py::test_step_move_at_boundary_says_so"
+      ],
+      "why": "A3：到顶/到底**静默**（去掉那句内联回执）——点了没有任何变化，用户分不清「到边界了」与「按钮坏了」。"
+    },
+    {
+      "id": "A3-M2-selection-does-not-follow",
+      "file": "pet_dialogs.py",
+      "old": "        self._steps.setCurrentRow(j)\n        self._steps.scrollToItem(item)\n",
+      "new": "        pass   # (mutation) 移动后选中项不跟随\n",
+      "tests": [
+        "tests/test_dialogs_behavior_v290.py::test_step_move_up_and_down_reorders_and_follows_selection"
+      ],
+      "expect_fail": [
+        "tests/test_dialogs_behavior_v290.py::test_step_move_up_and_down_reorders_and_follows_selection"
+      ],
+      "why": "A3：移动后**选中项不跟随**——连点两下就不知道动的是哪一条（顺序变了、选中框还在原地）。"
+    },
+    {
+      "id": "A2-M3-bypass-shared-impl",
+      "file": "pet_dialogs.py",
+      "old": "        add_frame_action(self._pet, self, sink=_StagedActionSink(self))\n",
+      "new": "        add_frame_action(self._pet, self)\n",
+      "tests": [
+        "tests/test_dialogs_behavior_v290.py::test_role_edit_frame_action_is_a_thin_wrapper"
+      ],
+      "expect_fail": [
+        "tests/test_dialogs_behavior_v290.py::test_role_edit_frame_action_is_a_thin_wrapper"
+      ],
+      "why": "A2/B2：**绕开公共实现**（丢掉 sink 参数）——角色编辑那侧不再往本窗口的暂存表单里写，两个入口的实现开始分叉（B2 要求「不许两份实现」）。"
+    },
+    {
+      "id": "A7-M1-no-extension-precheck",
+      "file": "pet_dialogs.py",
+      "old": "        _ext = os.path.splitext(str(_path))[1].lower()\n",
+      "new": "        _ext = \".json\"   # (mutation) 不预检扩展名，恒真\n",
+      "tests": [
+        "tests/test_dialogs_behavior_v290.py::test_import_non_json_gives_a_human_reason",
+        "tests/test_dialogs_behavior_v290.py::test_raw_import_errors_are_translated_to_human_reasons"
+      ],
+      "expect_fail": [
+        "tests/test_dialogs_behavior_v290.py::test_import_non_json_gives_a_human_reason"
+      ],
+      "why": "A7：**不预检扩展名**（`_ext` 恒为 `.json`）→ 选到 PNG 直接进库，用户看到的是英文 codec 异常（审计实测 7 号）。"
+    },
+    {
+      "id": "A7-M2-raw-english-error",
+      "file": "pet_dialogs.py",
+      "old": "            _msg = _human_import_error(_err, _path)   # A7：不把英文异常端给用户\n",
+      "new": "            _msg = _err or \"导入失败\"   # (mutation) 原样端英文异常\n",
+      "tests": [
+        "tests/test_dialogs_behavior_v290.py::test_import_json_that_fails_in_the_library_also_gets_a_human_reason"
+      ],
+      "expect_fail": [
+        "tests/test_dialogs_behavior_v290.py::test_import_json_that_fails_in_the_library_also_gets_a_human_reason"
+      ],
+      "why": "A7：**把原始英文异常原样端给用户**（不走 `_human_import_error`）。与 A7-M1 不是同一处：那条是「没预检」，这条是「预检过了但库层失败时的翻译没了」（例如 .json 里装的是别的东西）。 ⚠ **实测 NOT CAUGHT**（rc=0、2 passed）：这条变异把 `_import` 里\"库层失败时翻人话\"换成了原样端 `_err`，但两条目标用例都抓不到——`test_raw_import_errors_are_translated_to_human_reasons` 是**直接单测 `_human_import_error` 函数**（从不经过 `_import`），而 `test_import_non_json_gives_a_human_reason` 只走**扩展名预检**那条路（PNG 被预检拦下，永远到不了 `import_file` 失败分支）。**结论：A7 的第二层在\"生产路径\"上没有任何用例钉住**（函数被测了，它的**使用点**没被测）。**这是一条真覆盖缺口**，已报 A；建议补：monkeypatch `import_file` 返回 `(None, \"文件读取失败：<英文 codec 异常>\")` 且文件名走 `.json`，再断言界面文本里没有 `codec` / `Expecting value`。 ⚠ **F-C 更正（独立验收员指出、A 核实）**：原先的 `tests` / `expect_fail` 指向的两条用例**都不经过\"库层失败\"这条路**——`test_raw_import_errors_are_translated_to_human_reasons` 是**直接单测纯函数** `_human_import_error`（从不调 `_import`），`test_import_non_json_gives_a_human_reason` **只走扩展名预检**（PNG 被预检拦下，永远到不了 `import_file` 失败分支）。**所以这条变异此前判 NOT CAUGHT 不是\"护栏失效\"，是\"spec 指错了用例\"**（真覆盖缺口被 F-C 独立复现）。现指向 A 专为它写的那条：`test_import_json_that_fails_in_the_library_also_gets_a_human_reason`（`.json` 名字的 PNG 字节 → 过预检 → 真让 `import_file` 抛原始英文异常）。"
+    },
+    {
+      "id": "A9A11-M1-resident-label-not-updated",
+      "file": "pet_dialogs.py",
+      "old": "        self._state_label.setText(txt)\n",
+      "new": "        pass   # (mutation) 常驻标签不更新\n",
+      "tests": [
+        "tests/test_dialogs_behavior_v290.py::test_new_state_is_a_resident_label_not_a_one_shot_bubble",
+        "tests/test_dialogs_behavior_v290.py::test_key_information_is_visible_not_only_in_a_tooltip"
+      ],
+      "expect_fail": [
+        "tests/test_dialogs_behavior_v290.py::test_new_state_is_a_resident_label_not_a_one_shot_bubble",
+        "tests/test_dialogs_behavior_v290.py::test_key_information_is_visible_not_only_in_a_tooltip"
+      ],
+      "why": "A9/P2-8：常驻标签**不更新**（永远空）→ ①「点保存才落盘」这条决定成败的信息在界面上又看不见了（只剩 tooltip）②新建态标签名存实亡。"
+    },
+    {
+      "id": "A11-M2-label-degraded-to-one-shot",
+      "file": "pet_dialogs.py",
+      "old": "        self._state_label = QLabel(\"\")\n        self._state_label.setWordWrap(True)\n        lay.addWidget(self._state_label)\n",
+      "new": "        pass   # (mutation) 没有常驻标签（退化回一次性回执）\n",
+      "tests": [
+        "tests/test_dialogs_behavior_v290.py::test_new_state_is_a_resident_label_not_a_one_shot_bubble",
+        "tests/test_dialogs_behavior_v290.py::test_key_information_is_visible_not_only_in_a_tooltip"
+      ],
+      "expect_fail": [
+        "tests/test_dialogs_behavior_v290.py::test_new_state_is_a_resident_label_not_a_one_shot_bubble",
+        "tests/test_dialogs_behavior_v290.py::test_key_information_is_visible_not_only_in_a_tooltip"
+      ],
+      "why": "A11/P2-8：把常驻标签**整个拿掉**（= 上一轮「只做一次性回执」的修法原样复活）。与 A9A11-M1 的差别：那条是「有标签但不写」，这条是「根本没有这个控件」（用例访问 `_state_label` 直接 AttributeError）。 ⚠ **实测 WRONG TEST（rc=1, 2 errors）**：把 `_state_label` 整个拿掉 → 用例在 **fixture/调用期抛 AttributeError**，pytest 记的是 **ERROR 行**，而 `mutate_check.judge` 只看 **FAILED 行** → 判 WRONG TEST。**定性：变异其实被检出了（2 errors），是\"判定口径\"没认它**——`_mutate_lib.test_error_lines()` 的存在说明本仓早就承认\"setup/call 期 error 也算用例检出\"，但 `mutate_check` 的 judge 没有用它（`rc=2 + ERROR ::` 才算 INVALID 的那套口径只写没接）。**这是判据口径缺口，不是护栏失效**；本轮按\"WRONG TEST 一律不许当通过\"如实登记，改动 judge 口径属跨 spec 的影响面，留待专门一轮。"
+    },
+    {
+      "id": "A11-M3-open-idle-not-wired",
+      "file": "pet_dialogs.py",
+      "old": "        self._idle_btn.clicked.connect(self._open_idle_settings)\n",
+      "new": "        pass   # (mutation) open_idle 入口不接线\n",
+      "tests": [
+        "tests/test_dialogs_behavior_v290.py::test_idle_settings_has_a_real_entry_from_the_behavior_dialog"
+      ],
+      "expect_fail": [
+        "tests/test_dialogs_behavior_v290.py::test_idle_settings_has_a_real_entry_from_the_behavior_dialog"
+      ],
+      "why": "A11/P3-5：`open_idle` 的入口**不接线**（按钮在那儿、点了没反应）——审计 D#4 判的「流程断裂」原样复发。附属判据 `test_dialog_buttons_v270.py::test_every_action_button_is_wired_or_whitelisted` 也应能抓到（写在 tests 之外，未列入 expect_fail 以免误判）。"
+    },
+    {
+      "id": "A8-M1-voice-save-closes-window",
+      "file": "pet_dialogs.py",
+      "old": "            _toast(self._pet, \"语音设置已保存\")\n",
+      "new": "            self.accept()   # (mutation) 语音保存又关窗\n",
+      "tests": [
+        "tests/test_dialogs_behavior_v290.py::test_voice_save_keeps_the_window_and_second_button_is_cancel"
+      ],
+      "expect_fail": [
+        "tests/test_dialogs_behavior_v290.py::test_voice_save_keeps_the_window_and_second_button_is_cancel"
+      ],
+      "why": "A8/B3：语音设置是**工作台**（窗内 5 处 `_save(silent=True)` 就地落盘），保存一次就关窗＝把它当一次性表单用，改几条设置要重开好几次。"
+    },
+    {
+      "id": "A8-M2-idle-save-keeps-window",
+      "file": "pet_dialogs.py",
+      "old": "            _warn(self, \"保存\", \"保存失败（配置不可用）\")\n            return\n        self.accept()\n",
+      "new": "            _warn(self, \"保存\", \"保存失败（配置不可用）\")\n            return\n        return   # (mutation) 待机保存不关窗\n",
+      "tests": [
+        "tests/test_dialogs_behavior_v290.py::test_idle_save_still_closes_and_second_button_is_cancel"
+      ],
+      "expect_fail": [
+        "tests/test_dialogs_behavior_v290.py::test_idle_save_still_closes_and_second_button_is_cancel"
+      ],
+      "why": "A8/B3 ★**反向**：待机设置是**表单型** → 保存**照旧关窗**（用户路径一步没多）。这条防「把统一提交模型做成到处都多一步」。"
+    },
+    {
+      "id": "B4-M1-ui-cleanup-back-to-dead-branch",
+      "file": "pet_dialogs.py",
+      "old": "        _removed, _cerr = pet_behaviors.remove_idle_actions_for_behavior(_cfg, _bid)\n",
+      "new": "        _removed, _cerr = [], \"\"   # (mutation) 清理改回死分支\n",
+      "tests": [
+        "tests/test_dialogs_behavior_v290.py::test_delete_behavior_clears_idle_references"
+      ],
+      "expect_fail": [
+        "tests/test_dialogs_behavior_v290.py::test_delete_behavior_clears_idle_references"
+      ],
+      "why": "B4（**UI 侧**，与 B 的 B4-M1 后端侧不是同一处）：`BehaviorDialog._delete` 里的清理**改回死分支**（恒不命中）→ 删掉被待机引用的行为后 `idle_actions` 原样残留。"
+    },
+    {
+      "id": "B5-M1-ui-combo-hardcoded-off",
+      "file": "pet_dialogs.py",
+      "old": "        _st = pet_behaviors.idle_combo_state(\n            _cfg if isinstance(_cfg, dict) else {},\n            name_getter=lambda _bid: {b[\"id\"]: b[\"name\"] for b in _behaviors}.get(_bid, \"\"))\n",
+      "new": "        _st = {\"mode\": \"off\", \"label\": pet_behaviors.IDLE_COMBO_OFF_LABEL, \"count\": 0,\n               \"enabled_count\": 0, \"play_mode\": \"sequential\", \"plays_first_only\": False,\n               \"show_list_hint\": False, \"behavior_id\": \"\"}   # (mutation) 硬编码「不启用」\n",
+      "tests": [
+        "tests/test_dialogs_behavior_v290.py::test_idle_combo_shows_the_real_config_state"
+      ],
+      "expect_fail": [
+        "tests/test_dialogs_behavior_v290.py::test_idle_combo_shows_the_real_config_state"
+      ],
+      "why": "B5（**UI 侧**）：下拉状态**改回硬编码「（不启用 → 默认待机）」**——审计实测 4 号原样复活：配置里明明有 2 条待机动作，下拉却说「不启用」，用户点一下就把 2 条覆盖成 1 条。"
+    },
+    {
+      "id": "B5-M2-ui-silent-drop",
+      "file": "pet_dialogs.py",
+      "old": "        if _shrinks and not _confirm(\n",
+      "new": "        if False and not _confirm(\n",
+      "tests": [
+        "tests/test_dialogs_behavior_v290.py::test_idle_combo_pick_never_silently_drops_entries"
+      ],
+      "expect_fail": [
+        "tests/test_dialogs_behavior_v290.py::test_idle_combo_pick_never_silently_drops_entries"
+      ],
+      "why": "B5（**UI 侧**）：有得丢时那支**确认短路**（直接 `apply=True`）→ 静默丢条目（**数据损失面**）。B 的 B5-M2 钉的是「dropped 恒空」，这条钉的是「问都不问就丢」——两个不同的失败点。 ⚠ v2.9.0 第 7 轮重锚：**这是 A 有意改写源码造成的**（原意仍在，只是位置/判据漂移）——原意=「有得丢也不问，静默丢条目」；现锚点=`if _shrinks and not _confirm(`（A 修 F-2 把判据从 `if dropped` 收窄成\"条目数真的会减少\"）；变异方向不变。 判据收窄但**变异仍有效**：测试用的就是 2→1 那条（减少），仍会红。"
+    },
+    {
+      "id": "B6-M1-ui-play-old-on-save-failure",
+      "file": "pet_dialogs.py",
+      "old": "        _bid, _why = pet_behaviors.test_play_target(_ok, self._editing_id)\n        if _bid is None:\n            self._note(_why)\n            return\n",
+      "new": "        _bid, _why = pet_behaviors.test_play_target(_ok, self._editing_id)\n        if _bid is None:\n            _bid = self._editing_id   # (mutation) 保存失败也播旧内容\n        if _bid is None:\n            self._note(_why)\n            return\n",
+      "tests": [
+        "tests/test_dialogs_behavior_v290.py::test_test_play_does_not_play_when_save_fails"
+      ],
+      "expect_fail": [
+        "tests/test_dialogs_behavior_v290.py::test_test_play_does_not_play_when_save_fails"
+      ],
+      "why": "B6（**UI 侧**）：保存失败时**回落到 `_editing_id`**（上一次成功保存的那条）→ 用户点「试播」，播的是旧内容还以为在看自己的修改（审计实测 3 号）。B 的 B6-M1 钉逻辑层 `test_play_target`，这条钉 UI 层是不是真的用了它的结论。"
+    },
+    {
+      "id": "B6-M2-ui-says-saved-twice",
+      "file": "pet_dialogs.py",
+      "old": "        _ok = self._save(quiet=True)\n",
+      "new": "        _ok = self._save()   # (mutation) 试播顺带弹「已保存」\n",
+      "tests": [
+        "tests/test_dialogs_behavior_v290.py::test_test_play_plays_and_does_not_say_saved_twice"
+      ],
+      "expect_fail": [
+        "tests/test_dialogs_behavior_v290.py::test_test_play_plays_and_does_not_say_saved_twice"
+      ],
+      "why": "B6（**UI 侧**）：试播不再走 `quiet=True` → 一次用户动作弹两句（「已保存」+「正在试播」），而且那句「已保存」还可能盖住前一句。 ※代理 C 登记：父代理转述的 nodeid 是 `test_test_plays_and_does_not_say_saved_twice`，**现树里的真名是 `test_test_play_plays_and_does_not_say_saved_twice`**（少一个 `play_`）——**是 nodeid 体检工具当场抓出来的**（`坏 2`），已改正。这类\"转述 nodeid 与实际不符\"与乱码 nodeid 是同一类原料风险。"
+    }
+  ],
+  "results": {
+    "title": "变异验证 spec：mutations_agent_a_v290.json",
+    "checked_at": "2026-10-16 02:10:15",
+    "total": 28,
+    "caught": 27,
+    "not_caught": 1,
+    "blocked": 0,
+    "items": [
+      {
+        "id": "M-A290-01-clear-long-term-no-confirm",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 1.24s",
+        "failed": [
+          "test_ai_settings_clear_long_term_keeps_history"
+        ]
+      },
+      {
+        "id": "M-A290-02-clear-long-term-ignores-cancel",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 0.80s",
+        "failed": [
+          "test_ai_settings_clear_long_term_keeps_history"
+        ]
+      },
+      {
+        "id": "M-A290-03-clear-long-term-no-receipt",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 0.86s",
+        "failed": [
+          "test_ai_settings_clear_long_term_keeps_history"
+        ]
+      },
+      {
+        "id": "M-A290-04-frame-action-name-back-to-static",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 0.71s",
+        "failed": [
+          "test_static_input_dialogs_are_gone"
+        ]
+      },
+      {
+        "id": "M-A290-05-frame-action-call-site-bypasses-entry",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 0.65s",
+        "failed": [
+          "test_static_input_dialogs_are_gone"
+        ]
+      },
+      {
+        "id": "A1-M1-candidates-empty",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "2 failed in 1.27s",
+        "failed": [
+          "test_action_param_is_an_editable_combo_with_candidates",
+          "test_import_images_makes_an_action_on_the_current_role"
+        ]
+      },
+      {
+        "id": "A1-M2-fallback-to-first-item",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed, 1 passed in 1.43s",
+        "failed": [
+          "test_unknown_action_name_survives_load_and_save"
+        ]
+      },
+      {
+        "id": "A2-M1-sink-pretends-success",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 1.25s",
+        "failed": [
+          "test_import_images_makes_an_action_on_the_current_role"
+        ]
+      },
+      {
+        "id": "A2-M2-cancel-counts-as-confirm",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 0.99s",
+        "failed": [
+          "test_import_images_cancel_leaves_nothing_behind"
+        ]
+      },
+      {
+        "id": "A5-M1-no-unsaved-confirm",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed, 1 passed in 0.90s",
+        "failed": [
+          "test_cancel_with_unsaved_edits_asks_and_keeps_the_window"
+        ]
+      },
+      {
+        "id": "A5-M2-ask-even-when-clean",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed, 1 passed in 0.83s",
+        "failed": [
+          "test_cancel_without_edits_does_not_ask"
+        ]
+      },
+      {
+        "id": "A6-M1-confirm-comes-back",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "2 failed in 0.72s",
+        "failed": [
+          "test_delete_custom_action_can_be_undone_by_cancelling",
+          "test_role_edit_delete_action_needs_no_confirm_and_is_undoable"
+        ]
+      },
+      {
+        "id": "A4-M1-receipt-back-to-bubble",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "2 failed in 0.96s",
+        "failed": [
+          "test_step_receipts_use_the_inline_status_line_not_the_bubble",
+          "test_behavior_step_receipts"
+        ]
+      },
+      {
+        "id": "A3-M1-boundary-silent",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 0.80s",
+        "failed": [
+          "test_step_move_at_boundary_says_so"
+        ]
+      },
+      {
+        "id": "A3-M2-selection-does-not-follow",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 0.81s",
+        "failed": [
+          "test_step_move_up_and_down_reorders_and_follows_selection"
+        ]
+      },
+      {
+        "id": "A2-M3-bypass-shared-impl",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 0.68s",
+        "failed": [
+          "test_role_edit_frame_action_is_a_thin_wrapper"
+        ]
+      },
+      {
+        "id": "A7-M1-no-extension-precheck",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed, 1 passed in 0.82s",
+        "failed": [
+          "test_import_non_json_gives_a_human_reason"
+        ]
+      },
+      {
+        "id": "A7-M2-raw-english-error",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 0.81s",
+        "failed": [
+          "test_import_json_that_fails_in_the_library_also_gets_a_human_reason"
+        ]
+      },
+      {
+        "id": "A9A11-M1-resident-label-not-updated",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "2 failed in 0.85s",
+        "failed": [
+          "test_new_state_is_a_resident_label_not_a_one_shot_bubble",
+          "test_key_information_is_visible_not_only_in_a_tooltip"
+        ]
+      },
+      {
+        "id": "A11-M2-label-degraded-to-one-shot",
+        "verdict": "WRONG TEST",
+        "rc": 1,
+        "tail": "2 errors in 1.32s",
+        "failed": []
+      },
+      {
+        "id": "A11-M3-open-idle-not-wired",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 0.85s",
+        "failed": [
+          "test_idle_settings_has_a_real_entry_from_the_behavior_dialog"
+        ]
+      },
+      {
+        "id": "A8-M1-voice-save-closes-window",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 0.82s",
+        "failed": [
+          "test_voice_save_keeps_the_window_and_second_button_is_cancel"
+        ]
+      },
+      {
+        "id": "A8-M2-idle-save-keeps-window",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 0.80s",
+        "failed": [
+          "test_idle_save_still_closes_and_second_button_is_cancel"
+        ]
+      },
+      {
+        "id": "B4-M1-ui-cleanup-back-to-dead-branch",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 0.80s",
+        "failed": [
+          "test_delete_behavior_clears_idle_references"
+        ]
+      },
+      {
+        "id": "B5-M1-ui-combo-hardcoded-off",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 0.87s",
+        "failed": [
+          "test_idle_combo_shows_the_real_config_state"
+        ]
+      },
+      {
+        "id": "B5-M2-ui-silent-drop",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 0.81s",
+        "failed": [
+          "test_idle_combo_pick_never_silently_drops_entries"
+        ]
+      },
+      {
+        "id": "B6-M1-ui-play-old-on-save-failure",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 0.81s",
+        "failed": [
+          "test_test_play_does_not_play_when_save_fails"
+        ]
+      },
+      {
+        "id": "B6-M2-ui-says-saved-twice",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 0.82s",
+        "failed": [
+          "test_test_play_plays_and_does_not_say_saved_twice"
+        ]
+      }
+    ],
+    "spec": "mutations_agent_a_v290.json",
+    "tests": [
+      "tests/test_dialogs_behavior_v290.py::test_action_param_is_an_editable_combo_with_candidates",
+      "tests/test_dialogs_behavior_v290.py::test_cancel_with_unsaved_edits_asks_and_keeps_the_window",
+      "tests/test_dialogs_behavior_v290.py::test_cancel_without_edits_does_not_ask",
+      "tests/test_dialogs_behavior_v290.py::test_delete_behavior_clears_idle_references",
+      "tests/test_dialogs_behavior_v290.py::test_delete_custom_action_can_be_undone_by_cancelling",
+      "tests/test_dialogs_behavior_v290.py::test_idle_combo_pick_never_silently_drops_entries",
+      "tests/test_dialogs_behavior_v290.py::test_idle_combo_shows_the_real_config_state",
+      "tests/test_dialogs_behavior_v290.py::test_idle_save_still_closes_and_second_button_is_cancel",
+      "tests/test_dialogs_behavior_v290.py::test_idle_settings_has_a_real_entry_from_the_behavior_dialog",
+      "tests/test_dialogs_behavior_v290.py::test_import_images_cancel_leaves_nothing_behind",
+      "tests/test_dialogs_behavior_v290.py::test_import_images_makes_an_action_on_the_current_role",
+      "tests/test_dialogs_behavior_v290.py::test_import_json_that_fails_in_the_library_also_gets_a_human_reason",
+      "tests/test_dialogs_behavior_v290.py::test_import_non_json_gives_a_human_reason",
+      "tests/test_dialogs_behavior_v290.py::test_key_information_is_visible_not_only_in_a_tooltip",
+      "tests/test_dialogs_behavior_v290.py::test_new_state_is_a_resident_label_not_a_one_shot_bubble",
+      "tests/test_dialogs_behavior_v290.py::test_raw_import_errors_are_translated_to_human_reasons",
+      "tests/test_dialogs_behavior_v290.py::test_role_edit_frame_action_is_a_thin_wrapper",
+      "tests/test_dialogs_behavior_v290.py::test_step_move_at_boundary_says_so",
+      "tests/test_dialogs_behavior_v290.py::test_step_move_up_and_down_reorders_and_follows_selection",
+      "tests/test_dialogs_behavior_v290.py::test_step_receipts_use_the_inline_status_line_not_the_bubble",
+      "tests/test_dialogs_behavior_v290.py::test_test_play_does_not_play_when_save_fails",
+      "tests/test_dialogs_behavior_v290.py::test_test_play_plays_and_does_not_say_saved_twice",
+      "tests/test_dialogs_behavior_v290.py::test_typed_action_name_that_is_not_a_candidate_is_kept",
+      "tests/test_dialogs_behavior_v290.py::test_unknown_action_name_survives_load_and_save",
+      "tests/test_dialogs_behavior_v290.py::test_voice_save_keeps_the_window_and_second_button_is_cancel",
+      "tests/test_dialogs_feedback_v280.py::test_behavior_step_receipts",
+      "tests/test_dialogs_feedback_v280.py::test_role_edit_delete_action_needs_no_confirm_and_is_undoable",
+      "tests/test_dialogs_feedback_v280.py::test_static_input_dialogs_are_gone",
+      "tests/test_dialogs_v24.py::test_ai_settings_clear_long_term_keeps_history"
+    ],
+    "note": "变异只在 %TEMP% 影子副本里做，真实仓库只读（只写 _dev/.mutation.lock）",
+    "repo_fingerprint": {
+      "桌宠.py": "6b20873532c6",
+      "pet_export.py": "c01e1593efd2",
+      "pet_lines.py": "5332f60b5f26",
+      "pet_alarm.py": "1149e94deee3",
+      "pet_behaviors.py": "99f7dff343e4",
+      "_check_release.py": "5b25dd0d243d",
+      "pet_balance.py": "66948e5514a4",
+      "pet_plugin.py": "2f7853298fc3",
+      "pet_plugin_host.py": "82fb7b1384c8",
+      "pet_dialogs.py": "4bc0e8c868bb",
+      "pet_menu.py": "920daac1b835",
+      "pet_plugin_index.py": "e5e9845785e8",
+      "pet_ai.py": "a5989e7fe646",
+      "pet_config.py": "7a4ad883d4e8"
+    }
+  }
+}

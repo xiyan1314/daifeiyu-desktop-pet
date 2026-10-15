@@ -85,10 +85,10 @@
     },
     {
       "id": "M-R5-P2-4",
-      "why": "P2-4：帧动作的「取消」（空表）不许报成「至少 2 张图」",
+      "why": "⚠ v2.9.0 第 7 轮重锚：A 有意改写了这一处源码（回执从 _toast 改走 _note / 实现搬进模块级 add_frame_action），旧锚点现树命中 0 次（已实测确认）。锚点按现树重取，`new` 保持原意。 P2-4：帧动作的「取消」（空表）不许报成「至少 2 张图」",
       "file": "pet_dialogs.py",
-      "old": "        if not files:\n            # v2.7.0 第 5 轮（P2-4）：**取消**（文件框回空表）不是\"选少了\"——改前它和\n            # \"只选 1 张\"一起命中下面那条警告，用户点了取消却被训一句\"至少 2 张图\"。\n            # 取消 = 用户什么都没选：静默返回（与其它文件框取消路径同口径）。\n            return\n",
-      "new": "        if False:  # MUT: 取消又和\"选少了\"撞在一起（P2-4 的修复被拿掉）\n            return\n",
+      "old": "    if not files:\n        # v2.7.0 第 5 轮（P2-4）：**取消**（文件框回空表）不是「选少了」——静默返回，\n        # 与其它文件框取消路径同口径。\n        return False, \"\"",
+      "new": "    if not files:\n        _warn(parent, \"帧动作\", \"帧动作至少 2 张图\")\n        return False, \"帧动作至少 2 张图\"",
       "tests": [
         "tests/test_dialogs_feedback_v270.py::test_frame_action_cancel_is_not_reported_as_too_few"
       ],
@@ -195,7 +195,7 @@
   ],
   "results": {
     "title": "变异验证 spec：mutations_critic_v270.json",
-    "checked_at": "2026-10-15 21:29:13",
+    "checked_at": "2026-10-16 02:18:34",
     "total": 14,
     "caught": 14,
     "not_caught": 0,
@@ -205,7 +205,7 @@
         "id": "M-R5-F1",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 1.34s",
+        "tail": "1 failed in 1.40s",
         "failed": [
           "test_bind_hint_quiet_on_healthy_library"
         ]
@@ -214,7 +214,7 @@
         "id": "M-R5-F2",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "2 failed in 0.93s",
+        "tail": "2 failed in 0.94s",
         "failed": [
           "test_apply_result_treats_bare_error_string_as_failure",
           "test_physics_dialog_keeps_window_open_on_bare_error_string"
@@ -224,7 +224,7 @@
         "id": "M-R5-F4",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed, 1 passed in 0.86s",
+        "tail": "1 failed, 1 passed in 0.96s",
         "failed": [
           "test_ai_apply_settings_failure_leaves_memory_untouched"
         ]
@@ -233,7 +233,7 @@
         "id": "M-R5-F5",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.97s",
+        "tail": "1 failed in 0.94s",
         "failed": [
           "test_toast_is_best_effort_not_a_delivery_receipt"
         ]
@@ -242,7 +242,7 @@
         "id": "M-R5-L2-1a",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed, 1 passed in 0.95s",
+        "tail": "1 failed, 1 passed in 0.96s",
         "failed": [
           "test_sound_panel_treats_none_return_as_failure"
         ]
@@ -251,7 +251,7 @@
         "id": "M-R5-L2-1b",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.97s",
+        "tail": "1 failed in 1.08s",
         "failed": [
           "test_sound_panel_backend_failure_does_not_claim_success"
         ]
@@ -260,7 +260,7 @@
         "id": "M-R5-P2-4",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.99s",
+        "tail": "1 failed in 1.00s",
         "failed": [
           "test_frame_action_cancel_is_not_reported_as_too_few"
         ]
@@ -269,7 +269,7 @@
         "id": "M-R5-P2-1",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 1.18s",
+        "tail": "1 failed in 0.97s",
         "failed": [
           "test_clear_api_key_save_failure_keeps_key_and_says_so"
         ]
@@ -278,7 +278,7 @@
         "id": "M-R5-P3-1a",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.94s",
+        "tail": "1 failed in 1.13s",
         "failed": [
           "test_bubble_style_and_physics_roll_back_cfg_on_write_failure"
         ]
@@ -287,7 +287,7 @@
         "id": "M-R5-P3-1b",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 1.05s",
+        "tail": "1 failed in 0.98s",
         "failed": [
           "test_bubble_style_and_physics_roll_back_cfg_on_write_failure"
         ]
@@ -296,7 +296,7 @@
         "id": "M-R5-P3-2",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.96s",
+        "tail": "1 failed in 0.84s",
         "failed": [
           "test_ai_toggle_second_save_failure_is_reported"
         ]
@@ -305,7 +305,7 @@
         "id": "M-R5-P1-1",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 1.19s",
+        "tail": "1 failed in 0.91s",
         "failed": [
           "test_bundle_import_reports_bubble_style_write_failure"
         ]
@@ -314,7 +314,7 @@
         "id": "M-R6-P1-1",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "3 failed in 1.09s",
+        "tail": "3 failed in 0.95s",
         "failed": [
           "test_import_receipt_keeps_bubble_style_failure_behind_two_other_warnings",
           "test_import_receipt_never_silently_drops_warnings",
@@ -325,7 +325,7 @@
         "id": "M-R5-F6",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.95s",
+        "tail": "1 failed in 0.84s",
         "failed": [
           "test_menu_export_role_item_runs_full_path"
         ]
@@ -353,18 +353,20 @@
     ],
     "note": "变异只在 %TEMP% 影子副本里做，真实仓库只读（只写 _dev/.mutation.lock）",
     "repo_fingerprint": {
-      "桌宠.py": "17b471aa09e6",
+      "桌宠.py": "6b20873532c6",
       "pet_export.py": "c01e1593efd2",
       "pet_lines.py": "5332f60b5f26",
       "pet_alarm.py": "1149e94deee3",
-      "pet_behaviors.py": "8f57255144f6",
-      "_check_release.py": "e0abfe805849",
+      "pet_behaviors.py": "99f7dff343e4",
+      "_check_release.py": "5b25dd0d243d",
       "pet_balance.py": "66948e5514a4",
       "pet_plugin.py": "2f7853298fc3",
       "pet_plugin_host.py": "82fb7b1384c8",
-      "pet_dialogs.py": "2fb2f37a8853",
+      "pet_dialogs.py": "4bc0e8c868bb",
       "pet_menu.py": "920daac1b835",
-      "pet_plugin_index.py": "e5e9845785e8"
+      "pet_plugin_index.py": "e5e9845785e8",
+      "pet_ai.py": "a5989e7fe646",
+      "pet_config.py": "7a4ad883d4e8"
     }
   }
 }

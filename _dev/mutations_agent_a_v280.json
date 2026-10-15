@@ -140,15 +140,15 @@
     },
     {
       "id": "MA11-ask-item-back-to-static",
-      "why": "P2-5：静态 QInputDialog.getItem 不许回到「选择台词」那处（5 处已收口；帧动作那处按裁决保留）",
+      "why": "P2-5：静态 QInputDialog.getItem 不许回到「选择台词」那处（5 处已收口）。⚠ v2.9.0 第 7 轮（A10）节点重锚：A 把「帧动作那处」也并进了 _ask_text，用例改名 test_static_input_dialogs_are_gone 且断言改成「一处不剩」——旧节点名已不存在，本轮同步更新（否则 pytest 报 node not found、这条变异永远判不成 CAUGHT）。",
       "file": "pet_dialogs.py",
       "old": "        # P2-5：静态 getItem 改成手工建框 + modal()\n        label, ok = _ask_item(self, \"选择台词\", \"这条行为要读哪句台词：\", labels)",
       "new": "        label, ok = QInputDialog.getItem(self, \"选择台词\", \"这条行为要读哪句台词：\", labels, 0, False)",
       "tests": [
-        "tests/test_dialogs_feedback_v280.py::test_static_input_dialogs_are_gone_except_the_frame_action_one"
+        "tests/test_dialogs_feedback_v280.py::test_static_input_dialogs_are_gone"
       ],
       "expect_fail": [
-        "tests/test_dialogs_feedback_v280.py::test_static_input_dialogs_are_gone_except_the_frame_action_one"
+        "tests/test_dialogs_feedback_v280.py::test_static_input_dialogs_are_gone"
       ]
     },
     {
@@ -231,23 +231,25 @@
     },
     {
       "id": "MA18-del-action-no-confirm",
-      "why": "D14：删自定义动作必须二次确认（说明是暂存态、点名动作名）",
+      "why": "⚠ v2.9.0 第 7 轮重锚（**语义反转**）：A6 有意撤销上一轮的决定——删自定义动作的二次确认**已被移除**（它是暂存态、点取消可整体放弃）。所以这条变异从『去掉确认』翻成『**把确认加回来**』，它现在守的是『暂停态删除不该被套上不可逆确认』。 D14：删自定义动作必须二次确认（说明是暂存态、点名动作名）",
       "file": "pet_dialogs.py",
-      "old": "        if not _confirm(self, \"删除自定义动作\",",
-      "new": "        if False and not _confirm(self, \"删除自定义动作\",",
+      "old": "        item = self._act_list.currentItem()\n        if item is None or self._cur_idx is None:",
+      "new": "        if not _confirm(self, \"删除自定义动作\", \"确定删掉这个自定义动作吗？\"):\n            return\n        item = self._act_list.currentItem()\n        if item is None or self._cur_idx is None:",
       "tests": [
-        "tests/test_dialogs_feedback_v280.py::test_role_edit_delete_action_needs_confirm_and_reports"
+        "tests/test_dialogs_feedback_v280.py::test_role_edit_delete_action_needs_no_confirm_and_is_undoable",
+        "tests/test_dialogs_behavior_v290.py::test_delete_custom_action_can_be_undone_by_cancelling"
       ],
       "expect_fail": [
-        "tests/test_dialogs_feedback_v280.py::test_role_edit_delete_action_needs_confirm_and_reports"
+        "tests/test_dialogs_feedback_v280.py::test_role_edit_delete_action_needs_no_confirm_and_is_undoable",
+        "tests/test_dialogs_behavior_v290.py::test_delete_custom_action_can_be_undone_by_cancelling"
       ]
     },
     {
       "id": "MA19-del-action-no-receipt",
-      "why": "D14：删自定义动作成功要有回执（含动作名）",
+      "why": "⚠ v2.9.0 第 7 轮重锚：A 有意改写了这一处源码（回执从 _toast 改走 _note / 实现搬进模块级 add_frame_action），旧锚点现树命中 0 次（已实测确认）。锚点按现树重取，`new` 保持原意。 D14：删自定义动作成功要有回执（含动作名）",
       "file": "pet_dialogs.py",
-      "old": "            _toast(self._pet, \"已删除自定义动作「%s」（保存后生效）\" % name)",
-      "new": "            pass",
+      "old": "            _toast(self._pet, \"已删除自定义动作「%s」（点「取消」或关掉这个窗口，本次删除会被放弃）\"\n                   % name)",
+      "new": "            pass   # (MUT) 删动作零回执",
       "tests": [
         "tests/test_dialogs_feedback_v280.py::test_role_edit_delete_action_toasts_with_a_pet"
       ],
@@ -283,28 +285,32 @@
     },
     {
       "id": "MA22-step-receipts-gone",
-      "why": "N15/D11：行为「添加步骤」成功要有回执（并写明要先保存）",
+      "why": "⚠ v2.9.0 第 7 轮重锚：A 有意改写了这一处源码（回执从 _toast 改走 _note / 实现搬进模块级 add_frame_action），旧锚点现树命中 0 次（已实测确认）。锚点按现树重取，`new` 保持原意。 N15/D11：行为「添加步骤」成功要有回执（并写明要先保存）",
       "file": "pet_dialogs.py",
-      "old": "        _toast(self.pet, \"已添加步骤：%s（点「保存」才落盘）\" % self._step_text(norm[0])[:28])",
-      "new": "        pass",
+      "old": "        self._note(\"已添加步骤：%s（点「保存」才落盘）\" % self._step_text(norm[0])[:28])",
+      "new": "        pass   # (MUT) 添加步骤零回执",
       "tests": [
-        "tests/test_dialogs_feedback_v280.py::test_behavior_step_receipts"
+        "tests/test_dialogs_feedback_v280.py::test_behavior_step_receipts",
+        "tests/test_dialogs_behavior_v290.py::test_step_receipts_use_the_inline_status_line_not_the_bubble"
       ],
       "expect_fail": [
-        "tests/test_dialogs_feedback_v280.py::test_behavior_step_receipts"
+        "tests/test_dialogs_feedback_v280.py::test_behavior_step_receipts",
+        "tests/test_dialogs_behavior_v290.py::test_step_receipts_use_the_inline_status_line_not_the_bubble"
       ]
     },
     {
       "id": "MA23-del-step-receipt-gone",
-      "why": "D11：行为「删除选中步骤」成功要有回执",
+      "why": "⚠ v2.9.0 第 7 轮重锚：A 有意改写了这一处源码（回执从 _toast 改走 _note / 实现搬进模块级 add_frame_action），旧锚点现树命中 0 次（已实测确认）。锚点按现树重取，`new` 保持原意。 D11：行为「删除选中步骤」成功要有回执",
       "file": "pet_dialogs.py",
-      "old": "        _toast(self.pet, \"已删除步骤%s（点「保存」才落盘）\"\n               % (\"：%s\" % label[:20] if label else \"\"))",
-      "new": "        pass",
+      "old": "        self._note(\"已删除步骤%s（点「保存」才落盘）\"\n                   % (\"：%s\" % label[:20] if label else \"\"))",
+      "new": "        pass   # (MUT) 删除步骤零回执",
       "tests": [
-        "tests/test_dialogs_feedback_v280.py::test_behavior_step_receipts"
+        "tests/test_dialogs_feedback_v280.py::test_behavior_step_receipts",
+        "tests/test_dialogs_behavior_v290.py::test_step_receipts_use_the_inline_status_line_not_the_bubble"
       ],
       "expect_fail": [
-        "tests/test_dialogs_feedback_v280.py::test_behavior_step_receipts"
+        "tests/test_dialogs_feedback_v280.py::test_behavior_step_receipts",
+        "tests/test_dialogs_behavior_v290.py::test_step_receipts_use_the_inline_status_line_not_the_bubble"
       ]
     },
     {
@@ -336,7 +342,7 @@
   ],
   "results": {
     "title": "变异验证 spec：mutations_agent_a_v280.json",
-    "checked_at": "2026-10-15 21:18:40",
+    "checked_at": "2026-10-16 02:08:54",
     "total": 25,
     "caught": 25,
     "not_caught": 0,
@@ -346,7 +352,7 @@
         "id": "MA01-show_bubble-closing-lies",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "2 failed in 1.42s",
+        "tail": "2 failed in 1.13s",
         "failed": [
           "test_show_bubble_reports_false_while_closing",
           "test_toast_returns_false_and_logs_when_bubble_is_refused"
@@ -356,7 +362,7 @@
         "id": "MA02-toast-ignores-refusal",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "2 failed in 0.97s",
+        "tail": "2 failed in 0.90s",
         "failed": [
           "test_toast_returns_false_and_logs_when_bubble_is_refused",
           "test_toast_falls_back_to_the_dialog_status_line"
@@ -366,7 +372,7 @@
         "id": "MA03-toast-fallback-log-gone",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.99s",
+        "tail": "1 failed in 0.79s",
         "failed": [
           "test_toast_returns_false_and_logs_when_bubble_is_refused"
         ]
@@ -375,7 +381,7 @@
         "id": "MA04-source-url-no-local-check",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "7 failed in 0.90s",
+        "tail": "7 failed in 0.82s",
         "failed": [
           "test_bad_source_url_is_rejected_on_the_spot_with_a_reason[http://h.invalid/packs/index.json-https]",
           "test_bad_source_url_is_rejected_on_the_spot_with_a_reason[file:///C:/packs/index.json-\\u672c\\u5730\\u8def\\u5f84]",
@@ -390,7 +396,7 @@
         "id": "MA05-empty-save-not-rejected",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.66s",
+        "tail": "1 failed in 0.61s",
         "failed": [
           "test_empty_save_is_rejected_and_points_at_reset"
         ]
@@ -399,7 +405,7 @@
         "id": "MA06-refresh-fail-loses-fallback-hint",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "4 failed in 0.87s",
+        "tail": "4 failed in 0.70s",
         "failed": [
           "test_refresh_failure_shows_the_reason_and_keeps_a_way_back[\\u7f51\\u7edc\\u8bf7\\u6c42\\u5931\\u8d25\\uff1a\\u540d\\u79f0\\u89e3\\u6790\\u4e0d\\u4e86\\uff08\\u8fde\\u4e0d\\u4e0a\\u8fdc\\u7aef\\u7d22\\u5f15\\uff09]",
           "test_refresh_failure_shows_the_reason_and_keeps_a_way_back[HTTP",
@@ -411,7 +417,7 @@
         "id": "MA07-refresh-ok-does-not-repaint",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "2 failed in 0.72s",
+        "tail": "2 failed in 0.69s",
         "failed": [
           "test_refresh_success_reports_count_and_repaints_the_list",
           "test_real_backend_refresh_success_reports_count_and_repaints"
@@ -421,7 +427,7 @@
         "id": "MA08-refresh-forgets-force",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 10.95s",
+        "tail": "1 failed in 20.78s",
         "failed": [
           "test_manual_refresh_forces_and_auto_refresh_prefers_cache"
         ]
@@ -430,7 +436,7 @@
         "id": "MA09-backend-result-not-checked",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.61s",
+        "tail": "1 failed in 0.59s",
         "failed": [
           "test_backend_write_failure_keeps_window_and_reports_the_reason"
         ]
@@ -439,7 +445,7 @@
         "id": "MA10-cfg-injection-dropped",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.60s",
+        "tail": "1 failed in 0.59s",
         "failed": [
           "test_dialog_wires_cfg_read_and_write_into_the_backend"
         ]
@@ -448,16 +454,16 @@
         "id": "MA11-ask-item-back-to-static",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.66s",
+        "tail": "1 failed in 0.65s",
         "failed": [
-          "test_static_input_dialogs_are_gone_except_the_frame_action_one"
+          "test_static_input_dialogs_are_gone"
         ]
       },
       {
         "id": "MA12-compose-cancel-button-gone",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 1.00s",
+        "tail": "1 failed in 0.89s",
         "failed": [
           "test_compose_dialog_has_cancel_and_reject_adds_nothing"
         ]
@@ -466,7 +472,7 @@
         "id": "MA13-compose-cancel-not-wired",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 1.05s",
+        "tail": "1 failed in 0.87s",
         "failed": [
           "test_compose_dialog_has_cancel_and_reject_adds_nothing"
         ]
@@ -475,7 +481,7 @@
         "id": "MA14-voice-clear-no-confirm",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.96s",
+        "tail": "1 failed in 0.80s",
         "failed": [
           "test_voice_event_import_receipt_and_clear_confirm"
         ]
@@ -484,7 +490,7 @@
         "id": "MA15-voice-import-no-receipt",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 1.00s",
+        "tail": "1 failed in 0.77s",
         "failed": [
           "test_voice_event_import_receipt_and_clear_confirm"
         ]
@@ -493,7 +499,7 @@
         "id": "MA16-add-form-no-receipt",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.94s",
+        "tail": "1 failed in 0.74s",
         "failed": [
           "test_import_wizard_add_form_gives_a_receipt_and_construction_stays_quiet"
         ]
@@ -502,7 +508,7 @@
         "id": "MA17-act-list-no-select-scroll",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.97s",
+        "tail": "1 failed in 0.81s",
         "failed": [
           "test_new_proc_action_is_selected_and_scrolled_into_view"
         ]
@@ -511,16 +517,17 @@
         "id": "MA18-del-action-no-confirm",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.66s",
+        "tail": "2 failed in 0.71s",
         "failed": [
-          "test_role_edit_delete_action_needs_confirm_and_reports"
+          "test_role_edit_delete_action_needs_no_confirm_and_is_undoable",
+          "test_delete_custom_action_can_be_undone_by_cancelling"
         ]
       },
       {
         "id": "MA19-del-action-no-receipt",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.95s",
+        "tail": "1 failed in 0.85s",
         "failed": [
           "test_role_edit_delete_action_toasts_with_a_pet"
         ]
@@ -529,7 +536,7 @@
         "id": "MA20-member-remove-no-receipt",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 1.03s",
+        "tail": "1 failed in 1.06s",
         "failed": [
           "test_dialogue_remove_member_reports_what_was_removed"
         ]
@@ -538,7 +545,7 @@
         "id": "MA21-alarm-new-no-receipt",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.92s",
+        "tail": "1 failed in 1.34s",
         "failed": [
           "test_alarm_new_gives_a_receipt"
         ]
@@ -547,25 +554,27 @@
         "id": "MA22-step-receipts-gone",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 1.06s",
+        "tail": "2 failed in 1.06s",
         "failed": [
-          "test_behavior_step_receipts"
+          "test_behavior_step_receipts",
+          "test_step_receipts_use_the_inline_status_line_not_the_bubble"
         ]
       },
       {
         "id": "MA23-del-step-receipt-gone",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.98s",
+        "tail": "2 failed in 0.90s",
         "failed": [
-          "test_behavior_step_receipts"
+          "test_behavior_step_receipts",
+          "test_step_receipts_use_the_inline_status_line_not_the_bubble"
         ]
       },
       {
         "id": "MA24-move-line-boundary-silent",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.97s",
+        "tail": "1 failed in 0.81s",
         "failed": [
           "test_move_line_at_boundary_tells_the_user"
         ]
@@ -574,7 +583,7 @@
         "id": "MA25-wording-tip-gone",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.95s",
+        "tail": "1 failed in 0.86s",
         "failed": [
           "test_wording_table_is_applied_to_new_and_add_buttons"
         ]
@@ -582,6 +591,8 @@
     ],
     "spec": "mutations_agent_a_v280.json",
     "tests": [
+      "tests/test_dialogs_behavior_v290.py::test_delete_custom_action_can_be_undone_by_cancelling",
+      "tests/test_dialogs_behavior_v290.py::test_step_receipts_use_the_inline_status_line_not_the_bubble",
       "tests/test_dialogs_feedback_v280.py::test_alarm_new_gives_a_receipt",
       "tests/test_dialogs_feedback_v280.py::test_backend_write_failure_keeps_window_and_reports_the_reason",
       "tests/test_dialogs_feedback_v280.py::test_bad_source_url_is_rejected_on_the_spot_with_a_reason",
@@ -597,10 +608,10 @@
       "tests/test_dialogs_feedback_v280.py::test_real_backend_refresh_success_reports_count_and_repaints",
       "tests/test_dialogs_feedback_v280.py::test_refresh_failure_shows_the_reason_and_keeps_a_way_back",
       "tests/test_dialogs_feedback_v280.py::test_refresh_success_reports_count_and_repaints_the_list",
-      "tests/test_dialogs_feedback_v280.py::test_role_edit_delete_action_needs_confirm_and_reports",
+      "tests/test_dialogs_feedback_v280.py::test_role_edit_delete_action_needs_no_confirm_and_is_undoable",
       "tests/test_dialogs_feedback_v280.py::test_role_edit_delete_action_toasts_with_a_pet",
       "tests/test_dialogs_feedback_v280.py::test_show_bubble_reports_false_while_closing",
-      "tests/test_dialogs_feedback_v280.py::test_static_input_dialogs_are_gone_except_the_frame_action_one",
+      "tests/test_dialogs_feedback_v280.py::test_static_input_dialogs_are_gone",
       "tests/test_dialogs_feedback_v280.py::test_toast_falls_back_to_the_dialog_status_line",
       "tests/test_dialogs_feedback_v280.py::test_toast_returns_false_and_logs_when_bubble_is_refused",
       "tests/test_dialogs_feedback_v280.py::test_voice_event_import_receipt_and_clear_confirm",
@@ -608,18 +619,20 @@
     ],
     "note": "变异只在 %TEMP% 影子副本里做，真实仓库只读（只写 _dev/.mutation.lock）",
     "repo_fingerprint": {
-      "桌宠.py": "17b471aa09e6",
+      "桌宠.py": "6b20873532c6",
       "pet_export.py": "c01e1593efd2",
       "pet_lines.py": "5332f60b5f26",
       "pet_alarm.py": "1149e94deee3",
-      "pet_behaviors.py": "8f57255144f6",
-      "_check_release.py": "e0abfe805849",
+      "pet_behaviors.py": "99f7dff343e4",
+      "_check_release.py": "5b25dd0d243d",
       "pet_balance.py": "66948e5514a4",
       "pet_plugin.py": "2f7853298fc3",
       "pet_plugin_host.py": "82fb7b1384c8",
-      "pet_dialogs.py": "2fb2f37a8853",
+      "pet_dialogs.py": "4bc0e8c868bb",
       "pet_menu.py": "920daac1b835",
-      "pet_plugin_index.py": "e5e9845785e8"
+      "pet_plugin_index.py": "e5e9845785e8",
+      "pet_ai.py": "a5989e7fe646",
+      "pet_config.py": "7a4ad883d4e8"
     }
   }
 }

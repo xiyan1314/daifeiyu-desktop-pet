@@ -77,7 +77,7 @@
   ],
   "results": {
     "title": "变异验证 spec：mutations_agent_d_v280.json",
-    "checked_at": "2026-10-15 21:26:10",
+    "checked_at": "2026-10-16 02:15:47",
     "total": 5,
     "caught": 5,
     "not_caught": 0,
@@ -87,7 +87,7 @@
         "id": "MF1-qtimer-not-imported",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "2 failed, 1 passed in 1.43s",
+        "tail": "2 failed, 1 passed in 1.13s",
         "failed": [
           "test_manual_refresh_while_in_flight_is_replayed_after_the_source_lands",
           "test_manual_refresh_while_in_flight_is_replayed_on_the_read_path"
@@ -97,7 +97,7 @@
         "id": "MF1b-source-replay-disabled",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed, 1 passed in 0.75s",
+        "tail": "1 failed, 1 passed in 0.63s",
         "failed": [
           "test_manual_refresh_while_in_flight_is_replayed_after_the_source_lands"
         ]
@@ -106,7 +106,7 @@
         "id": "MF1c-index-replay-disabled",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed, 1 passed in 0.77s",
+        "tail": "1 failed, 1 passed in 0.65s",
         "failed": [
           "test_manual_refresh_while_in_flight_is_replayed_on_the_read_path"
         ]
@@ -115,7 +115,7 @@
         "id": "MF3b-toast-except-no-fallback",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed, 1 passed in 0.72s",
+        "tail": "1 failed, 1 passed in 0.63s",
         "failed": [
           "test_toast_falls_back_when_show_bubble_raises"
         ]
@@ -124,7 +124,7 @@
         "id": "MF4-undef-check-neutered",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "3 failed, 17 passed in 1.64s",
+        "tail": "3 failed, 17 passed in 1.41s",
         "failed": [
           "test_undefined_global_is_reported",
           "test_the_check_catches_the_v280_qtimer_defect",
@@ -141,18 +141,20 @@
     ],
     "note": "变异只在 %TEMP% 影子副本里做，真实仓库只读（只写 _dev/.mutation.lock）",
     "repo_fingerprint": {
-      "桌宠.py": "17b471aa09e6",
+      "桌宠.py": "6b20873532c6",
       "pet_export.py": "c01e1593efd2",
       "pet_lines.py": "5332f60b5f26",
       "pet_alarm.py": "1149e94deee3",
-      "pet_behaviors.py": "8f57255144f6",
-      "_check_release.py": "e0abfe805849",
+      "pet_behaviors.py": "99f7dff343e4",
+      "_check_release.py": "5b25dd0d243d",
       "pet_balance.py": "66948e5514a4",
       "pet_plugin.py": "2f7853298fc3",
       "pet_plugin_host.py": "82fb7b1384c8",
-      "pet_dialogs.py": "2fb2f37a8853",
+      "pet_dialogs.py": "4bc0e8c868bb",
       "pet_menu.py": "920daac1b835",
-      "pet_plugin_index.py": "e5e9845785e8"
+      "pet_plugin_index.py": "e5e9845785e8",
+      "pet_ai.py": "a5989e7fe646",
+      "pet_config.py": "7a4ad883d4e8"
     }
   }
 }

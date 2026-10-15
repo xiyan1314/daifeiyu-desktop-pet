@@ -133,7 +133,15 @@ def test_ai_settings_privacy_switch_persists_both_ways(pet):
 
 
 def test_ai_settings_clear_long_term_keeps_history(pet, monkeypatch):
-    """「清除长期记忆」按钮：long_term 落盘清空，**对话历史必须保留**。"""
+    """「清除长期记忆」按钮：long_term 落盘清空，**对话历史必须保留**。
+
+    v2.9.0（A11/D16）：实现改走统一确认框 _confirm / _info / _warn（裸 QMessageBox.question
+    不带 DIALOG_QSS、也不进 modal）。驱动方式同步从「monkeypatch 静态方法」改成**给
+    _confirm/_info 注入替身**——按铁律 4 是**加强式**改写：原有两条断言一条没减，另加两条
+    （旧写法把确认框 stub 成永远 Yes，「到底有没有问」根本没人测；拒绝路径也完全没覆盖）：
+      · 新断言①：这个不可撤销的操作**仍然会问**（_confirm 真被调用了）；
+      · 新断言②：点「取消」时长期记忆**一个字节都不许动**。
+    """
     pet_chat.write_long_term(main.MEMORY_PATH, {
         "user_name": "绳匠", "nicknames": ["小鱼干"], "preferences": ["睡懒觉"],
         "dislikes": ["加班"], "recent_topics": ["记账"]}, log=None)
@@ -142,21 +150,65 @@ def test_ai_settings_clear_long_term_keeps_history(pet, monkeypatch):
     assert pet_chat.read_long_term(main.MEMORY_PATH).get("user_name") == "绳匠", "用例前提不成立"
     assert len(main.load_chat_memory()) == 2, "用例前提不成立（历史没写进去）"
 
+    confirms = []
+    infos = []
+
+    def _confirm_no(parent, title, text):
+        confirms.append((str(title), str(text)))
+        return False
+
+    # v2.9.0（找茬 F-5）：**再兜一层裸 QMessageBox 的安全网**。
+    # 只注入 _confirm/_info/_warn 只能让"把确认整段拿掉"那种变异变红；一旦有人把实现
+    # **还原成上一版的裸 QMessageBox.question()**，这条路会走真 modal → offscreen 下没人点
+    # → **永久挂住**（实测 90s 被 harness 杀掉，判成"没被验证"；挂死比假绿更坏）。
+    # 三个静态入口也换成"记录 + 返回否/确定"：还原成旧实现时 question() 返回 No → 提前
+    # return → 下面的 assert confirms 照样**红**，不会挂。断言一条没减，另加两条（legacy）。
+    legacy = []
     monkeypatch.setattr(QMessageBox, "question",
-                        lambda *a, **k: QMessageBox.StandardButton.Yes)
+                        lambda *a, **k: (legacy.append("question"),
+                                         QMessageBox.StandardButton.No)[1])
     monkeypatch.setattr(QMessageBox, "information",
-                        lambda *a, **k: QMessageBox.StandardButton.Ok)
+                        lambda *a, **k: (legacy.append("information"),
+                                         QMessageBox.StandardButton.Ok)[1])
+    monkeypatch.setattr(QMessageBox, "warning",
+                        lambda *a, **k: (legacy.append("warning"),
+                                         QMessageBox.StandardButton.Ok)[1])
+    # 三件套**一起** stub：只要被测路径可能弹真框，就先把 _confirm/_info/_warn 全换掉。
+    # 反例（v2.9.0 第 7 轮实测，C 抓到的）：这里原来只 stub 了 _confirm，于是「把确认整段
+    # 拿掉」的变异（M-A290-01）会让代码继续走到 _info(...) → modal() → 真 QMessageBox.exec()
+    # → offscreen 下没人点 → **永久阻塞**。"本该红却挂住"比"假绿"更坏：整批变异空转，
+    # 这条还被判成"没被验证"（WRONG TEST）。三件套全 stub 之后，同一条变异会**红**
+    # （confirms 为空 → 第一条断言失败），这才是它该有的样子。
+    monkeypatch.setattr(pet_dialogs, "_confirm", _confirm_no)
+    monkeypatch.setattr(pet_dialogs, "_info",
+                        lambda _p, t, x: infos.append((str(t), str(x))))
+    monkeypatch.setattr(pet_dialogs, "_warn", lambda _p, t, x: None)
+
     dlg = pet_dialogs.AISettingsDialog(pet)
     dlg.show()
     try:
         dlg._clear_long_term()
     finally:
         dlg.hide()
+    assert confirms, "清除长期记忆没有二次确认（不可撤销的操作必须问一次）"
+    assert legacy == [], "又走回了裸 QMessageBox（统一入口被绕开）：%r" % (legacy,)
+    assert pet_chat.read_long_term(main.MEMORY_PATH).get("user_name") == "绳匠", \
+        "确认框点了取消，长期记忆却被清掉了"
+
+    monkeypatch.setattr(pet_dialogs, "_confirm", lambda _p, _t, _x: True)
+    dlg2 = pet_dialogs.AISettingsDialog(pet)
+    dlg2.show()
+    try:
+        dlg2._clear_long_term()
+    finally:
+        dlg2.hide()
 
     lt = pet_chat.read_long_term(main.MEMORY_PATH)
     assert not lt.get("user_name") and not lt.get("nicknames") and not lt.get("dislikes"), \
         "长期记忆没被清掉：%r" % (lt,)
     assert len(main.load_chat_memory()) == 2, "清除长期记忆把对话历史也删了"
+    assert infos and "忘掉" in infos[-1][1], "清完之后一句回执都没有：%r" % (infos,)
+    assert legacy == [], "又走回了裸 QMessageBox（统一入口被绕开）：%r" % (legacy,)
 
 
 # ---------------- 2) BubbleStyleDialog ----------------

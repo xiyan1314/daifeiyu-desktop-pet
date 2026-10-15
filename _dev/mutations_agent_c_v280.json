@@ -923,15 +923,15 @@
     },
     {
       "id": "M-C-A22",
-      "why": "静态 QInputDialog.getText 只剩帧动作那一处（其余 5 处一律走 _ask_text/_ask_item + modal）",
+      "why": "静态 QInputDialog.getText 一处都不许有（其余 5 处一律走 _ask_text/_ask_item + modal）。⚠ v2.9.0 第 7 轮（A10）节点重锚：帧动作那处也已并入 _ask_text、用例改名为 test_static_input_dialogs_are_gone，旧节点名不存在——本轮同步更新（这条与 M-C-A22 的 old 原样保留，只改节点名与 why）。",
       "file": "pet_dialogs.py",
       "old": "        name, ok = _ask_text(self._parent_widget(), \"重命名声音素材\", \"新名字：\",\n                             cur.get(\"name\", \"\"))\n",
       "new": "        name, ok = QInputDialog.getText(self._parent_widget(), \"重命名声音素材\", \"新名字：\", text=cur.get(\"name\", \"\"))  # MUT-A22: 退回静态 getText\n",
       "tests": [
-        "tests/test_dialogs_feedback_v280.py::test_static_input_dialogs_are_gone_except_the_frame_action_one"
+        "tests/test_dialogs_feedback_v280.py::test_static_input_dialogs_are_gone"
       ],
       "expect_fail": [
-        "tests/test_dialogs_feedback_v280.py::test_static_input_dialogs_are_gone_except_the_frame_action_one"
+        "tests/test_dialogs_feedback_v280.py::test_static_input_dialogs_are_gone"
       ]
     },
     {
@@ -1027,23 +1027,25 @@
     },
     {
       "id": "M-C-A30",
-      "why": "D14：删自定义动作要二次确认（说明是暂存态、点名动作名），取消时动作还在",
+      "why": "⚠ v2.9.0 第 7 轮重锚（**语义反转**）：A6 有意撤销上一轮的决定——删自定义动作的二次确认**已被移除**（它是暂存态、点取消可整体放弃）。所以这条变异从『去掉确认』翻成『**把确认加回来**』，它现在守的是『暂停态删除不该被套上不可逆确认』。 D14：删自定义动作要二次确认（说明是暂存态、点名动作名），取消时动作还在",
       "file": "pet_dialogs.py",
-      "old": "        if not _confirm(self, \"删除自定义动作\",\n                        \"把「%s」（%s动作）从当前形态里删掉吗？\\n\\n\"\n                        \"· 这一步只是**暂存**，还没写进角色；\\n\"\n                        \"· 删错了点「取消」或关掉这个窗口，本次全部改动（含这次删除）都会被放弃；\\n\"\n                        \"· 点「保存」才会真的落盘。\" % (name, kind or \"未知\")):\n            return\n",
-      "new": "        if False:  # MUT-A30: 删自定义动作不再二次确认\n            return\n",
+      "old": "        item = self._act_list.currentItem()\n        if item is None or self._cur_idx is None:",
+      "new": "        if not _confirm(self, \"删除自定义动作\", \"确定删掉这个自定义动作吗？\"):\n            return\n        item = self._act_list.currentItem()\n        if item is None or self._cur_idx is None:",
       "tests": [
-        "tests/test_dialogs_feedback_v280.py::test_role_edit_delete_action_needs_confirm_and_reports"
+        "tests/test_dialogs_feedback_v280.py::test_role_edit_delete_action_needs_no_confirm_and_is_undoable",
+        "tests/test_dialogs_behavior_v290.py::test_delete_custom_action_can_be_undone_by_cancelling"
       ],
       "expect_fail": [
-        "tests/test_dialogs_feedback_v280.py::test_role_edit_delete_action_needs_confirm_and_reports"
+        "tests/test_dialogs_feedback_v280.py::test_role_edit_delete_action_needs_no_confirm_and_is_undoable",
+        "tests/test_dialogs_behavior_v290.py::test_delete_custom_action_can_be_undone_by_cancelling"
       ]
     },
     {
       "id": "M-C-A31",
-      "why": "D14：删自定义动作成功后要给回执（含动作名）",
+      "why": "⚠ v2.9.0 第 7 轮重锚：A 有意改写了这一处源码（回执从 _toast 改走 _note / 实现搬进模块级 add_frame_action），旧锚点现树命中 0 次（已实测确认）。锚点按现树重取，`new` 保持原意。 D14：删自定义动作成功后要给回执（含动作名）",
       "file": "pet_dialogs.py",
-      "old": "            _toast(self._pet, \"已删除自定义动作「%s」（保存后生效）\" % name)\n",
-      "new": "            pass  # MUT-A31: 删自定义动作成功零回执\n",
+      "old": "            _toast(self._pet, \"已删除自定义动作「%s」（点「取消」或关掉这个窗口，本次删除会被放弃）\"\n                   % name)",
+      "new": "            pass  # MUT-A31: 删自定义动作成功零回执",
       "tests": [
         "tests/test_dialogs_feedback_v280.py::test_role_edit_delete_action_toasts_with_a_pet"
       ],
@@ -1170,28 +1172,32 @@
     },
     {
       "id": "M-C-A36",
-      "why": "N15/D11：行为「添加步骤」成功后要有回执（并写明要先保存）",
+      "why": "⚠ v2.9.0 第 7 轮重锚：A 有意改写了这一处源码（回执从 _toast 改走 _note / 实现搬进模块级 add_frame_action），旧锚点现树命中 0 次（已实测确认）。锚点按现树重取，`new` 保持原意。 N15/D11：行为「添加步骤」成功后要有回执（并写明要先保存）",
       "file": "pet_dialogs.py",
-      "old": "        _toast(self.pet, \"已添加步骤：%s（点「保存」才落盘）\" % self._step_text(norm[0])[:28])\n",
-      "new": "        pass  # MUT-A36: 添加步骤零回执\n",
+      "old": "        self._note(\"已添加步骤：%s（点「保存」才落盘）\" % self._step_text(norm[0])[:28])",
+      "new": "        pass  # MUT-A36: 添加步骤零回执",
       "tests": [
-        "tests/test_dialogs_feedback_v280.py::test_behavior_step_receipts"
+        "tests/test_dialogs_feedback_v280.py::test_behavior_step_receipts",
+        "tests/test_dialogs_behavior_v290.py::test_step_receipts_use_the_inline_status_line_not_the_bubble"
       ],
       "expect_fail": [
-        "tests/test_dialogs_feedback_v280.py::test_behavior_step_receipts"
+        "tests/test_dialogs_feedback_v280.py::test_behavior_step_receipts",
+        "tests/test_dialogs_behavior_v290.py::test_step_receipts_use_the_inline_status_line_not_the_bubble"
       ]
     },
     {
       "id": "M-C-A37",
-      "why": "D11：行为「删除选中步骤」成功后要有回执",
+      "why": "⚠ v2.9.0 第 7 轮重锚：A 有意改写了这一处源码（回执从 _toast 改走 _note / 实现搬进模块级 add_frame_action），旧锚点现树命中 0 次（已实测确认）。锚点按现树重取，`new` 保持原意。 D11：行为「删除选中步骤」成功后要有回执",
       "file": "pet_dialogs.py",
-      "old": "        _toast(self.pet, \"已删除步骤%s（点「保存」才落盘）\"\n               % (\"：%s\" % label[:20] if label else \"\"))\n",
-      "new": "        pass  # MUT-A37: 删除步骤零回执\n",
+      "old": "        self._note(\"已删除步骤%s（点「保存」才落盘）\"\n                   % (\"：%s\" % label[:20] if label else \"\"))",
+      "new": "        pass  # MUT-A37: 删除步骤零回执",
       "tests": [
-        "tests/test_dialogs_feedback_v280.py::test_behavior_step_receipts"
+        "tests/test_dialogs_feedback_v280.py::test_behavior_step_receipts",
+        "tests/test_dialogs_behavior_v290.py::test_step_receipts_use_the_inline_status_line_not_the_bubble"
       ],
       "expect_fail": [
-        "tests/test_dialogs_feedback_v280.py::test_behavior_step_receipts"
+        "tests/test_dialogs_feedback_v280.py::test_behavior_step_receipts",
+        "tests/test_dialogs_behavior_v290.py::test_step_receipts_use_the_inline_status_line_not_the_bubble"
       ]
     },
     {
@@ -1222,10 +1228,10 @@
     },
     {
       "id": "M-C-A40",
-      "why": "新建台词保存后要按 id 选中新行并滚进视口（审计 §4 ① 的实测现在钉在这里）",
+      "why": "新建台词保存后要按 id 选中新行并滚进视口（审计 §4 ① 的实测现在钉在这里） ⚠ v2.9.0 第 7 轮重锚：**这是 A 有意改写源码造成的**（原意仍在，只是位置/判据漂移）——原意=「台词保存后不按 id 选中新行、长列表下等于没保存」；现锚点=含 A5 新插的\"先把基线对齐\"两行（`_baseline` / `_discard_ok`）；变异方向不变。 ⚠ v2.9.0 第 7 轮重锚：**这是 A 有意改写源码造成的**（原意仍在、只是位置/判据漂移）——原意=「台词保存后不按 id 选中新行、长列表下等于没保存」；现锚点=含 A5 的\"先把基线对齐\"一行 + 注释（`_discard_ok = False` 那行已随 latch 机制删除）；变异方向不变（A 说这是它最后一次改源码）。",
       "file": "pet_dialogs.py",
-      "old": "        self._refresh_all()\n        # N3/S5/P1-8：保存成功后以前零提示、也不选中新行（长列表下等于没保存）\n        self._select_line(self._editing)\n",
-      "new": "        self._refresh_all()\n        pass  # MUT-A40: 保存后不选中新行（长列表下等于没保存）\n",
+      "old": "        self._refresh_all()\n        # A5：**先**把基线对齐到\"刚保存的内容\"，再 _select_line —— 否则它会触发\n        # _on_pick_line 的未保存检查，把\"保存成功\"误判成\"有未保存改动\"（凭空多一步）。\n        self._baseline = self._form_signature()\n        # N3/S5/P1-8：保存成功后以前零提示、也不选中新行（长列表下等于没保存）\n        self._select_line(self._editing)\n",
+      "new": "        self._refresh_all()\n        # A5：**先**把基线对齐到\"刚保存的内容\"，再 _select_line —— 否则它会触发\n        # _on_pick_line 的未保存检查，把\"保存成功\"误判成\"有未保存改动\"（凭空多一步）。\n        self._baseline = self._form_signature()\n        # N3/S5/P1-8：保存成功后以前零提示、也不选中新行（长列表下等于没保存）\n        pass  # MUT-A40: 不选中新行\n",
       "tests": [
         "tests/test_dialogs_feedback_v280.py::test_new_line_scrolls_into_view"
       ],

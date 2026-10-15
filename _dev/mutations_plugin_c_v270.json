@@ -94,7 +94,7 @@
   ],
   "results": {
     "title": "变异验证 spec：mutations_plugin_c_v270.json",
-    "checked_at": "2026-10-15 21:32:45",
+    "checked_at": "2026-10-16 02:21:37",
     "total": 7,
     "caught": 7,
     "not_caught": 0,
@@ -104,7 +104,7 @@
         "id": "M-C-a1",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.57s",
+        "tail": "1 failed in 0.59s",
         "failed": [
           "test_a_索引与包的data_kind不一致必须拒绝"
         ]
@@ -113,7 +113,7 @@
         "id": "M-C-b1",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.54s",
+        "tail": "1 failed in 0.58s",
         "failed": [
           "test_b_当前版目录不在而备份在_回滚点不丢也不留孤儿"
         ]
@@ -122,7 +122,7 @@
         "id": "M-C-b2",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.56s",
+        "tail": "1 failed in 0.55s",
         "failed": [
           "test_b_没有备份就不许留悬空回滚点"
         ]
@@ -131,7 +131,7 @@
         "id": "M-C-b3",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.51s",
+        "tail": "1 failed in 0.55s",
         "failed": [
           "test_b_登记里没有这条却留着备份_一并清掉"
         ]
@@ -140,7 +140,7 @@
         "id": "M-C-b4",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.49s",
+        "tail": "1 failed in 0.53s",
         "failed": [
           "test_b_登记写失败时上一版目录要挪回去"
         ]
@@ -149,7 +149,7 @@
         "id": "M-C-c1",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.49s",
+        "tail": "1 failed in 0.54s",
         "failed": [
           "test_c_同内容折叠回滚不说撤销了0项"
         ]
@@ -158,7 +158,7 @@
         "id": "M-C-d1",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed, 12 warnings in 52.08s",
+        "tail": "1 failed, 12 warnings in 37.97s",
         "failed": [
           "test_d_razor会核对证据原文能不能找到"
         ]
@@ -176,18 +176,20 @@
     ],
     "note": "变异只在 %TEMP% 影子副本里做，真实仓库只读（只写 _dev/.mutation.lock）",
     "repo_fingerprint": {
-      "桌宠.py": "17b471aa09e6",
+      "桌宠.py": "6b20873532c6",
       "pet_export.py": "c01e1593efd2",
       "pet_lines.py": "5332f60b5f26",
       "pet_alarm.py": "1149e94deee3",
-      "pet_behaviors.py": "8f57255144f6",
-      "_check_release.py": "e0abfe805849",
+      "pet_behaviors.py": "99f7dff343e4",
+      "_check_release.py": "5b25dd0d243d",
       "pet_balance.py": "66948e5514a4",
       "pet_plugin.py": "2f7853298fc3",
       "pet_plugin_host.py": "82fb7b1384c8",
-      "pet_dialogs.py": "2fb2f37a8853",
+      "pet_dialogs.py": "4bc0e8c868bb",
       "pet_menu.py": "920daac1b835",
-      "pet_plugin_index.py": "e5e9845785e8"
+      "pet_plugin_index.py": "e5e9845785e8",
+      "pet_ai.py": "a5989e7fe646",
+      "pet_config.py": "7a4ad883d4e8"
     }
   }
 }

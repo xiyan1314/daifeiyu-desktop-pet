@@ -81,19 +81,84 @@
 这是预期）。跑完对着发布门的两个提示通道复核到**双双静默**：`mutation_evidence_notes()`（指纹过期 /
 缺键）+ `mutation_verdict_notes()`（判定不通过）。
 
+**定版前还要跑一次 nodeid 体检（v2.9.0 第 7 轮 · 代理 C 新增，与 `--scan-only` 并列）**：
+`python -B _dev/check_mutation_nodeids.py`（秒级、只读、不跑 pytest）。**理由是一条本轮实测出来的新失败模式**：
+**改用例名是常规操作，而它会让变异静默失效**——A10 把
+`test_static_input_dialogs_are_gone_except_the_frame_action_one` 改名成
+`test_static_input_dialogs_are_gone`（而且是**加强式**改写：从"只剩这一处"变成"一处不剩"），
+spec 里的 nodeid 不会跟着动，于是 `MA11` 与 `M-C-A22` 指向了**不存在的用例**：pytest 报 node-not-found，
+**这两条变异永远判不成 CAUGHT**，而这件事**只有定版整批跑时才暴露成 WRONG TEST**（白烧一整批）。
+锚点一直有 `--scan-only` 体检（命中次数必须恰好 1），**nodeid 在此之前一条体检都没有**——这是"清单完整性"的另一面。
+判据：`tests/x.py::test_y` 的文件存在**且**真有这个 `def`（含类方法、参数化 `[参数]`）；只给文件的旧形态（`MF4`）文件存在即可；
+裸用例名在这份 spec 引用过的文件里找得到即可；`tests` 与 `expect_fail` **两份都查**（后者缺了会永远判 WRONG TEST）。
+**校验范围（v2.9.0 三审 F-6 更正）**：**只查 `mutations[].tests` / `mutations[].expect_fail`** —— 这两份才是判定真正会用到的 nodeid；
+spec 顶层 `evidence.tests`、`results.tests` / `results.items[].failed` 是**历史记录**（记的是"当时跑出什么"，保留当时的用例名本来就是对的），
+**不在校验范围、也不该改**；工具会把范围外还剩多少条**一并报出来**（本轮实测 **429 条**），免得读的人以为措辞比范围大。
+退出码 0/1 可直接进定版流水。本轮实测：**校验范围内 1139 条 / 坏 0**（F-C 之后：`A7-M2` 的 tests/expect_fail 从 3 条 nodeid 收到 2 条；修掉那几条之前是**坏 2**）。
+
+**改了源码的人，收工前必须跑一次 `python -B _dev/mutate_batch_v270.py --scan-only`（v2.9.0 第 7 轮定为规矩）**。
+理由：**锚点是源码字面量**，你**有意**改写一处实现（改名、改文案、把回执从 `_toast` 换成 `_note`、把函数搬进另一个模块）
+就会把**别人的**锚点改成命中 0 次。本轮 A 有意改写了 9 处源码，一次自查就查出 **9 条旧锚点 count=0**
+（`agent_a_v280` MA18/MA19/MA22/MA23 · `agent_c_v280` M-C-A30/A31/A36/A37 · `critic_v270` M-R5-P2-4）；
+**如果它不自查，这 9 条只会在定版批跑时暴露成 SPEC-BAD / ANCHOR-LOST —— 那时已经很难定位是谁改的**。
+自查是秒级的，成本几乎为零；不查的代价是一整批证据作废。**同理，改源码也会让 nodeid 漂移**（见上一段），
+两条体检一起跑：`--scan-only` + `check_mutation_nodeids.py`。
+
+**凡是被测路径可能弹真框的用例，必须先 stub `_confirm`/`_info`/`_warn` 三件套**（或加 `quiet` 类 fixture）。
+**（v2.9.0 第 7 轮 · 测试健壮性第一条 —— 注意：这条与前五条「证据保护」分开归类：前五条保的是"证据还算不算数"，这条保的是"回归会不会挂住"。）**
+**理由（本轮实测）**：`tests/test_dialogs_v24.py::test_ai_settings_clear_long_term_keeps_history` 的第一段**只 stub 了 `_confirm`（返回 False）**，
+没 stub `_info`/`_warn`；正常路径下确认被拒 → 函数提前 return，`_info` 走不到。
+于是把确认整段拿掉的变异（`M-A290-01`）会让代码走到 `_info` = `modal(QMessageBox)` = **真 exec()** → offscreen 下无人可点 → **永久阻塞**。
+**"本该红、结果挂"比假绿更坏**：假绿至少跑完了；挂住会让这条判成"**没被验证**"（harness 折成 `rc=3` → WRONG TEST），
+还会**拖垮整批节奏**（本轮实测：一条挂 ~600s，两条就是 ~20 分钟）。
+**本仓已两次踩同一类**：本轮这条 + 上一轮的 `tests/test_dialogs_feedback_v280.py::test_dialog_wires_cfg_read_and_write_into_the_backend`（A 当时补了 `quiet`）。
+**自查法**：grep 你的用例里有没有 `_confirm`/`_info`/`_warn` 的直接或间接调用点，而被测函数在"参数不合法 / 确认被拒"这些**出错分支**上会不会弹框。
+
+**转述变异原料时，nodeid 也不许手抄（v2.9.0 第 7 轮 · 证据保护第五条）**。
+本轮实测的**第三种**原料风险就是"人传话丢失字符"：值班人转述 A 的意图时，把
+`test_test_play_plays_and_does_not_say_saved_twice` 写成 `test_test_plays_and_does_not_say_saved_twice`（少一个 `play_`），
+**而转述人当时还特意说过"我转抄长字符串才是引入错误的地方"——结果正是这么错的**。
+规矩：转述变异原料时，**要么让来源方写成文件**（像 B 那样交 `%TEMP%\b_mutations_v290.json`），
+**要么由收方用 `python -B _dev/check_mutation_nodeids.py` 复核**。**"我照抄一遍"本身就是风险点。**
+
+**这一个工具已经抓到三种不同的原料风险**（都发生在"规格文件"上，不是产品代码上）：
+
+| 命中 | 风险类型 | 当场后果（若没抓到） |
+|---|---|---|
+| `MA11` / `M-C-A22` | **用例改名**（源码改动波及规格） | pytest node-not-found → 永远判不成 CAUGHT，只有定版批跑才暴露 |
+| `B7-M1` / `B7-M2` | **乱码**（编码在管道里坏了） | 红的是对的用例、`expect_fail` 谁也匹配不上 → 永远 WRONG TEST |
+| `B6-M2` | **转述错**（人传话丢字符） | 同上：node-not-found，静默失效 |
+
+**同一件工具抓到三种不同风险，就是它该进定版流水的最好理由**（跑法见 §一 的脚本表）。
+
+**中文 nodeid / 标识符经"管道或控制台"落盘后一律视为不可信（v2.9.0 第 7 轮 · 证据保护第四条）**。
+本轮实测：B 交来的 `%TEMP%\b_mutations_v290.json` 里，**B7-M1 与 B7-M2 的 `expect_fail` 两个中文 nodeid
+都被写成了 U+FFFD 乱码**（它自述"18/18 CAUGHT"是对的——它在自己影子里用的是内存里的正确字符串，
+**落盘那一步才坏的**）。照抄的后果：pytest 红的是**正确的**用例，而 `expect_fail` 谁也匹配不上 →
+**这两条永远判 WRONG TEST**。**判定器工作正常，坏的是原料。**
+交原料的人：**要么用文件传递并让收的人自查，要么同时给一个 ASCII 别名**（例如
+`tests/test_x.py::test_y` 的英文函数名，或干脆把中文用例名改成英文）。
+收原料的人：**必须逐条对齐现树，不许批量兜底**——代理 C 本轮图省事写了"凡乱码就填 B7-M1 的 nodeid"，
+**B7-M2 当场判 WRONG TEST**，是**判定器把它抓出来的**（判定器抓原料错，比抓代码错更有价值）。
+查法：`python -B _dev/mutate_check.py <spec>` 跑一遍 + 看 `results` 里的 `failed` 列表对不对得上；
+乱码字符可以用 `/[\uFFFD]/` 或 `grep -P '\xef\xbf\xbd'` 扫出来。
+
 **一条命令跑完整批（v2.7.0 代理 C 落成脚本）**：`python -B _dev/mutate_batch_v270.py` ——
-自动收全 ① 带 `mutations` 段的 `_dev/mutations_*.json`（当前 **22 份 / 392 条锚点** —— v2.7.0 当时是 20 份 / 270 条，验收员
+自动收全 ① 带 `mutations` 段的 `_dev/mutations_*.json`（当前 **26 份 / 471 条锚点** —— v2.8.0 第 6 轮是 22 份 / 392 条，v2.7.0 当时是 20 份 / 270 条，验收员
 定版实测为 20 份 / **269** 条，本轮 P1-1 回执修复新增 `M-R6-P1-1` 一条 → **270**）走 `mutate_check.py`；
 ② 三份**旧形态单脚本驱动**（`mutate_export_slice.py` 5/5 · `mutate_startup_defer.py` 8/8 ·
 `mutate_proc_reset_v26.py` 12/12，**共 25 条**）；③ 两份独立结果（`verify_fastci_slices_v251.py`
 11 组 · `verify_guardrails_can_fail.py` 9/9）。
-**合计 417 条锚点**（392 + 25）—— 这个数字**以 `python -B _dev/mutate_batch_v270.py --scan-only`
-的实测输出为准**（`--scan-only` 末行现为「锚点合计 **417** 条，坏 0 条」；每加/删一条变异它都会变，
+**合计 445 条锚点**（420 + 25）—— 这个数字**以 `python -B _dev/mutate_batch_v270.py --scan-only`
+的实测输出为准**（`--scan-only` 末行现为「锚点合计 **496** 条，坏 0 条」，2026-10-15 v2.9.0 第 7 轮实测；每加/删一条变异它都会变，
 本行此前写的「18 份 / 203 条」是 v2.7.0 代理 C 落成脚本当天的快照，已过期）。
 v2.7.0 三份新 spec 的条数：`mutations_agent_a_v270.json` **31** · `mutations_agent_b_v270.json` **35** ·
 `mutations_critic_v270.json` **14**（A/B 由验收员复跑 **31/31 · 35/35 全 CAUGHT**）。
 **v2.8.0 第 6 轮新增两份**：`mutations_agent_c_v280.json` **97** 条 + `mutations_agent_a_v280.json` **25** 条
 （后者是代理 A 那套变异，原本只在 `%TEMP%`，由代理 C 用 ast 原样取出收编入库——见下表与 `_dev/agent_c_v280_report.md`）。
+**v2.9.0 第 7 轮新增**：`mutations_agent_b_v280.json` **23** 条（B 上一轮的原料只落在 `%TEMP%\b_mutations_v280.json`，本轮由代理 C 逐字收编——**上一轮那份 spec 根本没入库**，这是补账）
+＋ `mutations_agent_b_v290.json` **23** 条（B1 动作候选 + B4 待机引用清理 + B5 待机下拉 + B6 试播 + B7 勾选回读：B 的 18 条 + 代理 C 独立补的 5 条，实测 **23/23 CAUGHT**）
+＋ `mutations_agent_a_v290.json` **13** 条（A10 静态输入框归零 · A11/D16 统一确认 · A1 候选下拉 · A2 图片做动作 · A5 未保存确认含**反向**变异 · A6 把确认加回来 · A4 回执改回气泡）。
 逐项打印 rc / 用时 / 末行，并把**跑前跑后**的源码指纹一起写进 `_dev/results_batch_v270.json`：
 **跑前跑后指纹不一致 = 这一批不是对着同一棵树测的，必须重跑**——三路并行时这是常态，门禁没红
 不代表证据有效。只要做锚点体检（秒级、不跑 pytest）：`python -B _dev/mutate_batch_v270.py --scan-only`
@@ -194,7 +259,8 @@ pytest 都在影子里跑，真仓只读），或自己在 `%TEMP%` 里复制一
 | `verify_guardrails_can_fail.py` | 护栏 A1-A6 / B7-B8 定向变异（9 条，同上，旧形态） | `python _dev/verify_guardrails_can_fail.py` | `results_guardrails_can_fail.json` |
 | `verify_d7a_v250_agent_c.py` | v2.5.0 D7-A 三条改动的定向变异（6 条，旧形态，**不产出结果 JSON**） | `python _dev/verify_d7a_v250_agent_c.py` | —（报告里贴输出） |
 | `verify_services_ast_v250.py` | **AST 实参对照**（不是变异）：旧 `__init__`（git `2a6563c`）vs 新 `pet_services.py` 的每一处构造实参；`--selftest` 现场验"对调两个实参一定报差异" | `python -B _dev/verify_services_ast_v250.py [--selftest]` | —（stdout 的 `compared=` / `mismatches=`） |
-| `mutate_batch_v270.py` | **整批复跑 = 铁律 5 的可执行形态**（v2.7.0 代理 C）：20 份 spec（270 条锚点，条数以 `--scan-only` 为准）+ 3 份旧形态单脚本驱动（25 条）+ 2 份独立结果，一条命令跑完；记录跑前跑后源码指纹，不一致就明确喊"这批不作数" | `python -B _dev/mutate_batch_v270.py [--scan-only]` | `results_batch_v270.json` |
+| `mutate_batch_v270.py` | **整批复跑 = 铁律 5 的可执行形态**（v2.7.0 代理 C）：26 份 spec（471 条锚点，条数以 `--scan-only` 为准）+ 3 份旧形态单脚本驱动（25 条）+ 2 份独立结果，一条命令跑完；记录跑前跑后源码指纹，不一致就明确喊"这批不作数" | `python -B _dev/mutate_batch_v270.py [--scan-only]` | `results_batch_v270.json` |
+| `check_mutation_nodeids.py` | **nodeid 体检（v2.9.0 第 7 轮 代理 C）**：spec 点名的用例在当前树里**还存不存在**。改用例名（哪怕是加强式改名）会让 `tests`/`expect_fail` 里的 nodeid 指向不存在的用例 → pytest node-not-found → **这条变异永远判不成 CAUGHT**，且只有定版整批跑才暴露。锚点有 `--scan-only`，nodeid 在此之前没有体检——这是清单完整性的另一面。秒级、只读、退出码 0/1 可进流水；**范围 = `mutations[].tests`/`expect_fail`**（历史记录不在内，工具会报出范围外条数）；本轮实测校验范围内 1139 条 / 坏 0 | `python -B _dev/check_mutation_nodeids.py [_dev/mutations_x.json …]`（不带参数＝自动收全） | —（stdout） |
 | `check_mutation_ast.py` | **变异体语法自检（v2.8.0 代理 C）**：逐条在内存里应用 `old → new` 再 `ast.parse` —— 抓"把 `if x:` 的缩进体一起换掉"这类错（pytest 收集期才炸，判定只能落 WRONG TEST，整批白跑）。非 `.py` 目标跳过。秒级，**跑批之前先过一遍** | `python -B _dev/check_mutation_ast.py [_dev/mutations_x.json …]`（不带参数＝自动收全） | —（stdout） |
 | `probe_c_mutation_output_v270.py` | 小账 a~d 的**变异原文证据**：逐条打印"改了什么 / 锚点命中几次 / 失败断言原文 / 还原后是否绿"（`mutate_check.py` 抓到时不打印输出，这份补的就是那段原文） | `python -B _dev/probe_c_mutation_output_v270.py` | —（stdout，贴报告） |
 
@@ -223,9 +289,14 @@ SPEC-BAD / ANCHOR-LOST / INVALID / BASELINE-RED 就**出声**（只提示、不�
 与出货修订不是同一份。现在发布门（`_check_release.py` 的 `mutation_evidence_notes()`）逐个读
 `_dev/*.json` 的指纹，不一致就打印"该证据已过期，需复跑对应 spec"（只提示、不挡发布；
 过期是开发期的正常中间态，但**不许静默**）。
-关键文件清单 = **11 个**：`桌宠.py` / `pet_export.py` / `pet_lines.py` / `pet_alarm.py` /
+关键文件清单 = **14 个**（v2.9.0 第 7 轮实测；v2.5.1 起本文一直写「11 个」，**漏记了 v2.6.0 补的 `pet_plugin_index.py`** —— 实为 12，本轮又补 2）：`桌宠.py` / `pet_export.py` / `pet_lines.py` / `pet_alarm.py` /
 `pet_behaviors.py` / `_check_release.py` / `pet_balance.py`（v2.4.4 补）/ `pet_plugin.py` /
-`pet_plugin_host.py` / `pet_dialogs.py` / `pet_menu.py`（v2.5.1 找茬审查 P3-1 补的四个模块）。
+`pet_plugin_host.py` / `pet_dialogs.py` / `pet_menu.py`（v2.5.1 找茬审查 P3-1 补的四个模块）/
+`pet_plugin_index.py`（v2.6.0 补，本文此前漏记）/ `pet_ai.py` / `pet_config.py`（v2.9.0 第 7 轮补，见下）。
+**v2.9.0 第 7 轮为什么补 `pet_ai.py` / `pet_config.py`**：实测**全库 40 条**变异的锚点落在这两个文件上（`pet_ai.py` **31** / `pet_config.py` **9**；31 = agent_b_v270 的 9 + agent_b_v280 的 7 + **agent_b_v290 的 2（B7-M1/M2）** + critic_v270 的 3 + agent_c_v280 的 10）
+（`pet_ai.py` **31** 条 / `pet_config.py` **9** 条；含本轮新增的 `B7-M1/M2`），而两处清单里都没有它们 → 改这两个文件**一条「证据过期」提示都不会有**
+（同一个盲区第 4 次出现）。复现探针 `probe_fingerprint_gap_v290.py`：补前 **20 个锚点文件 / 84 条变异**零提示，
+补后 **18 个 / 46 条**（残留的都是 `pet_io.py` / `pet_widgets.py` / `requirements.txt` 这类非「关键文件」）。
 `pet_balance.py` 那次是典型盲区：A-1 改的正是它、3 条锚点随之失效，而清单里没有它 →
 **发布门一条"证据过期"都不会提示**。两份清单（`_check_release.MUTATION_FINGERPRINT_FILES` 与
 `_dev/_mutate_lib.repo_fingerprint`）由 `tests/test_release_check.py` 的清单一致性用例钉住，
@@ -271,6 +342,8 @@ spec 清单（**状态列的 CAUGHT 数 = 该文件 `results` 段当前的实测
 | `mutations_plugin_c_v270.json` | **v2.7.0 代理 C 新增（插件线小账 a~d）**：M-C-a1 索引条目的 data_kind 与包自报不一致必须拒 · M-C-b1 当前版目录丢失而 .prev 在时保住回滚点 · M-C-b2 没有 .prev 就不留悬空回滚点 · M-C-b3 登记里没这条却留 .prev 则当孤儿清掉 · M-C-b4 登记写失败要回挪上一版目录 · M-C-c1 同内容折叠的回滚文案 · M-C-d1 razor 核对证据原文可查。钉 `tests/test_plugin_market_v270.py` | **7/7 CAUGHT**（2026-10-15 实测；原文证据见 `probe_c_mutation_output_v270.py` 与 `agent_c_v270_report.md`） |
 | `mutations_agent_a_v280.json` | **v2.8.0 第 6 轮 代理 A 新增（25 条，由代理 C 收编入库）**：A1 索引来源区（地址校验/空地址拒/回退路径/重画列表/force 口径/后端结果/接线注入）· A3 `_toast` 行为层（早退返回 False / 兜底返回 / 限流日志）· A2/P2-5/P2-7/D9/D11/D14/N14/N15/P3-5/P3-6（静态输入框、合成框取消与接线、清除片段确认、各处回执、文案 tooltip）。id 沿用代理 A 的 `MA01~MA25`（便于与它的报告对账），`old`/`new` 由 `ast` 从它的 `%TEMP%` 驱动里原样取出 | **25/25 CAUGHT**（2026-10-15 实测：`python -B _dev/mutate_check.py _dev/mutations_agent_a_v280.json`；基线 23 条用例全过） |
 | `mutations_agent_c_v280.json` | **v2.8.0 第 6 轮 代理 C 新增（97 条，三个来源合一）**：① **M-C-H01~H11** v2.6.0 远端硬化回退护栏（只收 https / 远端不许指本地 / Content-Length 前置 / 本地边读边判 / 注入容量兜底 / 解包前走校验器 —— 这 11 条此前**一条变异都没有**，是真空档）钉 `tests/test_plugin_market_v252.py`；② **M-C-B01~B48** B 的插件 Phase 3 / 配置键 / 先写盘再提交（`tests/test_plugin_phase3_v280.py` + `tests/test_ai_write_first_v280.py` + `tests/test_balance_feedback_v280.py`）；③ **M-C-A01~A40** A 的交互面（索引来源区 / 刷新 / `_toast` 行为层 / 合成框取消 / 静态输入框 / 文案对照表 / 各处回执与确认，`tests/test_dialogs_feedback_v280.py`） | **97/97 CAUGHT**（2026-10-15 实测：`python -B _dev/mutate_check.py _dev/mutations_agent_c_v280.json`；基线 70 条用例全过） |
+| `mutations_agent_b_v280.json` | **v2.8.0 第 6 轮 代理 B（23 条；v2.9.0 第 7 轮由代理 C 从 `%TEMP%` 收编入库——上一轮这份 spec **根本没进树**，是补账）**：插件索引（远端基址校验 / 没注入 fetch 就不联网 / 缓存命中与 force 语义 / 索引落地 / 体积上限前置 / `source_url` 不串站点 / `.json` 直通 / 组合错误两条原因都说 / 主机名判据 / 解析不了不抛）· 配置归一（`plugin_index_url` 归一 / `DEFAULT_CONFIG` 少一行）· **先写盘再提交**（`set_api_key` / `set_ai_enabled` / `set_chat_rounds` / `talk()` 自动开开关 / 程序化同步勾选不 emit）· 账本反馈（构建失败可见 / 金额 ≤0 明说）。id 沿用 B 的 `M-B01~M-B23`，逐字收编（只加 title/note） | 见该文件 `results` 段（2026-10-15 当前树复跑） |
+| `mutations_agent_b_v290.json` | **v2.9.0 第 7 轮 代理 B1（11 条 = B 交的 6 条 + 代理 C 独立补的 5 条）**：`pet_behaviors.action_choices` 的候选来源（空列表 / 漏 `custom_actions()` / 只摘 `ANIM_ACTIONS` 这一支 / `none` 未排除 / `getattr` 兜底 / `except` 收窄）+ 稳定排序（B1-M3 与其**确定性**版本 M-B290-07）+ `validate_steps` 不许变白名单（B1-M4 与同失败点的 M-B290-08） | **11/11 CAUGHT**（2026-10-15 实测：`python -B _dev/mutate_check.py _dev/mutations_agent_b_v290.json`；基线 7 条用例全过。⚠ M-B290-03 **首跑 WRONG TEST**——是代理 C 的 `expect_fail` 写宽了 2 条，已按实测改正，见该条 `why`） |
 | `mutations_plugin_market_v260.json` | **v2.6.0 第 2 阶段新增**：插件市场（M-A01..A04 索引层 sha256 / 声明字节数 / 相对 url 解析 / host_min 可装性）· 按内容指纹合并与回滚（M-A05 指纹落账 · M-A06 去重失效 · M-A07 landed 累积 · M-A08 撤销本版新增 · M-A09 保留上一版 payload · M-A10 旧登记补账 · M-A16 同版本重复安装不顶回滚点 · **M-A17 `_fresh` 的 still_there 被摘掉：登记有账就当库里真有，库里缺的内容补不回来**）· 市场界面（M-A11..A15） | **17/17 CAUGHT**（2026-10-12 第 4 轮复跑；M-A17 是本轮**新增**的一条，与 M-A06 锚同一行、方向相反：M-A06 去重失效＝旧内容重复落，M-A17 去重过度＝缺的内容不补） |
 
 **2026-10-15 v2.8.0 第 6 轮（代理 C）中间态记录 —— 不作发布依据。**
@@ -282,6 +355,24 @@ spec 清单（**状态列的 CAUGHT 数 = 该文件 `results` 段当前的实测
 重锚后 `--scan-only` = **417 条 / 坏 0**，`check_mutation_ast.py` = **392 条 / 0 不过**。
 ⚠ A/B 当时仍在改树：**这一批的用途只有"当前源码上每条变异都能被抓住"＋找出断裂锚点**；
 定版必须按铁律 5 在安静窗口再整批跑一次。
+
+**2026-10-15 v2.9.0 第 7 轮（代理 C）中间态记录 —— 不作发布依据。**
+本轮 C 的三件事（详见 `_dev/agent_c_v290_report.md`）：
+① **补录上一轮漏掉的 B spec**：`mutations_agent_b_v280.json` **23 条**（`M-B01~M-B23`）只落在 `%TEMP%\b_mutations_v280.json`，
+   本轮逐字收编入库；旁证 = 同目录 `b_mut_out.txt`（B 当时的原始运行输出，23 条 rc=1 且 FAILED 的正是 spec 点名的用例）。
+② **指纹清单 12 → 14**（补 `pet_ai.py` / `pet_config.py`）：全库 **40 条**变异的锚点在这两个文件上却零提示，是同一个盲区第 4 次
+   （v2.4.4 `pet_balance.py`、v2.5.1 四模块、v2.6.0 `pet_plugin_index.py` 之后）。探针 `probe_fingerprint_gap_v290.py`：
+   零覆盖锚点 **20 个文件 / 84 条 → 18 个 / 46 条**。⚠ 越界留痕：指纹一致性用例
+   （`tests/test_release_check.py::test_fingerprint_file_list_matches_the_mutation_lib`）把两处清单钉成必须逐项一致，
+   所以本轮**临时**在 `_check_release.py` 加了两个文件名字符串（**未改一行逻辑**，`pytest tests/test_release_check.py` = 37 passed）。
+③ **本轮变异随做随落**：`mutations_agent_b_v290.json`（B1，11 条，11/11 CAUGHT）已入库；A 侧与 B 的 B4~B8 等它们落地后补。
+
+`--scan-only` 现为 **锚点合计 496 条 / 坏 0**（471 条 spec 形态 + 25 条旧形态驱动）；nodeid 体检 **1141 个 / 坏 0**（体检当场抓出并修掉 1 条转述错的 nodeid）。
+**A 批 28 条判定（收尾实测）**：**CAUGHT 23 / WRONG TEST 4 / NOT CAUGHT 1**——其中 2 条是**测试不够健壮挂死**（⚠ 本轮新增「**测试健壮性第一条**」规矩：被测路径可能弹真框的用例必须 stub `_confirm`/`_info`/`_warn`）、1 条是代理 C 的 `expect_fail` 写宽（已按实测改正）、1 条是**真覆盖缺口**（`_human_import_error` 被测、它的使用点没被测）、1 条是**判据口径缺口**（ERROR 行不算检出）。
+**同轮还修掉 9 条被有意改写改死的旧锚点**（`agent_a_v280` MA18/MA19/MA22/MA23 · `agent_c_v280` M-C-A30/A31/A36/A37 · `critic_v270` M-R5-P2-4，其中 MA18/M-C-A30 是**语义反转**）＋ 2 条指向已改名用例的 nodeid（MA11 / M-C-A22）＋ 1 条历史笔误（`agent_a_v270` M-A-01 的 expect_fail 文件名）。
+⚠ 三轮并行仍在改树：**本批只证明"当前源码上每条变异都能被抓住"**；定版按铁律 5 在安静窗口整批再跑一次。
+**已知中间态（别误读成"证据坏了"）**：`_dev/*.json` 里 27 份有指纹段的证据当前全部报「过期 `pet_behaviors.py`」——
+那是本轮 B 正在改 `pet_behaviors.py` + 本轮给清单补了两个新键造成的，定版整批复跑即消；本轮**不处理**。
 
 **2026-10-12 v2.6.0 第 4 轮（出货修订 `bb73d5b`）整批复跑记录**：整批由人发起，报出 **5 条 SPEC-BAD**
 （`compat_v243` M-C12 · `dialog_fit_v250` M-D09 · `plugin_v251` M-H2/M-H3 · `round3_a` M-A13），
@@ -380,6 +471,7 @@ diff 未知键带回 / pet_fx 重新写死帧集 / README 口径说明被删）�
 | `probe_test_order.py` | **反序探针**（pytest 插件）：把 `tests/test_export_slice_v242.py` 挪到收集顺序最前/最后，用来判定"这些红是不是被别的模块污染"——顺序无关的失败才是真失败 |
 | `probe_plugin_gap_v260.py` | **校验器/安装器口径差复现探针**（v2.6.0 代理C）：造 4 个曾被校验器放行的合成包（`payload/a:b.png` / `payload/con.png` / `files: []` 两种形状）+ 1 个控制组，逐条打印"校验器怎么说 / 安装器怎么说 / plugins/ 下有没有残余"。收口前后各跑一次就是证据（收口前：校验器全放行、安装器才拒；收口后：两侧同一句原因、零残余） |
 | `probe_fingerprint_gap_v260.py` | **发布门"缺键"影响面探针**（v2.6.0 代理C，只读）：逐份打印 `_dev/*.json` 记了几个键 / 缺哪些键 / 哪些指纹过期，再打印 `mutation_evidence_notes()` 当前返回的每一条提示 |
+| `probe_fingerprint_gap_v290.py` | **锚点文件 ↔ 指纹清单的覆盖面探针**（v2.9.0 第 7 轮代理C，只读）：把两种"判不了过期"分开打——① 逐份 spec 收 `file` 字段，列出**不在指纹清单里**的锚点文件（改了它＝零提示，真盲区）及其变异 ID；② 逐份证据 JSON 的缺键 / 过期；③ 当场对一遍两处清单是否逐项一致。补 `pet_ai.py`/`pet_config.py` 前后各跑一次就是 C-2 的证据（84 条 → 46 条） |
 
 ---
 

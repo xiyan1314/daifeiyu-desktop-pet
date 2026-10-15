@@ -426,7 +426,11 @@ def test_四个并行改造文件不再有豁免区(scan):
     # 数字**刻意钉死**：收口当时这 4 个文件共 85 条（豁免期实测 82 条 + 本轮 P2 修复新增 3 条：
     # pet_plugin_host._fp_named_file / pet_plugin_index._file_url_to_path / _accepts_limit）。
     # 代码一动它就会红，逼着改的人回来看一眼"新加的那条有没有理由"——这正是要的效果。
-    assert per == {"pet_dialogs.py": 50, "pet_plugin.py": 5,
+    # v2.9.0 第 7 轮：pet_dialogs.py 50 → 49 —— `RoleEditDialog._add_frame_action` 里那条
+    # "导入失败回收残留文件"的静默 except 搬进了 `_StagedActionSink.rollback`（A2 抽公共实现），
+    # 同时改成 `pet_log.log_throttled` 留痕（**不新造静默 except**）；其余 3 条新落点也一并留痕，
+    # 所以净减 1。razor 本身没放宽：无主的静默 except 仍由 test_every_silent_except_has_an_owner 挡。
+    assert per == {"pet_dialogs.py": 49, "pet_plugin.py": 5,
                    "pet_plugin_host.py": 19, "pet_plugin_index.py": 11}, per
 
 
