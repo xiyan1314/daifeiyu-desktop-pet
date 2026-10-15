@@ -277,6 +277,11 @@ def normalize_cfg(cfg, defaults, persona_ids):
 def write_config(path, cfg, defaults, schema_version, log, encrypt_fn):
     """save_config 核心：diff 存储（api_key 特殊处理）+ 原子替换。
 
+    **返回值契约（v2.7.0 第 5 轮 · 代理 B）**：成功返回 None；失败返回**错误串**
+    （pet_io 的错误原文，或本函数自身异常的描述）——调用方据此给用户提示。
+    在此之前恒返回 None，写失败只写日志，调用方无从判断（见函数末尾注释）。
+    
+
     diff 存储 = 只落盘**与 defaults 不同**的键（外加 schema_version 与 api_key 密文）。
     于是**不在 defaults 里的顶层未知键会被丢弃——这是有意为之，不是缺陷**
     （v2.5.0 · D7-A 把口径写清楚，免得每轮审查重提一遍）：
@@ -325,5 +330,10 @@ def write_config(path, cfg, defaults, schema_version, log, encrypt_fn):
         err = pet_io.atomic_write_json(path, out, lock=_CFG_WRITE_LOCK, log=None)
         if err is not None:
             log("save_config failed: %s" % err)
+        return err      # v2.7.0 第 5 轮（代理 B · 闭环 P1-1）：**把失败交回调用方**
+        # 为什么必须回：此前无论成败都返回 None，于是"磁盘满/只读/被占用"这类**真实写失败**
+        # 只有 error.log 里一行，调用方（桌宠.save_config → AIService.apply_settings →
+        # AI 设置对话框）全链路都判不出来 → 窗口照常关闭 = "保存成功"假象。
     except Exception as e:
         log("save_config failed: %r" % (e,))
+        return "配置写盘异常：%r" % (e,)

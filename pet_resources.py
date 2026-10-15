@@ -1572,6 +1572,7 @@ class VoiceAssetLibrary:
         data = _read_json(self._index)
         raw = data.get("assets") if isinstance(data.get("assets"), list) else []
         clean = []
+        dropped = {}   # v2.7.0（B3）：{扩展名: [示例条目...]}——丢弃要留痕，见下面限流日志
         for a in raw:
             if not isinstance(a, dict):
                 continue
@@ -1582,7 +1583,12 @@ class VoiceAssetLibrary:
             if ext and not ext.startswith("."):
                 ext = "." + ext
             if ext not in self._EXTS:
-                continue  # 非法扩展名残留项丢弃
+                # v2.7.0（B3）：此前这里只有一句 continue —— 索引里躺着 .m4a 等白名单外条目时，
+                # 用户看到的是"素材凭空少了"，error.log 里却一个字都没有（库状态不可解释）。
+                # 丢弃本身是**有意**的（参考音只支持 wav/mp3），但不能静默：记一条限流日志。
+                dropped.setdefault(ext or "(无扩展名)", []).append(
+                    "%s（id %s）" % (str(a.get("name") or "") or "未命名声音", sid))
+                continue
             clean.append({
                 "id": sid,
                 "name": str(a.get("name") or "") or "未命名声音",
@@ -1592,6 +1598,19 @@ class VoiceAssetLibrary:
                 "duration": a.get("duration") if isinstance(a.get("duration"), (int, float)) else None,
             })
         self._assets = clean
+        if dropped:
+            # 限流口径照 pet_log.log_throttled（= pet_log.guard_slot 的同一份实现）：一次索引里
+            # 可能躺着几十条同类残留，逐条 log_error 会把 error.log 刷满同一句话、反而挤掉真正的
+            # 线索，所以按扩展名合并成一条（数量在前，用户一看就知道少了多少）。限流键带数据
+            # 目录：不同库各记各的，同一库 60s 内只落一条。**只记日志，不动任何文件**。
+            for _ext, _items in sorted(dropped.items()):
+                pet_log.log_throttled(
+                    "voice_asset.ext_dropped:%s:%s" % (
+                        os.path.basename(os.path.dirname(self._index)) or "data", _ext),
+                    "声音素材索引丢弃 %d 条：扩展名 %s 不在白名单（仅支持 .wav / .mp3）——"
+                    "文件仍留在 voice_ref/ 目录，库里不再显示。示例：%s"
+                    % (len(_items), _ext, "、".join(_items[:3])),
+                    data_dir=os.path.dirname(self._index))
 
     def _save(self):
         return _write_json(self._index, {"assets": self._assets})

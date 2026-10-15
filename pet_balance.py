@@ -402,8 +402,19 @@ class BalanceService:
             self._log("add_manual_record failed: %r" % (e,))
 
     def open_ledger(self):
+        """账本对话框入口（菜单「📒 账本…」）。
+
+        v2.7.0（B2）：打不开时不再只写日志——用户点了菜单毫无反应（_dev/audit_feedback_v270.md
+        S25 的五处入口之一）。口径同 pet_dialogs._dialog_failed（日志 + 一句中文），但这里
+        **不 import 那个私有助手**（领地互斥），按同一口径用宠物气泡 + 日志：气泡 5 秒自动
+        隐藏、不抢焦点，比模态框更适合"入口没打开"这种一次性告知。
+        """
         try:
             dlg = pet_dialogs.LedgerDialog(self.pet)
             pet_dialogs.modal(dlg)
         except Exception as e:
             self._log("ledger dialog failed: %r" % (e,))
+            try:
+                self.pet.show_bubble("「账本」打不开：%s\n（详情见数据目录的 error.log）" % (e,))
+            except Exception as e2:
+                self._log("ledger dialog notify failed: %r" % (e2,))

@@ -8,7 +8,7 @@
       "rc": 0,
       "verdict": "OK",
       "failed": [],
-      "tail": "3 passed in 3.69s",
+      "tail": "3 passed in 3.80s",
       "metrics": [],
       "asserts": []
     },
@@ -19,7 +19,7 @@
       "rc": 0,
       "verdict": "OK",
       "failed": [],
-      "tail": "3 passed in 3.69s",
+      "tail": "3 passed in 3.64s",
       "metrics": [
         "METRICS m4 per_step=[2, 1, 1, 1, 1, 1, 1, 1, 1, 0] cap=4 sync_units=1 decodes=10 steps=10 spin=n=11 min=5.0 med=5.0 max=5.0",
         "METRICS m2 per_step=[3, 1, 1, 1, 1, 1, 0] cap=4 steps=7 spin=n=24 min=5.0 med=5.0 max=5.0",
@@ -34,10 +34,10 @@
       "rc": 0,
       "verdict": "OK",
       "failed": [],
-      "tail": "3 passed in 2.30s",
+      "tail": "3 passed in 2.48s",
       "metrics": [
-        "METRICS m4 per_step=[1, 2, 2, 2, 2, 1] cap=4 sync_units=1 decodes=10 steps=6 spin=n=11 min=5.0 med=5.0 max=5.6",
-        "METRICS m2 per_step=[3, 2, 2, 1] cap=4 steps=4 spin=n=24 min=5.0 med=5.0 max=5.6",
+        "METRICS m4 per_step=[2, 1, 1, 1, 1, 1, 1, 1, 1, 0] cap=4 sync_units=1 decodes=10 steps=10 spin=n=11 min=5.0 med=5.0 max=5.0",
+        "METRICS m2 per_step=[3, 1, 1, 1, 1, 1, 0] cap=4 steps=7 spin=n=24 min=5.0 med=5.0 max=5.0",
         "METRICS export steps=8 deltas=[2, 2, 2, 2, 2, 2, 2, 2] cap=4 total=16 spin=n=16 min=8.0 med=8.0 max=8.0"
       ],
       "asserts": []
@@ -49,10 +49,10 @@
       "rc": 0,
       "verdict": "OK",
       "failed": [],
-      "tail": "3 passed in 5.98s",
+      "tail": "3 passed in 5.53s",
       "metrics": [
         "METRICS m4 per_step=[3, 2, 2, 2, 1] cap=4 sync_units=2 decodes=10 steps=5 spin=n=12 min=50.0 med=50.0 max=50.0",
-        "METRICS m2 per_step=[3, 2, 2, 1] cap=4 steps=4 spin=n=26 min=50.0 med=50.0 max=50.0",
+        "METRICS m2 per_step=[3, 2, 2, 1] cap=4 steps=4 spin=n=26 min=50.0 med=50.0 max=50.1",
         "METRICS export steps=8 deltas=[2, 2, 2, 2, 2, 2, 2, 2] cap=4 total=16 spin=n=16 min=80.0 med=80.0 max=80.0"
       ],
       "asserts": []
@@ -64,17 +64,15 @@
       "rc": 1,
       "verdict": "OK",
       "failed": [
-        "test_async_window_does_not_play_the_previous_roles_frames",
         "test_export_role_drives_the_writer_in_slices"
       ],
-      "tail": "2 failed, 1 passed in 3.39s",
+      "tail": "1 failed, 2 passed in 3.30s",
       "metrics": [
-        "METRICS m4 per_step=[3, 2, 2, 2, 1] cap=4 sync_units=1 decodes=10 steps=5 spin=[]"
+        "METRICS m4 per_step=[3, 2, 1, 2, 2, 0] cap=4 sync_units=1 decodes=10 steps=6 spin=[]",
+        "METRICS m2 per_step=[4, 2, 1, 1] cap=4 steps=4 spin=[]"
       ],
       "asserts": [
-        "E       AssertionError: 收尾分片逐片解了 [7, 1] 张（上界 4 = ceil(预算 12.0ms ÷ 单位成本 5.0ms) + 1）",
-        "tests\\test_anim_slice_v241.py:368: AssertionError",
-        "E       AssertionError: 有一片写了 6 条（上界 4 = ceil(预算 12.0ms ÷ 单位成本 8.0ms) + 2）：要么 step 的预算检查没生效、要么注入的写入 spy 没生效（逐片 [4, 6, 6]）",
+        "E       AssertionError: 有一片写了 6 条（上界 4 = ceil(预算 12.0ms ÷ 单位成本 8.0ms) + 2）：要么 step 的预算检查没生效、要么注入的写入 spy 没生效（逐片 [5, 5, 6]）",
         "tests\\test_export_slice_v242.py:351: AssertionError"
       ]
     },
@@ -93,10 +91,10 @@
         "test_async_window_does_not_play_the_previous_roles_frames",
         "test_export_role_drives_the_writer_in_slices"
       ],
-      "tail": "3 failed in 2.22s",
+      "tail": "3 failed in 2.12s",
       "metrics": [],
       "asserts": [
-        "E       AssertionError: (c) 有一片解了 7 张（上界 4 = ceil(预算 12.0ms ÷ 单位成本 5.0ms) + 1）：要么分片循环的预算检查没生效、要么注入的解码 spy 没生效（逐片 [7, 3, 0]）",
+        "E       AssertionError: (c) 有一片解了 10 张（上界 4 = ceil(预算 12.0ms ÷ 单位成本 5.0ms) + 1）：要么分片循环的预算检查没生效、要么注入的解码 spy 没生效（逐片 [10]）",
         "tests\\test_anim_slice_v241.py:236: AssertionError",
         "E       AssertionError: 前提不成立：没进异步分支（每单位 5.0ms × 8 张 = 40.0ms，预算 12.0ms）",
         "tests\\test_anim_slice_v241.py:355: AssertionError",
@@ -117,14 +115,14 @@
         "test_cold_big_frame_set_is_sliced_and_completes",
         "test_async_window_does_not_play_the_previous_roles_frames"
       ],
-      "tail": "2 failed, 1 passed in 4.13s",
+      "tail": "2 failed, 1 passed in 3.96s",
       "metrics": [
-        "METRICS export steps=8 deltas=[2, 2, 2, 2, 2, 2, 2, 2] cap=4 total=16 spin=n=16 min=8.0 med=8.0 max=8.0"
+        "METRICS export steps=8 deltas=[2, 2, 2, 2, 2, 2, 2, 2] cap=4 total=16 spin=n=16 min=8.0 med=8.0 max=8.3"
       ],
       "asserts": [
         "E       AssertionError: (c) 有一片解了 10 张（上界 4 = ceil(预算 12.0ms ÷ 单位成本 5.0ms) + 1）：要么分片循环的预算检查没生效、要么注入的解码 spy 没生效（逐片 [10]）",
         "tests\\test_anim_slice_v241.py:238: AssertionError",
-        "E       AssertionError: 收尾分片逐片解了 [8] 张（上界 4 = ceil(预算 12.0ms ÷ 单位成本 5.0ms) + 1）",
+        "E       AssertionError: 收尾分片逐片解了 [8] 张（上界 4 = ceil(预算 12.0ms ÷ 单位成本 5.0ms) + 1）：要么分片循环的预算检查没生效、要么注入的解码 spy 没生效",
         "tests\\test_anim_slice_v241.py:370: AssertionError"
       ]
     },
@@ -139,7 +137,7 @@
       "failed": [
         "test_async_window_does_not_play_the_previous_roles_frames"
       ],
-      "tail": "1 failed, 2 passed in 4.07s",
+      "tail": "1 failed, 2 passed in 4.48s",
       "metrics": [
         "METRICS m4 per_step=[2, 1, 1, 1, 1, 1, 1, 1, 1, 0] cap=4 sync_units=1 decodes=10 steps=10 spin=n=11 min=5.0 med=5.0 max=5.0",
         "METRICS export steps=8 deltas=[2, 2, 2, 2, 2, 2, 2, 2] cap=4 total=16 spin=n=16 min=8.0 med=8.0 max=8.0"
@@ -162,12 +160,12 @@
         "test_cold_big_frame_set_is_sliced_and_completes",
         "test_async_window_does_not_play_the_previous_roles_frames"
       ],
-      "tail": "2 failed, 1 passed in 3.44s",
+      "tail": "2 failed, 1 passed in 3.41s",
       "metrics": [
-        "METRICS export steps=8 deltas=[2, 2, 2, 2, 2, 2, 2, 2] cap=4 total=16 spin=n=16 min=8.0 med=8.0 max=8.0"
+        "METRICS export steps=8 deltas=[2, 2, 2, 2, 2, 2, 2, 2] cap=4 total=16 spin=n=16 min=8.0 med=8.0 max=8.2"
       ],
       "asserts": [
-        "E       AssertionError: (a) 首片就把 10 帧全解完了：每单位注入 5.0ms（整批合计 50.0ms、预算 12.0ms）——分片路径没被覆盖到（首片同步段 160.9ms、取了 10 次帧）",
+        "E       AssertionError: (a) 首片就把 10 帧全解完了：每单位注入 5.0ms（整批合计 50.0ms、预算 12.0ms）——分片路径没被覆盖到（首片同步段 174.2ms、取了 10 次帧）",
         "tests\\test_anim_slice_v241.py:224: AssertionError",
         "E       AssertionError: 前提不成立：没进异步分支（每单位 5.0ms × 8 张 = 40.0ms，预算 12.0ms）",
         "tests\\test_anim_slice_v241.py:357: AssertionError"
@@ -184,7 +182,7 @@
       "failed": [
         "test_export_role_drives_the_writer_in_slices"
       ],
-      "tail": "1 failed, 2 passed in 3.35s",
+      "tail": "1 failed, 2 passed in 3.46s",
       "metrics": [
         "METRICS m4 per_step=[2, 1, 1, 1, 1, 1, 1, 1, 1, 0] cap=4 sync_units=1 decodes=10 steps=10 spin=n=11 min=5.0 med=5.0 max=5.0",
         "METRICS m2 per_step=[3, 1, 1, 1, 1, 1, 0] cap=4 steps=7 spin=n=24 min=5.0 med=5.0 max=5.0"
@@ -205,7 +203,7 @@
       "failed": [
         "test_export_role_drives_the_writer_in_slices"
       ],
-      "tail": "1 failed, 2 passed in 3.38s",
+      "tail": "1 failed, 2 passed in 3.78s",
       "metrics": [
         "METRICS m4 per_step=[2, 1, 1, 1, 1, 1, 1, 1, 1, 0] cap=4 sync_units=1 decodes=10 steps=10 spin=n=11 min=5.0 med=5.0 max=5.0",
         "METRICS m2 per_step=[3, 1, 1, 1, 1, 1, 0] cap=4 steps=7 spin=n=24 min=5.0 med=5.0 max=5.0"
@@ -218,16 +216,17 @@
   ],
   "note": "变异/插桩只在 %TEMP% 影子副本里做，真实仓库只读（只写 _dev/.mutation.lock）",
   "repo_fingerprint": {
-    "桌宠.py": "b13d33d2c98d",
+    "桌宠.py": "7c64914aa083",
     "pet_export.py": "c01e1593efd2",
     "pet_lines.py": "5332f60b5f26",
     "pet_alarm.py": "1149e94deee3",
     "pet_behaviors.py": "8f57255144f6",
-    "_check_release.py": "b0447bfc5c44",
-    "pet_balance.py": "2828b2ebc0c9",
-    "pet_plugin.py": "3f1003898a10",
-    "pet_plugin_host.py": "6501e8858242",
-    "pet_dialogs.py": "e5a3d6a1949a",
-    "pet_menu.py": "920daac1b835"
+    "_check_release.py": "e0abfe805849",
+    "pet_balance.py": "c374984ca058",
+    "pet_plugin.py": "2f7853298fc3",
+    "pet_plugin_host.py": "82fb7b1384c8",
+    "pet_dialogs.py": "0084f1a6bad7",
+    "pet_menu.py": "920daac1b835",
+    "pet_plugin_index.py": "7e9b4537b98e"
   }
 }

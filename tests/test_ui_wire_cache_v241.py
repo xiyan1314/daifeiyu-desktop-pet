@@ -216,6 +216,15 @@ def test_in_place_material_swap_is_re_decoded_and_replayed(pet, monkeypatch):
     win._wire_key = None
     win._wire_anim_sets()
     win._play_idle()
+    # v2.7.0 第 5 轮（代理 B）：**必须把在途分片驱动完再读帧集**。
+    # _wire_anim_sets 的首片一旦超预算（_FRAME_SLICE_MS = 12ms：机器有负载 / 刚写过的
+    # PNG 冷解码慢一点就会超），它就走 _anim_start_async —— 那条路**先把 idle 槽置空**
+    # （桌宠.py:2921：宁可静态也不继续播旧帧），真帧集要等 _anim_chunk_step 分片装完。
+    # 用例没有事件循环，当场读到的就是空集 → 全量/并发负载下必红（本地注入 20ms 冷解码
+    # 可 100% 复现，见回报）。drain_anim_slices 是**同步驱动**（不 sleep、不重试），
+    # 与真实事件循环跑完的结果逐位相同，断言一个字都没放宽。
+    from helpers_roles import drain_anim_slices
+    drain_anim_slices(win)
     old = list(win.anim._sets.get("idle") or [])
     assert old, "idle 帧集是空的，用例前提不成立"
     path = win.role_lib.form_animations("inv1")[0]["idle"][0]
@@ -235,6 +244,7 @@ def test_in_place_material_swap_is_re_decoded_and_replayed(pet, monkeypatch):
 
     monkeypatch.setattr(main.PetWindow, "_frame_pix", spy)
     win._play_idle()
+    drain_anim_slices(win)   # 同上：首片超预算时分片接力，读帧集前先驱动完
     new = list(win.anim._sets.get("idle") or [])
     assert fetches, "同路径换素材后一帧都没重取：指纹没把 mtime/大小算进去"
     assert new and new[0] is not old[0], "重新注册拿到的还是旧 QPixmap 对象"

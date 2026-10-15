@@ -1,0 +1,838 @@
+{
+  "mutations": [
+    {
+      "id": "B1-PHYS-NOCHANGE",
+      "why": "物理「值未变」以前是静默 return；修复=返回 (True,\"物理参数没有改动\")",
+      "file": "桌宠.py",
+      "old": "                return True, \"物理参数没有改动\"  # v2.7.0（B1）：不再静默 return",
+      "new": "                return  # MUT：退回静默",
+      "tests": [
+        "tests/test_feedback_host_v270.py::test_apply_physics_no_change_is_not_silent"
+      ],
+      "expect_fail": [
+        "tests/test_feedback_host_v270.py::test_apply_physics_no_change_is_not_silent"
+      ]
+    },
+    {
+      "id": "B1-PHYS-NONDICT",
+      "why": "物理非 dict 入参必须回 (False,中文)，不许静默 return",
+      "file": "桌宠.py",
+      "old": "            return False, \"物理参数格式不对，没有保存\"",
+      "new": "            return  # MUT：退回静默",
+      "tests": [
+        "tests/test_feedback_host_v270.py::test_apply_callbacks_reject_non_dict_with_false"
+      ],
+      "expect_fail": [
+        "tests/test_feedback_host_v270.py::test_apply_callbacks_reject_non_dict_with_false"
+      ]
+    },
+    {
+      "id": "B1-PHYS-ERR",
+      "why": "物理落盘抛异常必须回 (False,原因)+日志",
+      "file": "桌宠.py",
+      "old": "        except Exception as e:\n            _log_error(\"apply_physics failed: %r\" % (e,))",
+      "new": "        except ZeroDivisionError as e:  # MUT：异常不再兜底\n            _log_error(\"apply_physics failed: %r\" % (e,))",
+      "tests": [
+        "tests/test_feedback_host_v270.py::test_apply_physics_failure_returns_false_and_logs"
+      ],
+      "expect_fail": [
+        "tests/test_feedback_host_v270.py::test_apply_physics_failure_returns_false_and_logs"
+      ]
+    },
+    {
+      "id": "B1-BUBBLE-RET",
+      "why": "气泡样式成功路径必须有返回值 (True,msg)",
+      "file": "桌宠.py",
+      "old": "        return True, \"气泡样式已更新~\"",
+      "new": "        return  # MUT",
+      "tests": [
+        "tests/test_feedback_host_v270.py::test_apply_bubble_style_roundtrip_and_failure"
+      ],
+      "expect_fail": [
+        "tests/test_feedback_host_v270.py::test_apply_bubble_style_roundtrip_and_failure"
+      ]
+    },
+    {
+      "id": "B1-BUBBLE-NONDICT",
+      "why": "气泡样式非 dict 入参必须回 (False,中文)",
+      "file": "桌宠.py",
+      "old": "            return False, \"气泡样式格式不对，没有保存\"",
+      "new": "            return  # MUT",
+      "tests": [
+        "tests/test_feedback_host_v270.py::test_apply_callbacks_reject_non_dict_with_false"
+      ],
+      "expect_fail": [
+        "tests/test_feedback_host_v270.py::test_apply_callbacks_reject_non_dict_with_false"
+      ]
+    },
+    {
+      "id": "B1-BUBBLE-ERR",
+      "why": "气泡样式落盘异常必须回 (False,原因)+日志",
+      "file": "桌宠.py",
+      "old": "        except Exception as e:\n            _log_error(\"apply_bubble_style failed: %r\" % (e,))",
+      "new": "        except ZeroDivisionError as e:  # MUT\n            _log_error(\"apply_bubble_style failed: %r\" % (e,))",
+      "tests": [
+        "tests/test_feedback_host_v270.py::test_apply_bubble_style_roundtrip_and_failure"
+      ],
+      "expect_fail": [
+        "tests/test_feedback_host_v270.py::test_apply_bubble_style_roundtrip_and_failure"
+      ]
+    },
+    {
+      "id": "B1-AI-RET",
+      "why": "主窗 AI 设置成功路径必须有返回值（透传服务层 msg）",
+      "file": "桌宠.py",
+      "old": "        return True, msg or \"AI 设置已更新，下次聊天就按新口味来~\"",
+      "new": "        return  # MUT",
+      "tests": [
+        "tests/test_feedback_host_v270.py::test_apply_ai_settings_roundtrip_and_failure",
+        "tests/test_feedback_host_v270.py::test_dialog_channel_passes_tuple_through"
+      ],
+      "expect_fail": [
+        "tests/test_feedback_host_v270.py::test_apply_ai_settings_roundtrip_and_failure"
+      ]
+    },
+    {
+      "id": "B1-AI-PASSTHRU",
+      "why": "主窗必须消费服务层的 (ok,msg)，不许无条件当成功",
+      "file": "桌宠.py",
+      "old": "        if isinstance(res, tuple) and len(res) == 2:\n            ok, msg = bool(res[0]), str(res[1] or \"\")",
+      "new": "        if False:  # MUT：忽略服务层结论\n            ok, msg = bool(res[0]), str(res[1] or \"\")",
+      "tests": [
+        "tests/test_feedback_host_v270.py::test_host_passes_ai_service_result_through"
+      ],
+      "expect_fail": [
+        "tests/test_feedback_host_v270.py::test_host_passes_ai_service_result_through"
+      ]
+    },
+    {
+      "id": "B1-AI-NONDICT",
+      "why": "主窗 AI 设置非 dict 入参必须回 (False,中文)",
+      "file": "桌宠.py",
+      "old": "            return False, \"AI 设置格式不对，没有保存\"",
+      "new": "            return  # MUT",
+      "tests": [
+        "tests/test_feedback_host_v270.py::test_apply_callbacks_reject_non_dict_with_false"
+      ],
+      "expect_fail": [
+        "tests/test_feedback_host_v270.py::test_apply_callbacks_reject_non_dict_with_false"
+      ]
+    },
+    {
+      "id": "B1-AI-EXCEPT",
+      "why": "主窗 AI 设置回调抛异常必须回 (False,原因)+日志",
+      "file": "桌宠.py",
+      "old": "        except Exception as e:\n            _log_error(\"apply_ai_settings failed: %r\" % (e,))",
+      "new": "        except ZeroDivisionError as e:  # MUT\n            _log_error(\"apply_ai_settings failed: %r\" % (e,))",
+      "tests": [
+        "tests/test_feedback_host_v270.py::test_apply_ai_settings_roundtrip_and_failure"
+      ],
+      "expect_fail": [
+        "tests/test_feedback_host_v270.py::test_apply_ai_settings_roundtrip_and_failure"
+      ]
+    },
+    {
+      "id": "B2-BEHAV-FAILED",
+      "why": "行为入口打不开必须给用户中文提示（不再只写日志）",
+      "file": "桌宠.py",
+      "old": "            pet_dialogs._dialog_failed(self, \"行为设置\", e)",
+      "new": "            _log_error(\"behavior dialog: %r\" % (e,))  # MUT",
+      "tests": [
+        "tests/test_feedback_host_v270.py::test_host_entry_failure_is_visible"
+      ],
+      "expect_fail": [
+        "tests/test_feedback_host_v270.py::test_host_entry_failure_is_visible"
+      ]
+    },
+    {
+      "id": "B2-IDLE-FAILED",
+      "why": "待机入口打不开必须给用户中文提示",
+      "file": "桌宠.py",
+      "old": "            pet_dialogs._dialog_failed(self, \"待机设置\", e)",
+      "new": "            _log_error(\"idle dialog: %r\" % (e,))  # MUT",
+      "tests": [
+        "tests/test_feedback_host_v270.py::test_host_entry_failure_is_visible"
+      ],
+      "expect_fail": [
+        "tests/test_feedback_host_v270.py::test_host_entry_failure_is_visible"
+      ]
+    },
+    {
+      "id": "B2-ALARM-FAILED",
+      "why": "闹钟入口打不开必须给用户中文提示",
+      "file": "桌宠.py",
+      "old": "            pet_dialogs._dialog_failed(self, \"闹钟\", e)",
+      "new": "            _log_error(\"alarm dialog: %r\" % (e,))  # MUT",
+      "tests": [
+        "tests/test_feedback_host_v270.py::test_host_entry_failure_is_visible"
+      ],
+      "expect_fail": [
+        "tests/test_feedback_host_v270.py::test_host_entry_failure_is_visible"
+      ]
+    },
+    {
+      "id": "B2-BEHAV-MODAL",
+      "why": "行为入口必须走 pet_dialogs.modal（置顶+抢焦点），不是裸 exec",
+      "file": "桌宠.py",
+      "old": "            pet_dialogs.modal(pet_dialogs.BehaviorDialog(self, self.behaviors, save_config))",
+      "new": "            pet_dialogs.BehaviorDialog(self, self.behaviors, save_config).exec()  # MUT",
+      "tests": [
+        "tests/test_feedback_host_v270.py::test_host_entries_open_through_modal"
+      ],
+      "expect_fail": [
+        "tests/test_feedback_host_v270.py::test_host_entries_open_through_modal"
+      ]
+    },
+    {
+      "id": "B2-IDLE-MODAL",
+      "why": "待机入口必须走 pet_dialogs.modal",
+      "file": "桌宠.py",
+      "old": "            pet_dialogs.modal(pet_dialogs.IdleDialog(self))",
+      "new": "            pet_dialogs.IdleDialog(self).exec()  # MUT",
+      "tests": [
+        "tests/test_feedback_host_v270.py::test_host_entries_open_through_modal"
+      ],
+      "expect_fail": [
+        "tests/test_feedback_host_v270.py::test_host_entries_open_through_modal"
+      ]
+    },
+    {
+      "id": "B2-ALARM-MODAL",
+      "why": "闹钟入口必须走 pet_dialogs.modal",
+      "file": "桌宠.py",
+      "old": "            pet_dialogs.modal(pet_dialogs.AlarmDialog(self, self.alarms))",
+      "new": "            pet_dialogs.AlarmDialog(self, self.alarms).exec()  # MUT",
+      "tests": [
+        "tests/test_feedback_host_v270.py::test_host_entries_open_through_modal"
+      ],
+      "expect_fail": [
+        "tests/test_feedback_host_v270.py::test_host_entries_open_through_modal"
+      ]
+    },
+    {
+      "id": "B2-BAL-BUBBLE",
+      "why": "账本入口打不开必须让用户看见（气泡），不能只 self._log",
+      "file": "pet_balance.py",
+      "old": "            try:\n                self.pet.show_bubble(\"「账本」打不开：%s\\n（详情见数据目录的 error.log）\" % (e,))\n            except Exception as e2:\n                self._log(\"ledger dialog notify failed: %r\" % (e2,))",
+      "new": "            pass  # MUT：退回只写日志",
+      "tests": [
+        "tests/test_feedback_host_v270.py::test_balance_open_ledger_failure_shows_bubble"
+      ],
+      "expect_fail": [
+        "tests/test_feedback_host_v270.py::test_balance_open_ledger_failure_shows_bubble"
+      ]
+    },
+    {
+      "id": "B2-BAL-OKPATH",
+      "why": "失败气泡必须只在 except 里（正常打开不许弹提示）",
+      "file": "pet_balance.py",
+      "old": "        try:\n            dlg = pet_dialogs.LedgerDialog(self.pet)",
+      "new": "        self.pet.show_bubble(\"「账本」打不开：MUT\")  # MUT：提示挪出 except\n        try:\n            dlg = pet_dialogs.LedgerDialog(self.pet)",
+      "tests": [
+        "tests/test_feedback_host_v270.py::test_balance_open_ledger_ok_path_unchanged"
+      ],
+      "expect_fail": [
+        "tests/test_feedback_host_v270.py::test_balance_open_ledger_ok_path_unchanged"
+      ]
+    },
+    {
+      "id": "B3-DROP-LOG",
+      "why": "声音素材库丢弃白名单外条目必须留痕（限流日志）",
+      "file": "pet_resources.py",
+      "old": "            for _ext, _items in sorted(dropped.items()):",
+      "new": "            for _ext, _items in []:  # MUT：退回纯 continue",
+      "tests": [
+        "tests/test_feedback_host_v270.py::test_voice_asset_dropped_ext_is_logged_once"
+      ],
+      "expect_fail": [
+        "tests/test_feedback_host_v270.py::test_voice_asset_dropped_ext_is_logged_once"
+      ]
+    },
+    {
+      "id": "CFG-RETERR",
+      "why": "pet_config.write_config 必须把写失败交回调用方（此前恒返回 None）",
+      "file": "pet_config.py",
+      "old": "        return err      # v2.7.0 第 5 轮（代理 B · 闭环 P1-1）：**把失败交回调用方**",
+      "new": "        return None     # MUT",
+      "tests": [
+        "tests/test_feedback_host_v270.py::test_write_failure_chain_reaches_dialog_and_keeps_it_open"
+      ],
+      "expect_fail": [
+        "tests/test_feedback_host_v270.py::test_write_failure_chain_reaches_dialog_and_keeps_it_open"
+      ]
+    },
+    {
+      "id": "CFG-SAVECFG",
+      "why": "桌宠.save_config 必须原样上交 pet_config 的错误",
+      "file": "桌宠.py",
+      "old": "    return pet_config.write_config(CONFIG_PATH, cfg, DEFAULT_CONFIG, CONFIG_SCHEMA_VERSION,\n                                   _log_error, encrypt_secret)",
+      "new": "    pet_config.write_config(CONFIG_PATH, cfg, DEFAULT_CONFIG, CONFIG_SCHEMA_VERSION,\n                            _log_error, encrypt_secret)  # MUT：丢掉返回值",
+      "tests": [
+        "tests/test_feedback_host_v270.py::test_write_failure_chain_reaches_dialog_and_keeps_it_open"
+      ],
+      "expect_fail": [
+        "tests/test_feedback_host_v270.py::test_write_failure_chain_reaches_dialog_and_keeps_it_open"
+      ]
+    },
+    {
+      "id": "CFG-FUTURE",
+      "why": "只读兼容模式下 save_config 没写盘就不能报成功",
+      "file": "桌宠.py",
+      "old": "        return \"当前配置来自更高版本，按兼容模式只读运行（未写盘）\"",
+      "new": "        return  # MUT",
+      "tests": [
+        "tests/test_feedback_host_v270.py::test_future_schema_readonly_mode_is_not_reported_as_success"
+      ],
+      "expect_fail": [
+        "tests/test_feedback_host_v270.py::test_future_schema_readonly_mode_is_not_reported_as_success"
+      ]
+    },
+    {
+      "id": "CFG-PHYS-ERRCHECK",
+      "why": "物理参数必须接住 save_config 的写失败",
+      "file": "桌宠.py",
+      "old": "            err = save_config(self.cfg)\n            if err:\n                # v2.7.0 第 5 轮（B · 闭环）：pet_config 现在把写失败**返回**出来",
+      "new": "            err = save_config(self.cfg)\n            if False:  # MUT\n                # v2.7.0 第 5 轮（B · 闭环）：pet_config 现在把写失败**返回**出来",
+      "tests": [
+        "tests/test_feedback_host_v270.py::test_write_failure_reaches_physics_and_bubble_style"
+      ],
+      "expect_fail": [
+        "tests/test_feedback_host_v270.py::test_write_failure_reaches_physics_and_bubble_style"
+      ]
+    },
+    {
+      "id": "CFG-BUBBLE-ERRCHECK",
+      "why": "气泡样式必须接住 save_config 的写失败（且不进 BUBBLE_STYLE）",
+      "file": "桌宠.py",
+      "old": "            err = save_config(self.cfg)\n            if err:\n                # v2.7.0 第 5 轮（B · 闭环）：写失败要回给对话框；且**不进 BUBBLE_STYLE**",
+      "new": "            err = save_config(self.cfg)\n            if False:  # MUT\n                # v2.7.0 第 5 轮（B · 闭环）：写失败要回给对话框；且**不进 BUBBLE_STYLE**",
+      "tests": [
+        "tests/test_feedback_host_v270.py::test_write_failure_reaches_physics_and_bubble_style"
+      ],
+      "expect_fail": [
+        "tests/test_feedback_host_v270.py::test_write_failure_reaches_physics_and_bubble_style"
+      ]
+    },
+    {
+      "id": "AI-SVC-RET",
+      "why": "AIService.apply_settings 成功路径必须返回 (True,msg)",
+      "file": "pet_ai.py",
+      "old": "        return True, \"AI 设置已更新，下次聊天就按新口味来~\"",
+      "new": "        return  # MUT",
+      "tests": [
+        "tests/test_feedback_host_v270.py::test_ai_service_apply_settings_returns_tuple_and_does_not_bubble",
+        "tests/test_feedback_host_v270.py::test_host_passes_ai_service_result_through"
+      ],
+      "expect_fail": [
+        "tests/test_feedback_host_v270.py::test_ai_service_apply_settings_returns_tuple_and_does_not_bubble"
+      ]
+    },
+    {
+      "id": "AI-SVC-NONDICT",
+      "why": "AIService.apply_settings 非 dict 必须回 (False,中文)",
+      "file": "pet_ai.py",
+      "old": "            return False, \"AI 设置格式不对，没有保存\"",
+      "new": "            return  # MUT",
+      "tests": [
+        "tests/test_feedback_host_v270.py::test_ai_service_apply_settings_non_dict"
+      ],
+      "expect_fail": [
+        "tests/test_feedback_host_v270.py::test_ai_service_apply_settings_non_dict"
+      ]
+    },
+    {
+      "id": "AI-SVC-EXCEPT",
+      "why": "AIService.apply_settings 落盘异常必须回 (False,原因)+日志",
+      "file": "pet_ai.py",
+      "old": "        except Exception as e:\n            self._log(\"ai apply_settings failed: %r\" % (e,))",
+      "new": "        except ZeroDivisionError as e:  # MUT\n            self._log(\"ai apply_settings failed: %r\" % (e,))",
+      "tests": [
+        "tests/test_feedback_host_v270.py::test_ai_service_apply_settings_disk_failure_returns_false"
+      ],
+      "expect_fail": [
+        "tests/test_feedback_host_v270.py::test_ai_service_apply_settings_disk_failure_returns_false"
+      ]
+    },
+    {
+      "id": "AI-SVC-ERRSTR",
+      "why": "落盘回调返回错误串（不抛）同样必须算失败",
+      "file": "pet_ai.py",
+      "old": "        if err is False or (isinstance(err, str) and err.strip()):\n            self._log(\"ai apply_settings save failed: %s\"",
+      "new": "        if False:  # MUT\n            self._log(\"ai apply_settings save failed: %s\"",
+      "tests": [
+        "tests/test_feedback_host_v270.py::test_ai_service_apply_settings_save_error_string_is_failure"
+      ],
+      "expect_fail": [
+        "tests/test_feedback_host_v270.py::test_ai_service_apply_settings_save_error_string_is_failure"
+      ]
+    },
+    {
+      "id": "AI-SVC-BUBBLE",
+      "why": "服务层不许自己弹气泡（一次用户动作一句反馈）",
+      "file": "pet_ai.py",
+      "old": "        cfg.update(new)      # F4：落盘成功才提交进内存（内容与键顺序与\"原地改\"逐位相同）\n        return True, \"AI 设置已更新，下次聊天就按新口味来~\"",
+      "new": "        cfg.update(new)      # F4：落盘成功才提交进内存（内容与键顺序与\"原地改\"逐位相同）\n        self.pet.show_bubble(\"AI 设置已更新，下次聊天就按新口味来~\")  # MUT：服务层又自己弹\n        return True, \"AI 设置已更新，下次聊天就按新口味来~\"",
+      "tests": [
+        "tests/test_feedback_host_v270.py::test_ai_service_apply_settings_returns_tuple_and_does_not_bubble"
+      ],
+      "expect_fail": [
+        "tests/test_feedback_host_v270.py::test_ai_service_apply_settings_returns_tuple_and_does_not_bubble"
+      ]
+    },
+    {
+      "id": "S17-EMPTYKEY",
+      "why": "空 Key 点确定必须给一句反馈（改前完全静默）",
+      "file": "pet_ai.py",
+      "old": "            if not key:\n                # v2.7.0 第 5 轮（代理 B · 审计 S17）：改前这里**什么都不做、也不说一句话**",
+      "new": "            if False:  # MUT\n                # v2.7.0 第 5 轮（代理 B · 审计 S17）：改前这里**什么都不做、也不说一句话**",
+      "tests": [
+        "tests/test_feedback_host_v270.py::test_set_api_key_empty_input_is_not_silent"
+      ],
+      "expect_fail": [
+        "tests/test_feedback_host_v270.py::test_set_api_key_empty_input_is_not_silent"
+      ]
+    },
+    {
+      "id": "S17-KEY-ERR",
+      "why": "Key 写失败不许回「记住啦！」",
+      "file": "pet_ai.py",
+      "old": "            err = self._save_cfg(self._cfg())\n            self._redact(key)   # 内存里已经存了这个值（不论落盘成败）→ 必须登记脱敏\n            if err:",
+      "new": "            err = self._save_cfg(self._cfg())\n            self._redact(key)   # 内存里已经存了这个值（不论落盘成败）→ 必须登记脱敏\n            if False:  # MUT",
+      "tests": [
+        "tests/test_feedback_host_v270.py::test_set_api_key_write_failure_does_not_claim_success"
+      ],
+      "expect_fail": [
+        "tests/test_feedback_host_v270.py::test_set_api_key_write_failure_does_not_claim_success"
+      ]
+    },
+    {
+      "id": "S17-TOGGLE-ERR",
+      "why": "AI 开关写失败必须说出来（不再假装已持久化）",
+      "file": "pet_ai.py",
+      "old": "        err = self._save_cfg(cfg)\n        if err:\n            # v2.7.0 第 5 轮（B · 闭环）：开关写盘失败时只说\"开关没生效\"",
+      "new": "        err = self._save_cfg(cfg)\n        if False:  # MUT\n            # v2.7.0 第 5 轮（B · 闭环）：开关写盘失败时只说\"开关没生效\"",
+      "tests": [
+        "tests/test_feedback_host_v270.py::test_ai_toggle_and_chat_rounds_report_write_failure"
+      ],
+      "expect_fail": [
+        "tests/test_feedback_host_v270.py::test_ai_toggle_and_chat_rounds_report_write_failure"
+      ]
+    },
+    {
+      "id": "S17-ROUNDS-ERR",
+      "why": "对话记忆写失败必须说出来（不许回「记住最近 N 轮啦~」）",
+      "file": "pet_ai.py",
+      "old": "        err = self._save_cfg(cfg)\n        if err:\n            # v2.7.0 第 5 轮（B · 闭环）：写失败就不许回「记住最近 N 轮啦~」（假象）",
+      "new": "        err = self._save_cfg(cfg)\n        if False:  # MUT\n            # v2.7.0 第 5 轮（B · 闭环）：写失败就不许回「记住最近 N 轮啦~」（假象）",
+      "tests": [
+        "tests/test_feedback_host_v270.py::test_ai_toggle_and_chat_rounds_report_write_failure"
+      ],
+      "expect_fail": [
+        "tests/test_feedback_host_v270.py::test_ai_toggle_and_chat_rounds_report_write_failure"
+      ]
+    },
+    {
+      "id": "DLG-AI-KEEPOPEN",
+      "why": "AI 设置对话框失败必须不关窗（消费 B 的 (ok,msg)）",
+      "file": "pet_dialogs.py",
+      "old": "        ok, msg, explicit = _apply_call(self._pet, \"apply_ai_settings\", data, strict=True)\n        if not ok:\n            # P1-1：以前丢弃返回值 + 无条件 accept()——人设正文/API 地址/模型/工具开关",
+      "new": "        ok, msg, explicit = _apply_call(self._pet, \"apply_ai_settings\", data, strict=True)\n        if False:  # MUT：退回无条件 accept()\n            # P1-1：以前丢弃返回值 + 无条件 accept()——人设正文/API 地址/模型/工具开关",
+      "tests": [
+        "tests/test_feedback_host_v270.py::test_dialog_keeps_window_open_when_host_reports_failure"
+      ],
+      "expect_fail": [
+        "tests/test_feedback_host_v270.py::test_dialog_keeps_window_open_when_host_reports_failure"
+      ]
+    },
+    {
+      "id": "DLG-PHYS-TOAST",
+      "why": "物理对话框必须把 msg 显示给用户（值未变时不再静默）",
+      "file": "pet_dialogs.py",
+      "old": "        self.accept()\n        # P1-4：值没变时主窗返回 (True, \"没有改动\")——以前是静默 return，\"点保存 = 什么都不知道\"\n        _toast(self._pet, msg or \"物理参数已更新~\")",
+      "new": "        self.accept()\n        # MUT：退回\"无条件 accept、零回执\"",
+      "tests": [
+        "tests/test_feedback_host_v270.py::test_physics_dialog_shows_no_change_message"
+      ],
+      "expect_fail": [
+        "tests/test_feedback_host_v270.py::test_physics_dialog_shows_no_change_message"
+      ]
+    }
+  ],
+  "results": {
+    "title": "变异验证 spec：mutations_agent_b_v270.json",
+    "checked_at": "2026-10-15 17:38:24",
+    "total": 35,
+    "caught": 35,
+    "not_caught": 0,
+    "blocked": 0,
+    "items": [
+      {
+        "id": "B1-PHYS-NOCHANGE",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 1.77s",
+        "failed": [
+          "test_apply_physics_no_change_is_not_silent"
+        ]
+      },
+      {
+        "id": "B1-PHYS-NONDICT",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "4 failed, 8 passed in 1.12s",
+        "failed": [
+          "test_apply_callbacks_reject_non_dict_with_false[None-apply_physics]",
+          "test_apply_callbacks_reject_non_dict_with_false[bad1-apply_physics]",
+          "test_apply_callbacks_reject_non_dict_with_false[x-apply_physics]",
+          "test_apply_callbacks_reject_non_dict_with_false[3-apply_physics]"
+        ]
+      },
+      {
+        "id": "B1-PHYS-ERR",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 1.36s",
+        "failed": [
+          "test_apply_physics_failure_returns_false_and_logs"
+        ]
+      },
+      {
+        "id": "B1-BUBBLE-RET",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 1.04s",
+        "failed": [
+          "test_apply_bubble_style_roundtrip_and_failure"
+        ]
+      },
+      {
+        "id": "B1-BUBBLE-NONDICT",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "4 failed, 8 passed in 1.21s",
+        "failed": [
+          "test_apply_callbacks_reject_non_dict_with_false[None-apply_bubble_style]",
+          "test_apply_callbacks_reject_non_dict_with_false[bad1-apply_bubble_style]",
+          "test_apply_callbacks_reject_non_dict_with_false[x-apply_bubble_style]",
+          "test_apply_callbacks_reject_non_dict_with_false[3-apply_bubble_style]"
+        ]
+      },
+      {
+        "id": "B1-BUBBLE-ERR",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 1.18s",
+        "failed": [
+          "test_apply_bubble_style_roundtrip_and_failure"
+        ]
+      },
+      {
+        "id": "B1-AI-RET",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "2 failed in 1.06s",
+        "failed": [
+          "test_apply_ai_settings_roundtrip_and_failure",
+          "test_dialog_channel_passes_tuple_through"
+        ]
+      },
+      {
+        "id": "B1-AI-PASSTHRU",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 1.03s",
+        "failed": [
+          "test_host_passes_ai_service_result_through"
+        ]
+      },
+      {
+        "id": "B1-AI-NONDICT",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "4 failed, 8 passed in 1.19s",
+        "failed": [
+          "test_apply_callbacks_reject_non_dict_with_false[None-apply_ai_settings]",
+          "test_apply_callbacks_reject_non_dict_with_false[bad1-apply_ai_settings]",
+          "test_apply_callbacks_reject_non_dict_with_false[x-apply_ai_settings]",
+          "test_apply_callbacks_reject_non_dict_with_false[3-apply_ai_settings]"
+        ]
+      },
+      {
+        "id": "B1-AI-EXCEPT",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 1.10s",
+        "failed": [
+          "test_apply_ai_settings_roundtrip_and_failure"
+        ]
+      },
+      {
+        "id": "B2-BEHAV-FAILED",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed, 2 passed in 1.40s",
+        "failed": [
+          "test_host_entry_failure_is_visible[BehaviorDialog-_open_behavior_dialog-\\u884c\\u4e3a\\u8bbe\\u7f6e]"
+        ]
+      },
+      {
+        "id": "B2-IDLE-FAILED",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed, 2 passed in 1.13s",
+        "failed": [
+          "test_host_entry_failure_is_visible[IdleDialog-_open_idle_dialog-\\u5f85\\u673a\\u8bbe\\u7f6e]"
+        ]
+      },
+      {
+        "id": "B2-ALARM-FAILED",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed, 2 passed in 1.20s",
+        "failed": [
+          "test_host_entry_failure_is_visible[AlarmDialog-_open_alarm_dialog-\\u95f9\\u949f]"
+        ]
+      },
+      {
+        "id": "B2-BEHAV-MODAL",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 1.10s",
+        "failed": [
+          "test_host_entries_open_through_modal"
+        ]
+      },
+      {
+        "id": "B2-IDLE-MODAL",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 1.02s",
+        "failed": [
+          "test_host_entries_open_through_modal"
+        ]
+      },
+      {
+        "id": "B2-ALARM-MODAL",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 1.05s",
+        "failed": [
+          "test_host_entries_open_through_modal"
+        ]
+      },
+      {
+        "id": "B2-BAL-BUBBLE",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 1.06s",
+        "failed": [
+          "test_balance_open_ledger_failure_shows_bubble"
+        ]
+      },
+      {
+        "id": "B2-BAL-OKPATH",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 1.04s",
+        "failed": [
+          "test_balance_open_ledger_ok_path_unchanged"
+        ]
+      },
+      {
+        "id": "B3-DROP-LOG",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 0.73s",
+        "failed": [
+          "test_voice_asset_dropped_ext_is_logged_once"
+        ]
+      },
+      {
+        "id": "CFG-RETERR",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 1.07s",
+        "failed": [
+          "test_write_failure_chain_reaches_dialog_and_keeps_it_open"
+        ]
+      },
+      {
+        "id": "CFG-SAVECFG",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 1.38s",
+        "failed": [
+          "test_write_failure_chain_reaches_dialog_and_keeps_it_open"
+        ]
+      },
+      {
+        "id": "CFG-FUTURE",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 1.02s",
+        "failed": [
+          "test_future_schema_readonly_mode_is_not_reported_as_success"
+        ]
+      },
+      {
+        "id": "CFG-PHYS-ERRCHECK",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 1.00s",
+        "failed": [
+          "test_write_failure_reaches_physics_and_bubble_style"
+        ]
+      },
+      {
+        "id": "CFG-BUBBLE-ERRCHECK",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 1.12s",
+        "failed": [
+          "test_write_failure_reaches_physics_and_bubble_style"
+        ]
+      },
+      {
+        "id": "AI-SVC-RET",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed, 1 passed in 1.34s",
+        "failed": [
+          "test_ai_service_apply_settings_returns_tuple_and_does_not_bubble"
+        ]
+      },
+      {
+        "id": "AI-SVC-NONDICT",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 1.03s",
+        "failed": [
+          "test_ai_service_apply_settings_non_dict"
+        ]
+      },
+      {
+        "id": "AI-SVC-EXCEPT",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 0.97s",
+        "failed": [
+          "test_ai_service_apply_settings_disk_failure_returns_false"
+        ]
+      },
+      {
+        "id": "AI-SVC-ERRSTR",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 1.01s",
+        "failed": [
+          "test_ai_service_apply_settings_save_error_string_is_failure"
+        ]
+      },
+      {
+        "id": "AI-SVC-BUBBLE",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 0.99s",
+        "failed": [
+          "test_ai_service_apply_settings_returns_tuple_and_does_not_bubble"
+        ]
+      },
+      {
+        "id": "S17-EMPTYKEY",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 0.97s",
+        "failed": [
+          "test_set_api_key_empty_input_is_not_silent"
+        ]
+      },
+      {
+        "id": "S17-KEY-ERR",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 1.10s",
+        "failed": [
+          "test_set_api_key_write_failure_does_not_claim_success"
+        ]
+      },
+      {
+        "id": "S17-TOGGLE-ERR",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 0.94s",
+        "failed": [
+          "test_ai_toggle_and_chat_rounds_report_write_failure"
+        ]
+      },
+      {
+        "id": "S17-ROUNDS-ERR",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 0.97s",
+        "failed": [
+          "test_ai_toggle_and_chat_rounds_report_write_failure"
+        ]
+      },
+      {
+        "id": "DLG-AI-KEEPOPEN",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 1.00s",
+        "failed": [
+          "test_dialog_keeps_window_open_when_host_reports_failure"
+        ]
+      },
+      {
+        "id": "DLG-PHYS-TOAST",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 1.03s",
+        "failed": [
+          "test_physics_dialog_shows_no_change_message"
+        ]
+      }
+    ],
+    "spec": "mutations_agent_b_v270.json",
+    "tests": [
+      "tests/test_feedback_host_v270.py::test_ai_service_apply_settings_disk_failure_returns_false",
+      "tests/test_feedback_host_v270.py::test_ai_service_apply_settings_non_dict",
+      "tests/test_feedback_host_v270.py::test_ai_service_apply_settings_returns_tuple_and_does_not_bubble",
+      "tests/test_feedback_host_v270.py::test_ai_service_apply_settings_save_error_string_is_failure",
+      "tests/test_feedback_host_v270.py::test_ai_toggle_and_chat_rounds_report_write_failure",
+      "tests/test_feedback_host_v270.py::test_apply_ai_settings_roundtrip_and_failure",
+      "tests/test_feedback_host_v270.py::test_apply_bubble_style_roundtrip_and_failure",
+      "tests/test_feedback_host_v270.py::test_apply_callbacks_reject_non_dict_with_false",
+      "tests/test_feedback_host_v270.py::test_apply_physics_failure_returns_false_and_logs",
+      "tests/test_feedback_host_v270.py::test_apply_physics_no_change_is_not_silent",
+      "tests/test_feedback_host_v270.py::test_balance_open_ledger_failure_shows_bubble",
+      "tests/test_feedback_host_v270.py::test_balance_open_ledger_ok_path_unchanged",
+      "tests/test_feedback_host_v270.py::test_dialog_channel_passes_tuple_through",
+      "tests/test_feedback_host_v270.py::test_dialog_keeps_window_open_when_host_reports_failure",
+      "tests/test_feedback_host_v270.py::test_future_schema_readonly_mode_is_not_reported_as_success",
+      "tests/test_feedback_host_v270.py::test_host_entries_open_through_modal",
+      "tests/test_feedback_host_v270.py::test_host_entry_failure_is_visible",
+      "tests/test_feedback_host_v270.py::test_host_passes_ai_service_result_through",
+      "tests/test_feedback_host_v270.py::test_physics_dialog_shows_no_change_message",
+      "tests/test_feedback_host_v270.py::test_set_api_key_empty_input_is_not_silent",
+      "tests/test_feedback_host_v270.py::test_set_api_key_write_failure_does_not_claim_success",
+      "tests/test_feedback_host_v270.py::test_voice_asset_dropped_ext_is_logged_once",
+      "tests/test_feedback_host_v270.py::test_write_failure_chain_reaches_dialog_and_keeps_it_open",
+      "tests/test_feedback_host_v270.py::test_write_failure_reaches_physics_and_bubble_style"
+    ],
+    "note": "变异只在 %TEMP% 影子副本里做，真实仓库只读（只写 _dev/.mutation.lock）",
+    "repo_fingerprint": {
+      "桌宠.py": "7c64914aa083",
+      "pet_export.py": "c01e1593efd2",
+      "pet_lines.py": "5332f60b5f26",
+      "pet_alarm.py": "1149e94deee3",
+      "pet_behaviors.py": "8f57255144f6",
+      "_check_release.py": "e0abfe805849",
+      "pet_balance.py": "c374984ca058",
+      "pet_plugin.py": "2f7853298fc3",
+      "pet_plugin_host.py": "82fb7b1384c8",
+      "pet_dialogs.py": "0084f1a6bad7",
+      "pet_menu.py": "920daac1b835",
+      "pet_plugin_index.py": "7e9b4537b98e"
+    }
+  }
+}

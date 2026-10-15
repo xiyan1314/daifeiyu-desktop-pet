@@ -69,7 +69,7 @@ from pet_plugin_host import PluginHost as _PluginHost  # v2.5.1：PetHub 插件�
 
 
 APP_NAME = "大肥鱼桌宠"
-VERSION = "2.6.1"
+VERSION = "2.7.0"
 PAD = 1.25  # 窗口相对角色的透明边距（为压扁/回弹预留空间）
 IDLE_FRAME_MS = 140      # 待机帧间隔
 IDLE_FORM_HOLD_SECS = 8  # v2.1.3：只有形态、没有动作可播时的展示期上限（到期回用户形态）
@@ -461,9 +461,13 @@ def save_config(cfg):
         if not _FUTURE_CFG_LOGGED:
             _FUTURE_CFG_LOGGED = True
             _log_error("save_config: 当前配置来自更高版本，按兼容模式只读运行（不写回，防降级覆盖未来键）")
-        return
-    pet_config.write_config(CONFIG_PATH, cfg, DEFAULT_CONFIG, CONFIG_SCHEMA_VERSION,
-                            _log_error, encrypt_secret)
+        # v2.7.0 第 5 轮（代理 B）：这里**确实一个字节都没写**，就不能对外报"成功"——
+        # 返回可读原因，让调用方（AIService.apply_settings 等）能如实告诉用户"这次没保存"。
+        # 其余调用点全部忽略返回值（全仓已 grep 核对），所以只影响"能不能说清"。
+        return "当前配置来自更高版本，按兼容模式只读运行（未写盘）"
+    # v2.7.0 第 5 轮（代理 B）：把 pet_config 的失败原样交给调用方（成功时是 None）
+    return pet_config.write_config(CONFIG_PATH, cfg, DEFAULT_CONFIG, CONFIG_SCHEMA_VERSION,
+                                   _log_error, encrypt_secret)
 
 
 # ---------------- 音效（参考项目音频 + 合成回退，统一由 pet_audio 管理） ----------------
@@ -1968,18 +1972,28 @@ class PetWindow(QWidget):
             self.show_bubble(err or "这段对白读不了")
 
     def _open_behavior_dialog(self):
-        """v2.0.2：行为设置对话框（菜单入口）。"""
+        """v2.0.2：行为设置对话框（菜单入口）。
+
+        v2.7.0（B2）：两处不再静默/裸 exec ——
+          ① 打开走 pet_dialogs.modal（置顶 + raise + activateWindow + setFocus；裸 .exec()
+             缺这套，docstring 明说这是防 Windows 前台锁的必要步骤）；
+          ② 打不开时经 pet_dialogs._dialog_failed 给一句中文（日志 + 警告框），
+             而不是只写 error.log —— 行为界面正是"新建/删除"最集中的地方，
+             入口静默失败 = 彻底的"点了没反应"（_dev/audit_feedback_v270.md S25）。
+        """
         try:
-            pet_dialogs.BehaviorDialog(self, self.behaviors, save_config).exec()
+            pet_dialogs.modal(pet_dialogs.BehaviorDialog(self, self.behaviors, save_config))
         except Exception as e:
-            _log_error("behavior dialog: %r" % (e,))
+            pet_dialogs._dialog_failed(self, "行为设置", e)
 
     def _open_idle_dialog(self):
-        """v2.1：待机设置对话框（两触发/待机形态/待机动作列表/播放模式）。"""
+        """v2.1：待机设置对话框（两触发/待机形态/待机动作列表/播放模式）。
+
+        v2.7.0（B2）：同 _open_behavior_dialog —— modal() 打开 + _dialog_failed 兜底。"""
         try:
-            pet_dialogs.IdleDialog(self).exec()
+            pet_dialogs.modal(pet_dialogs.IdleDialog(self))
         except Exception as e:
-            _log_error("idle dialog: %r" % (e,))
+            pet_dialogs._dialog_failed(self, "待机设置", e)
 
     def apply_idle_settings(self, data=None):
         """v2.1：待机设置回调（归一化后落盘；立即生效，不影响正在进行的动作）。"""
@@ -2031,11 +2045,14 @@ class PetWindow(QWidget):
                 _log_error("alarm fire: %r" % (e,))  # 有意忽略：单条失败不拖累后续闹钟
 
     def _open_alarm_dialog(self):
-        """v2.0.5：闹钟设置对话框（菜单入口）。"""
+        """v2.0.5：闹钟设置对话框（菜单入口）。
+
+        v2.7.0（B2）：同 _open_behavior_dialog —— modal() 打开 + _dialog_failed 兜底
+        （改前是裸 .exec() + 只写 error.log：闹钟也是"新建/删除"集中的界面）。"""
         try:
-            pet_dialogs.AlarmDialog(self, self.alarms).exec()
+            pet_dialogs.modal(pet_dialogs.AlarmDialog(self, self.alarms))
         except Exception as e:
-            _log_error("alarm dialog: %r" % (e,))  # 有意忽略：对话框失败只记日志不崩主程序
+            pet_dialogs._dialog_failed(self, "闹钟", e)
 
     # ---------------- v2.3.0（1.2 Function Calling）：工具在主线程落地 ----------------
     # worker 线程只发信号，真正碰 Qt 的活全部在本节完成（对话框 / 表情 / 动作 / QTimer）。
@@ -2526,8 +2543,19 @@ class PetWindow(QWidget):
         self._migrate_lines_extra()
         save_config(self.cfg)  # 可分享配置（语音开关等）已应用 → 持久化
         # 立即生效（不必重启）：气泡样式/音效组走现成应用入口
+        # v2.7.0 第 6 轮（验收 P1-1 部分修）：**后果性警告**（=「这次操作有一项没生效」）
+        # 单独登记，回执拼装时不计入上限——详见下面 _res["warnings"] 那段。
+        _must_show = []
         if "bubble_style" in self.cfg:
-            self.apply_bubble_style(self.cfg["bubble_style"])
+            # v2.7.0 第 5 轮（兼容审查 P1-1）：这里此前**丢弃**返回值（AST: DISCARD）——
+            # 写盘失败时气泡样式静默不生效，紧接着下面那句「角色包导入成功！」照说不误
+            # （触发面不小：更高版本配置的只读兼容模式 / 杀软瞬时锁文件重试仍失败）。
+            # 现在失败并入 warnings，成功气泡里带一句原因；导入本身已经成功，不改成失败。
+            _bs_ok, _bs_msg = self.apply_bubble_style(self.cfg["bubble_style"])
+            if not _bs_ok:
+                _bs_warn = "气泡样式没能应用（%s）" % (_bs_msg or "详情见 error.log",)
+                _res["warnings"].append(_bs_warn)
+                _must_show.append(_bs_warn)
         if "sound_group" in self.cfg:
             self._set_sound_group(self.cfg["sound_group"])
         self.apply_role(_res["role_id"])  # 导入即切换展示
@@ -2537,7 +2565,21 @@ class PetWindow(QWidget):
         if _meta.get("author") or _meta.get("name"):
             _msg += "来自「%s」" % (_meta.get("author") or _meta.get("name"))
         if _res["warnings"]:
-            _msg += "（%s）" % "；".join(_res["warnings"][:2])
+            # v2.7.0 第 6 轮（验收 P1-1 部分修）：这里此前是 "；".join(_res["warnings"][:2])，
+            # 上限之外的警告**静默消失**；而"气泡样式没能应用"这类**后果性警告**（用户这次
+            # 操作有一项没生效）完全可能排在第 3 条之后——验收员实测「2 条别的警告 + 写失败」
+            # 时，气泡里一个字的写失败都不剩（真实包通常只 0~1 条警告，所以这条洞一直没被看见）。
+            # 现在：① 后果性警告（_must_show）**不计入上限**、永远出现；② 其余警告超出上限时
+            # **把被截掉的条数写出来**，并把这 N 条原文补进 error.log——两件事都不静默。
+            _warns = [str(w) for w in _res["warnings"]]
+            _rest = [w for w in _warns if w not in _must_show]
+            _shown = [w for w in _warns if w in _must_show] + _rest[:2]
+            _dropped = _rest[2:]
+            if _dropped:
+                _log_error("角色包导入：%d 条警告没进回执（回执装不下），原文：%s"
+                           % (len(_dropped), "；".join(_dropped)))
+                _shown.append("…等其余 %d 条（详见 error.log）" % len(_dropped))
+            _msg += "（%s）" % "；".join(_shown)
         self.show_bubble(_msg)
 
     def _apply_imported_alarms(self, alarms_list):
@@ -4434,21 +4476,52 @@ class PetWindow(QWidget):
         self.show_bubble("甩抛物理已开启，使劲把我甩出去吧~" if on else "甩抛物理已关闭~")
 
     def apply_physics(self, data=None):
-        """P1-手感：物理参数回调——与 load_config 同口径归一化（负数/超界回退钳制），
-        数据未变不弹提示。"""
+        """P1-手感：物理参数回调——与 load_config 同口径归一化（负数/超界回退钳制）。
+
+        v2.7.0（B1）：返回 **(ok, msg)**。改前返回 None（成功也 None），对话框丢弃返回值 +
+        无条件 accept()；"值未变"那条更是连气泡都没有的静默 return —— 没改值就点保存 =
+        绝对静默，审计把这里记成"像没效果"的官方来源（_dev/audit_feedback_v270.md S12）。
+        现在三个出口都给结论（由对话框决定"关窗 + 气泡"还是"不关窗 + 警告"）：
+          · 值真的变了   → (True, "物理参数已更新~")（气泡照旧，用户可见行为不变）
+          · 值没有变     → (True, "物理参数没有改动")（**不再静默**）
+          · 入参不是 dict → (False, 中文原因)
+          · 落盘/归一化抛异常 → (False, 中文原因) + error.log（不再吞成 None）
+        """
         if not isinstance(data, dict):
-            return
-        phys = dict(self.cfg.get("physics") or {})
-        phys.update({k: v for k, v in data.items()
-                     if k in ("gravity", "restitution", "groundFriction", "ceilingBounce", "throwPower")})
-        phys = pet_config.normalize_physics(phys)
-        if phys.get("_fixed"):
-            _log_error("apply_physics: 参数非法已修正: %s" % ",".join(phys.pop("_fixed")))
-        if phys == (self.cfg.get("physics") or {}):
-            return  # 值未变：静默返回
-        self.cfg["physics"] = phys
-        save_config(self.cfg)
+            return False, "物理参数格式不对，没有保存"
+        try:
+            phys = dict(self.cfg.get("physics") or {})
+            phys.update({k: v for k, v in data.items()
+                         if k in ("gravity", "restitution", "groundFriction", "ceilingBounce", "throwPower")})
+            phys = pet_config.normalize_physics(phys)
+            if phys.get("_fixed"):
+                _log_error("apply_physics: 参数非法已修正: %s" % ",".join(phys.pop("_fixed")))
+            if phys == (self.cfg.get("physics") or {}):
+                return True, "物理参数没有改动"  # v2.7.0（B1）：不再静默 return
+            _prev_phys = self.cfg.get("physics")
+            self.cfg["physics"] = phys
+            err = save_config(self.cfg)
+            if err:
+                # v2.7.0 第 5 轮（B · 闭环）：pet_config 现在把写失败**返回**出来
+                # （磁盘满/只读/被占用），这里必须接住，否则又是"窗口一关什么都不知道"。
+                # v2.7.0 第 5 轮（兼容审查 P3-1）：cfg 同时**退回原值**（改前写失败后
+                # cfg 已是新参数、盘上还是旧的；物理引擎读的却是 cfg → 三处不一致）。
+                if _prev_phys is None:
+                    self.cfg.pop("physics", None)
+                else:
+                    self.cfg["physics"] = _prev_phys
+                return False, "物理参数没能保存：%s" % (err,)
+        except Exception as e:
+            _log_error("apply_physics failed: %r" % (e,))
+            return False, "物理参数没能保存：%s" % (e,)
+        # v2.7.0 第 5 轮（兼容审查 P3-3 · **观察项，裁决为"不删"**）：那条气泡留在原地。
+        # 依据：B 的用例 test_apply_physics_no_change_is_not_silent 把"值真的变了 → 有可见
+        # 反馈"钉在**主窗这一层**（assert bubbles —— 直接调 pet.apply_physics 时，对话框的
+        # _toast 不在链路上），删掉它会让那条既有用例红，且"直接调主窗回调"这条路彻底没反馈。
+        # 重复的代价有界：同一文案同时走 show_bubble 与对话框 _toast，而 Bubble.show_text 对
+        # 同文案/同尺寸/同位置幂等（pet_widgets），用户看不到两条。已在回报里点名"没做"。
         self.show_bubble("物理参数已更新~")
+        return True, "物理参数已更新~"
 
     def wheelEvent(self, e):
         delta = e.angleDelta().y()
@@ -4583,17 +4656,35 @@ class PetWindow(QWidget):
 
     def apply_sound_group(self, group=None, as_custom=True):
         """面板改槽位 / 菜单切组后调用：group=已解析槽位 dict 或 None（用库内当前组）；
-        as_custom=True 时自动把配置切到自定义组并落盘，保证改完立刻生效。"""
+        as_custom=True 时自动把配置切到自定义组并落盘，保证改完立刻生效。
+
+        v2.7.0 第 5 轮（L2-1）：返回 **(ok, msg)**。改前返回 None，内部 try/except 只写日志、
+        连 `save_config` 的返回值也丢掉 —— 面板侧按老契约（None=成功）判，"if not ok" 成了
+        死代码：底层抛异常或写盘失败时，用户照样看到「音效组已更新~」（假成功）。
+        现在 写盘失败 / 应用异常 → (False, 中文原因) + error.log；成功 → (True, "")。
+        写盘失败时把 cfg 里的 sound_group **退回原值**（与盘上一致，见 P3-1 同款口径），
+        其余调用点（菜单 _set_sound_group / 启动 _apply_sound_group）不看返回值，行为不变。
+        """
         try:
             if as_custom:
+                _prev_group = self.cfg.get("sound_group")
                 self.cfg["sound_group"] = "custom"
-                save_config(self.cfg)
+                err = save_config(self.cfg)
+                if err:
+                    if _prev_group is None:
+                        self.cfg.pop("sound_group", None)
+                    else:
+                        self.cfg["sound_group"] = _prev_group
+                    _log_error("apply_sound_group save failed: %s" % (err,))
+                    return False, "音效组没能保存：%s" % (err,)
             if self.cfg.get("sound_group") == "custom":
                 pet_audio.set_custom_group(self.audio_lib.group_paths() if group is None else group)
             else:
                 pet_audio.clear_custom_group()
         except Exception as e:
             _log_error("apply_sound_group failed: %r" % (e,))
+            return False, "音效组没能应用：%s" % (e,)
+        return True, ""
 
     def _apply_sound_group(self):
         """启动 / 菜单切组时按配置把音效组同步进 pet_audio（不改变配置）。"""
@@ -4804,23 +4895,47 @@ class PetWindow(QWidget):
             return False
 
     def apply_bubble_style(self, style):
+        """应用气泡样式（气泡样式对话框保存后回调）。
+
+        v2.7.0（B1）：返回 **(ok, msg)**。改前返回 None——对话框丢弃返回值 + 无条件
+        accept()，样式没生效也显示"保存成功"（_dev/audit_feedback_v270.md S11）。
+        现在失败给出中文原因 + error.log，由对话框决定"不关窗 + 警告"。
+        """
         if not isinstance(style, dict):
-            return
-        st = dict(BUBBLE_STYLE)
-        for k in ("bg", "fg", "border"):
-            v = style.get(k)
-            if isinstance(v, str) and QColor(v).isValid():
-                st[k] = v
-        for k in ("font_size", "radius"):
-            try:
-                v = int(style.get(k))
-                st[k] = max(8 if k == "font_size" else 0, min(18 if k == "font_size" else 30, v))
-            except (TypeError, ValueError):
-                pass  # 有意忽略：非数字样式值保持原值
-        self.cfg["bubble_style"] = st
-        save_config(self.cfg)
-        BUBBLE_STYLE.update(st)
-        self.bubble.update()
+            return False, "气泡样式格式不对，没有保存"
+        try:
+            st = dict(BUBBLE_STYLE)
+            for k in ("bg", "fg", "border"):
+                v = style.get(k)
+                if isinstance(v, str) and QColor(v).isValid():
+                    st[k] = v
+            for k in ("font_size", "radius"):
+                try:
+                    v = int(style.get(k))
+                    st[k] = max(8 if k == "font_size" else 0,
+                                min(18 if k == "font_size" else 30, v))
+                except (TypeError, ValueError):
+                    pass  # 有意忽略：非数字样式值保持原值
+            _prev_style = self.cfg.get("bubble_style")
+            self.cfg["bubble_style"] = st
+            err = save_config(self.cfg)
+            if err:
+                # v2.7.0 第 5 轮（B · 闭环）：写失败要回给对话框；且**不进 BUBBLE_STYLE**
+                # ——否则内存里已经是新样式、盘上还是旧的（失败留半截）。
+                # v2.7.0 第 5 轮（兼容审查 P3-1）：cfg 也要**退回原值**——改前写失败后
+                # cfg 已是新样式（内存改/盘未改/引擎未改三处不一致），下次保存别的键会
+                # 把这次没写成的样式一起带上盘。
+                if _prev_style is None:
+                    self.cfg.pop("bubble_style", None)
+                else:
+                    self.cfg["bubble_style"] = _prev_style
+                return False, "气泡样式没能保存：%s" % (err,)
+            BUBBLE_STYLE.update(st)
+            self.bubble.update()
+        except Exception as e:
+            _log_error("apply_bubble_style failed: %r" % (e,))
+            return False, "气泡样式没能保存：%s" % (e,)
+        return True, "气泡样式已更新~"
 
     def save_lines(self, pool, lines):
         """兼容入口（v2.0 台词对话框语义）：整体替换某类别的台词文本。
@@ -4961,8 +5076,32 @@ class PetWindow(QWidget):
             self._update_badge()
 
     def apply_ai_settings(self, data=None):
-        """应用 AI 设置（对话框保存后回调；P0-1：实现迁至 pet_ai.AIService）。"""
-        self.ai.apply_settings(data)
+        """应用 AI 设置（对话框保存后回调；P0-1：实现迁至 pet_ai.AIService）。
+
+        v2.7.0（B1）：返回 **(ok, msg)**。改前返回 None（成功也 None），对话框丢弃返回值 +
+        无条件 accept() —— 回调抛异常时只有 error.log 一行，窗口照常关闭 = "保存成功"假象，
+        人设正文 / API 地址 / 模型 / max_tokens / 工具开关整批可能静默丢失
+        （_dev/audit_feedback_v270.md S10）。
+
+        v2.7.0 第 5 轮（代理 B · 闭环）：**msg 从 pet_ai.AIService.apply_settings 原样透传**。
+        气泡由对话框按 msg 弹（一次用户动作一句反馈）；pet_ai.AIService.apply_settings 自己
+        **不再弹气泡**，所以不再有"两条同文案气泡"的问题。
+        """
+        if not isinstance(data, dict):
+            return False, "AI 设置格式不对，没有保存"
+        try:
+            res = self.ai.apply_settings(data)
+        except Exception as e:
+            _log_error("apply_ai_settings failed: %r" % (e,))
+            return False, "AI 设置没能保存：%s" % (e,)
+        if isinstance(res, tuple) and len(res) == 2:
+            ok, msg = bool(res[0]), str(res[1] or "")
+        else:
+            # 兼容老契约 / 测试替身：裸 None 或 True = 成功；裸 False = 失败（不猜别的）
+            ok, msg = (res is not False), ""
+        if not ok:
+            return False, msg or "AI 设置没能保存（详情见数据目录 error.log）"
+        return True, msg or "AI 设置已更新，下次聊天就按新口味来~"
 
     def _clear_logs(self):
         """清理 error.log(.old) / memory.log / **对话记忆**（P2-1 日志卫生）。

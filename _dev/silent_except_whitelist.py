@@ -374,8 +374,62 @@ def is_delegated(ent):
     return os.path.basename(ent["file"]) in DELEGATED_FILES
 
 
-def check(entries, wl):
-    """判定：返回问题列表（空＝绿）。**测试与 CLI 用的是同一份实现**。"""
+# ---------------- 源码证据"是不是真的"（v2.7.0 · 代理 C·小账 d） ----------------
+# 此前 check() 只判 evidence **非空**："有证据"与"证据是真的"是两件事——抄一句别处的话、
+# 或者代码改过之后没重跑 --write，白名单照样绿。这里补一条判据：evidence 必须能在它自称
+# 的那个文件里**原样找到**（两边空白都归一化，_flatten 截断留下的尾部 "..." 先剥掉）。
+_EVIDENCE_SRC = {}
+
+
+def _norm_ws(text):
+    """空白归一（与 _flatten 同一口径）：换行/缩进折叠成单个空格。"""
+    return re.sub(r"\s+", " ", text or "").strip()
+
+
+def _evidence_haystack(rel, root=None):
+    """某个文件"空白归一"后的全文；读不动 / 不存在 → None（查不了，不误报）。"""
+    path = os.path.join(os.path.abspath(root or HERE), str(rel or ""))
+    if path not in _EVIDENCE_SRC:
+        try:
+            with io.open(path, "r", encoding="utf-8-sig") as fh:
+                _EVIDENCE_SRC[path] = _norm_ws(fh.read())
+        except (OSError, UnicodeDecodeError):
+            _EVIDENCE_SRC[path] = None
+    return _EVIDENCE_SRC[path]
+
+
+def evidence_in_source(rec, root=None):
+    """白名单条目自称的源码证据能不能真的在它点名的文件里找到 → (verdict, detail)。
+
+    verdict ∈ {"ok", "missing", "unknown"}：
+      · ok      —— 找到了；
+      · missing —— 文件读得到，但那段"源码证据"在文件里**根本不存在**（抄来的 / 过期没刷新）；
+      · unknown —— 文件不存在或读不动（合成树、相对路径不对）：查不了，**不误报**。
+
+    取舍（若大面积假红就退成提示级）：这条是**硬判据**，因为实测 307 条全部命中（证据就是
+    扫描当时从该文件里取出来的原文，不存在"口径不同"的假红）；真要放开，把 check() 里那个
+    分支改成只打印即可。刷新证据：python -B _dev/silent_except_whitelist.py --write
+    （它保留已有理由码，只把 evidence / lines / count 换成当前源码的）。
+    """
+    rec = rec if isinstance(rec, dict) else {}
+    rel = str(rec.get("file") or "")
+    needle = _norm_ws(rec.get("evidence"))
+    if not rel or not needle:
+        return "unknown", "没有可核对的文件或证据原文"
+    hay = _evidence_haystack(rel, root)
+    if hay is None:
+        return "unknown", "文件读不到：%s" % rel
+    probe = needle[:-3].strip() if needle.endswith("...") else needle
+    if probe and probe in hay:
+        return "ok", ""
+    return "missing", "证据原文在 %s 里找不到：%s" % (rel, needle[:70])
+
+
+def check(entries, wl, root=None):
+    """判定：返回问题列表（空＝绿）。**测试与 CLI 用的是同一份实现**。
+
+    root：核对源码证据时的仓库根（缺省 = 本文件所在仓库）。条目里的 file 是**相对路径**。
+    """
     problems = []
     known = {}
     for e in wl.get("entries", []):
@@ -398,13 +452,24 @@ def check(entries, wl):
     for key, w in sorted(known.items()):
         if key not in entries:
             problems.append("白名单条目已失效（代码改了/删了，指纹对不上）：%s" % (key,))
-        elif w.get("reason") not in REASONS:
+            continue
+        if w.get("reason") not in REASONS:
             problems.append("理由码非法：%s → %r" % (key, w.get("reason")))
-        elif w.get("reason") == "unreviewed":
+            continue
+        if w.get("reason") == "unreviewed":
             problems.append("白名单条目仍是 unreviewed（必须给出真理由）：%s · %s"
                             % (key, w.get("evidence", "")))
-        elif not str(w.get("evidence", "")).strip():
+            continue
+        if not str(w.get("evidence", "")).strip():
             problems.append("白名单条目缺源码证据：%s" % (key,))
+            continue
+        # v2.7.0（代理 C·小账 d）：证据**非空**还不够，得真的出现在它自称的那个文件里。
+        verdict, detail = evidence_in_source(w, root)
+        if verdict == "missing":
+            problems.append(
+                "白名单条目的源码证据对不上：%s（%s）\n"
+                "    → 代码改过就重跑 python -B _dev/silent_except_whitelist.py --write 刷新证据；"
+                "证据是抄来的请抄回它自己那段 handler" % (key, detail))
     return problems
 
 

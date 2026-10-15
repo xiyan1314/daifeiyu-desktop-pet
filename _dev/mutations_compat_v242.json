@@ -154,7 +154,7 @@
   ],
   "results": {
     "title": "变异验证 spec：mutations_compat_v242.json",
-    "checked_at": "2026-10-12 12:00:25",
+    "checked_at": "2026-10-15 17:40:00",
     "total": 15,
     "caught": 15,
     "not_caught": 0,
@@ -164,7 +164,7 @@
         "id": "M-C1",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 1.10s",
+        "tail": "1 failed in 1.58s",
         "failed": [
           "test_export_role_refuses_reentry_and_finishes_the_first_package"
         ]
@@ -173,7 +173,7 @@
         "id": "M-C2",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.44s",
+        "tail": "1 failed in 0.57s",
         "failed": [
           "test_two_writers_never_share_a_tmp_name"
         ]
@@ -182,7 +182,7 @@
         "id": "M-C3",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 1.75s",
+        "tail": "1 failed in 1.80s",
         "failed": [
           "test_big_entry_is_written_across_slices_and_bytes_stay_identical"
         ]
@@ -191,7 +191,7 @@
         "id": "M-C4",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.63s",
+        "tail": "1 failed in 0.65s",
         "failed": [
           "test_cp932_locale_reads_shift_jis_lines_correctly"
         ]
@@ -200,7 +200,7 @@
         "id": "M-C5",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.42s",
+        "tail": "1 failed in 0.57s",
         "failed": [
           "test_broken_utf8_is_not_caught_by_cp1252"
         ]
@@ -209,7 +209,7 @@
         "id": "M-C6",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.77s",
+        "tail": "1 failed in 0.70s",
         "failed": [
           "test_startup_bubble_is_wired_to_the_real_encoding"
         ]
@@ -218,7 +218,7 @@
         "id": "M-C7",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "2 failed, 1 passed in 0.44s",
+        "tail": "2 failed, 1 passed in 0.58s",
         "failed": [
           "test_alarms_gbk_index_survives_the_first_write",
           "test_undecodable_index_is_backed_up_before_first_write[alarms.json-pet_alarm-AlarmService]"
@@ -228,7 +228,7 @@
         "id": "M-C8",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.40s",
+        "tail": "1 failed in 0.55s",
         "failed": [
           "test_behaviors_gbk_index_survives_the_first_write"
         ]
@@ -237,7 +237,7 @@
         "id": "M-C9",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed, 1 passed in 0.44s",
+        "tail": "1 failed, 1 passed in 0.62s",
         "failed": [
           "test_undecodable_index_is_backed_up_before_first_write[behaviors.json-pet_behaviors-BehaviorService]"
         ]
@@ -246,7 +246,7 @@
         "id": "M-C10",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.42s",
+        "tail": "1 failed in 0.55s",
         "failed": [
           "test_lines_keeps_top_level_unknown_keys_on_save"
         ]
@@ -255,7 +255,7 @@
         "id": "M-C11",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.85s",
+        "tail": "1 failed in 1.14s",
         "failed": [
           "test_start_petting_does_not_load_frames_on_early_return"
         ]
@@ -264,7 +264,7 @@
         "id": "M-C12",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.70s",
+        "tail": "1 failed in 1.10s",
         "failed": [
           "test_play_idle_skips_default_frames_for_custom_role"
         ]
@@ -273,7 +273,7 @@
         "id": "M-C13",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.81s",
+        "tail": "1 failed in 1.02s",
         "failed": [
           "test_quit_aborts_inflight_export"
         ]
@@ -282,7 +282,7 @@
         "id": "M-C14",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.41s",
+        "tail": "1 failed in 0.61s",
         "failed": [
           "test_play_action_ensures_frames_before_frame_action"
         ]
@@ -291,7 +291,7 @@
         "id": "M-C15",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.41s",
+        "tail": "1 failed in 0.53s",
         "failed": [
           "test_finish_after_abort_reports_cancelled"
         ]
@@ -317,18 +317,18 @@
     ],
     "note": "变异只在 %TEMP% 影子副本里做，真实仓库只读（只写 _dev/.mutation.lock）",
     "repo_fingerprint": {
-      "桌宠.py": "99e2abf3e7fb",
+      "桌宠.py": "7c64914aa083",
       "pet_export.py": "c01e1593efd2",
       "pet_lines.py": "5332f60b5f26",
       "pet_alarm.py": "1149e94deee3",
       "pet_behaviors.py": "8f57255144f6",
       "_check_release.py": "e0abfe805849",
-      "pet_balance.py": "2828b2ebc0c9",
+      "pet_balance.py": "c374984ca058",
       "pet_plugin.py": "2f7853298fc3",
-      "pet_plugin_host.py": "e41ee09707ba",
-      "pet_dialogs.py": "48f300e4fc50",
+      "pet_plugin_host.py": "82fb7b1384c8",
+      "pet_dialogs.py": "0084f1a6bad7",
       "pet_menu.py": "920daac1b835",
-      "pet_plugin_index.py": "439340b16523"
+      "pet_plugin_index.py": "7e9b4537b98e"
     }
   }
 }

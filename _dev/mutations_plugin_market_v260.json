@@ -111,7 +111,7 @@
       "id": "M-A09",
       "why": "更新时不保留上一版 payload（把当前目录删掉而不是挪到 .prev-<id>/，回滚无从恢复）",
       "file": "pet_plugin_host.py",
-      "old": "                    if already and os.path.isdir(target):\n                        if os.path.isdir(previous):\n                            shutil.rmtree(previous, ignore_errors=True)\n                        os.replace(target, previous)\n                        moved_prev = True",
+      "old": "                    if already and target_is_dir:\n                        if prev_is_dir:\n                            shutil.rmtree(previous, ignore_errors=True)\n                        os.replace(target, previous)\n                        moved_prev = True",
       "new": "                    if already and os.path.isdir(target):\n                        if os.path.isdir(previous):\n                            shutil.rmtree(previous, ignore_errors=True)\n                        shutil.rmtree(target, ignore_errors=True)\n                        moved_prev = False",
       "tests": [
         "tests/test_plugin_market_v252.py::test_回滚_撤销本版新增_不碰用户自己的内容"
@@ -204,7 +204,7 @@
       "id": "M-A16",
       "why": "同一个版本的重复安装照旧轮换 .prev-<id>/（把上一版的回滚点顶掉）",
       "file": "pet_plugin_host.py",
-      "old": "                if repeat and os.path.isdir(target):",
+      "old": "                if repeat and target_is_dir:",
       "new": "                if False and os.path.isdir(target):",
       "tests": [
         "tests/test_plugin_market_v252.py::test_同一个版本重复安装不顶掉回滚点"
@@ -229,7 +229,7 @@
   ],
   "results": {
     "title": "变异验证 spec：mutations_plugin_market_v260.json",
-    "checked_at": "2026-10-12 12:33:32",
+    "checked_at": "2026-10-15 17:46:40",
     "total": 17,
     "caught": 17,
     "not_caught": 0,
@@ -239,7 +239,7 @@
         "id": "M-A01",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.73s",
+        "tail": "1 failed in 0.76s",
         "failed": [
           "test_sha256不符_拒收并删掉临时文件"
         ]
@@ -248,7 +248,7 @@
         "id": "M-A02",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.54s",
+        "tail": "1 failed in 0.59s",
         "failed": [
           "test_bytes不符_拒收且不留残余"
         ]
@@ -257,7 +257,7 @@
         "id": "M-A03",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.62s",
+        "tail": "1 failed in 0.66s",
         "failed": [
           "test_随包索引_相对url解析到随包本地副本_不联网"
         ]
@@ -266,7 +266,7 @@
         "id": "M-A04",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.53s",
+        "tail": "1 failed in 0.61s",
         "failed": [
           "test_密钥不可装的条目也列出来_不静默隐藏"
         ]
@@ -275,7 +275,7 @@
         "id": "M-A05",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed, 1 passed in 0.68s",
+        "tail": "1 failed, 1 passed in 0.85s",
         "failed": [
           "test_内容指纹落在安装登记里"
         ]
@@ -284,7 +284,7 @@
         "id": "M-A06",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.61s",
+        "tail": "1 failed in 0.66s",
         "failed": [
           "test_更新把新版新增内容并入_旧内容不重复落"
         ]
@@ -293,7 +293,7 @@
         "id": "M-A07",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.62s",
+        "tail": "1 failed in 0.67s",
         "failed": [
           "test_landed_是历次落地的累积账"
         ]
@@ -302,7 +302,7 @@
         "id": "M-A08",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.61s",
+        "tail": "1 failed in 0.73s",
         "failed": [
           "test_回滚_撤销本版新增_不碰用户自己的内容"
         ]
@@ -311,7 +311,7 @@
         "id": "M-A09",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.63s",
+        "tail": "1 failed in 0.65s",
         "failed": [
           "test_回滚_撤销本版新增_不碰用户自己的内容"
         ]
@@ -320,7 +320,7 @@
         "id": "M-A10",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.61s",
+        "tail": "1 failed in 0.64s",
         "failed": [
           "test_旧登记没有指纹_也能不重复落地"
         ]
@@ -329,7 +329,7 @@
         "id": "M-A11",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.61s",
+        "tail": "1 failed in 0.70s",
         "failed": [
           "test_安装走后台线程_落地在主线程"
         ]
@@ -338,7 +338,7 @@
         "id": "M-A12",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.65s",
+        "tail": "1 failed in 0.70s",
         "failed": [
           "test_安装走后台线程_落地在主线程"
         ]
@@ -347,7 +347,7 @@
         "id": "M-A13",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.61s",
+        "tail": "1 failed in 0.68s",
         "failed": [
           "test_在途期间连点不起第二个下载_结果只落一次"
         ]
@@ -356,7 +356,7 @@
         "id": "M-A14",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.63s",
+        "tail": "1 failed in 0.73s",
         "failed": [
           "test_更新按钮只在有新版本时出现_回滚按钮只在有上一版时出现"
         ]
@@ -365,7 +365,7 @@
         "id": "M-A15",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "2 failed, 14 passed in 1.54s",
+        "tail": "2 failed, 14 passed in 1.84s",
         "failed": [
           "test_每个对话框的设计尺寸就是它自己的契约[PluginManagerDialog]",
           "test_每个对话框的设计尺寸都写在源码里"
@@ -375,7 +375,7 @@
         "id": "M-A16",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.66s",
+        "tail": "1 failed in 0.79s",
         "failed": [
           "test_同一个版本重复安装不顶掉回滚点"
         ]
@@ -384,7 +384,7 @@
         "id": "M-A17",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.66s",
+        "tail": "1 failed in 0.85s",
         "failed": [
           "test_上一版目录读不出来时_用新包指纹补账并如实告知"
         ]
@@ -411,18 +411,18 @@
     ],
     "note": "变异只在 %TEMP% 影子副本里做，真实仓库只读（只写 _dev/.mutation.lock）",
     "repo_fingerprint": {
-      "桌宠.py": "99e2abf3e7fb",
+      "桌宠.py": "7c64914aa083",
       "pet_export.py": "c01e1593efd2",
       "pet_lines.py": "5332f60b5f26",
       "pet_alarm.py": "1149e94deee3",
       "pet_behaviors.py": "8f57255144f6",
       "_check_release.py": "e0abfe805849",
-      "pet_balance.py": "2828b2ebc0c9",
+      "pet_balance.py": "c374984ca058",
       "pet_plugin.py": "2f7853298fc3",
-      "pet_plugin_host.py": "e41ee09707ba",
-      "pet_dialogs.py": "48f300e4fc50",
+      "pet_plugin_host.py": "82fb7b1384c8",
+      "pet_dialogs.py": "0084f1a6bad7",
       "pet_menu.py": "920daac1b835",
-      "pet_plugin_index.py": "439340b16523"
+      "pet_plugin_index.py": "7e9b4537b98e"
     }
   }
 }

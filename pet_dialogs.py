@@ -328,6 +328,109 @@ def _confirm(parent, title, text):
     return box.clickedButton() is yes
 
 
+# ---------------- v2.7.0 第 5 轮：反馈口径的公共出口 ----------------
+# 为什么把反馈收进这里（口径见 _dev/audit_feedback_v270.md §1）：
+#   · 面板内轻操作（新建/保存/删除/导出/重命名/导入成功）→ 宠物气泡：5 秒自动隐藏、
+#     不打断连续操作；z 序已实测（_dev/probe_bubble_z_order_v270.py）：modal exec 期间
+#     气泡仍压在上面，所以面板内也能用气泡。
+#   · 失败 / 需要用户决策 → _warn / _info / _confirm（模态）。
+# 全部调用点都走这两个函数：以后若要换成"内联标签"只需改这一处。
+def _toast(pet, text):
+    """成功回执：宠物气泡。**尽力而为**——返回 False 只表示"这次压根没尝试发"
+    （没有 pet / 没有 show_bubble / 文本为空 / show_bubble 抛异常）。
+
+    v2.7.0 第 5 轮（F5：文档承诺与实现不符）：改前这里写的是"返回是否**真的发出**"，
+    而现网 pet 的 show_bubble 在退出守卫下会**静默早退**（桌宠.show_bubble 的 `_closing`
+    分支直接 return，实测 _toast=True 而气泡可见=False）——回调不抛异常，返回值就是 True。
+    要让这个返回值变成硬承诺，得让生产端回报"到底显示了没有"，而那会改动主窗的公共接口；
+    所以这里取**改动最小且诚实**的一条：把口径说成"尽力而为"，**调用方不得拿返回值当
+    "用户看见了"**（全文件目前也没有任何调用点消费它）。回调自己抛异常仍然记日志 + False。
+    """
+    if not text:
+        return False
+    fn = _get(pet, "show_bubble")
+    if not callable(fn):
+        return False
+    try:
+        fn(str(text))
+    except Exception as e:
+        pet_log.log_error("show_bubble failed: %r" % (e,))
+        return False
+    return True
+
+
+def _apply_result(res):
+    """主窗「应用/保存」回调的返回值 → (ok, msg)。契约见 _apply_call。
+
+    v2.7.0 第 5 轮（F2 修复）：**非空字符串 = 失败**（那个串就是原因）。
+    为什么必须补：本轮把 write_config / save_config 的失败口径定成"**返回错误串**"
+    （pet_config.py 的 `return err`、桌宠.save_config 原样上交），同一仓库里这种形态已经落地；
+    改前这里只认 False 与二元组，裸串一路落到最后一行 `return True, ""` ——
+    实测 `_apply_call(_P(), "apply_physics", {}, strict=True)` = (True, "", True)：**窗口会关**，
+    用户看到的又是"保存成功"假象。空串仍按成功处理（老回调 `return ""` 的写法继续放行）。
+    """
+    if isinstance(res, (tuple, list)):
+        if not res:
+            return False, ""
+        return bool(res[0]), ("" if len(res) < 2 or not res[1] else str(res[1]))
+    if res is False:
+        return False, ""
+    if isinstance(res, str) and res.strip():
+        return False, res
+    return True, ""
+
+
+def _apply_call(pet, name, *args, **kw):
+    """调用主窗的「应用/保存」回调 → (ok, msg, explicit)。
+
+    strict=True（与代理 B 有接口约定的三个回调 apply_ai_settings / apply_bubble_style /
+    apply_physics）：**必须**拿到结果——(ok, msg) 二元组或 True 才算成功；返回 None /
+    False / 方法缺失一律算失败（B：这三个回调永远返回二元组，None 说明这次调用没拿到结果，
+    按 B 的明确要求当失败处理，不许当成"老契约的成功"）。
+    回调返回值的完整口径（v2.7.0 第 5 轮 F2 起，_apply_result 是唯一实现处）：
+      · `(ok, msg)` 二元组 → 按 ok；msg 非空时原样回给用户；
+      · `True` → 成功；`False` → 失败（无原因）；
+      · `None` → strict 记失败 / 非 strict（老回调）记成功；
+      · **非空字符串 → 失败，串就是原因**（pet_config.write_config / 桌宠.save_config 的
+        失败口径；空串按成功，兼容老回调 `return ""`）；
+      · 其它（数字、对象…）→ 沿用"没明说失败就是成功"，不猜。
+    strict=False（老式回调 apply_role / apply_sound_group：成功不返回东西，全仓无返回值约定）：
+    None 视为成功，行为与 _call 的 None 一致。
+    explicit=False 表示失败原因不是回调给的（回调抛异常或没返回值）：细节进 error.log，
+    调用方只做**非模态**提示——保存回调抛异常时绝不能弹模态框（既有用例
+    test_silent_logging_v24 就是在没有任何记录器的情况下直接调 AISettingsDialog._save 的）。
+    """
+    strict = bool(kw.pop("strict", False))
+    fn = _get(pet, name)
+    if not callable(fn):
+        return (False, "", False) if strict else (True, "", False)
+    try:
+        res = fn(*args)
+    except Exception as e:
+        pet_log.log_error("dialog callback %s failed: %r" % (name, e))
+        return False, "", False
+    if res is None:
+        return (False, "", False) if strict else (True, "", False)
+    ok, msg = _apply_result(res)
+    return ok, msg, True
+
+
+def _save_failed(dlg, title, msg, explicit):
+    """保存失败：**不关闭窗口** + 原因对用户可见。
+
+    回调自己给了原因（explicit=True）→ 额外弹一次 _warn（用户当场知道为什么没保存成功）；
+    原因来自异常（explicit=False）→ 只写进窗口内的状态行（非模态，不阻塞也不打断）。
+    """
+    text = msg or "保存失败（详情见数据目录的 error.log）"
+    hint = getattr(dlg, "_save_hint", None)
+    if hint is not None:
+        hint.setText("⚠ " + text)
+    # 没有"窗口内状态行"可写的窗口（角色面板/音效面板）一律退回模态警告——
+    # 失败绝不允许重新变成静默（explicit=False 时上面那行写不进去任何东西）。
+    if explicit or hint is None:
+        _warn(dlg, title, text)
+
+
 def _preview_audio(pet, path):
     """试听：优先 pet.preview_audio；缺省时本地兜底
     （wav → pet_audio.preview_file；mp3 → QMediaPlayer）。返回是否已播出。"""
@@ -2168,6 +2271,11 @@ class RoleEditDialog(_FitDialog):
         """多选图片 → 统一画布管线 → 立即入角色目录（staged，取消时回收）。"""
         files, _f = QFileDialog.getOpenFileNames(
             self, "选择动作帧图片（2 张起）", "", "图片 (*.png *.jpg *.jpeg *.bmp *.webp)")
+        if not files:
+            # v2.7.0 第 5 轮（P2-4）：**取消**（文件框回空表）不是"选少了"——改前它和
+            # "只选 1 张"一起命中下面那条警告，用户点了取消却被训一句"至少 2 张图"。
+            # 取消 = 用户什么都没选：静默返回（与其它文件框取消路径同口径）。
+            return
         if len(files) < 2:
             _warn(self, "帧动作", "帧动作至少 2 张图")
             return
@@ -2375,7 +2483,9 @@ class BehaviorDialog(_FitDialog):
         lay.addLayout(add_row)
         del_row = QHBoxLayout()
         b_del_step = QPushButton("删除选中步骤")
-        b_del_step.clicked.connect(lambda: self._steps.takeItem(self._steps.currentRow()))
+        # P1-6：以前是 lambda 直接 takeItem(currentRow())——没选中时 takeItem(-1) 只往
+        # qWarning 打一行，界面上什么都没发生、也没有任何提示
+        b_del_step.clicked.connect(self._del_step)
         del_row.addWidget(b_del_step)
         del_row.addStretch(1)
         lay.addLayout(del_row)
@@ -2511,10 +2621,27 @@ class BehaviorDialog(_FitDialog):
             self._steps.addItem(_it)
 
     def _new(self):
+        """「新建」按钮：清空表单进入新建态，并给一句即时回执。
+
+        以前这里是"表单本来就空时屏幕上零变化"（最典型的"像没效果"）——现在有气泡。
+        """
+        self._reset_form()
+        _toast(self.pet, "已进入新建态：填好行为名与步骤后点「保存」")
+
+    def _reset_form(self):
+        """只清表单（删除成功后复用，不重复发回执）。"""
         self._editing_id = None
         self._name.clear()
         self._steps.clear()
         self._list.setCurrentRow(-1)
+
+    def _del_step(self):
+        """「删除选中步骤」：没选中时给提示（takeItem(-1) 是静默的）。"""
+        row = self._steps.currentRow()
+        if row < 0:
+            _warn(self, "删除步骤", "先在「动作序列」里选中要删的步骤")
+            return
+        self._steps.takeItem(row)
 
     def _add_step(self):
         act = self._act_combo.currentData()
@@ -2616,27 +2743,51 @@ class BehaviorDialog(_FitDialog):
         if not _ok:
             _warn(self, "行为编辑", _err or "保存失败")
             return
-        _row = self._list.currentRow()
+        _saved_id = self._editing_id
+        _saved_name = (self.svc.get(_saved_id) or {}).get("name") or self._name.text().strip()
         self._refresh()
-        if _row >= 0 and _row < self._list.count():
-            self._list.setCurrentRow(_row)
+        # P1-9：新建时 _row = currentRow() == -1 → 以前既不选中也不滚动，新行为落在列表
+        # 末尾看不见（"保存了像没保存"）。现在按 id 定位新条目并滚到可见处。
+        self._select_behavior(_saved_id)
+        _toast(self.pet, "行为「%s」已保存" % _saved_name)
+
+    def _select_behavior(self, bid):
+        """按 id 选中并滚到可见处（正例照抄 AlarmDialog._save）。返回是否找到。"""
+        if not bid:
+            return False
+        for _i in range(self._list.count()):
+            _it = self._list.item(_i)
+            if _it.data(Qt.ItemDataRole.UserRole) == bid:
+                self._list.setCurrentRow(_i)
+                self._list.scrollToItem(_it)
+                return True
+        return False
 
     def _delete(self):
         _row = self._list.currentRow()
         if _row < 0 or self.svc is None:
+            _warn(self, "删除行为", "先在列表里选中一个行为")
             return
         _bid = self._list.item(_row).data(Qt.ItemDataRole.UserRole)
+        _b = self.svc.get(_bid) or {}
+        _label = _b.get("name") or str(_bid)
+        # P1-3：这里以前**没有二次确认**（同仓 _confirm 到处都用）——点一下就永久删掉，
+        # 而且成功后没有任何"已删除"回执。
+        if not _confirm(self, "删除行为",
+                        "确定删除行为「%s」吗？\n删除后无法撤销（它的步骤会一起没）。" % _label):
+            return
         _ok, _err = self.svc.delete(_bid)
         if not _ok:
-            _warn(self, "行为编辑", _err)
+            _warn(self, "行为编辑", _err or "删除失败")
             return
         # 删除的若是当前待机行为 → 同步清配置（防悬挂引用静默失效）
         _cfg = getattr(self.pet, "cfg", None)
         if isinstance(_cfg, dict) and str(_cfg.get("idle_behavior") or "") == _bid:
             _cfg["idle_behavior"] = ""
             self._save_cfg(_cfg)
-        self._new()
+        self._reset_form()
         self._refresh()
+        _toast(self.pet, "已删除行为「%s」" % _label)
 
     def _test_play(self):
         self._save()  # 先保存再试播（试播内容 = 已保存内容）
@@ -2653,13 +2804,17 @@ class BehaviorDialog(_FitDialog):
             return
         _b, _err = self.svc.import_file(_path)
         if _b is None:
-            _warn(self, "行为编辑", _err)
+            _warn(self, "行为编辑", _err or "导入失败")
             return
         self._refresh()
+        self._select_behavior(_b.get("id"))
+        _toast(self.pet, "已导入行为「%s」" % (_b.get("name") or _b.get("id", "")))
 
     def _export(self):
         _row = self._list.currentRow()
         if _row < 0 or self.svc is None:
+            # E3/P1-2：未选中时以前直接静默 return，连"先选中一个"都不说
+            _info(self, "导出行为", "先在列表里选中一个行为，再点「导出…」")
             return
         _bid = self._list.item(_row).data(Qt.ItemDataRole.UserRole)
         _path, _f = QFileDialog.getSaveFileName(self, "导出行为资源", "", "行为 JSON (*.json)")
@@ -2667,7 +2822,11 @@ class BehaviorDialog(_FitDialog):
             return
         _ok, _err = self.svc.export_file(_bid, _path)
         if not _ok:
-            _warn(self, "行为编辑", _err)
+            _warn(self, "行为编辑", _err or "导出失败")
+            return
+        # E3/P1-2：成功路径以前**没有任何分支**——选完保存路径后窗口零变化，用户完全
+        # 不知道导出成没成（这是"导出像没效果"最纯粹的一例）。
+        _toast(self.pet, "行为已导出到 %s" % os.path.basename(_path))
 
 
 # ---------------- v2.0.5：闹钟 ----------------
@@ -2823,11 +2982,16 @@ class AlarmDialog(_FitDialog):
         for _i in range(self._list.count()):
             if self._list.item(_i).data(Qt.ItemDataRole.UserRole) == _saved_id:
                 self._list.setCurrentRow(_i)
+                self._list.scrollToItem(self._list.item(_i))
                 break
+        _toast(self.pet, "闹钟已保存~（到点气泡提醒）")
 
     def _delete(self):
         _row = self._list.currentRow()
         if _row < 0 or self.svc is None:
+            # 未选中/无服务 = 空操作。**不许**在这里补 _warn：
+            # tests/test_dialogs_more_v24.py::test_alarm_dialog_update_failure_and_delete_
+            # without_selection 明确断言"未选中删除不该弹提示"（既有断言不动）。
             return
         _aid = self._list.item(_row).data(Qt.ItemDataRole.UserRole)
         _a = self.svc.get(_aid)
@@ -2836,10 +3000,11 @@ class AlarmDialog(_FitDialog):
             return
         _ok, _err = self.svc.delete(_aid)
         if not _ok:
-            _warn(self, "闹钟", _err)
+            _warn(self, "闹钟", _err or "删除失败")
             return
         self._new()
         self._refresh()
+        _toast(self.pet, "已删除闹钟 %s" % _tlabel)
 
 
 # ---------------- a) 角色面板 ----------------
@@ -2999,7 +3164,11 @@ class AISettingsDialog(_FitDialog):
         ok.setDefault(True)
         ok.clicked.connect(self._save)
         cancel.clicked.connect(self.reject)
-        btns.addStretch(1)
+        # v2.7.0 第 5 轮（P1-1）：保存失败时的**非模态**状态行——窗口不关，原因就在按钮旁边
+        self._save_hint = QLabel("")
+        self._save_hint.setWordWrap(True)
+        self._save_hint.setStyleSheet("color:#ff8080;")
+        btns.addWidget(self._save_hint, 1)
         btns.addWidget(ok)
         btns.addWidget(cancel)
         stick_buttons(self, btns)   # v2.5.0 B：按钮行在滚动区之外
@@ -3090,8 +3259,14 @@ class AISettingsDialog(_FitDialog):
             "ai_tools_confirm": self._tools_confirm.isChecked(),
             "ai_rag_enabled": self._rag.isChecked(),  # v2.4：隐私开关（此前只有键没有入口）
         }
-        _call(self._pet, "apply_ai_settings", data)
+        ok, msg, explicit = _apply_call(self._pet, "apply_ai_settings", data, strict=True)
+        if not ok:
+            # P1-1：以前丢弃返回值 + 无条件 accept()——人设正文/API 地址/模型/工具开关
+            # 整批静默丢失，窗口照常关闭 = "保存成功"假象。现在失败就**不关窗**。
+            _save_failed(self, "AI 设置", msg, explicit)
+            return
         self.accept()
+        _toast(self._pet, msg or "AI 设置已更新~")
 
 
 class RolePanel(QWidget):
@@ -3337,29 +3512,38 @@ class RolePanel(QWidget):
             return
         it = self._list.currentItem()
         if it is None:
+            _warn(self._parent_widget(), "切换角色", "先在列表里选中一个角色")
             return
         rid = it.data(Qt.ItemDataRole.UserRole)
         if not rid:
             return
+        _name = (self._lib.get(rid) or {}).get("name") or rid
         if hasattr(self._pet, "apply_role"):
-            _call(self._pet, "apply_role", rid)  # 主线内部 set_active + 保存 + 重载贴图
+            # S22：以前丢弃返回值——失败只在 error.log 里，界面上只有 "[当前]" 标记动了
+            ok, msg, explicit = _apply_call(self._pet, "apply_role", rid)
+            if not ok:
+                _save_failed(self._parent_widget(), "切换角色", msg, explicit)
+                return
         elif not self._lib.set_active(rid):
             _warn(self._parent_widget(), "切换角色", "切换失败")
             return
         self._refresh()
+        _toast(self._pet, "已切换到角色「%s」" % _name)
 
     def _delete(self):
         if self._lib is None:
             return
         it = self._list.currentItem()
         if it is None:
+            _warn(self._parent_widget(), "删除角色", "先在列表里选中一个角色")
             return
         rid = it.data(Qt.ItemDataRole.UserRole)
         if not rid:
             return
         role = self._lib.get(rid) or {}
+        _name = role.get("name") or rid
         if not _confirm(self._parent_widget(), "删除角色",
-                        "确定删除角色「%s」吗？" % role.get("name", "")):
+                        "确定删除角色「%s」吗？删除后无法撤销。" % _name):
             return
         ok, err = self._lib.delete(rid)
         if not ok:
@@ -3367,15 +3551,21 @@ class RolePanel(QWidget):
             return
         self._refresh()
         _call(self._pet, "apply_role", self._lib.active_id())
+        _toast(self._pet, "已删除角色「%s」" % _name)
 
     def _reset_default(self):
         if self._lib is None:
             return
         if hasattr(self._pet, "apply_role"):
-            _call(self._pet, "apply_role", "")
+            # S23：以前丢弃返回值，成功也只是标记移动、失败全静默
+            ok, msg, explicit = _apply_call(self._pet, "apply_role", "")
+            if not ok:
+                _save_failed(self._parent_widget(), "恢复默认角色", msg, explicit)
+                return
         else:
             self._lib.set_active("")
         self._refresh()
+        _toast(self._pet, "已恢复默认角色")
 
 
 # ---------------- b) 音效面板 ----------------
@@ -3482,7 +3672,17 @@ class SoundPanel(QWidget):
                   "该槽位仅支持 wav 片段（mp3 可以试听，但事件播放不支持）")
             self._refresh()  # 回滚组合框显示
             return
-        _call(self._pet, "apply_sound_group", self._lib.group_paths())
+        # S16：以前返回值被丢弃（apply_sound_group 自己 try/except 只写日志）→ 静默
+        # v2.7.0 第 5 轮（L2-1）：**strict=True**。改前这里按老契约（None = 成功）判，
+        # 而桌宠.apply_sound_group 内部吞异常只写日志、还丢掉 save_config 的返回值 → 一律
+        # 回 None → `if not ok` 是死代码、下面的成功气泡**无条件**执行：底层抛异常时
+        # 用户看到的仍是「音效组已更新~」（假成功）。生产端已同步改成返回 (ok, msg)。
+        ok, msg, explicit = _apply_call(self._pet, "apply_sound_group",
+                                        self._lib.group_paths(), strict=True)
+        if not ok:
+            _save_failed(self._parent_widget(), "音效组", msg, explicit)
+            return
+        _toast(self._pet, "音效组已更新~")
 
     # ---------- 动作 ----------
     def _preview_selected(self):
@@ -3512,12 +3712,16 @@ class SoundPanel(QWidget):
             _warn(self._parent_widget(), "导入音频", err or "导入失败")
             return
         self._refresh()
+        # N7/P1-9：新片段落在列表末尾，以前既不选中也不滚动、也没有任何提示
+        self._select_fragment(frag.get("id"))
+        _toast(self._pet, "已导入音频「%s」" % (frag.get("name") or ""))
 
     def _rename(self):
         if self._lib is None:
             return
         it = self._list.currentItem()
         if it is None:
+            _warn(self._parent_widget(), "重命名", "先在列表里选中一个音频片段")
             return
         fid = it.data(Qt.ItemDataRole.UserRole)
         f = None
@@ -3526,6 +3730,7 @@ class SoundPanel(QWidget):
                 f = x
                 break
         if f is None:
+            _warn(self._parent_widget(), "重命名", "这个片段已经不在库里了，刷新一下再试")
             return
         dlg = QInputDialog(self._parent_widget())
         dlg.setWindowTitle("重命名片段")
@@ -3536,18 +3741,23 @@ class SoundPanel(QWidget):
             return
         name = dlg.textValue().strip()
         if not name:
+            # S2/P2-3：以前空名静默 return——用户删光名字点确定，什么都没发生
+            _warn(self._parent_widget(), "重命名", "名字不能为空")
             return
         ok, err = self._lib.rename(fid, name)
         if not ok:
             _warn(self._parent_widget(), "重命名", err or "重命名失败")
             return
         self._refresh()
+        self._select_fragment(fid)
+        _toast(self._pet, "已重命名为「%s」" % name)
 
     def _delete_audio(self):
         if self._lib is None:
             return
         it = self._list.currentItem()
         if it is None:
+            _warn(self._parent_widget(), "删除音频", "先在列表里选中一个音频片段")
             return
         fid = it.data(Qt.ItemDataRole.UserRole)
         f = None
@@ -3556,6 +3766,7 @@ class SoundPanel(QWidget):
                 f = x
                 break
         if f is None:
+            _warn(self._parent_widget(), "删除音频", "这个片段已经不在库里了，刷新一下再试")
             return
         if not _confirm(self._parent_widget(), "删除音频",
                         "确定删除片段「%s」吗？\n引用它的音效组槽位将变为静音。" % f["name"]):
@@ -3566,6 +3777,19 @@ class SoundPanel(QWidget):
             return
         self._refresh()
         _call(self._pet, "apply_sound_group", self._lib.group_paths())
+        _toast(self._pet, "已删除音频片段「%s」" % f["name"])
+
+    def _select_fragment(self, fid):
+        """按 id 选中并滚到可见处（新建/重命名后的落点反馈）。返回是否找到。"""
+        if not fid:
+            return False
+        for _i in range(self._list.count()):
+            _it = self._list.item(_i)
+            if _it.data(Qt.ItemDataRole.UserRole) == fid:
+                self._list.setCurrentRow(_i)
+                self._list.scrollToItem(_it)
+                return True
+        return False
 
 
 # ---------------- c) 资源管理对话框 ----------------
@@ -3656,10 +3880,26 @@ class VoiceAssetPanel(QWidget):
             _warn(self._parent_widget(), "导入失败", err or "导入失败")
             return
         self._refresh()
+        # N8：新素材落在列表末尾，以前只有"共 N 个"这行字变化，既不选中也不滚动
+        self._select_asset(asset.get("id"))
+        _toast(self._pet, "已导入参考音「%s」" % (asset.get("name") or ""))
+
+    def _select_asset(self, sid):
+        """按 id 选中并滚到可见处（新建/重命名后的落点反馈）。返回是否找到。"""
+        if not sid:
+            return False
+        for _i in range(self._list.count()):
+            _it = self._list.item(_i)
+            if _it.data(Qt.ItemDataRole.UserRole) == sid:
+                self._list.setCurrentRow(_i)
+                self._list.scrollToItem(_it)
+                return True
+        return False
 
     def _rename(self):
         sid = self._selected()
         if not sid or self._lib is None:
+            _warn(self._parent_widget(), "重命名", "先在列表里选中一个声音素材")
             return
         cur = self._lib.get_asset(sid) or {}
         name, ok = QInputDialog.getText(self._parent_widget(), "重命名", "新名字：",
@@ -3668,24 +3908,29 @@ class VoiceAssetPanel(QWidget):
             return
         res = self._lib.rename(sid, name)
         if res[0] is False:
-            _warn(self._parent_widget(), "重命名失败", res[1])
+            _warn(self._parent_widget(), "重命名失败", res[1] or "重命名失败")
             return
         self._refresh()
+        self._select_asset(sid)
+        _toast(self._pet, "已重命名为「%s」" % (res[1] or cur.get("name", "")))
 
     def _delete_asset(self):
         sid = self._selected()
         if not sid or self._lib is None:
+            _warn(self._parent_widget(), "删除声音素材", "先在列表里选中一个素材")
             return
         cur = self._lib.get_asset(sid) or {}
+        _name = cur.get("name", sid)
         if not _confirm(self._parent_widget(), "删除声音素材",
                         "删除「%s」吗？台词里引用它的地方会变成失效引用（会明确提示，不会静默）。"
-                        % cur.get("name", sid)):
+                        % _name):
             return
         res = self._lib.delete(sid)
         if res[0] is False:
-            _warn(self._parent_widget(), "删除失败", res[1])
+            _warn(self._parent_widget(), "删除失败", res[1] or "删除失败")
             return
         self._refresh()
+        _toast(self._pet, "已删除声音素材「%s」" % _name)
 
 
 class ResourceManagerDialog(_FitDialog):
@@ -3953,7 +4198,11 @@ class BubbleStyleDialog(_FitDialog):
         save_btn.clicked.connect(self._save)
         reset_btn.clicked.connect(self._reset_default)
         cancel_btn.clicked.connect(self.reject)
-        row.addStretch(1)
+        # v2.7.0 第 5 轮（P1-4）：保存失败时的非模态状态行
+        self._save_hint = QLabel("")
+        self._save_hint.setWordWrap(True)
+        self._save_hint.setStyleSheet("color:#ff8080;")
+        row.addWidget(self._save_hint, 1)
         row.addWidget(save_btn)
         row.addWidget(reset_btn)
         row.addWidget(cancel_btn)
@@ -4006,8 +4255,13 @@ class BubbleStyleDialog(_FitDialog):
             "font_size": self._to_int(self._style["font_size"], 10),
             "radius": self._to_int(self._style["radius"], 16),
         }
-        _call(self._pet, "apply_bubble_style", style)
+        ok, msg, explicit = _apply_call(self._pet, "apply_bubble_style", style, strict=True)
+        if not ok:
+            # P1-4：以前丢弃返回值 + 无条件 accept()——失败也照常关窗，界面零变化
+            _save_failed(self, "气泡样式", msg, explicit)
+            return
         self.accept()
+        _toast(self._pet, msg or "气泡样式已更新~（新样式从下一条气泡开始）")
 
     def _reset_default(self):
         self._style = dict(_DEFAULT_BUBBLE_STYLE)
@@ -4242,6 +4496,8 @@ class LinesDialog(_FitDialog):
         self._food.setCurrentIndex(0)  # v2.2.5：新建台词时重置喂食对象（防上一轮编辑残留）
         self._list.setCurrentRow(-1)
         self._text.setFocus()
+        # N2：表单本来就空时，点「新建」屏幕上零变化——给一句"已进入新建态"的即时回执
+        _toast(self._pet, "已进入新建态：写完台词点「保存」")
 
     def _save_line(self):
         if self._lib is None:
@@ -4254,6 +4510,7 @@ class LinesDialog(_FitDialog):
         role = self._role.currentData() or ""
         voice = self._voice.currentData() or ""
         food = self._food.currentData() if cat == "food" else ""
+        _created = False
         if self._editing:
             ok, err = self._lib.save(self._editing, text=text, category=cat,
                                      role_slot=role, voice_slot=voice, food=food,
@@ -4263,10 +4520,37 @@ class LinesDialog(_FitDialog):
             ok = ln is not None
             if ok:
                 self._editing = ln["id"]
+                _created = True
         if not ok:
             _warn(self, "保存失败", err or "保存失败")
             return
+        if _created:
+            # P1-8：新行受「类别」筛选与关键词搜索约束——筛选/搜索与新建类别不一致时，
+            # 新台词根本不出现，用户以为没建成。新建落库后把这两个过滤条件复位。
+            self._clear_line_filters(cat)
         self._refresh_all()
+        # N3/S5/P1-8：保存成功后以前零提示、也不选中新行（长列表下等于没保存）
+        self._select_line(self._editing)
+        _toast(self._pet, "台词已保存~")
+
+    def _clear_line_filters(self, cat):
+        """新建台词后复位"看不见新行"的两个过滤条件（类别=全部 + 清空搜索词）。"""
+        if self._filter.currentData() and self._filter.currentData() != cat:
+            self._filter.setCurrentIndex(0)     # 「全部」
+        if (self._search.text() or "").strip():
+            self._search.clear()
+
+    def _select_line(self, lid):
+        """按 id 选中并滚到可见处（保存/新建后的落点反馈）。返回是否找到。"""
+        if not lid:
+            return False
+        for _i in range(self._list.count()):
+            _it = self._list.item(_i)
+            if _it.data(Qt.ItemDataRole.UserRole) == lid:
+                self._list.setCurrentRow(_i)
+                self._list.scrollToItem(_it)
+                return True
+        return False
 
     def _delete_selected(self):
         if self._lib is None:
@@ -4280,11 +4564,13 @@ class LinesDialog(_FitDialog):
             return
         n, err = self._lib.delete_many(ids)
         if err:
-            _warn(self, "删除失败", err)
+            _warn(self, "删除失败", err or "删除失败")
             return
         self._editing = None
         self._text.clear()
         self._refresh_all()
+        # D4：n（真删掉几条）以前拿到了却从不显示
+        _toast(self._pet, "已删除 %d 条台词" % int(n or 0))
 
     def _clear_all(self):
         if self._lib is None:
@@ -4298,6 +4584,7 @@ class LinesDialog(_FitDialog):
         self._editing = None
         self._text.clear()
         self._refresh_all()
+        _toast(self._pet, "已清空全部台词与对白（本窗口内可「撤销删除」找回）")
 
     def _restore_builtins(self):
         if self._lib is None:
@@ -4410,7 +4697,9 @@ class LinesDialog(_FitDialog):
         for i in range(self._dlist.count()):
             if self._dlist.item(i).data(Qt.ItemDataRole.UserRole) == d["id"]:
                 self._dlist.setCurrentRow(i)
+                self._dlist.scrollToItem(self._dlist.item(i))
                 break
+        _toast(self._pet, "已新建对白「%s」，记得改名~" % (d.get("name") or ""))
 
     def _delete_dialogue(self):
         if self._lib is None or not self._editing_dlg:
@@ -4424,6 +4713,7 @@ class LinesDialog(_FitDialog):
             return
         self._editing_dlg = None
         self._refresh_all()
+        _toast(self._pet, "已删除对白（台词本身不受影响）")
 
     def _rename_dialogue(self):
         if self._lib is None or not self._editing_dlg:
@@ -4434,6 +4724,7 @@ class LinesDialog(_FitDialog):
             _warn(self, "保存失败", err or "保存失败")
             return
         self._refresh_all()
+        _toast(self._pet, "对白名称已保存~")
 
     def _member_ids(self):
         return [self._members.item(i).data(Qt.ItemDataRole.UserRole)
@@ -4453,6 +4744,7 @@ class LinesDialog(_FitDialog):
             return
         self._on_pick_dialogue()
         self._refresh_dialogues()
+        _toast(self._pet, "已添加到对白（顺序即播放顺序）")
 
     def _remove_member(self):
         if self._lib is None or not self._editing_dlg:
@@ -4461,6 +4753,8 @@ class LinesDialog(_FitDialog):
         row = self._members.currentRow()
         if row < 0:
             _warn(self, "移除台词", "先在对白内容里选中一条台词")
+            return
+        if not _confirm(self, "移除台词", "把这条台词从对白里移掉吗？（台词本身不受影响）"):
             return
         ids = self._member_ids()
         ids.pop(row)
@@ -4613,10 +4907,14 @@ class LinesDialog(_FitDialog):
         lid = self._bad_selected()
         if not lid or self._lib is None:
             return
+        if not _confirm(self, "清空引用", "把这条台词的角色/声音引用清空吗？（台词本身保留）"):
+            return
         res = self._lib.save(lid, clear_role=True, clear_voice=True)
         if res[0] is False:
-            _warn(self, "清空失败", res[1])
+            _warn(self, "清空失败", res[1] or "清空失败")
+            return
         self._refresh_all()
+        _toast(self._pet, "已清空这条台词的角色/声音引用")
 
     def _delete_bad_one(self):
         lid = self._bad_selected()
@@ -4624,8 +4922,13 @@ class LinesDialog(_FitDialog):
             return
         if not _confirm(self, "删除台词", "删除这条失效台词吗？"):
             return
-        self._lib.delete(lid)
+        # D6：以前 delete(lid) 的返回值直接丢弃——删失败也照样刷新，用户以为删了
+        ok, err = self._lib.delete(lid)
+        if not ok:
+            _warn(self, "删除失败", err or "删除失败")
+            return
         self._refresh_all()
+        _toast(self._pet, "已删除失效台词")
 
     def _delete_all_bad(self):
         if self._lib is None:
@@ -4637,8 +4940,13 @@ class LinesDialog(_FitDialog):
         if not _confirm(self, "一键删除失效台词",
                         "删除全部 %d 条失效台词吗？删除后可用「台词库 → 撤销删除」找回。" % len(items)):
             return
-        self._lib.delete_many([x["line_id"] for x in items])
+        # D7：以前 delete_many 的返回值与 err 全丢——删失败/删不掉也照样刷新
+        n, err = self._lib.delete_many([x["line_id"] for x in items])
+        if err:
+            _warn(self, "删除失败", err)
+            return
         self._refresh_all()
+        _toast(self._pet, "已删除 %d 条失效台词（可用「撤销删除」找回）" % int(n or 0))
 
     # ---------- 刷新 ----------
     def _refresh_all(self):
@@ -4707,6 +5015,11 @@ class PhysicsDialog(_FitDialog):
         ok.clicked.connect(self._save)
         cancel.clicked.connect(self.reject)
         btns.addStretch(1)
+        # v2.7.0 第 5 轮（P1-4）：保存失败时的非模态状态行
+        self._save_hint = QLabel("")
+        self._save_hint.setWordWrap(True)
+        self._save_hint.setStyleSheet("color:#ff8080;")
+        btns.addWidget(self._save_hint, 1)
         btns.addWidget(ok)
         btns.addWidget(cancel)
         stick_buttons(self, btns)   # v2.5.0 B：按钮行在滚动区之外
@@ -4717,8 +5030,13 @@ class PhysicsDialog(_FitDialog):
                 "groundFriction": self._spin["groundFriction"].value(),
                 "throwPower": self._spin["throwPower"].value(),
                 "ceilingBounce": self._ceil.isChecked()}
-        _call(self._pet, "apply_physics", data)
+        ok, msg, explicit = _apply_call(self._pet, "apply_physics", data, strict=True)
+        if not ok:
+            _save_failed(self, "物理参数", msg, explicit)
+            return
         self.accept()
+        # P1-4：值没变时主窗返回 (True, "没有改动")——以前是静默 return，"点保存 = 什么都不知道"
+        _toast(self._pet, msg or "物理参数已更新~")
 
 
 def open_physics(pet):
@@ -4727,7 +5045,9 @@ def open_physics(pet):
         dlg = PhysicsDialog(pet)
         modal(dlg)
     except Exception as e:
-        pet_log.log_error("physics dialog failed: %r" % (e,))
+        # S25/P1-7：这里以前只 log_error——菜单点了没反应，用户完全不知道为什么。
+        # 与同文件另外 7 个入口统一走 _dialog_failed（日志 + 中文警告框）。
+        _dialog_failed(pet, "物理参数", e)
 
 
 class VoiceDialog(_FitDialog):
@@ -5119,11 +5439,101 @@ class VoiceDialog(_FitDialog):
         lay = QVBoxLayout(w)
         lay.addWidget(QLabel("给角色绑定声音素材（朗读台词时用它）。台词若自己指定了声音，"
                              "以台词为准。"))
+        # P2-3（v2.7.0 第 5 轮）：素材库为空时下拉只剩「（不绑定）」，和"填充坏掉"长得
+        # 一模一样；而且这一页没有导入入口（「管理声音素材…」在另一个页签）。这里把
+        # 空态/故障态显式说出来，并给一个就地能点的入口。
+        self._bind_hint = QLabel("")
+        self._bind_hint.setWordWrap(True)
+        lay.addWidget(self._bind_hint)
         self._bind_area = QWidget()
         self._bind_form = QFormLayout(self._bind_area)
         lay.addWidget(self._bind_area, 1)
+        _imp_row = QHBoxLayout()
+        self._btn_import_assets = QPushButton("去导入参考音…")
+        self._btn_import_assets.clicked.connect(self._open_assets)
+        _imp_row.addWidget(self._btn_import_assets)
+        _imp_row.addStretch(1)
+        lay.addLayout(_imp_row)
         self._refresh_bindings()
         return w
+
+    def _assets_health(self):
+        """声音素材库是否可读 → (ok, 人话原因)。
+
+        与 _asset_items 里那条"取不到就只给（不绑定）"的兜底**分工**：那条保界面不崩，
+        这条负责**留痕 + 给出原因**——"库是空的"和"库读坏了"以前在界面上分不出来。
+        """
+        if self._assets is None:
+            return False, "声音素材库没准备好（重启桌宠试试）"
+        try:
+            self._assets.assets()
+        except Exception as e:
+            pet_log.log_error("voice assets unreadable: %r" % (e,))
+            return False, "声音素材读不出来（详情见数据目录的 error.log）"
+        return True, ""
+
+    def _assets_index_unusable(self):
+        """索引文件在、**库里真的一条可用素材都没有** → (True, 一句人话)；否则 (False, "")。
+
+        为什么要它：assets() 返回 [] 有两种**完全不同**的原因——"还没导入过任何素材"
+        （索引文件不存在）与"索引里有内容却读不出来"（扩展名不在白名单 / JSON 坏了）。
+        两种在界面上长得一模一样，用户只会问"怎么只有不绑定的选项"。
+
+        v2.7.0 第 5 轮（F1 修复，本轮新引入的用户可见假警报）：判据必须**两条同时成立**——
+          ① 索引文件在、且内容 > 2 字节（"导入过东西"留下的痕迹）；
+          ② **库里真的一条都读不出来**（assets() 为空）。
+        改前只有①，于是**任何导入过参考音的健康库**一打开声音素材面板就顶一条红字假警报
+        「索引里有内容，但一条都读不出来」，而它下面的下拉里素材好好地列着；同一判据还往
+        error.log 写一条**误导性**限流日志（实测两处复现：手造库 + 生产对象 pet.voice_assets）。
+        所以：**先问库**——assets() 非空 = 健康库，直接返回 False，索引文件都不看。
+        「读不出来 / 库故障」由 _assets_health 报（三态文案互不相同，见 _refresh_bind_hint）；
+        **日志只在真丢弃时落**（上面②成立）。
+        """
+        if self._assets is None:
+            return False, ""
+        try:
+            if self._assets.assets():
+                return False, ""   # 真读得出素材 → 没有"索引不可用"这回事（F1）
+        except Exception as e:
+            # 读不出来 = 三态里的"库故障"，由 _assets_health 说话（本判据不重复判、不重复报）；
+            # 这里仍记一条**留痕**：读不出来本身就是要查的事，而且审计口径（_dev 静默 except
+            # razor）要求每个 except 要么补日志、要么登记进白名单 —— 这条属于"补日志"。
+            pet_log.log_error("voice assets unreadable (index check): %r" % (e,))
+            return False, ""
+        idx = getattr(self._assets, "_index", None)
+        if not idx or not os.path.isfile(idx):
+            return False, ""
+        try:
+            _size = os.path.getsize(idx)
+        except OSError as e:
+            pet_log.log_error("voice assets index stat failed: %r" % (e,))
+            return False, ""
+        if _size <= 2:          # 文件在但只有 "{}"/空白 = 就是"还没导入过"
+            return False, ""
+        pet_log.log_throttled(
+            "voice_assets.unusable:%s" % (os.path.basename(os.path.dirname(idx)) or "data"),
+            "声音素材索引有内容但一条可用素材都没读出来：%s"
+            "（参考音只支持 .wav / .mp3；扩展名不符的条目会被跳过）" % idx)
+        return True, ("声音素材索引里有内容，但一条都读不出来——参考音只支持 .wav / .mp3，"
+                      "扩展名不符的条目会被跳过（详情见数据目录的 error.log）。")
+
+    def _refresh_bind_hint(self):
+        """按素材库的真实状态写提示行（正常 / 空库 / 索引读不出 / 库故障）。"""
+        ok, why = self._assets_health()
+        _unusable, _why2 = self._assets_index_unusable()
+        if not ok:
+            self._bind_hint.setText("⚠ %s" % why)
+            self._bind_hint.setStyleSheet("color:#ff8080;")
+        elif _unusable:
+            self._bind_hint.setText("⚠ %s" % _why2)
+            self._bind_hint.setStyleSheet("color:#ff8080;")
+        elif len(self._asset_items()) <= 1:
+            self._bind_hint.setText("还没有配音素材，下面只能选「（不绑定）」——"
+                                    "点「去导入参考音…」导入 3~10 秒干净人声（wav 最佳）。")
+            self._bind_hint.setStyleSheet("color:#ffd65a;")
+        else:
+            self._bind_hint.setText("")
+            self._bind_hint.setStyleSheet("")
 
     def _role_items(self):
         out = [("", "默认角色（兜底声音）")]
@@ -5175,6 +5585,7 @@ class VoiceDialog(_FitDialog):
             h.addWidget(b)
             self._bind_form.addRow(label, row)
             self._bind_combos[slot] = cb
+        self._refresh_bind_hint()
 
     def _on_bind_changed(self, slot, combo):
         if self._svc is None:
@@ -5182,6 +5593,8 @@ class VoiceDialog(_FitDialog):
         ok, err = self._svc.bind_voice(slot, combo.currentData() or "")
         if not ok:
             _warn(self, "绑定失败", err or "绑定失败")
+            return
+        _toast(self._pet, "绑定已保存~")
 
     def _preview(self, vs):
         if not vs:
@@ -5584,6 +5997,9 @@ class IdleDialog(_FitDialog):
             _warn(self, "添加待机动作", err or "添加失败")
             return
         self._refresh_table()
+        # N11：新动作加在表格末尾，以前既不选中也不滚动、也没有任何提示
+        self._select_action(item.get("id") if isinstance(item, dict) else "")
+        _toast(self._pet, "已添加待机动作")
 
     def _remove_action(self):
         aid = self._selected_action()
@@ -5596,6 +6012,19 @@ class IdleDialog(_FitDialog):
             _warn(self, "移除失败", err or "移除失败")
             return
         self._refresh_table()
+        _toast(self._pet, "已移除待机动作")
+
+    def _select_action(self, aid):
+        """按 id 选中待机动作那一行（表格）。返回是否找到。"""
+        if not aid:
+            return False
+        for row in range(self._table.rowCount()):
+            _it = self._table.item(row, 0)
+            if _it is not None and _it.data(Qt.ItemDataRole.UserRole) == aid:
+                self._table.setCurrentCell(row, 0)
+                self._table.scrollToItem(_it)
+                return True
+        return False
 
     def _move(self, delta):
         aid = self._selected_action()
@@ -5808,6 +6237,13 @@ def build_role_meta_dialog(parent, default_name=""):
     row.addStretch(1)
     btn_ok = QPushButton("继续导出")
     btn_cancel = QPushButton("取消")
+    # P0-1（v2.7.0 第 5 轮）：v2.5.0 B 把这段抽成工厂时把两条接线丢了——两个按钮只被
+    # addWidget 进布局，pick_role_meta() 进 modal() 的嵌套事件循环后**关不掉窗口**
+    # （导出角色包必现不可用，连"取消"都点不动，回车也触发不了）。这里补回接线与默认
+    # 按钮，对齐 _VoicePickDialog 的"确定/取消导出"两行。
+    btn_ok.setDefault(True)
+    btn_ok.clicked.connect(dlg.accept)
+    btn_cancel.clicked.connect(dlg.reject)
     row.addWidget(btn_cancel)
     row.addWidget(btn_ok)
     stick_buttons(dlg, row)   # v2.5.0 B：按钮行在滚动区之外

@@ -1,0 +1,769 @@
+{
+  "title": "代理 A（pet_dialogs.py）v2.7.0 第 5 轮变异证据：31 条，全部在 %TEMP% 影子副本里跑",
+  "note": "跑法：python -B _dev/mutate_check.py _dev/mutations_agent_a_v270.json（会回写 results 段）。每条 old 在当前树必须恰好命中 1 次。",
+  "mutations": [
+    {
+      "id": "M-A-01",
+      "why": "P0：导出角色包「角色信息」框的两条接线（少了它们 modal 关不掉 = 用户卡死）",
+      "file": "pet_dialogs.py",
+      "tests": [
+        "tests/test_dialog_buttons_v270.py::test_role_meta_ok_button_accepts",
+        "tests/test_dialog_buttons_v270.py::test_role_meta_cancel_button_rejects",
+        "tests/test_dialog_buttons_v270.py::test_every_action_button_is_wired_or_whitelisted",
+        "tests/test_dialogs_feedback_v270.py::test_export_role_bundle_end_to_end",
+        "tests/test_dialogs_feedback_v270.py::test_export_role_bundle_cancel_writes_nothing"
+      ],
+      "expect_fail": [
+        "tests/test_dialog_buttons_v270.py::test_role_meta_ok_button_accepts",
+        "tests/test_dialog_buttons_v270.py::test_export_role_bundle_end_to_end",
+        "tests/test_dialogs_feedback_v270.py::test_export_role_bundle_cancel_writes_nothing"
+      ],
+      "old": "    btn_ok.setDefault(True)\n    btn_ok.clicked.connect(dlg.accept)\n    btn_cancel.clicked.connect(dlg.reject)",
+      "new": "    btn_ok.setDefault(True)\n    # btn_ok.clicked.connect(dlg.accept)      # MUT: 回到 P0 的修复前状态\n    # btn_cancel.clicked.connect(dlg.reject)  # MUT: 回到 P0 的修复前状态"
+    },
+    {
+      "id": "M-A-02",
+      "why": "P0：btn_ok.setDefault(True)——没有它回车也触发不了「继续导出」",
+      "file": "pet_dialogs.py",
+      "tests": [
+        "tests/test_dialog_buttons_v270.py::test_role_meta_dialog_has_both_buttons"
+      ],
+      "expect_fail": [
+        "tests/test_dialog_buttons_v270.py::test_role_meta_dialog_has_both_buttons"
+      ],
+      "old": "    btn_ok.setDefault(True)\n    btn_ok.clicked.connect(dlg.accept)",
+      "new": "    # btn_ok.setDefault(True)   # MUT\n    btn_ok.clicked.connect(dlg.accept)"
+    },
+    {
+      "id": "M-A-03",
+      "why": "pick_role_meta 必须看 modal 的结果：Esc/取消/关闭都要返回 None（不导出）",
+      "file": "pet_dialogs.py",
+      "tests": [
+        "tests/test_dialog_buttons_v270.py::test_role_meta_esc_or_close_returns_none",
+        "tests/test_dialog_buttons_v270.py::test_role_meta_cancel_button_rejects"
+      ],
+      "expect_fail": [
+        "tests/test_dialog_buttons_v270.py::test_role_meta_esc_or_close_returns_none"
+      ],
+      "old": "    dlg, name, author, desc, tags = build_role_meta_dialog(parent, default_name)\n    if modal(dlg) != QDialog.DialogCode.Accepted:\n        return None",
+      "new": "    dlg, name, author, desc, tags = build_role_meta_dialog(parent, default_name)\n    modal(dlg)   # MUT：不看结果（用户取消也照样导出）"
+    },
+    {
+      "id": "M-A-04",
+      "why": "P1-1：AI 设置保存必须检查返回值——失败不关窗（不许「保存成功」假象）",
+      "file": "pet_dialogs.py",
+      "tests": [
+        "tests/test_dialogs_feedback_v270.py::test_ai_settings_save_failure_keeps_window_open"
+      ],
+      "expect_fail": [
+        "tests/test_dialogs_feedback_v270.py::test_ai_settings_save_failure_keeps_window_open"
+      ],
+      "old": "        ok, msg, explicit = _apply_call(self._pet, \"apply_ai_settings\", data, strict=True)\n        if not ok:\n            # P1-1：以前丢弃返回值 + 无条件 accept()——人设正文/API 地址/模型/工具开关\n            # 整批静默丢失，窗口照常关闭 = \"保存成功\"假象。现在失败就**不关窗**。\n            _save_failed(self, \"AI 设置\", msg, explicit)\n            return\n        self.accept()",
+      "new": "        _call(self._pet, \"apply_ai_settings\", data)   # MUT：丢弃返回值\n        self.accept()                                 # MUT：无条件关窗"
+    },
+    {
+      "id": "M-A-05",
+      "why": "P1-1：AI 设置保存成功要有回执（气泡），不然关窗后界面零变化",
+      "file": "pet_dialogs.py",
+      "tests": [
+        "tests/test_dialogs_feedback_v270.py::test_ai_settings_save_success_closes_and_toasts"
+      ],
+      "expect_fail": [
+        "tests/test_dialogs_feedback_v270.py::test_ai_settings_save_success_closes_and_toasts"
+      ],
+      "old": "        self.accept()\n        _toast(self._pet, msg or \"AI 设置已更新~\")",
+      "new": "        self.accept()\n        pass  # MUT：成功回执被删"
+    },
+    {
+      "id": "M-A-06",
+      "why": "回调抛异常必须算失败（不许当成功关窗）",
+      "file": "pet_dialogs.py",
+      "tests": [
+        "tests/test_dialogs_feedback_v270.py::test_ai_settings_save_exception_stays_open_without_modal"
+      ],
+      "expect_fail": [
+        "tests/test_dialogs_feedback_v270.py::test_ai_settings_save_exception_stays_open_without_modal"
+      ],
+      "old": "    except Exception as e:\n        pet_log.log_error(\"dialog callback %s failed: %r\" % (name, e))\n        return False, \"\", False\n    if res is None:",
+      "new": "    except Exception as e:\n        pet_log.log_error(\"dialog callback %s failed: %r\" % (name, e))\n        return True, \"\", False      # MUT：异常当成功\n    if res is None:"
+    },
+    {
+      "id": "M-A-07",
+      "why": "B 的接口约定：三个回调返回 None 时必须当失败（strict 模式）",
+      "file": "pet_dialogs.py",
+      "tests": [
+        "tests/test_dialogs_feedback_v270.py::test_ai_settings_none_return_is_failure"
+      ],
+      "expect_fail": [
+        "tests/test_dialogs_feedback_v270.py::test_ai_settings_none_return_is_failure"
+      ],
+      "old": "        ok, msg, explicit = _apply_call(self._pet, \"apply_ai_settings\", data, strict=True)",
+      "new": "        ok, msg, explicit = _apply_call(self._pet, \"apply_ai_settings\", data)  # MUT：去掉 strict"
+    },
+    {
+      "id": "M-A-08",
+      "why": "_apply_result 的二元组/False 归一（丢了它 → 明说失败也当成功）",
+      "file": "pet_dialogs.py",
+      "tests": [
+        "tests/test_dialogs_feedback_v270.py::test_apply_call_normalizes_new_and_old_contracts"
+      ],
+      "expect_fail": [
+        "tests/test_dialogs_feedback_v270.py::test_apply_call_normalizes_new_and_old_contracts"
+      ],
+      "old": "    if isinstance(res, (tuple, list)):\n        if not res:\n            return False, \"\"\n        return bool(res[0]), (\"\" if len(res) < 2 or not res[1] else str(res[1]))\n    if res is False:\n        return False, \"\"\n",
+      "new": "    return True, \"\"      # MUT：二元组/False 分支被拿掉（永远当成功）\n"
+    },
+    {
+      "id": "M-A-09",
+      "why": "_toast 的降级：没有气泡能力时不许假装发过（更不许抛）",
+      "file": "pet_dialogs.py",
+      "tests": [
+        "tests/test_dialogs_feedback_v270.py::test_toast_degrades_without_bubble"
+      ],
+      "expect_fail": [
+        "tests/test_dialogs_feedback_v270.py::test_toast_degrades_without_bubble"
+      ],
+      "old": "    fn = _get(pet, \"show_bubble\")\n    if not callable(fn):\n        return False",
+      "new": "    return True      # MUT：不真的发气泡\n    fn = _get(pet, \"show_bubble\")\n    if not callable(fn):\n        return False"
+    },
+    {
+      "id": "M-A-10",
+      "why": "P1-2：导出行为成功必须有回执（含文件名）",
+      "file": "pet_dialogs.py",
+      "tests": [
+        "tests/test_dialogs_feedback_v270.py::test_behavior_export_ok_toasts_filename"
+      ],
+      "expect_fail": [
+        "tests/test_dialogs_feedback_v270.py::test_behavior_export_ok_toasts_filename"
+      ],
+      "old": "        _toast(self.pet, \"行为已导出到 %s\" % os.path.basename(_path))",
+      "new": "        pass  # MUT：成功分支被删"
+    },
+    {
+      "id": "M-A-11",
+      "why": "P1-2：导出行为未选中时必须有人话提示（且不弹文件框）",
+      "file": "pet_dialogs.py",
+      "tests": [
+        "tests/test_dialogs_feedback_v270.py::test_behavior_export_without_selection_prompts"
+      ],
+      "expect_fail": [
+        "tests/test_dialogs_feedback_v270.py::test_behavior_export_without_selection_prompts"
+      ],
+      "old": "        if _row < 0 or self.svc is None:\n            # E3/P1-2：未选中时以前直接静默 return，连\"先选中一个\"都不说\n            _info(self, \"导出行为\", \"先在列表里选中一个行为，再点「导出…」\")\n            return",
+      "new": "        if _row < 0 or self.svc is None:\n            return"
+    },
+    {
+      "id": "M-A-12",
+      "why": "P1-3：删除行为必须先 _confirm（点一下永久删是本体缺陷）",
+      "file": "pet_dialogs.py",
+      "tests": [
+        "tests/test_dialogs_feedback_v270.py::test_behavior_delete_needs_confirm"
+      ],
+      "expect_fail": [
+        "tests/test_dialogs_feedback_v270.py::test_behavior_delete_needs_confirm"
+      ],
+      "old": "        if not _confirm(self, \"删除行为\",\n                        \"确定删除行为「%s」吗？\\n删除后无法撤销（它的步骤会一起没）。\" % _label):\n            return\n",
+      "new": ""
+    },
+    {
+      "id": "M-A-13",
+      "why": "删除行为未选中时要提示（别静默 return）",
+      "file": "pet_dialogs.py",
+      "tests": [
+        "tests/test_dialogs_feedback_v270.py::test_behavior_delete_without_selection_prompts"
+      ],
+      "expect_fail": [
+        "tests/test_dialogs_feedback_v270.py::test_behavior_delete_without_selection_prompts"
+      ],
+      "old": "        if _row < 0 or self.svc is None:\n            _warn(self, \"删除行为\", \"先在列表里选中一个行为\")\n            return",
+      "new": "        if _row < 0 or self.svc is None:\n            return"
+    },
+    {
+      "id": "M-A-14",
+      "why": "D11：删除选中步骤必须是具名方法（未选中给提示），不是 takeItem(-1) 的 lambda",
+      "file": "pet_dialogs.py",
+      "tests": [
+        "tests/test_dialogs_feedback_v270.py::test_behavior_delete_step_without_selection_prompts"
+      ],
+      "expect_fail": [
+        "tests/test_dialogs_feedback_v270.py::test_behavior_delete_step_without_selection_prompts"
+      ],
+      "old": "        b_del_step.clicked.connect(self._del_step)",
+      "new": "        b_del_step.clicked.connect(lambda: self._steps.takeItem(self._steps.currentRow()))  # MUT：回到修复前"
+    },
+    {
+      "id": "M-A-15",
+      "why": "删除选中步骤要真的删掉选中的那一行",
+      "file": "pet_dialogs.py",
+      "tests": [
+        "tests/test_dialogs_feedback_v270.py::test_behavior_delete_step_removes_selected"
+      ],
+      "expect_fail": [
+        "tests/test_dialogs_feedback_v270.py::test_behavior_delete_step_removes_selected"
+      ],
+      "old": "        self._steps.takeItem(row)",
+      "new": "        pass  # MUT：不真删"
+    },
+    {
+      "id": "M-A-16",
+      "why": "P1-9：新建行为保存后必须按 id 选中新条目（列表末尾看不见＝像没保存）",
+      "file": "pet_dialogs.py",
+      "tests": [
+        "tests/test_dialogs_feedback_v270.py::test_behavior_save_selects_new_row"
+      ],
+      "expect_fail": [
+        "tests/test_dialogs_feedback_v270.py::test_behavior_save_selects_new_row"
+      ],
+      "old": "        self._select_behavior(_saved_id)",
+      "new": "        pass  # MUT：不选中新条目"
+    },
+    {
+      "id": "M-A-17",
+      "why": "P1-4：物理参数保存必须检查返回值（失败不关窗；值未变也要有回执）",
+      "file": "pet_dialogs.py",
+      "tests": [
+        "tests/test_dialogs_feedback_v270.py::test_physics_save_reports_no_change",
+        "tests/test_dialogs_feedback_v270.py::test_physics_save_failure_keeps_window_open"
+      ],
+      "expect_fail": [
+        "tests/test_dialogs_feedback_v270.py::test_physics_save_reports_no_change",
+        "tests/test_dialogs_feedback_v270.py::test_physics_save_failure_keeps_window_open"
+      ],
+      "old": "        ok, msg, explicit = _apply_call(self._pet, \"apply_physics\", data, strict=True)\n        if not ok:\n            _save_failed(self, \"物理参数\", msg, explicit)\n            return\n        self.accept()",
+      "new": "        _call(self._pet, \"apply_physics\", data)   # MUT\n        self.accept()                             # MUT"
+    },
+    {
+      "id": "M-A-18",
+      "why": "P1-4：气泡样式保存必须检查返回值（失败不关窗）",
+      "file": "pet_dialogs.py",
+      "tests": [
+        "tests/test_dialogs_feedback_v270.py::test_bubble_style_save_failure_keeps_window_open"
+      ],
+      "expect_fail": [
+        "tests/test_dialogs_feedback_v270.py::test_bubble_style_save_failure_keeps_window_open"
+      ],
+      "old": "        ok, msg, explicit = _apply_call(self._pet, \"apply_bubble_style\", style, strict=True)\n        if not ok:\n            # P1-4：以前丢弃返回值 + 无条件 accept()——失败也照常关窗，界面零变化\n            _save_failed(self, \"气泡样式\", msg, explicit)\n            return\n        self.accept()",
+      "new": "        _call(self._pet, \"apply_bubble_style\", style)   # MUT\n        self.accept()                                   # MUT"
+    },
+    {
+      "id": "M-A-19",
+      "why": "气泡样式保存成功要有回执",
+      "file": "pet_dialogs.py",
+      "tests": [
+        "tests/test_dialogs_feedback_v270.py::test_bubble_style_save_success_toasts"
+      ],
+      "expect_fail": [
+        "tests/test_dialogs_feedback_v270.py::test_bubble_style_save_success_toasts"
+      ],
+      "old": "        self.accept()\n        _toast(self._pet, msg or \"气泡样式已更新~（新样式从下一条气泡开始）\")",
+      "new": "        self.accept()\n        pass  # MUT"
+    },
+    {
+      "id": "M-A-20",
+      "why": "D6：失效引用「删除该台词」必须接住 delete 的返回值",
+      "file": "pet_dialogs.py",
+      "tests": [
+        "tests/test_dialogs_feedback_v270.py::test_delete_bad_one_surfaces_failure"
+      ],
+      "expect_fail": [
+        "tests/test_dialogs_feedback_v270.py::test_delete_bad_one_surfaces_failure"
+      ],
+      "old": "        ok, err = self._lib.delete(lid)\n        if not ok:\n            _warn(self, \"删除失败\", err or \"删除失败\")\n            return\n        self._refresh_all()\n        _toast(self._pet, \"已删除失效台词\")",
+      "new": "        self._lib.delete(lid)      # MUT：返回值被丢弃\n        self._refresh_all()"
+    },
+    {
+      "id": "M-A-21",
+      "why": "D7：一键删除失效台词必须接住 delete_many 的返回值与 err",
+      "file": "pet_dialogs.py",
+      "tests": [
+        "tests/test_dialogs_feedback_v270.py::test_delete_all_bad_surfaces_failure_and_success"
+      ],
+      "expect_fail": [
+        "tests/test_dialogs_feedback_v270.py::test_delete_all_bad_surfaces_failure_and_success"
+      ],
+      "old": "        n, err = self._lib.delete_many([x[\"line_id\"] for x in items])\n        if err:\n            _warn(self, \"删除失败\", err)\n            return\n        self._refresh_all()\n        _toast(self._pet, \"已删除 %d 条失效台词（可用「撤销删除」找回）\" % int(n or 0))",
+      "new": "        self._lib.delete_many([x[\"line_id\"] for x in items])   # MUT：返回值被丢弃\n        self._refresh_all()"
+    },
+    {
+      "id": "M-A-22",
+      "why": "S22：角色「设为当前」失败要给提示（不许只进 error.log）",
+      "file": "pet_dialogs.py",
+      "tests": [
+        "tests/test_dialogs_feedback_v270.py::test_role_set_active_failure_warns_and_success_toasts"
+      ],
+      "expect_fail": [
+        "tests/test_dialogs_feedback_v270.py::test_role_set_active_failure_warns_and_success_toasts"
+      ],
+      "old": "            ok, msg, explicit = _apply_call(self._pet, \"apply_role\", rid)\n            if not ok:\n                _save_failed(self._parent_widget(), \"切换角色\", msg, explicit)\n                return",
+      "new": "            _call(self._pet, \"apply_role\", rid)    # MUT"
+    },
+    {
+      "id": "M-A-23",
+      "why": "S23：角色「恢复默认」失败要给提示",
+      "file": "pet_dialogs.py",
+      "tests": [
+        "tests/test_dialogs_feedback_v270.py::test_role_reset_default_failure_warns"
+      ],
+      "expect_fail": [
+        "tests/test_dialogs_feedback_v270.py::test_role_reset_default_failure_warns"
+      ],
+      "old": "            ok, msg, explicit = _apply_call(self._pet, \"apply_role\", \"\")\n            if not ok:\n                _save_failed(self._parent_widget(), \"恢复默认角色\", msg, explicit)\n                return",
+      "new": "            _call(self._pet, \"apply_role\", \"\")    # MUT"
+    },
+    {
+      "id": "M-A-24",
+      "why": "P2-3：素材库为空时绑定下拉要有空态提示（不是只剩「不绑定」）",
+      "file": "pet_dialogs.py",
+      "tests": [
+        "tests/test_dialogs_feedback_v270.py::test_bind_empty_state_shows_hint_and_import_entry"
+      ],
+      "expect_fail": [
+        "tests/test_dialogs_feedback_v270.py::test_bind_empty_state_shows_hint_and_import_entry"
+      ],
+      "old": "        elif len(self._asset_items()) <= 1:\n            self._bind_hint.setText(\"还没有配音素材，下面只能选「（不绑定）」——\"\n                                    \"点「去导入参考音…」导入 3~10 秒干净人声（wav 最佳）。\")\n            self._bind_hint.setStyleSheet(\"color:#ffd65a;\")",
+      "new": "        elif len(self._asset_items()) <= 1:\n            pass  # MUT：空态提示被删"
+    },
+    {
+      "id": "M-A-25",
+      "why": "P2-3：素材库读坏了必须留痕（pet_log）+ 界面说得出原因",
+      "file": "pet_dialogs.py",
+      "tests": [
+        "tests/test_dialogs_feedback_v270.py::test_bind_broken_library_logs_and_says_why"
+      ],
+      "expect_fail": [
+        "tests/test_dialogs_feedback_v270.py::test_bind_broken_library_logs_and_says_why"
+      ],
+      "old": "        try:\n            self._assets.assets()\n        except Exception as e:\n            pet_log.log_error(\"voice assets unreadable: %r\" % (e,))\n            return False, \"声音素材读不出来（详情见数据目录的 error.log）\"\n        return True, \"\"",
+      "new": "        return True, \"\"      # MUT：故障探测与留痕被删"
+    },
+    {
+      "id": "M-A-26",
+      "why": "P2-3：索引有内容却读不出可用素材，必须与「还没导入过」区分开（各给各的话）",
+      "file": "pet_dialogs.py",
+      "tests": [
+        "tests/test_dialogs_feedback_v270.py::test_bind_index_unusable_is_not_the_empty_state"
+      ],
+      "expect_fail": [
+        "tests/test_dialogs_feedback_v270.py::test_bind_index_unusable_is_not_the_empty_state"
+      ],
+      "old": "        elif _unusable:\n            self._bind_hint.setText(\"⚠ %s\" % _why2)\n            self._bind_hint.setStyleSheet(\"color:#ff8080;\")\n",
+      "new": ""
+    },
+    {
+      "id": "M-A-27",
+      "why": "S2：重命名空名要给提示（以前静默 return，用户以为点了没反应）",
+      "file": "pet_dialogs.py",
+      "tests": [
+        "tests/test_dialogs_feedback_v270.py::test_sound_rename_empty_name_warns"
+      ],
+      "expect_fail": [
+        "tests/test_dialogs_feedback_v270.py::test_sound_rename_empty_name_warns"
+      ],
+      "old": "        if not name:\n            # S2/P2-3：以前空名静默 return——用户删光名字点确定，什么都没发生\n            _warn(self._parent_widget(), \"重命名\", \"名字不能为空\")\n            return",
+      "new": "        if not name:\n            return"
+    },
+    {
+      "id": "M-A-28",
+      "why": "P1-8：新建台词后要复位类别筛选/搜索词（否则新行根本不出现）",
+      "file": "pet_dialogs.py",
+      "tests": [
+        "tests/test_dialogs_feedback_v270.py::test_lines_save_new_line_clears_filters_and_toasts"
+      ],
+      "expect_fail": [
+        "tests/test_dialogs_feedback_v270.py::test_lines_save_new_line_clears_filters_and_toasts"
+      ],
+      "old": "        if _created:\n            # P1-8：新行受「类别」筛选与关键词搜索约束——筛选/搜索与新建类别不一致时，\n            # 新台词根本不出现，用户以为没建成。新建落库后把这两个过滤条件复位。\n            self._clear_line_filters(cat)",
+      "new": "        if _created:\n            pass  # MUT：过滤条件不复位"
+    },
+    {
+      "id": "M-A-29",
+      "why": "通用契约：15 个 QCheckBox 必须逐个登记成状态输入（白名单删一条就要红）",
+      "file": "tests/test_dialog_buttons_v270.py",
+      "tests": [
+        "tests/test_dialog_buttons_v270.py::test_state_inputs_are_declared_and_actually_read"
+      ],
+      "expect_fail": [
+        "tests/test_dialog_buttons_v270.py::test_state_inputs_are_declared_and_actually_read"
+      ],
+      "old": "    \"self._rag\": \"AI 隐私开关 ai_rag_enabled：保存时读 .isChecked()\",\n",
+      "new": ""
+    },
+    {
+      "id": "M-A-30",
+      "why": "通用契约：AST 扫描器不许空转（返回 [] 必须被自证用例抓住）",
+      "file": "tests/test_dialog_buttons_v270.py",
+      "tests": [
+        "tests/test_dialog_buttons_v270.py::test_scanner_is_not_vacuous",
+        "tests/test_dialog_buttons_v270.py::test_every_action_button_is_wired_or_whitelisted"
+      ],
+      "expect_fail": [
+        "tests/test_dialog_buttons_v270.py::test_scanner_is_not_vacuous"
+      ],
+      "old": "    out = []\n    for node in ast.walk(tree):\n        if not isinstance(node, ast.Call):\n            continue\n        cname = _cls_name(node)",
+      "new": "    return []\n    out = []\n    for node in ast.walk(tree):\n        if not isinstance(node, ast.Call):\n            continue\n        cname = _cls_name(node)"
+    },
+    {
+      "id": "M-A-31",
+      "why": "通用契约：白名单检查器不许空转（失效/无理由/已接线三种反例必须报出来）",
+      "file": "tests/test_dialog_buttons_v270.py",
+      "tests": [
+        "tests/test_dialog_buttons_v270.py::test_action_whitelist_checker_is_not_vacuous"
+      ],
+      "expect_fail": [
+        "tests/test_dialog_buttons_v270.py::test_action_whitelist_checker_is_not_vacuous"
+      ],
+      "old": "    by_target = {c.target: c for c in ctls if c.target}\n    problems = []",
+      "new": "    return []      # MUT\n    by_target = {c.target: c for c in ctls if c.target}\n    problems = []"
+    }
+  ],
+  "results": {
+    "title": "变异验证 spec：mutations_agent_a_v270.json",
+    "checked_at": "2026-10-15 17:36:27",
+    "total": 31,
+    "caught": 31,
+    "not_caught": 0,
+    "blocked": 0,
+    "items": [
+      {
+        "id": "M-A-01",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "5 failed in 5.52s",
+        "failed": [
+          "test_role_meta_ok_button_accepts",
+          "test_role_meta_cancel_button_rejects",
+          "test_every_action_button_is_wired_or_whitelisted",
+          "test_export_role_bundle_end_to_end",
+          "test_export_role_bundle_cancel_writes_nothing"
+        ]
+      },
+      {
+        "id": "M-A-02",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 3.53s",
+        "failed": [
+          "test_role_meta_dialog_has_both_buttons"
+        ]
+      },
+      {
+        "id": "M-A-03",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "2 failed in 0.76s",
+        "failed": [
+          "test_role_meta_esc_or_close_returns_none",
+          "test_role_meta_cancel_button_rejects"
+        ]
+      },
+      {
+        "id": "M-A-04",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 1.37s",
+        "failed": [
+          "test_ai_settings_save_failure_keeps_window_open"
+        ]
+      },
+      {
+        "id": "M-A-05",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 1.23s",
+        "failed": [
+          "test_ai_settings_save_success_closes_and_toasts"
+        ]
+      },
+      {
+        "id": "M-A-06",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 1.04s",
+        "failed": [
+          "test_ai_settings_save_exception_stays_open_without_modal"
+        ]
+      },
+      {
+        "id": "M-A-07",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 1.24s",
+        "failed": [
+          "test_ai_settings_none_return_is_failure"
+        ]
+      },
+      {
+        "id": "M-A-08",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 0.75s",
+        "failed": [
+          "test_apply_call_normalizes_new_and_old_contracts"
+        ]
+      },
+      {
+        "id": "M-A-09",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 1.14s",
+        "failed": [
+          "test_toast_degrades_without_bubble"
+        ]
+      },
+      {
+        "id": "M-A-10",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 1.22s",
+        "failed": [
+          "test_behavior_export_ok_toasts_filename"
+        ]
+      },
+      {
+        "id": "M-A-11",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 1.05s",
+        "failed": [
+          "test_behavior_export_without_selection_prompts"
+        ]
+      },
+      {
+        "id": "M-A-12",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 1.10s",
+        "failed": [
+          "test_behavior_delete_needs_confirm"
+        ]
+      },
+      {
+        "id": "M-A-13",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 1.07s",
+        "failed": [
+          "test_behavior_delete_without_selection_prompts"
+        ]
+      },
+      {
+        "id": "M-A-14",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 1.05s",
+        "failed": [
+          "test_behavior_delete_step_without_selection_prompts"
+        ]
+      },
+      {
+        "id": "M-A-15",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 1.10s",
+        "failed": [
+          "test_behavior_delete_step_removes_selected"
+        ]
+      },
+      {
+        "id": "M-A-16",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 1.03s",
+        "failed": [
+          "test_behavior_save_selects_new_row"
+        ]
+      },
+      {
+        "id": "M-A-17",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "2 failed in 1.55s",
+        "failed": [
+          "test_physics_save_reports_no_change",
+          "test_physics_save_failure_keeps_window_open"
+        ]
+      },
+      {
+        "id": "M-A-18",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 1.18s",
+        "failed": [
+          "test_bubble_style_save_failure_keeps_window_open"
+        ]
+      },
+      {
+        "id": "M-A-19",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 1.02s",
+        "failed": [
+          "test_bubble_style_save_success_toasts"
+        ]
+      },
+      {
+        "id": "M-A-20",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 1.24s",
+        "failed": [
+          "test_delete_bad_one_surfaces_failure"
+        ]
+      },
+      {
+        "id": "M-A-21",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 1.32s",
+        "failed": [
+          "test_delete_all_bad_surfaces_failure_and_success"
+        ]
+      },
+      {
+        "id": "M-A-22",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 1.04s",
+        "failed": [
+          "test_role_set_active_failure_warns_and_success_toasts"
+        ]
+      },
+      {
+        "id": "M-A-23",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 1.14s",
+        "failed": [
+          "test_role_reset_default_failure_warns"
+        ]
+      },
+      {
+        "id": "M-A-24",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 1.35s",
+        "failed": [
+          "test_bind_empty_state_shows_hint_and_import_entry"
+        ]
+      },
+      {
+        "id": "M-A-25",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 1.05s",
+        "failed": [
+          "test_bind_broken_library_logs_and_says_why"
+        ]
+      },
+      {
+        "id": "M-A-26",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 1.06s",
+        "failed": [
+          "test_bind_index_unusable_is_not_the_empty_state"
+        ]
+      },
+      {
+        "id": "M-A-27",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 1.10s",
+        "failed": [
+          "test_sound_rename_empty_name_warns"
+        ]
+      },
+      {
+        "id": "M-A-28",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 1.40s",
+        "failed": [
+          "test_lines_save_new_line_clears_filters_and_toasts"
+        ]
+      },
+      {
+        "id": "M-A-29",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 1.27s",
+        "failed": [
+          "test_state_inputs_are_declared_and_actually_read"
+        ]
+      },
+      {
+        "id": "M-A-30",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "2 failed in 0.83s",
+        "failed": [
+          "test_scanner_is_not_vacuous",
+          "test_every_action_button_is_wired_or_whitelisted"
+        ]
+      },
+      {
+        "id": "M-A-31",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 1.61s",
+        "failed": [
+          "test_action_whitelist_checker_is_not_vacuous"
+        ]
+      }
+    ],
+    "spec": "mutations_agent_a_v270.json",
+    "tests": [
+      "tests/test_dialog_buttons_v270.py::test_action_whitelist_checker_is_not_vacuous",
+      "tests/test_dialog_buttons_v270.py::test_every_action_button_is_wired_or_whitelisted",
+      "tests/test_dialog_buttons_v270.py::test_role_meta_cancel_button_rejects",
+      "tests/test_dialog_buttons_v270.py::test_role_meta_dialog_has_both_buttons",
+      "tests/test_dialog_buttons_v270.py::test_role_meta_esc_or_close_returns_none",
+      "tests/test_dialog_buttons_v270.py::test_role_meta_ok_button_accepts",
+      "tests/test_dialog_buttons_v270.py::test_scanner_is_not_vacuous",
+      "tests/test_dialog_buttons_v270.py::test_state_inputs_are_declared_and_actually_read",
+      "tests/test_dialogs_feedback_v270.py::test_ai_settings_none_return_is_failure",
+      "tests/test_dialogs_feedback_v270.py::test_ai_settings_save_exception_stays_open_without_modal",
+      "tests/test_dialogs_feedback_v270.py::test_ai_settings_save_failure_keeps_window_open",
+      "tests/test_dialogs_feedback_v270.py::test_ai_settings_save_success_closes_and_toasts",
+      "tests/test_dialogs_feedback_v270.py::test_apply_call_normalizes_new_and_old_contracts",
+      "tests/test_dialogs_feedback_v270.py::test_behavior_delete_needs_confirm",
+      "tests/test_dialogs_feedback_v270.py::test_behavior_delete_step_removes_selected",
+      "tests/test_dialogs_feedback_v270.py::test_behavior_delete_step_without_selection_prompts",
+      "tests/test_dialogs_feedback_v270.py::test_behavior_delete_without_selection_prompts",
+      "tests/test_dialogs_feedback_v270.py::test_behavior_export_ok_toasts_filename",
+      "tests/test_dialogs_feedback_v270.py::test_behavior_export_without_selection_prompts",
+      "tests/test_dialogs_feedback_v270.py::test_behavior_save_selects_new_row",
+      "tests/test_dialogs_feedback_v270.py::test_bind_broken_library_logs_and_says_why",
+      "tests/test_dialogs_feedback_v270.py::test_bind_empty_state_shows_hint_and_import_entry",
+      "tests/test_dialogs_feedback_v270.py::test_bind_index_unusable_is_not_the_empty_state",
+      "tests/test_dialogs_feedback_v270.py::test_bubble_style_save_failure_keeps_window_open",
+      "tests/test_dialogs_feedback_v270.py::test_bubble_style_save_success_toasts",
+      "tests/test_dialogs_feedback_v270.py::test_delete_all_bad_surfaces_failure_and_success",
+      "tests/test_dialogs_feedback_v270.py::test_delete_bad_one_surfaces_failure",
+      "tests/test_dialogs_feedback_v270.py::test_export_role_bundle_cancel_writes_nothing",
+      "tests/test_dialogs_feedback_v270.py::test_export_role_bundle_end_to_end",
+      "tests/test_dialogs_feedback_v270.py::test_lines_save_new_line_clears_filters_and_toasts",
+      "tests/test_dialogs_feedback_v270.py::test_physics_save_failure_keeps_window_open",
+      "tests/test_dialogs_feedback_v270.py::test_physics_save_reports_no_change",
+      "tests/test_dialogs_feedback_v270.py::test_role_reset_default_failure_warns",
+      "tests/test_dialogs_feedback_v270.py::test_role_set_active_failure_warns_and_success_toasts",
+      "tests/test_dialogs_feedback_v270.py::test_sound_rename_empty_name_warns",
+      "tests/test_dialogs_feedback_v270.py::test_toast_degrades_without_bubble"
+    ],
+    "note": "变异只在 %TEMP% 影子副本里做，真实仓库只读（只写 _dev/.mutation.lock）",
+    "repo_fingerprint": {
+      "桌宠.py": "7c64914aa083",
+      "pet_export.py": "c01e1593efd2",
+      "pet_lines.py": "5332f60b5f26",
+      "pet_alarm.py": "1149e94deee3",
+      "pet_behaviors.py": "8f57255144f6",
+      "_check_release.py": "e0abfe805849",
+      "pet_balance.py": "c374984ca058",
+      "pet_plugin.py": "2f7853298fc3",
+      "pet_plugin_host.py": "82fb7b1384c8",
+      "pet_dialogs.py": "0084f1a6bad7",
+      "pet_menu.py": "920daac1b835",
+      "pet_plugin_index.py": "7e9b4537b98e"
+    }
+  }
+}

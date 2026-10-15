@@ -123,7 +123,7 @@
   ],
   "results": {
     "title": "变异验证 spec：mutations_asset_absence_v244.json",
-    "checked_at": "2026-10-12 11:59:54",
+    "checked_at": "2026-10-15 17:39:07",
     "total": 9,
     "caught": 9,
     "not_caught": 0,
@@ -133,7 +133,7 @@
         "id": "M-A1",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 3.15s",
+        "tail": "1 failed in 1.79s",
         "failed": [
           "test_character_images_missing_fall_back_to_placeholder_fish"
         ]
@@ -142,7 +142,7 @@
         "id": "M-A2",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 2.56s",
+        "tail": "1 failed in 0.91s",
         "failed": [
           "test_frame_sets_missing_degrade_to_static_form_and_still_run"
         ]
@@ -151,7 +151,7 @@
         "id": "M-A3",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "2 failed in 1.24s",
+        "tail": "2 failed in 1.48s",
         "failed": [
           "test_startup_relay_converges_without_any_assets[none]",
           "test_entire_assets_dir_unavailable_keeps_every_consumer_alive"
@@ -161,7 +161,7 @@
         "id": "M-A4",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.75s",
+        "tail": "1 failed in 0.99s",
         "failed": [
           "test_money_preload_with_unavailable_fx_dir_converges_silently[none]"
         ]
@@ -170,7 +170,7 @@
         "id": "M-A5",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.75s",
+        "tail": "1 failed in 1.04s",
         "failed": [
           "test_money_preload_with_unavailable_fx_dir_converges_silently[empty]"
         ]
@@ -179,7 +179,7 @@
         "id": "M-A6",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.71s",
+        "tail": "1 failed in 0.96s",
         "failed": [
           "test_custom_role_without_animations_falls_back_to_static_and_keeps_petpet"
         ]
@@ -188,7 +188,7 @@
         "id": "M-A7",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 1.01s",
+        "tail": "1 failed in 1.36s",
         "failed": [
           "test_sounds_dir_missing_uses_synth_fallback"
         ]
@@ -197,7 +197,7 @@
         "id": "M-A8",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 1.22s",
+        "tail": "1 failed in 1.59s",
         "failed": [
           "test_state_images_missing_show_nothing_and_only_log"
         ]
@@ -206,7 +206,7 @@
         "id": "M-A9",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 1.16s",
+        "tail": "1 failed in 1.58s",
         "failed": [
           "test_runtime_data_files_missing_are_regenerated"
         ]
@@ -227,18 +227,18 @@
     ],
     "note": "变异只在 %TEMP% 影子副本里做，真实仓库只读（只写 _dev/.mutation.lock）",
     "repo_fingerprint": {
-      "桌宠.py": "99e2abf3e7fb",
+      "桌宠.py": "7c64914aa083",
       "pet_export.py": "c01e1593efd2",
       "pet_lines.py": "5332f60b5f26",
       "pet_alarm.py": "1149e94deee3",
       "pet_behaviors.py": "8f57255144f6",
       "_check_release.py": "e0abfe805849",
-      "pet_balance.py": "2828b2ebc0c9",
+      "pet_balance.py": "c374984ca058",
       "pet_plugin.py": "2f7853298fc3",
-      "pet_plugin_host.py": "e41ee09707ba",
-      "pet_dialogs.py": "48f300e4fc50",
+      "pet_plugin_host.py": "82fb7b1384c8",
+      "pet_dialogs.py": "0084f1a6bad7",
       "pet_menu.py": "920daac1b835",
-      "pet_plugin_index.py": "439340b16523"
+      "pet_plugin_index.py": "7e9b4537b98e"
     }
   }
 }

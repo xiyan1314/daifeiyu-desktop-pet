@@ -1,0 +1,193 @@
+{
+  "mutations": [
+    {
+      "id": "M-C-a1",
+      "why": "install_file 核索引条目的 data_kind 与包自报的 data_kind 是否一致（小账 a）",
+      "file": "pet_plugin_index.py",
+      "old": "            if want_kind and got_kind and want_kind != got_kind:\n",
+      "new": "            if False:  # MUT: 不核索引与包的类别（小账 a 的修复被拿掉）\n",
+      "tests": [
+        "tests/test_plugin_market_v270.py::test_a_索引与包的data_kind不一致必须拒绝"
+      ],
+      "expect_fail": [
+        "tests/test_plugin_market_v270.py::test_a_索引与包的data_kind不一致必须拒绝"
+      ]
+    },
+    {
+      "id": "M-C-b1",
+      "why": "当前版目录不在而 .prev 在时保住 history（回滚点不白丢、备份不成孤儿）",
+      "file": "pet_plugin_host.py",
+      "old": "                elif already and not target_is_dir:\n                    # 当前版目录不在了：没有可轮换的 payload，直接换上新目录。\n                    keep_history = prev_is_dir\n",
+      "new": "                elif already and not target_is_dir:\n                    keep_history = False  # MUT: history 白丢 + .prev 成孤儿\n",
+      "tests": [
+        "tests/test_plugin_market_v270.py::test_b_当前版目录不在而备份在_回滚点不丢也不留孤儿"
+      ],
+      "expect_fail": [
+        "tests/test_plugin_market_v270.py::test_b_当前版目录不在而备份在_回滚点不丢也不留孤儿"
+      ]
+    },
+    {
+      "id": "M-C-b2",
+      "why": "没有 .prev 就不许留悬空回滚点（同版本重复安装分支）",
+      "file": "pet_plugin_host.py",
+      "old": "                    moved_prev = False\n                    keep_history = prev_is_dir   # .prev 不在 → 悬空回滚点一并清掉\n",
+      "new": "                    moved_prev = False\n                    keep_history = True  # MUT: 留一个盘上不存在的回滚点\n",
+      "tests": [
+        "tests/test_plugin_market_v270.py::test_b_没有备份就不许留悬空回滚点"
+      ],
+      "expect_fail": [
+        "tests/test_plugin_market_v270.py::test_b_没有备份就不许留悬空回滚点"
+      ]
+    },
+    {
+      "id": "M-C-b3",
+      "why": "登记里没有这条却留着 .prev-<id>/ 时一并清掉（无主孤儿）",
+      "file": "pet_plugin_host.py",
+      "old": "                    if not already and prev_is_dir:\n                        # 登记里没有这条，却留着一份 .prev-<id>/：没有任何记录能跟它配对\n                        shutil.rmtree(previous, ignore_errors=True)\n",
+      "new": "                    if False:  # MUT: 孤儿 .prev 不清\n                        pass\n",
+      "tests": [
+        "tests/test_plugin_market_v270.py::test_b_登记里没有这条却留着备份_一并清掉"
+      ],
+      "expect_fail": [
+        "tests/test_plugin_market_v270.py::test_b_登记里没有这条却留着备份_一并清掉"
+      ]
+    },
+    {
+      "id": "M-C-b4",
+      "why": "登记写失败时不回挪上一版目录（孤儿备份的制造者）",
+      "file": "pet_plugin_host.py",
+      "old": "                if moved_prev:\n                    # v2.7.0（代理 C·小账 b 的连带）：目录轮换也要退回去——这次更新没成立，\n",
+      "new": "                if False:  # MUT: 登记写失败时不回挪上一版目录\n                    # v2.7.0（代理 C·小账 b 的连带）：目录轮换也要退回去——这次更新没成立，\n",
+      "tests": [
+        "tests/test_plugin_market_v270.py::test_b_登记写失败时上一版目录要挪回去"
+      ],
+      "expect_fail": [
+        "tests/test_plugin_market_v270.py::test_b_登记写失败时上一版目录要挪回去"
+      ]
+    },
+    {
+      "id": "M-C-c1",
+      "why": "同内容折叠时回滚文案不再说「撤销了 0 项」（小账 c）",
+      "file": "pet_plugin_host.py",
+      "old": "        done = (\"撤销了本版新导入的 %d 项内容\" % count if count\n                else \"这一版没有新导入的内容（与上一版一致），没有条目需要撤销\")\n",
+      "new": "        done = (\"撤销了本版新导入的 %d 项内容\" % count)  # MUT: 0 项也照念撤销\n",
+      "tests": [
+        "tests/test_plugin_market_v270.py::test_c_同内容折叠回滚不说撤销了0项"
+      ],
+      "expect_fail": [
+        "tests/test_plugin_market_v270.py::test_c_同内容折叠回滚不说撤销了0项"
+      ]
+    },
+    {
+      "id": "M-C-d1",
+      "why": "razor 核对证据原文能不能在它自称的文件里找到（小账 d）",
+      "file": "_dev/silent_except_whitelist.py",
+      "old": "        verdict, detail = evidence_in_source(w, root)\n        if verdict == \"missing\":\n",
+      "new": "        verdict, detail = evidence_in_source(w, root)\n        if False:  # MUT: 只判证据非空（回到修复前）\n",
+      "tests": [
+        "tests/test_plugin_market_v270.py::test_d_razor会核对证据原文能不能找到"
+      ],
+      "expect_fail": [
+        "tests/test_plugin_market_v270.py::test_d_razor会核对证据原文能不能找到"
+      ]
+    }
+  ],
+  "results": {
+    "title": "变异验证 spec：mutations_plugin_c_v270.json",
+    "checked_at": "2026-10-15 17:45:21",
+    "total": 7,
+    "caught": 7,
+    "not_caught": 0,
+    "blocked": 0,
+    "items": [
+      {
+        "id": "M-C-a1",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 0.66s",
+        "failed": [
+          "test_a_索引与包的data_kind不一致必须拒绝"
+        ]
+      },
+      {
+        "id": "M-C-b1",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 0.66s",
+        "failed": [
+          "test_b_当前版目录不在而备份在_回滚点不丢也不留孤儿"
+        ]
+      },
+      {
+        "id": "M-C-b2",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 0.74s",
+        "failed": [
+          "test_b_没有备份就不许留悬空回滚点"
+        ]
+      },
+      {
+        "id": "M-C-b3",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 0.63s",
+        "failed": [
+          "test_b_登记里没有这条却留着备份_一并清掉"
+        ]
+      },
+      {
+        "id": "M-C-b4",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 0.58s",
+        "failed": [
+          "test_b_登记写失败时上一版目录要挪回去"
+        ]
+      },
+      {
+        "id": "M-C-c1",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 0.60s",
+        "failed": [
+          "test_c_同内容折叠回滚不说撤销了0项"
+        ]
+      },
+      {
+        "id": "M-C-d1",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed, 12 warnings in 48.27s",
+        "failed": [
+          "test_d_razor会核对证据原文能不能找到"
+        ]
+      }
+    ],
+    "spec": "mutations_plugin_c_v270.json",
+    "tests": [
+      "tests/test_plugin_market_v270.py::test_a_索引与包的data_kind不一致必须拒绝",
+      "tests/test_plugin_market_v270.py::test_b_当前版目录不在而备份在_回滚点不丢也不留孤儿",
+      "tests/test_plugin_market_v270.py::test_b_没有备份就不许留悬空回滚点",
+      "tests/test_plugin_market_v270.py::test_b_登记写失败时上一版目录要挪回去",
+      "tests/test_plugin_market_v270.py::test_b_登记里没有这条却留着备份_一并清掉",
+      "tests/test_plugin_market_v270.py::test_c_同内容折叠回滚不说撤销了0项",
+      "tests/test_plugin_market_v270.py::test_d_razor会核对证据原文能不能找到"
+    ],
+    "note": "变异只在 %TEMP% 影子副本里做，真实仓库只读（只写 _dev/.mutation.lock）",
+    "repo_fingerprint": {
+      "桌宠.py": "7c64914aa083",
+      "pet_export.py": "c01e1593efd2",
+      "pet_lines.py": "5332f60b5f26",
+      "pet_alarm.py": "1149e94deee3",
+      "pet_behaviors.py": "8f57255144f6",
+      "_check_release.py": "e0abfe805849",
+      "pet_balance.py": "c374984ca058",
+      "pet_plugin.py": "2f7853298fc3",
+      "pet_plugin_host.py": "82fb7b1384c8",
+      "pet_dialogs.py": "0084f1a6bad7",
+      "pet_menu.py": "920daac1b835",
+      "pet_plugin_index.py": "7e9b4537b98e"
+    }
+  }
+}

@@ -42,15 +42,27 @@ class AIService:
     def set_ai_enabled(self, on: Any) -> None:
         cfg = self._cfg()
         cfg["ai_enabled"] = bool(on)
-        self._save_cfg(cfg)
+        err = self._save_cfg(cfg)
+        if err:
+            # v2.7.0 第 5 轮（B · 闭环）：开关写盘失败时只说"开关没生效"，不再让勾选状态
+            # 假装已经持久化（重启就变回去 = 用户以为设置丢了）
+            self.pet.show_bubble("AI 开关没能保存：%s\n（详情见数据目录的 error.log）" % (err,))
+            return
         if on and not cfg.get("api_key"):
             self.set_api_key()
             if not self._cfg().get("api_key"):
                 cfg["ai_enabled"] = False
-                self._save_cfg(cfg)
+                # v2.7.0 第 5 轮（兼容审查 P3-2）：第二次落盘的返回值此前**丢弃**——
+                # "没 Key 就把开关退回关"这一步没写进去时，勾选状态与磁盘不一致（重启后
+                # 又是开的）。现在按同一口径判，失败就一并说出来（成功路径文案逐字不变）。
+                _err2 = self._save_cfg(cfg)
                 if self.pet._ai_act:
                     self.pet._ai_act.setChecked(False)  # 同步菜单勾选状态，避免残留
-                self.pet.show_bubble("要先填 DeepSeek API Key 才能开 AI 对话哦~")
+                if _err2 is False or (isinstance(_err2, str) and _err2.strip()):
+                    self.pet.show_bubble("要先填 DeepSeek API Key 才能开 AI 对话哦~\n"
+                                         "（另外：AI 开关也没能保存：%s）" % (_err2,))
+                else:
+                    self.pet.show_bubble("要先填 DeepSeek API Key 才能开 AI 对话哦~")
 
     def set_api_key(self) -> None:
         # 挂到桌宠窗口（置顶窗口的子对话框必然显示在最上层）：
@@ -70,21 +82,46 @@ class AIService:
         dlg.setFocus()  # 前台锁残余风险：显式请求键盘焦点
         if dlg.exec() == QDialog.DialogCode.Accepted:
             key = dlg.textValue().strip()
-            if key:
-                self._cfg()["api_key"] = key
-                self._save_cfg(self._cfg())
-                self._redact(key)
-                pet.show_bubble("记住啦！可以和我聊天了~")
+            if not key:
+                # v2.7.0 第 5 轮（代理 B · 审计 S17）：改前这里**什么都不做、也不说一句话**
+                # ——用户清空输入框点确定 = 完全静默（"点了没效果"，error.log 里也查不到）。
+                # 只补一句反馈，**绝不动已有 Key**（清空有专门的菜单项，标签里也写明了），
+                # 所以这条改动不存在"手滑把 Key 清掉"的数据风险。
+                pet.show_bubble("没有输入 Key，什么都没改~（要清空请用菜单「清除DeepSeek API Key」）")
+                return
+            self._cfg()["api_key"] = key
+            err = self._save_cfg(self._cfg())
+            self._redact(key)   # 内存里已经存了这个值（不论落盘成败）→ 必须登记脱敏
+            if err:
+                # v2.7.0 第 5 轮（B · 闭环）：写失败不许再回「记住啦！」——那是"保存成功"假象
+                pet.show_bubble("Key 没能保存：%s\n（详情见数据目录的 error.log）" % (err,))
+                return
+            pet.show_bubble("记住啦！可以和我聊天了~")
 
     def clear_api_key(self) -> None:
         pet = self.pet
         cfg = self._cfg()
         usage_path, data_dir, config_path, memory_path = self._paths
-        cfg["api_key"] = ""
-        self._redact("")
-        cfg["badge"] = False
-        cfg["ai_enabled"] = False
-        self._save_cfg(cfg)
+        # v2.7.0 第 5 轮（兼容审查 P2-1）：**先在副本上改，写盘成功才提交**。
+        # 改前无论写盘成败都往下走：内存里 Key / 开关已清、盘上一个字节没写（重启后 Key
+        # 又回来），而余额基准、对话记忆、日志**已经真删了**，用户看到的却是"已清空"
+        # —— 既是假反馈，删掉的记忆还找不回来。现在失败就**什么都不清**、如实说明。
+        new = dict(cfg)
+        new["api_key"] = ""
+        new["badge"] = False
+        new["ai_enabled"] = False
+        err = self._save_cfg(new)
+        if err is False or (isinstance(err, str) and err.strip()):
+            self._log("clear_api_key save failed: %s"
+                      % (err if isinstance(err, str) and err.strip()
+                         else "save callback returned False"))
+            pet.show_bubble("API Key 没能清空：%s\n（盘上还是旧值；余额基准 / 对话记忆 / 日志"
+                            "这次一个都没动，详情见数据目录的 error.log）"
+                            % (err if isinstance(err, str) and err.strip()
+                               else "落盘回调报了失败"))
+            return
+        cfg.update(new)
+        self._redact("")   # 只有真清掉了才注销脱敏：失败时 Key 还在内存里，必须继续脱敏
         pet.balance.stop()
         pet.badge.hide()
         pet._shown_balance = None
@@ -159,16 +196,54 @@ class AIService:
         self.chat.ask(msg)
 
     # ---- AI 设置 / 对话记忆 ----
-    def apply_settings(self, data: Any = None) -> None:
-        """应用 AI 设置（对话框保存后回调；data 为 {配置键: 值}）。"""
+    def apply_settings(self, data: Any = None) -> tuple[bool, str]:
+        """应用 AI 设置（对话框保存后回调；data 为 {配置键: 值}）→ **(ok, msg)**。
+
+        v2.7.0 第 5 轮（代理 B，闭环 P1-1）：本方法此前返回 None（成功也 None）**且自己弹气泡**
+        —— 调用方（桌宠.apply_ai_settings → AI 设置对话框）无从判断成败，"窗口照常关闭 =
+        保存成功假象"的根源就在这里（_dev/audit_feedback_v270.md S10/P1-1）。现在：
+          · 成功 → (True, "AI 设置已更新，下次聊天就按新口味来~")；
+          · 失败 → (False, 可读原因) **+ 记一条日志**（入参不是 dict / 落盘回调抛异常 /
+            落盘回调返回错误串或 False，三种都算失败）；
+          · **不再自己弹气泡**：一次用户动作只给一句反馈，气泡由调用方给
+            （桌宠.apply_ai_settings 把 msg 原样交回对话框，对话框按 msg 弹气泡）。
+            否则同一次「保存」会出现两条同文案气泡。
+        """
         if not isinstance(data, dict):
-            return
-        cfg = self._cfg()
-        for k, v in data.items():
-            if k in self._defaults:
-                cfg[k] = v
-        self._save_cfg(cfg)
-        self.pet.show_bubble("AI 设置已更新，下次聊天就按新口味来~")
+            return False, "AI 设置格式不对，没有保存"
+        try:
+            cfg = self._cfg()
+            # v2.7.0 第 5 轮（F4：写盘失败时内存里的 cfg 已经被改）。改前是"先原地改 cfg、
+            # 再 save"：写失败后用户看到的是"没能保存"，**本次会话却已经在用新的 API 地址/
+            # 模型/人设**，重启才回旧值 —— 用户被同时骗了两次（一次说没保存、一次说没生效）。
+            # 取**方案②（先改副本、成功后再提交）**而不是①（只改文案），理由三条：
+            #   1) 交付物要求"同一件事只能有一个真相"：口径既然是"没保存"，内存就不该变；
+            #   2) 这个函数的入口只有 AI 设置对话框（modal，失败不关窗、值还在控件里），
+            #      不提交**不会**让用户丢输入，重试一次即可；
+            #   3) 提交是 `cfg.update(new)`，对成功路径**逐位等价**（同一批键、同一批值、
+            #      键顺序也相同：既有键 update 不挪位置、新键与原地写一样追加在末尾），
+            #      落盘字节由 write_config 从 dict 内容算出 → 与改前完全一致（有用例钉住）。
+            new = dict(cfg)
+            for k, v in data.items():
+                if k in self._defaults:
+                    new[k] = v
+            err = self._save_cfg(new)
+        except Exception as e:
+            self._log("ai apply_settings failed: %r" % (e,))
+            return False, "AI 设置没能保存：%s" % (e,)
+        # 落盘回调的失败信号：错误串（pet_io/pet_config 的口径）或裸 False。
+        # v2.7.0 第 5 轮（F3 更正：原注释写于本轮前半，已经过期）：现网注入的正是
+        # 桌宠.save_config，而它自本轮起**原样上交** pet_config.write_config 的返回值
+        # （桌宠.py `return pet_config.write_config(...)`；pet_config.py 失败时 `return err`、
+        # 成功 None），只读兼容模式另有一句原因串。链条已经通了 —— 上面这条判据在现网
+        # 链路里是**真起作用**的，不是防御性代码。
+        if err is False or (isinstance(err, str) and err.strip()):
+            self._log("ai apply_settings save failed: %s"
+                      % (err if isinstance(err, str) and err.strip() else "save callback returned False"))
+            return False, "AI 设置没能保存：%s" % (
+                err if isinstance(err, str) and err.strip() else "落盘回调报了失败（详情见 error.log）")
+        cfg.update(new)      # F4：落盘成功才提交进内存（内容与键顺序与"原地改"逐位相同）
+        return True, "AI 设置已更新，下次聊天就按新口味来~"
 
     def set_chat_rounds(self) -> None:
         pet = self.pet
@@ -186,8 +261,13 @@ class AIService:
         if dlg.exec() != QDialog.DialogCode.Accepted:
             return
         val = dlg.intValue()
-        self._cfg()["chat_memory_rounds"] = val
-        self._save_cfg(self._cfg())
+        cfg = self._cfg()
+        cfg["chat_memory_rounds"] = val
+        err = self._save_cfg(cfg)
+        if err:
+            # v2.7.0 第 5 轮（B · 闭环）：写失败就不许回「记住最近 N 轮啦~」（假象）
+            pet.show_bubble("对话记忆没能保存：%s\n（详情见数据目录的 error.log）" % (err,))
+            return
         if val:
             pet.show_bubble("记住最近 %d 轮对话啦~" % val)
         else:

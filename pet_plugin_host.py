@@ -919,19 +919,41 @@ class PluginHost(object):
                             == str((known or {}).get("version") or ""))
             repeat = bool(already and added == 0 and skipped > 0 and same_version)
             previous = self.previous_dir(pid)
+            # v2.7.0（代理 C·小账 b）：**history 与 .prev-<id>/ 必须成对**。
+            # v2.6.0 起 history[-1] 是"上一版目录里那份 payload 对应的登记"，轮换
+            # （target → .prev-、新包 → target）保证了两者一一对应。但当前版目录**不在**时
+            # （用户手工清过 plugins/<id>/、上一次提交半途失败、杀软删过）此前走的是 else
+            # 分支：history 被清成 []（回滚点白丢、回滚按钮变灰），而 .prev-<id>/ 原样留在
+            # 盘上成了孤儿（没人能回滚它、也没人清它）。新口径：
+            #   · 目录不在而 .prev 在 → 那份 payload 正是 history[-1] 记的那一版，配对关系
+            #     还成立：**既不轮换也不清**（回滚点保住）；
+            #   · 两边都不在 → history 一并清掉（不留指向空气的回滚点）；
+            #   · 登记里没有这条却留着 .prev → 孤儿（上次安装半途失败留下的），一并清掉。
+            target_is_dir = os.path.isdir(target)
+            prev_is_dir = bool(previous) and os.path.isdir(previous)
             moved_prev = False
+            keep_history = False
             try:
-                if repeat and os.path.isdir(target):
+                if repeat and target_is_dir:
                     # 目录原样留着（它里面就是这一版的内容）；tmp 由 finally 清掉。
                     moved_prev = False
+                    keep_history = prev_is_dir   # .prev 不在 → 悬空回滚点一并清掉
+                elif already and not target_is_dir:
+                    # 当前版目录不在了：没有可轮换的 payload，直接换上新目录。
+                    keep_history = prev_is_dir
+                    os.replace(tmp, target)
+                    tmp = ""                # 已经搬走：finally 不必再删
                 else:
-                    if already and os.path.isdir(target):
-                        if os.path.isdir(previous):
+                    if already and target_is_dir:
+                        if prev_is_dir:
                             shutil.rmtree(previous, ignore_errors=True)
                         os.replace(target, previous)
                         moved_prev = True
-                    elif os.path.isdir(target):
+                    elif target_is_dir:
                         shutil.rmtree(target)
+                    if not already and prev_is_dir:
+                        # 登记里没有这条，却留着一份 .prev-<id>/：没有任何记录能跟它配对
+                        shutil.rmtree(previous, ignore_errors=True)
                     os.replace(tmp, target)
                     tmp = ""                # 已经搬走：finally 不必再删
             except Exception as e:
@@ -964,8 +986,11 @@ class PluginHost(object):
                 "enabled": bool((known or {}).get("enabled", True)),
                 "landed": _merge_landed(known.get("landed") if already else None, landed),
                 FINGERPRINT_KEY: _ledger_json(ledger),
+                # history 的三种口径（v2.7.0 代理 C·小账 b）：轮换了目录 → 记被换下去的那条；
+                # 没轮换但 .prev 还在（当前版目录丢了 / 同版本重复安装）→ 沿用原记录，回滚点
+                # 不丢；其余（没有可恢复的 payload）→ 空表，不许留悬空回滚点。
                 "history": ([prev_record] if (already and moved_prev and prev_record)
-                            else (list(known.get("history") or []) if repeat else [])),
+                            else (list(known.get("history") or []) if keep_history else [])),
             }
             registry["plugins"][pid] = record
             werr = self._save_registry(registry)
@@ -974,6 +999,15 @@ class PluginHost(object):
                 # 把刚并进宿主库的条目逐条回滚——否则用户看到"安装失败"，而台词/角色其实
                 # 已经永久进了库（插件管理里还看不到它，重装再来一份）。
                 shutil.rmtree(target, ignore_errors=True)
+                if moved_prev:
+                    # v2.7.0（代理 C·小账 b 的连带）：目录轮换也要退回去——这次更新没成立，
+                    # 用户该继续用原来那一版（与 S1-b 提交失败分支同口径）。少了这一步会留下
+                    # "登记说装着上一版、plugins/<id>/ 却不在、真 payload 躺在 .prev-<id>/"
+                    # 的错位状态——正是 b 那条孤儿备份的制造者。
+                    try:
+                        os.replace(previous, target)
+                    except Exception as back:
+                        self._log_rollback("上一版目录", back)
                 self._unland(data_kind, landed)
                 return False, ("写入安装登记失败：%s（已撤掉插件目录，并回滚本次导入的内容）"
                                % werr)
@@ -1082,11 +1116,19 @@ class PluginHost(object):
         registry["plugins"][safe] = restored
         werr = self._save_registry(registry)
         if werr:
-            return False, ("已恢复上一版目录，但安装登记写入失败：%s（内容已撤销 %d 项，"
-                           "请重开插件管理看看当前状态）" % (werr, count))
-        return True, ("已把插件「%s」回滚到上一版 %s：撤销了本版新导入的 %d 项内容"
+            undone = ("已撤销本版新导入的 %d 项内容" % count if count
+                      else "本版没有新导入的内容需要撤销")
+            return False, ("已恢复上一版目录，但安装登记写入失败：%s（%s，"
+                           "请重开插件管理看看当前状态）" % (werr, undone))
+        # v2.7.0（代理 C·小账 c）：文案必须与行为对齐。同内容折叠（这一版的内容与上一版
+        # 完全一致、按指纹一条都没重复落）时差集是空的，此前文案照念"撤销了本版新导入的
+        # 0 项内容"——用户读到一句自相矛盾的"撤销了 0 项"，分不清是回滚没生效还是本来就没
+        # 内容。0 项时改说"没有新导入的内容"，不再提"撤销"。
+        done = ("撤销了本版新导入的 %d 项内容" % count if count
+                else "这一版没有新导入的内容（与上一版一致），没有条目需要撤销")
+        return True, ("已把插件「%s」回滚到上一版 %s：%s"
                       "（你自己的角色 / 台词 / 音效一件没动）"
-                      % (safe, restored.get("version") or "(未知)", count))
+                      % (safe, restored.get("version") or "(未知)", done))
 
     def set_enabled(self, pid: Any, on: Any) -> tuple:
         """启用/禁用插件：只改登记里的 enabled，**文件一个不动**（可逆）。返回 (ok, msg)。"""

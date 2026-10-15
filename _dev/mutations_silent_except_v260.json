@@ -252,7 +252,7 @@
   ],
   "results": {
     "title": "变异验证 spec：mutations_silent_except_v260.json",
-    "checked_at": "2026-10-12 12:07:46",
+    "checked_at": "2026-10-15 17:58:54",
     "total": 19,
     "caught": 19,
     "not_caught": 0,
@@ -262,7 +262,7 @@
         "id": "M-S1",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.51s",
+        "tail": "1 failed in 0.85s",
         "failed": [
           "test_decrypt_secret_failure_is_logged"
         ]
@@ -271,7 +271,7 @@
         "id": "M-S2",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.43s",
+        "tail": "1 failed in 0.68s",
         "failed": [
           "test_role_stage_file_failure_is_logged"
         ]
@@ -280,7 +280,7 @@
         "id": "M-S3",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.44s",
+        "tail": "1 failed in 0.65s",
         "failed": [
           "test_audio_preview_failure_is_logged"
         ]
@@ -289,7 +289,7 @@
         "id": "M-S4",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.82s",
+        "tail": "1 failed in 1.48s",
         "failed": [
           "test_window_preview_audio_failure_is_logged"
         ]
@@ -298,7 +298,7 @@
         "id": "M-S5",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.58s",
+        "tail": "1 failed in 0.83s",
         "failed": [
           "test_persona_file_text_logs_only_for_custom_personas"
         ]
@@ -307,7 +307,7 @@
         "id": "M-S6",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.42s",
+        "tail": "1 failed in 0.69s",
         "failed": [
           "test_describe_call_keeps_args_when_describe_raises"
         ]
@@ -316,7 +316,7 @@
         "id": "M-S7",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.40s",
+        "tail": "1 failed in 0.61s",
         "failed": [
           "test_log_throttled_window_uses_injected_clock"
         ]
@@ -325,7 +325,7 @@
         "id": "M-S8",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.40s",
+        "tail": "1 failed in 0.66s",
         "failed": [
           "test_guard_slot_still_throttles_after_refactor"
         ]
@@ -334,7 +334,7 @@
         "id": "M-S9",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed, 6 warnings in 18.00s",
+        "tail": "1 failed, 12 warnings in 59.19s",
         "failed": [
           "test_every_silent_except_has_an_owner"
         ]
@@ -343,7 +343,7 @@
         "id": "M-S10",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed, 6 warnings in 17.85s",
+        "tail": "1 failed, 12 warnings in 66.32s (0:01:06)",
         "failed": [
           "test_every_silent_except_has_an_owner"
         ]
@@ -352,7 +352,7 @@
         "id": "M-S11",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed, 6 warnings in 17.93s",
+        "tail": "1 failed, 12 warnings in 70.38s (0:01:10)",
         "failed": [
           "test_every_silent_except_has_an_owner"
         ]
@@ -361,7 +361,7 @@
         "id": "M-S12",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed, 6 warnings in 17.88s",
+        "tail": "1 failed, 12 warnings in 62.94s (0:01:02)",
         "failed": [
           "test_every_silent_except_has_an_owner"
         ]
@@ -370,7 +370,7 @@
         "id": "M-S13",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.53s",
+        "tail": "1 failed in 0.74s",
         "failed": [
           "test_明文http一律拒_只收https"
         ]
@@ -379,7 +379,7 @@
         "id": "M-S14",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.54s",
+        "tail": "1 failed in 0.77s",
         "failed": [
           "test_远端索引不许指向本地路径_随包索引不受限"
         ]
@@ -388,7 +388,7 @@
         "id": "M-S15",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.50s",
+        "tail": "1 failed in 1.03s",
         "failed": [
           "test_相对地址拒路径穿越与空段"
         ]
@@ -397,7 +397,7 @@
         "id": "M-S16",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.50s",
+        "tail": "1 failed in 0.83s",
         "failed": [
           "test_file_url折成本机路径"
         ]
@@ -406,7 +406,7 @@
         "id": "M-S17",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.43s",
+        "tail": "1 failed in 0.76s",
         "failed": [
           "test_describe_call_amount_not_a_number_stays_visible"
         ]
@@ -415,7 +415,7 @@
         "id": "M-S18",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.63s",
+        "tail": "1 failed in 1.11s",
         "failed": [
           "test_prompt插件更新_用户没改过就允许覆盖新版内容"
         ]
@@ -424,7 +424,7 @@
         "id": "M-S19",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.63s",
+        "tail": "1 failed in 1.01s",
         "failed": [
           "test_底排必须有本地包安装入口_而且真的能装"
         ]
@@ -451,18 +451,18 @@
     ],
     "note": "变异只在 %TEMP% 影子副本里做，真实仓库只读（只写 _dev/.mutation.lock）",
     "repo_fingerprint": {
-      "桌宠.py": "99e2abf3e7fb",
+      "桌宠.py": "7c64914aa083",
       "pet_export.py": "c01e1593efd2",
       "pet_lines.py": "5332f60b5f26",
       "pet_alarm.py": "1149e94deee3",
       "pet_behaviors.py": "8f57255144f6",
       "_check_release.py": "e0abfe805849",
-      "pet_balance.py": "2828b2ebc0c9",
+      "pet_balance.py": "c374984ca058",
       "pet_plugin.py": "2f7853298fc3",
-      "pet_plugin_host.py": "e41ee09707ba",
-      "pet_dialogs.py": "48f300e4fc50",
+      "pet_plugin_host.py": "82fb7b1384c8",
+      "pet_dialogs.py": "0084f1a6bad7",
       "pet_menu.py": "920daac1b835",
-      "pet_plugin_index.py": "439340b16523"
+      "pet_plugin_index.py": "7e9b4537b98e"
     }
   }
 }

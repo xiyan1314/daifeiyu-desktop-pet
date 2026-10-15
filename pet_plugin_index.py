@@ -597,6 +597,17 @@ class PluginIndex(object):
             if want and got and want != got:
                 return False, ("索引条目「%s」里的包自报 id 是「%s」——对不上，已拒绝安装"
                                "（索引与包不是同一件东西，宁可不装）" % (want, got))
+            # v2.7.0（代理 C·小账 a）：**id 对上了还不够**——类别也得对上。
+            # 此前只核 id：索引写 data_kind=lines、包里装的是 role 时，市场页按索引显示成
+            # 「台词包」，落地却把一只角色塞进角色库（界面与实际内容对不上，用户没有任何
+            # 线索）。类别不一致 = 索引与包不是同一件东西，与 id 不一致同一个口径。
+            want_kind = str(entry.get("data_kind") or "")
+            got_kind = str(meta.get("data_kind") or "")
+            if want_kind and got_kind and want_kind != got_kind:
+                return False, ("索引条目「%s」标的是「%s」类插件，包里的 manifest 却自报"
+                               "「%s」类——界面会按索引显示成一种、实际落地成另一种，"
+                               "已拒绝安装（索引与包不是同一件东西，宁可不装）"
+                               % (want, want_kind, got_kind))
             ok, msg = host.install_zip(path, source_url=str(entry.get("url") or ""))
             return bool(ok), msg
         finally:

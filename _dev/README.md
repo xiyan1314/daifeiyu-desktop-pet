@@ -13,7 +13,7 @@
 
 ---
 
-## 零、五条铁律（动手之前先看一眼；代价都是实测过的）
+## 零、六条铁律（动手之前先看一眼；代价都是实测过的）
 
 **铁律 1：在绿色版目录里调用 `python.exe`，一律加 `-B`（或设 `PYTHONDONTWRITEBYTECODE=1`）。**
 
@@ -81,6 +81,22 @@
 这是预期）。跑完对着发布门的两个提示通道复核到**双双静默**：`mutation_evidence_notes()`（指纹过期 /
 缺键）+ `mutation_verdict_notes()`（判定不通过）。
 
+**一条命令跑完整批（v2.7.0 代理 C 落成脚本）**：`python -B _dev/mutate_batch_v270.py` ——
+自动收全 ① 带 `mutations` 段的 `_dev/mutations_*.json`（当前 **20 份 / 270 条锚点** —— 验收员
+定版实测为 20 份 / **269** 条，本轮 P1-1 回执修复新增 `M-R6-P1-1` 一条 → **270**）走 `mutate_check.py`；
+② 三份**旧形态单脚本驱动**（`mutate_export_slice.py` 5/5 · `mutate_startup_defer.py` 8/8 ·
+`mutate_proc_reset_v26.py` 12/12，**共 25 条**）；③ 两份独立结果（`verify_fastci_slices_v251.py`
+11 组 · `verify_guardrails_can_fail.py` 9/9）。
+**合计 295 条锚点**（270 + 25）—— 这个数字**以 `python -B _dev/mutate_batch_v270.py --scan-only`
+的实测输出为准**（`--scan-only` 末行现为「锚点合计 **295** 条，坏 0 条」；每加/删一条变异它都会变，
+本行此前写的「18 份 / 203 条」是 v2.7.0 代理 C 落成脚本当天的快照，已过期）。
+本轮三份新 spec 的条数：`mutations_agent_a_v270.json` **31** · `mutations_agent_b_v270.json` **35** ·
+`mutations_critic_v270.json` **14**（A/B 由验收员复跑 **31/31 · 35/35 全 CAUGHT**）。
+逐项打印 rc / 用时 / 末行，并把**跑前跑后**的源码指纹一起写进 `_dev/results_batch_v270.json`：
+**跑前跑后指纹不一致 = 这一批不是对着同一棵树测的，必须重跑**——三路并行时这是常态，门禁没红
+不代表证据有效。只要做锚点体检（秒级、不跑 pytest）：`python -B _dev/mutate_batch_v270.py --scan-only`
+（要求每条锚点命中**恰好 1 次**；命中 0 次或 2 次都是"这条没被验证"）。
+
 **反面教材（v2.6.0 第 4 轮实测，别重演）**：`mutations_dialog_fit_v250.json` 的 **M-D09** 钉的是
 `clamp_dialog(self, 600, 540)`，而 **v2.5.1 的 A/L5 就把 RoleEditDialog 的设计宽改成了 620**——
 `git show 1b5d591:pet_dialogs.py` 里**只有 `620/540`、根本没有 `600/540`**：这条锚点在 **v2.5.1 就已经
@@ -89,6 +105,66 @@ v2.5.0 那份 spec **再没被整批复跑过**，而它的 `results` 段一直�
 同轮 5 条 SPEC-BAD 里另有 4 条是本轮改动的漂移（`compat_v243` M-C12 · `plugin_v251` M-H2/M-H3 ·
 `round3_a` M-A13），其中 **M-C12 是"命中 2 次"而不是 0 次**——发布门口径是 **匹配次数 `!= 1`** 即
 SPEC-BAD（v2.6.0 新增的 `missing_fingerprint_keys` 复制了同一段两句判空，把唯一锚点变成了歧义）。
+
+**铁律 5 的显式例外登记（v2.7.0 定版收尾 · 全仓唯一一条）：注入型变异 —— wire 用例的同步驱动。**
+
+`tests/test_ui_wire_cache_v241.py::test_in_place_material_swap_is_re_decoded_and_replayed` 里那两处
+`drain_anim_slices(win)`（v2.7.0 第 5 轮加的"同步驱动在途分片"，现树 **:227 / :247**）**塞不进普通文本
+变异 spec**。机理：`_wire_anim_sets` 首片一旦超预算（`_FRAME_SLICE_MS = 12ms`）就走 `_anim_start_async`，
+那条路**先把 idle 槽置空**，真帧集要等 `_anim_chunk_step` 分片装完；用例没有事件循环，当场读到的就是空集。
+这两处 drain 就是把"事件循环跑完"**同步**跑一遍——**安静机器上首片不超预算，那条路根本走不到**，
+所以把 drain 从测试文件里**文本删掉**，用例照样全绿。验收员用复现器忠实复现了这一点：
+
+| 影子里的动作（产品源码一个字节不动，只改测试文件） | 结果 |
+|---|---|
+| 拿掉那两处 `drain_anim_slices`（安静机器，不注入） | **rc=0（绿）** → 文本变异会得到假的 `NOT CAUGHT` |
+| 同上 **+ `SLOW_SWAP=1` 注入慢解码**（模拟负载/杀软下的冷解码 > 12ms 预算） | **rc=1（红）**，红在 `assert old, "idle 帧集是空的"` |
+| 对照组①：drain 原样 + 不注入 | rc=0（绿） |
+| 对照组②：drain 原样 + `SLOW_SWAP=1` | rc=0（绿）—— **注入本身不制造假红**，"红"只由"修复被拿掉"造成 |
+
+> 上面四行由本轮定版收尾**逐条复跑过**（0 / 1 / 0 / 0），不是照抄别人的结论。
+
+**复现器（不进仓库，放系统 TEMP）：`%TEMP%\wire_repro_v270\repro_driver.py`** —— 只把"素材被换过之后的那次
+重新解码"延迟 20ms（依据 = 同一路径这次的 `(mtime, size)` 与上次解码时不同且刚被写过），其余解码一律不干预；
+它自己先 `import 桌宠`（真仓在最前），pytest 里再 import 时命中同一个模块对象——所以**产品源码读的永远是真仓**，
+被变异的只是影子里的那个测试文件。复现步骤与预期输出：
+
+```powershell
+# 安静 = 绿（先把影子副本里那两处 drain 去掉，产品源码原样）
+python -B %TEMP%\wire_repro_v270\repro_driver.py tests/test_ui_wire_cache_v241.py -q          # 预期 rc=0
+# 注入 = 红（同一个影子，加环境变量触发慢解码注入）
+$env:SLOW_SWAP=1; python -B %TEMP%\wire_repro_v270\repro_driver.py tests/test_ui_wire_cache_v241.py -q   # 预期 rc=1
+```
+
+⚠️ **这条复现器只能验"测试文件里的修复"**：产品源码被它钉在真仓（`sys.modules` 里已经是那一份）。
+要拿它验产品源码的改动，得把驱动器里那行 `sys.path.insert(0, <真仓>)` 改成影子根，否则会**拿未变异的
+真仓产品代码**跑出"全绿"的假象。
+
+**定性：这不是一条被豁免的修复，而是一条证据形态不同的修复；把它塞进文本 spec 只会产生假绿/假红。**
+假绿 = 安静机器上"拿掉修复仍全绿" → 记成 `NOT CAUGHT`（污染门禁含义：读数像"有一条没被验证"）；
+假红 = 机器恰好有负载时它真红了 → 记成 `CAUGHT`，于是"这条被验证了"同样是假的。判定它只有一条路：
+**按上面的复现器在注入条件下跑——安静必须绿、注入必须红，两条都要**（缺一条就不算证据）。
+
+**铁律 6：变异验证必须在影子副本里做，不许原地改真仓。**
+
+原地改写 + 事后还原会造出一个 1~2 秒的"**真仓正处于变异态**"窗口——任何并发的全量 pytest 撞进
+这个窗口就会看到**假红**：红的是别人写的用例，看起来却像产品缺陷。
+**v2.7.0 第 5 轮实测（2026-10-12）**：A 的全量里 3 条红
+（`tests/test_feedback_host_v270.py` 的 `test_set_api_key_empty_input_is_not_silent` /
+`test_set_api_key_write_failure_does_not_claim_success` /
+`test_ai_toggle_and_chat_rounds_report_write_failure`）**完全等于** B 当时正在跑的 pet_ai 变异红集
+（MP8/MP9/MP10/MP11：`if not key:` / `if err:` → `if False:`），第 4 条（wire）另有归属——
+只有"窗口重叠"能解释这个集合，但**无法回溯证明**，所以按"不许制造这种窗口"处理（B 自己报的，
+没有推给偶发）。
+
+正确做法：`_dev/_mutate_lib.py` 的 `shadow_repo()` / `shadow()`（整仓复制到 `%TEMP%`，变异与
+pytest 都在影子里跑，真仓只读），或自己在 `%TEMP%` 里复制一份仓库再改；
+不想动真仓的"运行时替换"也是可选项（`%TEMP%` 里放一个驱动脚本，先 `monkeypatch` 目标方法再
+`pytest.main(...)`——v2.7.0 第 5 轮用它验了"对话框失败不关窗"那两条跨模块用例）。
+**唯一例外**：该文件**只有你在动**、且窗口可忽略（秒级）时允许原地改，但**必须在回报里点名**
+（哪个文件、哪几次变异、窗口多大）。
+
+这条与铁律 2 是一对：铁律 2 管"**别在变异窗口里下结论**"，铁律 6 管"**别制造那个窗口**"。
 
 ---
 
@@ -116,6 +192,8 @@ SPEC-BAD（v2.6.0 新增的 `missing_fingerprint_keys` 复制了同一段两句�
 | `verify_guardrails_can_fail.py` | 护栏 A1-A6 / B7-B8 定向变异（9 条，同上，旧形态） | `python _dev/verify_guardrails_can_fail.py` | `results_guardrails_can_fail.json` |
 | `verify_d7a_v250_agent_c.py` | v2.5.0 D7-A 三条改动的定向变异（6 条，旧形态，**不产出结果 JSON**） | `python _dev/verify_d7a_v250_agent_c.py` | —（报告里贴输出） |
 | `verify_services_ast_v250.py` | **AST 实参对照**（不是变异）：旧 `__init__`（git `2a6563c`）vs 新 `pet_services.py` 的每一处构造实参；`--selftest` 现场验"对调两个实参一定报差异" | `python -B _dev/verify_services_ast_v250.py [--selftest]` | —（stdout 的 `compared=` / `mismatches=`） |
+| `mutate_batch_v270.py` | **整批复跑 = 铁律 5 的可执行形态**（v2.7.0 代理 C）：20 份 spec（270 条锚点，条数以 `--scan-only` 为准）+ 3 份旧形态单脚本驱动（25 条）+ 2 份独立结果，一条命令跑完；记录跑前跑后源码指纹，不一致就明确喊"这批不作数" | `python -B _dev/mutate_batch_v270.py [--scan-only]` | `results_batch_v270.json` |
+| `probe_c_mutation_output_v270.py` | 小账 a~d 的**变异原文证据**：逐条打印"改了什么 / 锚点命中几次 / 失败断言原文 / 还原后是否绿"（`mutate_check.py` 抓到时不打印输出，这份补的就是那段原文） | `python -B _dev/probe_c_mutation_output_v270.py` | —（stdout，贴报告） |
 
 这三条**旧形态**驱动的 2026-10-11 v2.4.4 复跑结果：导出 **5/5**（`E3` 已重锚到"固定时间戳
 `ZipInfo`"写法：`self._zf.writestr(_zi, json.dumps(...))`）、启动延迟装载 **8/8**（`M6` 锚点补回
@@ -187,6 +265,7 @@ spec 清单（**状态列的 CAUGHT 数 = 该文件 `results` 段当前的实测
 | `mutations_dialog_fit_v250.json` | **v2.5.0 第 3 轮新增**：对话框尺寸与滚动（B）——M-D01..D12 **逐个**删掉 12 个类的设计尺寸 clamp · M-D13 自指比例 0.85→1.5 · M-D14 重钳兜底 · M-D15 下限保护 · M-D16 滚动容器 · M-D17 按钮行进滚动区 | **17/17 CAUGHT**（2026-10-12 第 4 轮复跑：M-D09 重锚——v2.5.1 A/L5 把设计宽 600→620，旧锚点自 v2.5.1 起静默失效，见 §零 铁律 5 的反面教材） |
 | `mutations_plugin_v251.json` | **v2.5.1 代理A新增**：插件包校验器（M-P1 code 一致性 · M-P2 路径穿越 · M-P3 双版本门 · M-P4 禁止项清单 · M-P5 files 覆盖 · M-P6 容量上限复用 · M-P7 执行位 · M-P8 read_installed 不抛）· 发布门反向校验（M-R1 漏件必须报 · M-R2 AST 扫描不许空转 · M-R3 用户插件必须点名）· 安装器（M-H1 P1-1 保留名自保 · M-H2 S1-c already 必须以 landed 为准 · M-H3 S1-a 登记写失败回滚 · M-H4 P2-1 未落地内容必须点名）· M-P9 min_host_version 版本号判据 · L5 设计宽 620（M-L1） | **17/17 CAUGHT**（2026-10-12 第 4 轮复跑：M-H2/M-H3 重锚——v2.6.0 给 `_has_landed` 补了内容指纹参、登记失败的回滚调用收成无条件 `_unland`；2026-10-11 实测；M-P4/M-P8 首轮 NOT CAUGHT——M-P4 的"点名"被扩展名白名单分支同样满足、M-P8 的锚点钉在了走不到的分支上，都已重锚 + 收紧断言后复跑） |
 | `mutations_plugin_gap_v260.json` | **v2.6.0 代理C新增**：校验器与安装器两处口径差收口（M-G1 Windows 非法字符 · M-G2 保留设备名 · M-G3 空 files · M-G4/G5 发布门"缺键"提示与纯函数 · M-G6/G7 文档↔常量双向契约 · M-G8 安装器不再交出校验器那句原因） | **8/8 CAUGHT**（2026-10-12 实测：`python -B _dev/mutate_check.py _dev/mutations_plugin_gap_v260.json`） |
+| `mutations_plugin_c_v270.json` | **v2.7.0 代理 C 新增（插件线小账 a~d）**：M-C-a1 索引条目的 data_kind 与包自报不一致必须拒 · M-C-b1 当前版目录丢失而 .prev 在时保住回滚点 · M-C-b2 没有 .prev 就不留悬空回滚点 · M-C-b3 登记里没这条却留 .prev 则当孤儿清掉 · M-C-b4 登记写失败要回挪上一版目录 · M-C-c1 同内容折叠的回滚文案 · M-C-d1 razor 核对证据原文可查。钉 `tests/test_plugin_market_v270.py` | **7/7 CAUGHT**（2026-10-15 实测；原文证据见 `probe_c_mutation_output_v270.py` 与 `agent_c_v270_report.md`） |
 | `mutations_plugin_market_v260.json` | **v2.6.0 第 2 阶段新增**：插件市场（M-A01..A04 索引层 sha256 / 声明字节数 / 相对 url 解析 / host_min 可装性）· 按内容指纹合并与回滚（M-A05 指纹落账 · M-A06 去重失效 · M-A07 landed 累积 · M-A08 撤销本版新增 · M-A09 保留上一版 payload · M-A10 旧登记补账 · M-A16 同版本重复安装不顶回滚点 · **M-A17 `_fresh` 的 still_there 被摘掉：登记有账就当库里真有，库里缺的内容补不回来**）· 市场界面（M-A11..A15） | **17/17 CAUGHT**（2026-10-12 第 4 轮复跑；M-A17 是本轮**新增**的一条，与 M-A06 锚同一行、方向相反：M-A06 去重失效＝旧内容重复落，M-A17 去重过度＝缺的内容不补） |
 
 **2026-10-12 v2.6.0 第 4 轮（出货修订 `bb73d5b`）整批复跑记录**：整批由人发起，报出 **5 条 SPEC-BAD**
@@ -194,6 +273,21 @@ spec 清单（**状态列的 CAUGHT 数 = 该文件 `results` 段当前的实测
 **全部重锚后复跑**为 13/13 · 17/17 · 17/17 · 16/16；同轮给 `plugin_market_v260` 补了 M-A17 → 17/17；
 三份旧形态单脚本同轮对齐 **5/5 · 8/8 · 9/9**；本轮回写的 7 份证据指纹**全部与当前树一致**。
 这 5 条**全是锚点漂移**（不是护栏失效），其中 M-D09 是历史欠账——见 §零 铁律 5 的反面教材。
+
+**2026-10-15 v2.7.0 整批复跑（代理 C）—— 并行窗口中间态，**不作发布依据**。**
+起因：v2.6.1 的 anim_mode 修复改了 `桌宠.py`，于是 v2.6.0 那批复跑落下的**全部 20 份证据**
+（不是此前以为的 2 份）指纹在 v2.6.1 定版那一刻就过期了。本轮用
+`python -B _dev/mutate_batch_v270.py` 整批跑完 **22 项 / 268 条判定**，结果：
+**SPEC-BAD 0 · ANCHOR-LOST 0 · WRONG TEST 0 · NOT CAUGHT 0 · INVALID 0 · BASELINE-RED 0**
+（`mutation_verdict_notes()` 静默）；`results_fastci_slices_v251.json` 的**缺 `pet_plugin_index.py` 键**
+也随复跑补齐（缺键提示一并消失）。
+跑的过程里发现并修好 **3 条断裂锚点**（`plugin_market_v260` M-A09/M-A16、`plugin_v251` M-H3 ——
+都是本轮 `install_zip` 重构造成的漂移），另有一条 M-H3 因重锚时 old/new 配错而**空转成 NOT CAUGHT**、
+修正后 CAUGHT（教训：重锚要连 `new` 一起复核，见 `results_batch_v270.json` 的 `rerun_after_batch`）。
+**但 A、B 当时正在改 `桌宠.py` / `pet_dialogs.py`**：跑前跑后指纹不一致（`fingerprint_moved`），
+跑完后这两个文件又变了 → 发布门仍有 15 条"指纹过期"。
+**所以这一批的用途只有一个：证明"当前源码上每条变异都能被抓住"＋找出断裂锚点；
+定版必须在安静窗口用同一条命令再跑一次**（跑法见 §零 铁律 5）。
 
 **2026-10-11 v2.4.4 证据对齐复跑**（真仓只读、逐个在 %TEMP% 影子里跑；本次总耗时约 255s）：上表
 **9 个 spec 全部 rc=0、共 94 条变异 100% CAUGHT**；三条**不是** `mutate_check.py` 形态的结果文件
