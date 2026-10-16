@@ -418,7 +418,7 @@
   ],
   "results": {
     "title": "变异验证 spec：mutations_agent_a_v270.json",
-    "checked_at": "2026-10-16 07:27:39",
+    "checked_at": "2026-10-16 09:29:33",
     "total": 31,
     "caught": 31,
     "not_caught": 0,
@@ -428,318 +428,349 @@
         "id": "M-A-01",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "5 failed in 3.39s",
+        "tail": "5 failed in 2.40s",
         "failed": [
-          "test_role_meta_ok_button_accepts",
-          "test_role_meta_cancel_button_rejects",
-          "test_every_action_button_is_wired_or_whitelisted",
-          "test_export_role_bundle_end_to_end",
-          "test_export_role_bundle_cancel_writes_nothing"
+          "tests/test_dialog_buttons_v270.py::test_role_meta_ok_button_accepts",
+          "tests/test_dialog_buttons_v270.py::test_role_meta_cancel_button_rejects",
+          "tests/test_dialog_buttons_v270.py::test_every_action_button_is_wired_or_whitelisted",
+          "tests/test_dialogs_feedback_v270.py::test_export_role_bundle_end_to_end",
+          "tests/test_dialogs_feedback_v270.py::test_export_role_bundle_cancel_writes_nothing"
         ],
-        "errors": []
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "M-A-02",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.90s",
+        "tail": "1 failed in 0.68s",
         "failed": [
-          "test_role_meta_dialog_has_both_buttons"
+          "tests/test_dialog_buttons_v270.py::test_role_meta_dialog_has_both_buttons"
         ],
-        "errors": []
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "M-A-03",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "2 failed in 1.29s",
+        "tail": "2 failed in 0.96s",
         "failed": [
-          "test_role_meta_esc_or_close_returns_none",
-          "test_role_meta_cancel_button_rejects"
+          "tests/test_dialog_buttons_v270.py::test_role_meta_esc_or_close_returns_none",
+          "tests/test_dialog_buttons_v270.py::test_role_meta_cancel_button_rejects"
         ],
-        "errors": []
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "M-A-04",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 1.68s",
+        "tail": "1 failed in 1.21s",
         "failed": [
-          "test_ai_settings_save_failure_keeps_window_open"
+          "tests/test_dialogs_feedback_v270.py::test_ai_settings_save_failure_keeps_window_open"
         ],
-        "errors": []
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "M-A-05",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 1.32s",
+        "tail": "1 failed in 1.07s",
         "failed": [
-          "test_ai_settings_save_success_closes_and_toasts"
+          "tests/test_dialogs_feedback_v270.py::test_ai_settings_save_success_closes_and_toasts"
         ],
-        "errors": []
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "M-A-06",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 1.61s",
+        "tail": "1 failed in 1.41s",
         "failed": [
-          "test_ai_settings_save_exception_stays_open_without_modal"
+          "tests/test_dialogs_feedback_v270.py::test_ai_settings_save_exception_stays_open_without_modal"
         ],
-        "errors": []
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "M-A-07",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 1.31s",
+        "tail": "1 failed in 1.10s",
         "failed": [
-          "test_ai_settings_none_return_is_failure"
+          "tests/test_dialogs_feedback_v270.py::test_ai_settings_none_return_is_failure"
         ],
-        "errors": []
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "M-A-08",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 1.18s",
+        "tail": "1 failed in 0.76s",
         "failed": [
-          "test_apply_call_normalizes_new_and_old_contracts"
+          "tests/test_dialogs_feedback_v270.py::test_apply_call_normalizes_new_and_old_contracts"
         ],
-        "errors": []
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "M-A-09",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 1.79s",
+        "tail": "1 failed in 1.06s",
         "failed": [
-          "test_toast_degrades_without_bubble"
+          "tests/test_dialogs_feedback_v270.py::test_toast_degrades_without_bubble"
         ],
-        "errors": []
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "M-A-10",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 2.20s",
+        "tail": "1 failed in 1.14s",
         "failed": [
-          "test_behavior_export_ok_toasts_filename"
+          "tests/test_dialogs_feedback_v270.py::test_behavior_export_ok_toasts_filename"
         ],
-        "errors": []
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "M-A-11",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 1.60s",
+        "tail": "1 failed in 1.07s",
         "failed": [
-          "test_behavior_export_without_selection_prompts"
+          "tests/test_dialogs_feedback_v270.py::test_behavior_export_without_selection_prompts"
         ],
-        "errors": []
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "M-A-12",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 1.40s",
+        "tail": "1 failed in 1.07s",
         "failed": [
-          "test_behavior_delete_needs_confirm"
+          "tests/test_dialogs_feedback_v270.py::test_behavior_delete_needs_confirm"
         ],
-        "errors": []
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "M-A-13",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 1.71s",
+        "tail": "1 failed in 1.07s",
         "failed": [
-          "test_behavior_delete_without_selection_prompts"
+          "tests/test_dialogs_feedback_v270.py::test_behavior_delete_without_selection_prompts"
         ],
-        "errors": []
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "M-A-14",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 1.65s",
+        "tail": "1 failed in 1.12s",
         "failed": [
-          "test_behavior_delete_step_without_selection_prompts"
+          "tests/test_dialogs_feedback_v270.py::test_behavior_delete_step_without_selection_prompts"
         ],
-        "errors": []
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "M-A-15",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 1.56s",
+        "tail": "1 failed in 1.09s",
         "failed": [
-          "test_behavior_delete_step_removes_selected"
+          "tests/test_dialogs_feedback_v270.py::test_behavior_delete_step_removes_selected"
         ],
-        "errors": []
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "M-A-16",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 1.60s",
+        "tail": "1 failed in 1.07s",
         "failed": [
-          "test_behavior_save_selects_new_row"
+          "tests/test_dialogs_feedback_v270.py::test_behavior_save_selects_new_row"
         ],
-        "errors": []
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "M-A-17",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "2 failed in 1.51s",
+        "tail": "2 failed in 1.70s",
         "failed": [
-          "test_physics_save_reports_no_change",
-          "test_physics_save_failure_keeps_window_open"
+          "tests/test_dialogs_feedback_v270.py::test_physics_save_reports_no_change",
+          "tests/test_dialogs_feedback_v270.py::test_physics_save_failure_keeps_window_open"
         ],
-        "errors": []
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "M-A-18",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 1.20s",
+        "tail": "1 failed in 1.24s",
         "failed": [
-          "test_bubble_style_save_failure_keeps_window_open"
+          "tests/test_dialogs_feedback_v270.py::test_bubble_style_save_failure_keeps_window_open"
         ],
-        "errors": []
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "M-A-19",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 1.68s",
+        "tail": "1 failed in 1.86s",
         "failed": [
-          "test_bubble_style_save_success_toasts"
+          "tests/test_dialogs_feedback_v270.py::test_bubble_style_save_success_toasts"
         ],
-        "errors": []
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "M-A-20",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 1.55s",
+        "tail": "1 failed in 1.07s",
         "failed": [
-          "test_delete_bad_one_surfaces_failure"
+          "tests/test_dialogs_feedback_v270.py::test_delete_bad_one_surfaces_failure"
         ],
-        "errors": []
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "M-A-21",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 1.45s",
+        "tail": "1 failed in 1.19s",
         "failed": [
-          "test_delete_all_bad_surfaces_failure_and_success"
+          "tests/test_dialogs_feedback_v270.py::test_delete_all_bad_surfaces_failure_and_success"
         ],
-        "errors": []
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "M-A-22",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 1.27s",
+        "tail": "1 failed in 0.98s",
         "failed": [
-          "test_role_set_active_failure_warns_and_success_toasts"
+          "tests/test_dialogs_feedback_v270.py::test_role_set_active_failure_warns_and_success_toasts"
         ],
-        "errors": []
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "M-A-23",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 1.29s",
+        "tail": "1 failed in 0.93s",
         "failed": [
-          "test_role_reset_default_failure_warns"
+          "tests/test_dialogs_feedback_v270.py::test_role_reset_default_failure_warns"
         ],
-        "errors": []
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "M-A-24",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.97s",
+        "tail": "1 failed in 0.94s",
         "failed": [
-          "test_bind_empty_state_shows_hint_and_import_entry"
+          "tests/test_dialogs_feedback_v270.py::test_bind_empty_state_shows_hint_and_import_entry"
         ],
-        "errors": []
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "M-A-25",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.93s",
+        "tail": "1 failed in 1.00s",
         "failed": [
-          "test_bind_broken_library_logs_and_says_why"
+          "tests/test_dialogs_feedback_v270.py::test_bind_broken_library_logs_and_says_why"
         ],
-        "errors": []
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "M-A-26",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.99s",
+        "tail": "1 failed in 0.95s",
         "failed": [
-          "test_bind_index_unusable_is_not_the_empty_state"
+          "tests/test_dialogs_feedback_v270.py::test_bind_index_unusable_is_not_the_empty_state"
         ],
-        "errors": []
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "M-A-27",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.97s",
+        "tail": "1 failed in 0.99s",
         "failed": [
-          "test_sound_rename_empty_name_warns"
+          "tests/test_dialogs_feedback_v270.py::test_sound_rename_empty_name_warns"
         ],
-        "errors": []
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "M-A-28",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 1.09s",
+        "tail": "1 failed in 0.96s",
         "failed": [
-          "test_lines_save_new_line_clears_filters_and_toasts"
+          "tests/test_dialogs_feedback_v270.py::test_lines_save_new_line_clears_filters_and_toasts"
         ],
-        "errors": []
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "M-A-29",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 1.36s",
+        "tail": "1 failed in 1.25s",
         "failed": [
-          "test_state_inputs_are_declared_and_actually_read"
+          "tests/test_dialog_buttons_v270.py::test_state_inputs_are_declared_and_actually_read"
         ],
-        "errors": []
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "M-A-30",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "2 failed in 0.83s",
+        "tail": "2 failed in 0.78s",
         "failed": [
-          "test_scanner_is_not_vacuous",
-          "test_every_action_button_is_wired_or_whitelisted"
+          "tests/test_dialog_buttons_v270.py::test_scanner_is_not_vacuous",
+          "tests/test_dialog_buttons_v270.py::test_every_action_button_is_wired_or_whitelisted"
         ],
-        "errors": []
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "M-A-31",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 1.30s",
+        "tail": "1 failed in 1.21s",
         "failed": [
-          "test_action_whitelist_checker_is_not_vacuous"
+          "tests/test_dialog_buttons_v270.py::test_action_whitelist_checker_is_not_vacuous"
         ],
-        "errors": []
+        "errors": [],
+        "errors_teardown": []
       }
     ],
     "spec": "mutations_agent_a_v270.json",
@@ -783,34 +814,73 @@
     ],
     "note": "变异只在 %TEMP% 影子副本里做，真实仓库只读（只写 _dev/.mutation.lock）",
     "repo_fingerprint": {
-      "桌宠.py": "1ebbedad0f2c",
+      "桌宠.py": "59b2f99c52ba",
       "pet_export.py": "c01e1593efd2",
       "pet_lines.py": "5332f60b5f26",
       "pet_alarm.py": "1149e94deee3",
       "pet_behaviors.py": "732273f95fb4",
-      "_check_release.py": "ed892a64f797",
+      "_check_release.py": "7377b3fad58e",
       "pet_balance.py": "66948e5514a4",
       "pet_plugin.py": "2f7853298fc3",
       "pet_plugin_host.py": "82fb7b1384c8",
-      "pet_dialogs.py": "1d46810817ab",
-      "pet_menu.py": "920daac1b835",
+      "pet_dialogs.py": "7e1a11cff2a2",
+      "pet_menu.py": "d2f565537b3f",
       "pet_plugin_index.py": "e5e9845785e8",
       "pet_ai.py": "a5989e7fe646",
-      "pet_config.py": "7a4ad883d4e8",
+      "pet_config.py": "6fe2b20ae424",
       "pet_io.py": "6b1e0413fb7f",
       "pet_services.py": "ecebb6ab5891",
-      "pet_widgets.py": "429688679fb6",
+      "pet_widgets.py": "b8de517121e1",
       "pet_resources.py": "e28f38917052",
       "pet_tools.py": "46e9030d073f",
       "pet_voice.py": "9fe0a570ca81",
       "pet_audio.py": "a6feadf4d653",
-      "pet_chat.py": "02a223b8849a",
+      "pet_chat.py": "de979c429c2c",
       "pet_log.py": "de14ecf338ab",
       "pet_actions.py": "83eb11403fec",
       "pet_book.py": "098676ac52d4",
       "_check_static.py": "6286f9f493bd",
+      "pet_motion.py": "fcee7ab63bb2",
       "tests/test_dialog_buttons_v270.py": "4f95acca7fc6",
       "tests/test_import_thread.py": "1c6fc2ec5d05"
+    },
+    "pinned_ast": {
+      "tests/test_dialog_buttons_v270.py::test_role_meta_ok_button_accepts": "4261384407ad",
+      "tests/test_dialog_buttons_v270.py::test_role_meta_cancel_button_rejects": "f0705efb7ae9",
+      "tests/test_dialog_buttons_v270.py::test_every_action_button_is_wired_or_whitelisted": "c6d0c3673a42",
+      "tests/test_dialogs_feedback_v270.py::test_export_role_bundle_end_to_end": "7e4ab732f7b5",
+      "tests/test_dialogs_feedback_v270.py::test_export_role_bundle_cancel_writes_nothing": "ef41a6b7db22",
+      "tests/test_dialog_buttons_v270.py::test_role_meta_dialog_has_both_buttons": "48b3149ab288",
+      "tests/test_dialog_buttons_v270.py::test_role_meta_esc_or_close_returns_none": "13c11b903ae8",
+      "tests/test_dialogs_feedback_v270.py::test_ai_settings_save_failure_keeps_window_open": "9dc0a85a8967",
+      "tests/test_dialogs_feedback_v270.py::test_ai_settings_save_success_closes_and_toasts": "6c6337935bd6",
+      "tests/test_dialogs_feedback_v270.py::test_ai_settings_save_exception_stays_open_without_modal": "993f7ab4d315",
+      "tests/test_dialogs_feedback_v270.py::test_ai_settings_none_return_is_failure": "a082a8fe32cb",
+      "tests/test_dialogs_feedback_v270.py::test_apply_call_normalizes_new_and_old_contracts": "51f536a88824",
+      "tests/test_dialogs_feedback_v270.py::test_toast_degrades_without_bubble": "a24593214b4f",
+      "tests/test_dialogs_feedback_v270.py::test_behavior_export_ok_toasts_filename": "3398d1a36319",
+      "tests/test_dialogs_feedback_v270.py::test_behavior_export_without_selection_prompts": "b5d295b96bfc",
+      "tests/test_dialogs_feedback_v270.py::test_behavior_delete_needs_confirm": "5db80312a1f5",
+      "tests/test_dialogs_feedback_v270.py::test_behavior_delete_without_selection_prompts": "8cf3f330653c",
+      "tests/test_dialogs_feedback_v270.py::test_behavior_delete_step_without_selection_prompts": "75c49c6ecfba",
+      "tests/test_dialogs_feedback_v270.py::test_behavior_delete_step_removes_selected": "6d3c93316a30",
+      "tests/test_dialogs_feedback_v270.py::test_behavior_save_selects_new_row": "8be90be5783a",
+      "tests/test_dialogs_feedback_v270.py::test_physics_save_reports_no_change": "48ea5c7595e8",
+      "tests/test_dialogs_feedback_v270.py::test_physics_save_failure_keeps_window_open": "17669ad5675b",
+      "tests/test_dialogs_feedback_v270.py::test_bubble_style_save_failure_keeps_window_open": "496bb4fb2507",
+      "tests/test_dialogs_feedback_v270.py::test_bubble_style_save_success_toasts": "b7d2324b87ac",
+      "tests/test_dialogs_feedback_v270.py::test_delete_bad_one_surfaces_failure": "a51ae84f1920",
+      "tests/test_dialogs_feedback_v270.py::test_delete_all_bad_surfaces_failure_and_success": "5272bab5ccee",
+      "tests/test_dialogs_feedback_v270.py::test_role_set_active_failure_warns_and_success_toasts": "9fcdd6788f15",
+      "tests/test_dialogs_feedback_v270.py::test_role_reset_default_failure_warns": "d1b50866e822",
+      "tests/test_dialogs_feedback_v270.py::test_bind_empty_state_shows_hint_and_import_entry": "f1919f7e7683",
+      "tests/test_dialogs_feedback_v270.py::test_bind_broken_library_logs_and_says_why": "d8954f41953e",
+      "tests/test_dialogs_feedback_v270.py::test_bind_index_unusable_is_not_the_empty_state": "881c9f53b9e5",
+      "tests/test_dialogs_feedback_v270.py::test_sound_rename_empty_name_warns": "3f500da22c05",
+      "tests/test_dialogs_feedback_v270.py::test_lines_save_new_line_clears_filters_and_toasts": "63ce3c02c4d6",
+      "tests/test_dialog_buttons_v270.py::test_state_inputs_are_declared_and_actually_read": "256d82299238",
+      "tests/test_dialog_buttons_v270.py::test_scanner_is_not_vacuous": "9aba86d70bb3",
+      "tests/test_dialog_buttons_v270.py::test_action_whitelist_checker_is_not_vacuous": "d0db0cf7527a"
     }
   }
 }

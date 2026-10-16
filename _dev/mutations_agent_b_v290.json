@@ -441,7 +441,7 @@
   ],
   "results": {
     "title": "变异验证 spec：mutations_agent_b_v290.json",
-    "checked_at": "2026-10-16 02:13:48",
+    "checked_at": "2026-10-16 09:41:28",
     "total": 23,
     "caught": 23,
     "not_caught": 0,
@@ -451,233 +451,279 @@
         "id": "B1-M1-empty-candidate-source",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "4 failed, 3 passed in 1.15s",
+        "tail": "4 failed, 3 passed in 1.60s",
         "failed": [
-          "test_action_choices_always_has_builtins_even_without_custom_actions",
-          "test_action_choices_includes_custom_actions",
-          "test_action_choices_tolerates_missing_pet_and_odd_shapes",
-          "test_action_choices_against_real_pet_window"
-        ]
+          "tests/test_behavior_v290.py::test_action_choices_always_has_builtins_even_without_custom_actions",
+          "tests/test_behavior_v290.py::test_action_choices_includes_custom_actions",
+          "tests/test_behavior_v290.py::test_action_choices_tolerates_missing_pet_and_odd_shapes",
+          "tests/test_behavior_v290.py::test_action_choices_against_real_pet_window"
+        ],
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "B1-M2-missing-custom-actions",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "3 failed, 4 passed in 0.83s",
+        "tail": "3 failed, 4 passed in 1.23s",
         "failed": [
-          "test_action_choices_includes_custom_actions",
-          "test_action_choices_tolerates_missing_pet_and_odd_shapes",
-          "test_action_choices_against_real_pet_window"
-        ]
+          "tests/test_behavior_v290.py::test_action_choices_includes_custom_actions",
+          "tests/test_behavior_v290.py::test_action_choices_tolerates_missing_pet_and_odd_shapes",
+          "tests/test_behavior_v290.py::test_action_choices_against_real_pet_window"
+        ],
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "B1-M3-no-dedup-no-sort",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "3 failed, 4 passed in 0.86s",
+        "tail": "3 failed, 4 passed in 1.10s",
         "failed": [
-          "test_action_choices_is_deduped_and_stably_sorted",
-          "test_action_choices_tolerates_missing_pet_and_odd_shapes",
-          "test_action_choices_against_real_pet_window"
-        ]
+          "tests/test_behavior_v290.py::test_action_choices_is_deduped_and_stably_sorted",
+          "tests/test_behavior_v290.py::test_action_choices_tolerates_missing_pet_and_odd_shapes",
+          "tests/test_behavior_v290.py::test_action_choices_against_real_pet_window"
+        ],
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "B1-M4-candidates-become-whitelist",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed, 6 passed in 0.81s",
+        "tail": "1 failed, 6 passed in 1.11s",
         "failed": [
-          "test_unknown_action_name_survives_read_and_write"
-        ]
+          "tests/test_behavior_v290.py::test_unknown_action_name_survives_read_and_write"
+        ],
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "B1-M5-keep-none-in-candidates",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed, 6 passed in 0.82s",
+        "tail": "1 failed, 6 passed in 1.06s",
         "failed": [
-          "test_action_choices_excludes_the_noop_name"
-        ]
+          "tests/test_behavior_v290.py::test_action_choices_excludes_the_noop_name"
+        ],
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "B1-M6-no-getattr-guard",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed, 6 passed in 0.81s",
+        "tail": "1 failed, 6 passed in 1.09s",
         "failed": [
-          "test_action_choices_tolerates_missing_pet_and_odd_shapes"
-        ]
+          "tests/test_behavior_v290.py::test_action_choices_tolerates_missing_pet_and_odd_shapes"
+        ],
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "B1-M7-drop-anim-actions-source",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "3 failed, 4 passed in 0.82s",
+        "tail": "3 failed, 4 passed in 1.09s",
         "failed": [
-          "test_action_choices_always_has_builtins_even_without_custom_actions",
-          "test_action_choices_includes_custom_actions",
-          "test_action_choices_tolerates_missing_pet_and_odd_shapes"
-        ]
+          "tests/test_behavior_v290.py::test_action_choices_always_has_builtins_even_without_custom_actions",
+          "tests/test_behavior_v290.py::test_action_choices_includes_custom_actions",
+          "tests/test_behavior_v290.py::test_action_choices_tolerates_missing_pet_and_odd_shapes"
+        ],
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "B4-M1-dead-branch-legacy-key",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "3 failed, 2 passed in 0.57s",
+        "tail": "3 failed, 2 passed in 0.75s",
         "failed": [
-          "test_remove_idle_refs_clears_the_reference",
-          "test_remove_idle_refs_does_not_hurt_other_entries",
-          "test_delete_behavior_then_clear_idle_refs_end_to_end"
-        ]
+          "tests/test_behavior_v290.py::test_remove_idle_refs_clears_the_reference",
+          "tests/test_behavior_v290.py::test_remove_idle_refs_does_not_hurt_other_entries",
+          "tests/test_behavior_v290.py::test_delete_behavior_then_clear_idle_refs_end_to_end"
+        ],
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "B4-M2-rewrite-with-normalized-entries",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed, 4 passed in 0.54s",
+        "tail": "1 failed, 4 passed in 0.73s",
         "failed": [
-          "test_remove_idle_refs_does_not_hurt_other_entries"
-        ]
+          "tests/test_behavior_v290.py::test_remove_idle_refs_does_not_hurt_other_entries"
+        ],
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "B4-M3-write-back-even-without-hit",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed, 4 passed in 0.56s",
+        "tail": "1 failed, 4 passed in 0.73s",
         "failed": [
-          "test_remove_idle_refs_is_idempotent_and_touches_nothing_when_no_hit"
-        ]
+          "tests/test_behavior_v290.py::test_remove_idle_refs_is_idempotent_and_touches_nothing_when_no_hit"
+        ],
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "B5-M1-hardcoded-not-enabled",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "2 failed, 4 passed in 0.55s",
+        "tail": "2 failed, 4 passed in 0.76s",
         "failed": [
-          "test_idle_combo_state_two_entries_is_not_off",
-          "test_idle_combo_state_single_and_first_only"
-        ]
+          "tests/test_behavior_v290.py::test_idle_combo_state_two_entries_is_not_off",
+          "tests/test_behavior_v290.py::test_idle_combo_state_single_and_first_only"
+        ],
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "B5-M2-silent-drop",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "3 failed, 3 passed in 0.58s",
+        "tail": "3 failed, 3 passed in 0.80s",
         "failed": [
-          "test_idle_single_change_dry_run_does_not_touch_cfg",
-          "test_idle_single_change_apply_reports_every_entry_it_drops",
-          "test_idle_single_change_clears_legacy_key_so_dropped_do_not_resurrect"
-        ]
+          "tests/test_behavior_v290.py::test_idle_single_change_dry_run_does_not_touch_cfg",
+          "tests/test_behavior_v290.py::test_idle_single_change_apply_reports_every_entry_it_drops",
+          "tests/test_behavior_v290.py::test_idle_single_change_clears_legacy_key_so_dropped_do_not_resurrect"
+        ],
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "B5-M3-keep-legacy-key-on-apply",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed, 5 passed in 0.58s",
+        "tail": "1 failed, 5 passed in 0.75s",
         "failed": [
-          "test_idle_single_change_clears_legacy_key_so_dropped_do_not_resurrect"
-        ]
+          "tests/test_behavior_v290.py::test_idle_single_change_clears_legacy_key_so_dropped_do_not_resurrect"
+        ],
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "B5-M4-dry-run-also-writes",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed, 5 passed in 0.57s",
+        "tail": "1 failed, 5 passed in 0.73s",
         "failed": [
-          "test_idle_single_change_dry_run_does_not_touch_cfg"
-        ]
+          "tests/test_behavior_v290.py::test_idle_single_change_dry_run_does_not_touch_cfg"
+        ],
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "B5-M5-chosen-entry-stays-disabled",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed, 5 passed in 0.56s",
+        "tail": "1 failed, 5 passed in 0.74s",
         "failed": [
-          "test_idle_single_change_enables_the_chosen_entry_and_keeps_its_fields"
-        ]
+          "tests/test_behavior_v290.py::test_idle_single_change_enables_the_chosen_entry_and_keeps_its_fields"
+        ],
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "B6-M1-play-even-if-save-failed",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "3 failed, 2 passed in 0.66s",
+        "tail": "3 failed, 2 passed in 0.74s",
         "failed": [
-          "test_test_play_target_refuses_when_save_failed",
-          "test_test_play_target_never_plays_a_stale_id",
-          "test_test_play_target_reason_is_human_readable"
-        ]
+          "tests/test_behavior_v290.py::test_test_play_target_refuses_when_save_failed",
+          "tests/test_behavior_v290.py::test_test_play_target_never_plays_a_stale_id",
+          "tests/test_behavior_v290.py::test_test_play_target_reason_is_human_readable"
+        ],
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "B7-M1-checkbox-hardcoded-false",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.88s",
+        "tail": "1 failed in 1.50s",
         "failed": [
-          "test_set_ai_enabled_无Key回退写盘失败_菜单勾选必须回读cfg"
-        ]
+          "tests/test_ai_write_first_v280.py::test_set_ai_enabled_无Key回退写盘失败_菜单勾选必须回读cfg"
+        ],
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "B7-M2-no-blocksignals",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "2 failed in 0.84s",
+        "tail": "2 failed in 1.14s",
         "failed": [
-          "test_talk_自动开开关_写失败_内存不变且如实告知但对话照常",
-          "test_talk_自动开开关_成功路径落盘且勾选跟上"
-        ]
+          "tests/test_ai_write_first_v280.py::test_talk_自动开开关_写失败_内存不变且如实告知但对话照常",
+          "tests/test_ai_write_first_v280.py::test_talk_自动开开关_成功路径落盘且勾选跟上"
+        ],
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "M-B290-01",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "5 failed, 2 passed in 0.82s",
+        "tail": "5 failed, 2 passed in 1.16s",
         "failed": [
-          "test_action_choices_always_has_builtins_even_without_custom_actions",
-          "test_action_choices_includes_custom_actions",
-          "test_action_choices_is_deduped_and_stably_sorted",
-          "test_action_choices_tolerates_missing_pet_and_odd_shapes",
-          "test_action_choices_against_real_pet_window"
-        ]
+          "tests/test_behavior_v290.py::test_action_choices_always_has_builtins_even_without_custom_actions",
+          "tests/test_behavior_v290.py::test_action_choices_includes_custom_actions",
+          "tests/test_behavior_v290.py::test_action_choices_is_deduped_and_stably_sorted",
+          "tests/test_behavior_v290.py::test_action_choices_tolerates_missing_pet_and_odd_shapes",
+          "tests/test_behavior_v290.py::test_action_choices_against_real_pet_window"
+        ],
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "M-B290-03",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "3 failed, 4 passed in 0.83s",
+        "tail": "3 failed, 4 passed in 1.14s",
         "failed": [
-          "test_action_choices_always_has_builtins_even_without_custom_actions",
-          "test_action_choices_includes_custom_actions",
-          "test_action_choices_tolerates_missing_pet_and_odd_shapes"
-        ]
+          "tests/test_behavior_v290.py::test_action_choices_always_has_builtins_even_without_custom_actions",
+          "tests/test_behavior_v290.py::test_action_choices_includes_custom_actions",
+          "tests/test_behavior_v290.py::test_action_choices_tolerates_missing_pet_and_odd_shapes"
+        ],
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "M-B290-06",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed, 6 passed in 0.84s",
+        "tail": "1 failed, 6 passed in 1.10s",
         "failed": [
-          "test_action_choices_tolerates_missing_pet_and_odd_shapes"
-        ]
+          "tests/test_behavior_v290.py::test_action_choices_tolerates_missing_pet_and_odd_shapes"
+        ],
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "M-B290-07",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "3 failed, 4 passed in 0.82s",
+        "tail": "3 failed, 4 passed in 1.11s",
         "failed": [
-          "test_action_choices_is_deduped_and_stably_sorted",
-          "test_action_choices_tolerates_missing_pet_and_odd_shapes",
-          "test_action_choices_against_real_pet_window"
-        ]
+          "tests/test_behavior_v290.py::test_action_choices_is_deduped_and_stably_sorted",
+          "tests/test_behavior_v290.py::test_action_choices_tolerates_missing_pet_and_odd_shapes",
+          "tests/test_behavior_v290.py::test_action_choices_against_real_pet_window"
+        ],
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "M-B290-08",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed, 6 passed in 0.80s",
+        "tail": "1 failed, 6 passed in 1.07s",
         "failed": [
-          "test_unknown_action_name_survives_read_and_write"
-        ]
+          "tests/test_behavior_v290.py::test_unknown_action_name_survives_read_and_write"
+        ],
+        "errors": [],
+        "errors_teardown": []
       }
     ],
     "spec": "mutations_agent_b_v290.json",
@@ -711,20 +757,63 @@
     ],
     "note": "变异只在 %TEMP% 影子副本里做，真实仓库只读（只写 _dev/.mutation.lock）",
     "repo_fingerprint": {
-      "桌宠.py": "6b20873532c6",
+      "桌宠.py": "59b2f99c52ba",
       "pet_export.py": "c01e1593efd2",
       "pet_lines.py": "5332f60b5f26",
       "pet_alarm.py": "1149e94deee3",
-      "pet_behaviors.py": "99f7dff343e4",
-      "_check_release.py": "5b25dd0d243d",
+      "pet_behaviors.py": "732273f95fb4",
+      "_check_release.py": "7377b3fad58e",
       "pet_balance.py": "66948e5514a4",
       "pet_plugin.py": "2f7853298fc3",
       "pet_plugin_host.py": "82fb7b1384c8",
-      "pet_dialogs.py": "4bc0e8c868bb",
-      "pet_menu.py": "920daac1b835",
+      "pet_dialogs.py": "7e1a11cff2a2",
+      "pet_menu.py": "d2f565537b3f",
       "pet_plugin_index.py": "e5e9845785e8",
       "pet_ai.py": "a5989e7fe646",
-      "pet_config.py": "7a4ad883d4e8"
+      "pet_config.py": "6fe2b20ae424",
+      "pet_io.py": "6b1e0413fb7f",
+      "pet_services.py": "ecebb6ab5891",
+      "pet_widgets.py": "b8de517121e1",
+      "pet_resources.py": "e28f38917052",
+      "pet_tools.py": "46e9030d073f",
+      "pet_voice.py": "9fe0a570ca81",
+      "pet_audio.py": "a6feadf4d653",
+      "pet_chat.py": "de979c429c2c",
+      "pet_log.py": "de14ecf338ab",
+      "pet_actions.py": "83eb11403fec",
+      "pet_book.py": "098676ac52d4",
+      "_check_static.py": "6286f9f493bd",
+      "pet_motion.py": "fcee7ab63bb2",
+      "tests/test_dialog_buttons_v270.py": "4f95acca7fc6",
+      "tests/test_import_thread.py": "1c6fc2ec5d05"
+    },
+    "pinned_ast": {
+      "tests/test_behavior_v290.py::test_action_choices_always_has_builtins_even_without_custom_actions": "d9fe56e71654",
+      "tests/test_behavior_v290.py::test_action_choices_includes_custom_actions": "ad68293607e1",
+      "tests/test_behavior_v290.py::test_action_choices_is_deduped_and_stably_sorted": "3ff06436deb7",
+      "tests/test_behavior_v290.py::test_action_choices_tolerates_missing_pet_and_odd_shapes": "ec0e90d8ee64",
+      "tests/test_behavior_v290.py::test_action_choices_excludes_the_noop_name": "3b2d86b588a4",
+      "tests/test_behavior_v290.py::test_unknown_action_name_survives_read_and_write": "783fa749d03d",
+      "tests/test_behavior_v290.py::test_action_choices_against_real_pet_window": "586fe1157818",
+      "tests/test_behavior_v290.py::test_remove_idle_refs_clears_the_reference": "40d8785da870",
+      "tests/test_behavior_v290.py::test_remove_idle_refs_is_idempotent_and_touches_nothing_when_no_hit": "779d9a892fd9",
+      "tests/test_behavior_v290.py::test_remove_idle_refs_does_not_hurt_other_entries": "02eeb40bb2fa",
+      "tests/test_behavior_v290.py::test_remove_idle_refs_clears_legacy_key_too": "a25b275570a1",
+      "tests/test_behavior_v290.py::test_delete_behavior_then_clear_idle_refs_end_to_end": "ca82d5cee4b7",
+      "tests/test_behavior_v290.py::test_idle_combo_state_two_entries_is_not_off": "0c61d946e372",
+      "tests/test_behavior_v290.py::test_idle_combo_state_single_and_first_only": "be3d548011b4",
+      "tests/test_behavior_v290.py::test_idle_single_change_dry_run_does_not_touch_cfg": "f29e29f591cc",
+      "tests/test_behavior_v290.py::test_idle_single_change_apply_reports_every_entry_it_drops": "4664847c1a36",
+      "tests/test_behavior_v290.py::test_idle_single_change_clears_legacy_key_so_dropped_do_not_resurrect": "3db0bdead7eb",
+      "tests/test_behavior_v290.py::test_idle_single_change_enables_the_chosen_entry_and_keeps_its_fields": "9746458d517e",
+      "tests/test_behavior_v290.py::test_test_play_target_refuses_when_save_failed": "612ef13dab4c",
+      "tests/test_behavior_v290.py::test_test_play_target_plays_only_after_successful_save": "e919c1b91e7e",
+      "tests/test_behavior_v290.py::test_test_play_target_needs_a_saved_behavior": "179b81db19c0",
+      "tests/test_behavior_v290.py::test_test_play_target_never_plays_a_stale_id": "c59502f450d7",
+      "tests/test_behavior_v290.py::test_test_play_target_reason_is_human_readable": "64b4ac7936c4",
+      "tests/test_ai_write_first_v280.py::test_set_ai_enabled_无Key回退写盘失败_菜单勾选必须回读cfg": "6016af4e1828",
+      "tests/test_ai_write_first_v280.py::test_talk_自动开开关_写失败_内存不变且如实告知但对话照常": "7abc9783bc3e",
+      "tests/test_ai_write_first_v280.py::test_talk_自动开开关_成功路径落盘且勾选跟上": "a458e820662c"
     }
   }
 }

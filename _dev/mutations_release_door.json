@@ -35,7 +35,7 @@
   ],
   "results": {
     "title": "变异验证 spec：mutations_release_door.json",
-    "checked_at": "2026-10-16 02:26:27",
+    "checked_at": "2026-10-16 10:04:31",
     "total": 3,
     "caught": 3,
     "not_caught": 0,
@@ -45,30 +45,36 @@
         "id": "G-D1",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "2 failed in 1.91s",
+        "tail": "2 failed in 1.54s",
         "failed": [
-          "test_clean_tree_points_at_deleted_entries",
-          "test_clean_tree_reports_a_really_deleted_file"
-        ]
+          "tests/test_release_check.py::test_clean_tree_points_at_deleted_entries",
+          "tests/test_release_check.py::test_clean_tree_reports_a_really_deleted_file"
+        ],
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "G-A1",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "2 failed in 1.47s",
+        "tail": "2 failed in 1.33s",
         "failed": [
-          "test_asset_manifest_catches_a_deleted_asset",
-          "test_asset_manifest_reports_a_missing_shipped_asset"
-        ]
+          "tests/test_release_check.py::test_asset_manifest_catches_a_deleted_asset",
+          "tests/test_release_check.py::test_asset_manifest_reports_a_missing_shipped_asset"
+        ],
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "G-L1",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.94s",
+        "tail": "1 failed in 0.60s",
         "failed": [
-          "test_mutation_lock_blocks_or_warns"
-        ]
+          "tests/test_release_check.py::test_mutation_lock_blocks_or_warns"
+        ],
+        "errors": [],
+        "errors_teardown": []
       }
     ],
     "spec": "mutations_release_door.json",
@@ -81,20 +87,42 @@
     ],
     "note": "变异只在 %TEMP% 影子副本里做，真实仓库只读（只写 _dev/.mutation.lock）",
     "repo_fingerprint": {
-      "桌宠.py": "6b20873532c6",
+      "桌宠.py": "59b2f99c52ba",
       "pet_export.py": "c01e1593efd2",
       "pet_lines.py": "5332f60b5f26",
       "pet_alarm.py": "1149e94deee3",
-      "pet_behaviors.py": "99f7dff343e4",
-      "_check_release.py": "5b25dd0d243d",
+      "pet_behaviors.py": "732273f95fb4",
+      "_check_release.py": "7377b3fad58e",
       "pet_balance.py": "66948e5514a4",
       "pet_plugin.py": "2f7853298fc3",
       "pet_plugin_host.py": "82fb7b1384c8",
-      "pet_dialogs.py": "4bc0e8c868bb",
-      "pet_menu.py": "920daac1b835",
+      "pet_dialogs.py": "7e1a11cff2a2",
+      "pet_menu.py": "d2f565537b3f",
       "pet_plugin_index.py": "e5e9845785e8",
       "pet_ai.py": "a5989e7fe646",
-      "pet_config.py": "7a4ad883d4e8"
+      "pet_config.py": "6fe2b20ae424",
+      "pet_io.py": "6b1e0413fb7f",
+      "pet_services.py": "ecebb6ab5891",
+      "pet_widgets.py": "b8de517121e1",
+      "pet_resources.py": "e28f38917052",
+      "pet_tools.py": "46e9030d073f",
+      "pet_voice.py": "9fe0a570ca81",
+      "pet_audio.py": "a6feadf4d653",
+      "pet_chat.py": "de979c429c2c",
+      "pet_log.py": "de14ecf338ab",
+      "pet_actions.py": "83eb11403fec",
+      "pet_book.py": "098676ac52d4",
+      "_check_static.py": "6286f9f493bd",
+      "pet_motion.py": "fcee7ab63bb2",
+      "tests/test_dialog_buttons_v270.py": "4f95acca7fc6",
+      "tests/test_import_thread.py": "1c6fc2ec5d05"
+    },
+    "pinned_ast": {
+      "tests/test_release_check.py::test_clean_tree_points_at_deleted_entries": "1c793fbb4dde",
+      "tests/test_release_check.py::test_clean_tree_reports_a_really_deleted_file": "86395cb3d9c3",
+      "tests/test_release_check.py::test_asset_manifest_catches_a_deleted_asset": "fb6c15e24703",
+      "tests/test_release_check.py::test_asset_manifest_reports_a_missing_shipped_asset": "398b2f9427c5",
+      "tests/test_release_check.py::test_mutation_lock_blocks_or_warns": "153d3c1429b5"
     }
   }
 }

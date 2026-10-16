@@ -167,7 +167,7 @@
   ],
   "results": {
     "title": "变异验证 spec：mutations_agent_a_v2100.json",
-    "checked_at": "2026-10-16 07:25:19",
+    "checked_at": "2026-10-16 09:26:13",
     "total": 9,
     "caught": 9,
     "not_caught": 0,
@@ -177,100 +177,109 @@
         "id": "M-A2100-01-U2-message-back-to-bare",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed, 1 passed in 1.93s",
+        "tail": "1 failed, 1 passed in 2.15s",
         "failed": [
-          "test_one_image_explains_why_two_are_needed_and_what_to_do"
+          "tests/test_dialogs_behavior_v290.py::test_one_image_explains_why_two_are_needed_and_what_to_do"
         ],
-        "errors": []
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "M-A2100-02-R1-behavior-entry-hides-cancel-semantics",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed, 1 passed in 1.11s",
+        "tail": "1 failed, 1 passed in 4.78s",
         "failed": [
-          "test_both_frame_action_entries_say_whether_cancel_undoes_it"
+          "tests/test_dialogs_behavior_v290.py::test_both_frame_action_entries_say_whether_cancel_undoes_it"
         ],
-        "errors": []
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "M-A2100-03-R1-role-edit-note-removed",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed, 2 passed in 1.80s",
+        "tail": "1 failed, 2 passed in 1.44s",
         "failed": [
-          "test_both_frame_action_entries_say_whether_cancel_undoes_it"
+          "tests/test_dialogs_behavior_v290.py::test_both_frame_action_entries_say_whether_cancel_undoes_it"
         ],
-        "errors": []
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "M-A2100-04-R3-no-duplicate-check-in-save",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "5 failed, 4 passed in 1.89s",
+        "tail": "5 failed, 4 passed in 1.44s",
         "failed": [
-          "test_duplicate_behavior_name_asks_instead_of_silently_adding",
-          "test_duplicate_name_keep_adds_a_second_entry_only_when_chosen",
-          "test_duplicate_name_overwrite_reuses_the_same_id",
-          "test_duplicate_name_rename_saves_the_new_name",
-          "test_renaming_an_existing_behavior_onto_another_name_also_asks"
+          "tests/test_dialogs_behavior_v290.py::test_duplicate_behavior_name_asks_instead_of_silently_adding",
+          "tests/test_dialogs_behavior_v290.py::test_duplicate_name_keep_adds_a_second_entry_only_when_chosen",
+          "tests/test_dialogs_behavior_v290.py::test_duplicate_name_overwrite_reuses_the_same_id",
+          "tests/test_dialogs_behavior_v290.py::test_duplicate_name_rename_saves_the_new_name",
+          "tests/test_dialogs_behavior_v290.py::test_renaming_an_existing_behavior_onto_another_name_also_asks"
         ],
-        "errors": []
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "M-A2100-05-R3-find-by-name-never-hits",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "6 failed, 3 passed in 2.29s",
+        "tail": "6 failed, 3 passed in 1.79s",
         "failed": [
-          "test_duplicate_behavior_name_asks_instead_of_silently_adding",
-          "test_duplicate_name_keep_adds_a_second_entry_only_when_chosen",
-          "test_duplicate_name_overwrite_reuses_the_same_id",
-          "test_duplicate_name_rename_saves_the_new_name",
-          "test_renaming_an_existing_behavior_onto_another_name_also_asks",
-          "test_find_by_name_is_the_single_judgement_for_duplicate_names"
+          "tests/test_dialogs_behavior_v290.py::test_duplicate_behavior_name_asks_instead_of_silently_adding",
+          "tests/test_dialogs_behavior_v290.py::test_duplicate_name_keep_adds_a_second_entry_only_when_chosen",
+          "tests/test_dialogs_behavior_v290.py::test_duplicate_name_overwrite_reuses_the_same_id",
+          "tests/test_dialogs_behavior_v290.py::test_duplicate_name_rename_saves_the_new_name",
+          "tests/test_dialogs_behavior_v290.py::test_renaming_an_existing_behavior_onto_another_name_also_asks",
+          "tests/test_behavior_v290.py::test_find_by_name_is_the_single_judgement_for_duplicate_names"
         ],
-        "errors": []
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "M-A2100-06-R3-overwrite-does-not-take-over-the-id",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed, 8 passed in 3.21s",
+        "tail": "1 failed, 8 passed in 1.40s",
         "failed": [
-          "test_duplicate_name_overwrite_reuses_the_same_id"
+          "tests/test_dialogs_behavior_v290.py::test_duplicate_name_overwrite_reuses_the_same_id"
         ],
-        "errors": []
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "M-A2100-07-R3-rename-path-offers-overwrite",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed, 8 passed in 1.88s",
+        "tail": "1 failed, 8 passed in 1.31s",
         "failed": [
-          "test_renaming_an_existing_behavior_onto_another_name_also_asks"
+          "tests/test_dialogs_behavior_v290.py::test_renaming_an_existing_behavior_onto_another_name_also_asks"
         ],
-        "errors": []
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "M-A2100-08-R3-clash-box-loses-the-overwrite-option",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 1.47s",
+        "tail": "1 failed in 1.06s",
         "failed": [
-          "test_name_clash_box_offers_three_choices_plus_cancel"
+          "tests/test_dialogs_behavior_v290.py::test_name_clash_box_offers_three_choices_plus_cancel"
         ],
-        "errors": []
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "M-A2100-09-R2-idle-save-stops-closing",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 1.75s",
+        "tail": "1 failed in 1.54s",
         "failed": [
-          "test_submit_model_is_split_by_type_and_every_save_is_pinned"
+          "tests/test_dialogs_behavior_v290.py::test_submit_model_is_split_by_type_and_every_save_is_pinned"
         ],
-        "errors": []
+        "errors": [],
+        "errors_teardown": []
       }
     ],
     "spec": "mutations_agent_a_v2100.json",
@@ -294,34 +303,53 @@
     ],
     "note": "变异只在 %TEMP% 影子副本里做，真实仓库只读（只写 _dev/.mutation.lock）",
     "repo_fingerprint": {
-      "桌宠.py": "1ebbedad0f2c",
+      "桌宠.py": "59b2f99c52ba",
       "pet_export.py": "c01e1593efd2",
       "pet_lines.py": "5332f60b5f26",
       "pet_alarm.py": "1149e94deee3",
       "pet_behaviors.py": "732273f95fb4",
-      "_check_release.py": "ed892a64f797",
+      "_check_release.py": "7377b3fad58e",
       "pet_balance.py": "66948e5514a4",
       "pet_plugin.py": "2f7853298fc3",
       "pet_plugin_host.py": "82fb7b1384c8",
-      "pet_dialogs.py": "1d46810817ab",
-      "pet_menu.py": "920daac1b835",
+      "pet_dialogs.py": "7e1a11cff2a2",
+      "pet_menu.py": "d2f565537b3f",
       "pet_plugin_index.py": "e5e9845785e8",
       "pet_ai.py": "a5989e7fe646",
-      "pet_config.py": "7a4ad883d4e8",
+      "pet_config.py": "6fe2b20ae424",
       "pet_io.py": "6b1e0413fb7f",
       "pet_services.py": "ecebb6ab5891",
-      "pet_widgets.py": "429688679fb6",
+      "pet_widgets.py": "b8de517121e1",
       "pet_resources.py": "e28f38917052",
       "pet_tools.py": "46e9030d073f",
       "pet_voice.py": "9fe0a570ca81",
       "pet_audio.py": "a6feadf4d653",
-      "pet_chat.py": "02a223b8849a",
+      "pet_chat.py": "de979c429c2c",
       "pet_log.py": "de14ecf338ab",
       "pet_actions.py": "83eb11403fec",
       "pet_book.py": "098676ac52d4",
       "_check_static.py": "6286f9f493bd",
+      "pet_motion.py": "fcee7ab63bb2",
       "tests/test_dialog_buttons_v270.py": "4f95acca7fc6",
       "tests/test_import_thread.py": "1c6fc2ec5d05"
+    },
+    "pinned_ast": {
+      "tests/test_dialogs_behavior_v290.py::test_one_image_explains_why_two_are_needed_and_what_to_do": "0dfca4e984b8",
+      "tests/test_dialogs_feedback_v270.py::test_frame_action_cancel_is_not_reported_as_too_few": "8165846ecb24",
+      "tests/test_dialogs_behavior_v290.py::test_both_frame_action_entries_say_whether_cancel_undoes_it": "8b71c791f3f2",
+      "tests/test_dialogs_behavior_v290.py::test_import_images_says_it_takes_effect_now": "4a4489715eaf",
+      "tests/test_dialogs_behavior_v290.py::test_role_edit_frame_action_is_a_thin_wrapper": "4d1f2c5e3167",
+      "tests/test_dialogs_feedback_v280.py::test_wording_table_is_applied_to_new_and_add_buttons": "aebd8af23760",
+      "tests/test_dialogs_behavior_v290.py::test_duplicate_behavior_name_asks_instead_of_silently_adding": "fa0a2ea159d0",
+      "tests/test_dialogs_behavior_v290.py::test_duplicate_name_keep_adds_a_second_entry_only_when_chosen": "af0268131f4a",
+      "tests/test_dialogs_behavior_v290.py::test_duplicate_name_overwrite_reuses_the_same_id": "1b19c993530f",
+      "tests/test_dialogs_behavior_v290.py::test_duplicate_name_rename_saves_the_new_name": "8c3d629516ec",
+      "tests/test_dialogs_behavior_v290.py::test_renaming_an_existing_behavior_onto_another_name_also_asks": "1c185230ba51",
+      "tests/test_dialogs_behavior_v290.py::test_unique_name_never_asks_about_duplicates": "1a56f19450ae",
+      "tests/test_dialogs_behavior_v290.py::test_name_clash_box_offers_three_choices_plus_cancel": "8cc05ced5d4f",
+      "tests/test_behavior_v290.py::test_find_by_name_is_the_single_judgement_for_duplicate_names": "3fb6f754b5bf",
+      "tests/test_behavior_v290.py::test_add_itself_still_allows_duplicates_so_the_ui_owns_the_question": "8f9ef57fcf03",
+      "tests/test_dialogs_behavior_v290.py::test_submit_model_is_split_by_type_and_every_save_is_pinned": "ec4ebab1ca3f"
     }
   }
 }

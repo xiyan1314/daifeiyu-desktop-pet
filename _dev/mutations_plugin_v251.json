@@ -231,7 +231,7 @@
   ],
   "results": {
     "title": "变异验证 spec：mutations_plugin_v251.json",
-    "checked_at": "2026-10-16 02:23:41",
+    "checked_at": "2026-10-16 10:00:52",
     "total": 17,
     "caught": 17,
     "not_caught": 0,
@@ -241,162 +241,196 @@
         "id": "M-P1",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.51s",
+        "tail": "1 failed in 0.66s",
         "failed": [
-          "test_kind_data_却_code_true拒"
-        ]
+          "tests/test_plugin_v251.py::test_kind_data_却_code_true拒"
+        ],
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "M-P2",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed, 6 passed in 0.57s",
+        "tail": "1 failed, 6 passed in 0.66s",
         "failed": [
-          "test_条目名含双点拒"
-        ]
+          "tests/test_plugin_v251.py::test_条目名含双点拒"
+        ],
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "M-P3",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.53s",
+        "tail": "1 failed in 0.60s",
         "failed": [
-          "test_min_host_version_99_拒且_err_含要求与当前"
-        ]
+          "tests/test_plugin_v251.py::test_min_host_version_99_拒且_err_含要求与当前"
+        ],
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "M-P4",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.48s",
+        "tail": "1 failed in 0.55s",
         "failed": [
-          "test_payload_里有_evil_py_点名拒绝"
-        ]
+          "tests/test_plugin_v251.py::test_payload_里有_evil_py_点名拒绝"
+        ],
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "M-P5",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.48s",
+        "tail": "1 failed in 0.56s",
         "failed": [
-          "test_某_payload_文件不在_files_里拒"
-        ]
+          "tests/test_plugin_v251.py::test_某_payload_文件不在_files_里拒"
+        ],
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "M-P6",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.47s",
+        "tail": "1 failed in 0.61s",
         "failed": [
-          "test_条目数与解压总量上限走_pet_export_同一来源"
-        ]
+          "tests/test_plugin_v251.py::test_条目数与解压总量上限走_pet_export_同一来源"
+        ],
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "M-P7",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.49s",
+        "tail": "1 failed in 0.58s",
         "failed": [
-          "test_外部属性执行位与符号链接拒"
-        ]
+          "tests/test_plugin_v251.py::test_外部属性执行位与符号链接拒"
+        ],
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "M-P8",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.47s",
+        "tail": "1 failed in 0.55s",
         "failed": [
-          "test_plugins_目录不存在返回空不抛"
-        ]
+          "tests/test_plugin_v251.py::test_plugins_目录不存在返回空不抛"
+        ],
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "M-R1",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "2 failed in 1.41s",
+        "tail": "2 failed in 1.38s",
         "failed": [
-          "test_反向校验_从清单删掉真模块必须报",
-          "test_反向校验_合成仓库能认出漏件"
-        ]
+          "tests/test_release_check.py::test_反向校验_从清单删掉真模块必须报",
+          "tests/test_release_check.py::test_反向校验_合成仓库能认出漏件"
+        ],
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "M-R2",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "2 failed in 0.54s",
+        "tail": "2 failed in 0.60s",
         "failed": [
-          "test_本仓被导入的运行时模块都在发货清单里",
-          "test_反向校验_合成仓库能认出漏件"
-        ]
+          "tests/test_release_check.py::test_本仓被导入的运行时模块都在发货清单里",
+          "tests/test_release_check.py::test_反向校验_合成仓库能认出漏件"
+        ],
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "M-R3",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "2 failed in 0.51s",
+        "tail": "2 failed in 0.60s",
         "failed": [
-          "test_发布包里的用户插件必须点名",
-          "test_官方插件资产不会被当成用户数据"
-        ]
+          "tests/test_release_check.py::test_发布包里的用户插件必须点名",
+          "tests/test_release_check.py::test_官方插件资产不会被当成用户数据"
+        ],
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "M-L1",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "2 failed, 14 passed in 1.69s",
+        "tail": "2 failed, 14 passed in 2.23s",
         "failed": [
-          "test_每个对话框的设计尺寸就是它自己的契约[RoleEditDialog]",
-          "test_每个对话框的设计尺寸都写在源码里"
-        ]
+          "tests/test_dialog_fit_v250.py::test_每个对话框的设计尺寸就是它自己的契约[RoleEditDialog]",
+          "tests/test_dialog_fit_v250.py::test_每个对话框的设计尺寸都写在源码里"
+        ],
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "M-P9",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "5 failed in 0.64s",
+        "tail": "5 failed in 0.73s",
         "failed": [
-          "test_min_host_version不是版本号一律拒[abc]",
-          "test_min_host_version不是版本号一律拒[latest]",
-          "test_min_host_version不是版本号一律拒[v2.5.0]",
-          "test_min_host_version不是版本号一律拒[LTS]",
-          "test_min_host_version不是版本号一律拒[\\u4e8c\\u70b9\\u4e94]"
-        ]
+          "tests/test_plugin_v251.py::test_min_host_version不是版本号一律拒[abc]",
+          "tests/test_plugin_v251.py::test_min_host_version不是版本号一律拒[latest]",
+          "tests/test_plugin_v251.py::test_min_host_version不是版本号一律拒[v2.5.0]",
+          "tests/test_plugin_v251.py::test_min_host_version不是版本号一律拒[LTS]",
+          "tests/test_plugin_v251.py::test_min_host_version不是版本号一律拒[\\u4e8c\\u70b9\\u4e94]"
+        ],
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "M-H1",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.76s",
+        "tail": "1 failed in 0.81s",
         "failed": [
-          "test_P1_1_写入方自保_绕过校验器也拦得住_packs"
-        ]
+          "tests/test_plugin_host_v251.py::test_P1_1_写入方自保_绕过校验器也拦得住_packs"
+        ],
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "M-H2",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.67s",
+        "tail": "1 failed in 0.78s",
         "failed": [
-          "test_S1_c_手工拷进来的插件目录_装同id的真包必须真的落地"
-        ]
+          "tests/test_plugin_host_v251.py::test_S1_c_手工拷进来的插件目录_装同id的真包必须真的落地"
+        ],
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "M-H3",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.82s",
+        "tail": "1 failed in 0.91s",
         "failed": [
-          "test_S1_a_登记写失败必须回滚已落地内容"
-        ]
+          "tests/test_plugin_host_v251.py::test_S1_a_登记写失败必须回滚已落地内容"
+        ],
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "M-H4",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.62s",
+        "tail": "1 failed in 0.96s",
         "failed": [
-          "test_P2_1_role包里没落地的东西必须让用户看见"
-        ]
+          "tests/test_plugin_host_v251.py::test_P2_1_role包里没落地的东西必须让用户看见"
+        ],
+        "errors": [],
+        "errors_teardown": []
       }
     ],
     "spec": "mutations_plugin_v251.json",
@@ -425,20 +459,58 @@
     ],
     "note": "变异只在 %TEMP% 影子副本里做，真实仓库只读（只写 _dev/.mutation.lock）",
     "repo_fingerprint": {
-      "桌宠.py": "6b20873532c6",
+      "桌宠.py": "59b2f99c52ba",
       "pet_export.py": "c01e1593efd2",
       "pet_lines.py": "5332f60b5f26",
       "pet_alarm.py": "1149e94deee3",
-      "pet_behaviors.py": "99f7dff343e4",
-      "_check_release.py": "5b25dd0d243d",
+      "pet_behaviors.py": "732273f95fb4",
+      "_check_release.py": "7377b3fad58e",
       "pet_balance.py": "66948e5514a4",
       "pet_plugin.py": "2f7853298fc3",
       "pet_plugin_host.py": "82fb7b1384c8",
-      "pet_dialogs.py": "4bc0e8c868bb",
-      "pet_menu.py": "920daac1b835",
+      "pet_dialogs.py": "7e1a11cff2a2",
+      "pet_menu.py": "d2f565537b3f",
       "pet_plugin_index.py": "e5e9845785e8",
       "pet_ai.py": "a5989e7fe646",
-      "pet_config.py": "7a4ad883d4e8"
+      "pet_config.py": "6fe2b20ae424",
+      "pet_io.py": "6b1e0413fb7f",
+      "pet_services.py": "ecebb6ab5891",
+      "pet_widgets.py": "b8de517121e1",
+      "pet_resources.py": "e28f38917052",
+      "pet_tools.py": "46e9030d073f",
+      "pet_voice.py": "9fe0a570ca81",
+      "pet_audio.py": "a6feadf4d653",
+      "pet_chat.py": "de979c429c2c",
+      "pet_log.py": "de14ecf338ab",
+      "pet_actions.py": "83eb11403fec",
+      "pet_book.py": "098676ac52d4",
+      "_check_static.py": "6286f9f493bd",
+      "pet_motion.py": "fcee7ab63bb2",
+      "tests/test_dialog_buttons_v270.py": "4f95acca7fc6",
+      "tests/test_import_thread.py": "1c6fc2ec5d05"
+    },
+    "pinned_ast": {
+      "tests/test_plugin_v251.py::test_kind_data_却_code_true拒": "fd06428b9076",
+      "tests/test_plugin_v251.py::test_条目名含双点拒": "1c397e63fbda",
+      "tests/test_plugin_v251.py::test_不安全条目名都拒": "f5d5ebb9607c",
+      "tests/test_plugin_v251.py::test_min_host_version_99_拒且_err_含要求与当前": "aafd4a0b8026",
+      "tests/test_plugin_v251.py::test_payload_里有_evil_py_点名拒绝": "c10417795bb6",
+      "tests/test_plugin_v251.py::test_某_payload_文件不在_files_里拒": "ea338111be4f",
+      "tests/test_plugin_v251.py::test_条目数与解压总量上限走_pet_export_同一来源": "f87add755b2b",
+      "tests/test_plugin_v251.py::test_外部属性执行位与符号链接拒": "5a48be2ed606",
+      "tests/test_plugin_v251.py::test_plugins_目录不存在返回空不抛": "4855fb8197ab",
+      "tests/test_release_check.py::test_反向校验_从清单删掉真模块必须报": "f2d784d72654",
+      "tests/test_release_check.py::test_反向校验_合成仓库能认出漏件": "7b61a641c970",
+      "tests/test_release_check.py::test_本仓被导入的运行时模块都在发货清单里": "51c73f86a758",
+      "tests/test_release_check.py::test_发布包里的用户插件必须点名": "f5f21625b909",
+      "tests/test_release_check.py::test_官方插件资产不会被当成用户数据": "000050533d54",
+      "tests/test_dialog_fit_v250.py::test_每个对话框的设计尺寸就是它自己的契约": "e431c5775cae",
+      "tests/test_dialog_fit_v250.py::test_每个对话框的设计尺寸都写在源码里": "10a1aa4ac1b9",
+      "tests/test_plugin_v251.py::test_min_host_version不是版本号一律拒": "6c403479d278",
+      "tests/test_plugin_host_v251.py::test_P1_1_写入方自保_绕过校验器也拦得住_packs": "cadfb5564ee4",
+      "tests/test_plugin_host_v251.py::test_S1_c_手工拷进来的插件目录_装同id的真包必须真的落地": "bb29b20815cf",
+      "tests/test_plugin_host_v251.py::test_S1_a_登记写失败必须回滚已落地内容": "bbee4ed55af1",
+      "tests/test_plugin_host_v251.py::test_P2_1_role包里没落地的东西必须让用户看见": "afb1bf77a684"
     }
   }
 }

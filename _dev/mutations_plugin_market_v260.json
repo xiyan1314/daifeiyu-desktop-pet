@@ -229,7 +229,7 @@
   ],
   "results": {
     "title": "变异验证 spec：mutations_plugin_market_v260.json",
-    "checked_at": "2026-10-16 02:22:51",
+    "checked_at": "2026-10-16 09:59:42",
     "total": 17,
     "caught": 17,
     "not_caught": 0,
@@ -239,155 +239,189 @@
         "id": "M-A01",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.79s",
+        "tail": "1 failed in 0.98s",
         "failed": [
-          "test_sha256不符_拒收并删掉临时文件"
-        ]
+          "tests/test_plugin_market_v252.py::test_sha256不符_拒收并删掉临时文件"
+        ],
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "M-A02",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.57s",
+        "tail": "1 failed in 0.66s",
         "failed": [
-          "test_bytes不符_拒收且不留残余"
-        ]
+          "tests/test_plugin_market_v252.py::test_bytes不符_拒收且不留残余"
+        ],
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "M-A03",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.64s",
+        "tail": "1 failed in 0.79s",
         "failed": [
-          "test_随包索引_相对url解析到随包本地副本_不联网"
-        ]
+          "tests/test_plugin_market_v252.py::test_随包索引_相对url解析到随包本地副本_不联网"
+        ],
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "M-A04",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.57s",
+        "tail": "1 failed in 0.69s",
         "failed": [
-          "test_密钥不可装的条目也列出来_不静默隐藏"
-        ]
+          "tests/test_plugin_market_v252.py::test_密钥不可装的条目也列出来_不静默隐藏"
+        ],
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "M-A05",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed, 1 passed in 0.72s",
+        "tail": "1 failed, 1 passed in 0.87s",
         "failed": [
-          "test_内容指纹落在安装登记里"
-        ]
+          "tests/test_plugin_market_v252.py::test_内容指纹落在安装登记里"
+        ],
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "M-A06",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.62s",
+        "tail": "1 failed in 0.76s",
         "failed": [
-          "test_更新把新版新增内容并入_旧内容不重复落"
-        ]
+          "tests/test_plugin_market_v252.py::test_更新把新版新增内容并入_旧内容不重复落"
+        ],
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "M-A07",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.65s",
+        "tail": "1 failed in 0.81s",
         "failed": [
-          "test_landed_是历次落地的累积账"
-        ]
+          "tests/test_plugin_market_v252.py::test_landed_是历次落地的累积账"
+        ],
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "M-A08",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.66s",
+        "tail": "1 failed in 0.78s",
         "failed": [
-          "test_回滚_撤销本版新增_不碰用户自己的内容"
-        ]
+          "tests/test_plugin_market_v252.py::test_回滚_撤销本版新增_不碰用户自己的内容"
+        ],
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "M-A09",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.65s",
+        "tail": "1 failed in 0.75s",
         "failed": [
-          "test_回滚_撤销本版新增_不碰用户自己的内容"
-        ]
+          "tests/test_plugin_market_v252.py::test_回滚_撤销本版新增_不碰用户自己的内容"
+        ],
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "M-A10",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.66s",
+        "tail": "1 failed in 0.75s",
         "failed": [
-          "test_旧登记没有指纹_也能不重复落地"
-        ]
+          "tests/test_plugin_market_v252.py::test_旧登记没有指纹_也能不重复落地"
+        ],
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "M-A11",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.70s",
+        "tail": "1 failed in 0.82s",
         "failed": [
-          "test_安装走后台线程_落地在主线程"
-        ]
+          "tests/test_plugin_market_v252.py::test_安装走后台线程_落地在主线程"
+        ],
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "M-A12",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.69s",
+        "tail": "1 failed in 0.82s",
         "failed": [
-          "test_安装走后台线程_落地在主线程"
-        ]
+          "tests/test_plugin_market_v252.py::test_安装走后台线程_落地在主线程"
+        ],
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "M-A13",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.65s",
+        "tail": "1 failed in 0.80s",
         "failed": [
-          "test_在途期间连点不起第二个下载_结果只落一次"
-        ]
+          "tests/test_plugin_market_v252.py::test_在途期间连点不起第二个下载_结果只落一次"
+        ],
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "M-A14",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.68s",
+        "tail": "1 failed in 1.12s",
         "failed": [
-          "test_更新按钮只在有新版本时出现_回滚按钮只在有上一版时出现"
-        ]
+          "tests/test_plugin_market_v252.py::test_更新按钮只在有新版本时出现_回滚按钮只在有上一版时出现"
+        ],
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "M-A15",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "2 failed, 14 passed in 1.48s",
+        "tail": "2 failed, 14 passed in 2.46s",
         "failed": [
-          "test_每个对话框的设计尺寸就是它自己的契约[PluginManagerDialog]",
-          "test_每个对话框的设计尺寸都写在源码里"
-        ]
+          "tests/test_dialog_fit_v250.py::test_每个对话框的设计尺寸就是它自己的契约[PluginManagerDialog]",
+          "tests/test_dialog_fit_v250.py::test_每个对话框的设计尺寸都写在源码里"
+        ],
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "M-A16",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.76s",
+        "tail": "1 failed in 1.50s",
         "failed": [
-          "test_同一个版本重复安装不顶掉回滚点"
-        ]
+          "tests/test_plugin_market_v252.py::test_同一个版本重复安装不顶掉回滚点"
+        ],
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "M-A17",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.69s",
+        "tail": "1 failed in 1.49s",
         "failed": [
-          "test_上一版目录读不出来时_用新包指纹补账并如实告知"
-        ]
+          "tests/test_plugin_host_v251.py::test_上一版目录读不出来时_用新包指纹补账并如实告知"
+        ],
+        "errors": [],
+        "errors_teardown": []
       }
     ],
     "spec": "mutations_plugin_market_v260.json",
@@ -411,20 +445,53 @@
     ],
     "note": "变异只在 %TEMP% 影子副本里做，真实仓库只读（只写 _dev/.mutation.lock）",
     "repo_fingerprint": {
-      "桌宠.py": "6b20873532c6",
+      "桌宠.py": "59b2f99c52ba",
       "pet_export.py": "c01e1593efd2",
       "pet_lines.py": "5332f60b5f26",
       "pet_alarm.py": "1149e94deee3",
-      "pet_behaviors.py": "99f7dff343e4",
-      "_check_release.py": "5b25dd0d243d",
+      "pet_behaviors.py": "732273f95fb4",
+      "_check_release.py": "7377b3fad58e",
       "pet_balance.py": "66948e5514a4",
       "pet_plugin.py": "2f7853298fc3",
       "pet_plugin_host.py": "82fb7b1384c8",
-      "pet_dialogs.py": "4bc0e8c868bb",
-      "pet_menu.py": "920daac1b835",
+      "pet_dialogs.py": "7e1a11cff2a2",
+      "pet_menu.py": "d2f565537b3f",
       "pet_plugin_index.py": "e5e9845785e8",
       "pet_ai.py": "a5989e7fe646",
-      "pet_config.py": "7a4ad883d4e8"
+      "pet_config.py": "6fe2b20ae424",
+      "pet_io.py": "6b1e0413fb7f",
+      "pet_services.py": "ecebb6ab5891",
+      "pet_widgets.py": "b8de517121e1",
+      "pet_resources.py": "e28f38917052",
+      "pet_tools.py": "46e9030d073f",
+      "pet_voice.py": "9fe0a570ca81",
+      "pet_audio.py": "a6feadf4d653",
+      "pet_chat.py": "de979c429c2c",
+      "pet_log.py": "de14ecf338ab",
+      "pet_actions.py": "83eb11403fec",
+      "pet_book.py": "098676ac52d4",
+      "_check_static.py": "6286f9f493bd",
+      "pet_motion.py": "fcee7ab63bb2",
+      "tests/test_dialog_buttons_v270.py": "4f95acca7fc6",
+      "tests/test_import_thread.py": "1c6fc2ec5d05"
+    },
+    "pinned_ast": {
+      "tests/test_plugin_market_v252.py::test_sha256不符_拒收并删掉临时文件": "948b5cef2393",
+      "tests/test_plugin_market_v252.py::test_bytes不符_拒收且不留残余": "9ff913668bdb",
+      "tests/test_plugin_market_v252.py::test_随包索引_相对url解析到随包本地副本_不联网": "f13f6b55db71",
+      "tests/test_plugin_market_v252.py::test_密钥不可装的条目也列出来_不静默隐藏": "a0385ff0216a",
+      "tests/test_plugin_market_v252.py::test_内容指纹落在安装登记里": "97688bb09958",
+      "tests/test_plugin_market_v252.py::test_更新把新版新增内容并入_旧内容不重复落": "3b4ce375fdbe",
+      "tests/test_plugin_market_v252.py::test_landed_是历次落地的累积账": "1d6d15d1064e",
+      "tests/test_plugin_market_v252.py::test_回滚_撤销本版新增_不碰用户自己的内容": "26e369b7daaf",
+      "tests/test_plugin_market_v252.py::test_旧登记没有指纹_也能不重复落地": "15277daddbc3",
+      "tests/test_plugin_market_v252.py::test_安装走后台线程_落地在主线程": "0548d73b78a7",
+      "tests/test_plugin_market_v252.py::test_在途期间连点不起第二个下载_结果只落一次": "666eb19b55df",
+      "tests/test_plugin_market_v252.py::test_更新按钮只在有新版本时出现_回滚按钮只在有上一版时出现": "94439cdb15f7",
+      "tests/test_dialog_fit_v250.py::test_每个对话框的设计尺寸就是它自己的契约": "e431c5775cae",
+      "tests/test_dialog_fit_v250.py::test_每个对话框的设计尺寸都写在源码里": "10a1aa4ac1b9",
+      "tests/test_plugin_market_v252.py::test_同一个版本重复安装不顶掉回滚点": "cc3442292ed5",
+      "tests/test_plugin_host_v251.py::test_上一版目录读不出来时_用新包指纹补账并如实告知": "f194ade57e63"
     }
   }
 }

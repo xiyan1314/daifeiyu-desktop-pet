@@ -250,7 +250,7 @@
   ],
   "results": {
     "title": "变异验证 spec：mutations_dialog_fit_v250.json",
-    "checked_at": "2026-10-16 02:19:33",
+    "checked_at": "2026-10-16 09:54:31",
     "total": 17,
     "caught": 17,
     "not_caught": 0,
@@ -260,201 +260,235 @@
         "id": "M-D01",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "2 failed, 14 passed in 1.54s",
+        "tail": "2 failed, 14 passed in 1.73s",
         "failed": [
-          "test_每个对话框的设计尺寸就是它自己的契约[AISettingsDialog]",
-          "test_每个对话框的设计尺寸都写在源码里"
-        ]
+          "tests/test_dialog_fit_v250.py::test_每个对话框的设计尺寸就是它自己的契约[AISettingsDialog]",
+          "tests/test_dialog_fit_v250.py::test_每个对话框的设计尺寸都写在源码里"
+        ],
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "M-D02",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "2 failed, 14 passed in 1.18s",
+        "tail": "2 failed, 14 passed in 1.34s",
         "failed": [
-          "test_每个对话框的设计尺寸就是它自己的契约[AlarmDialog]",
-          "test_每个对话框的设计尺寸都写在源码里"
-        ]
+          "tests/test_dialog_fit_v250.py::test_每个对话框的设计尺寸就是它自己的契约[AlarmDialog]",
+          "tests/test_dialog_fit_v250.py::test_每个对话框的设计尺寸都写在源码里"
+        ],
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "M-D03",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "2 failed, 14 passed in 1.21s",
+        "tail": "2 failed, 14 passed in 1.35s",
         "failed": [
-          "test_每个对话框的设计尺寸就是它自己的契约[BehaviorDialog]",
-          "test_每个对话框的设计尺寸都写在源码里"
-        ]
+          "tests/test_dialog_fit_v250.py::test_每个对话框的设计尺寸就是它自己的契约[BehaviorDialog]",
+          "tests/test_dialog_fit_v250.py::test_每个对话框的设计尺寸都写在源码里"
+        ],
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "M-D04",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "2 failed, 14 passed in 1.46s",
+        "tail": "2 failed, 14 passed in 1.37s",
         "failed": [
-          "test_每个对话框的设计尺寸就是它自己的契约[IdleDialog]",
-          "test_每个对话框的设计尺寸都写在源码里"
-        ]
+          "tests/test_dialog_fit_v250.py::test_每个对话框的设计尺寸就是它自己的契约[IdleDialog]",
+          "tests/test_dialog_fit_v250.py::test_每个对话框的设计尺寸都写在源码里"
+        ],
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "M-D05",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "2 failed, 14 passed in 1.74s",
+        "tail": "2 failed, 14 passed in 1.33s",
         "failed": [
-          "test_每个对话框的设计尺寸就是它自己的契约[LedgerDialog]",
-          "test_每个对话框的设计尺寸都写在源码里"
-        ]
+          "tests/test_dialog_fit_v250.py::test_每个对话框的设计尺寸就是它自己的契约[LedgerDialog]",
+          "tests/test_dialog_fit_v250.py::test_每个对话框的设计尺寸都写在源码里"
+        ],
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "M-D06",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "2 failed, 14 passed in 1.38s",
+        "tail": "2 failed, 14 passed in 1.41s",
         "failed": [
-          "test_每个对话框的设计尺寸就是它自己的契约[LinesDialog]",
-          "test_每个对话框的设计尺寸都写在源码里"
-        ]
+          "tests/test_dialog_fit_v250.py::test_每个对话框的设计尺寸就是它自己的契约[LinesDialog]",
+          "tests/test_dialog_fit_v250.py::test_每个对话框的设计尺寸都写在源码里"
+        ],
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "M-D07",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "2 failed, 14 passed in 1.27s",
+        "tail": "2 failed, 14 passed in 1.35s",
         "failed": [
-          "test_每个对话框的设计尺寸就是它自己的契约[PhysicsDialog]",
-          "test_每个对话框的设计尺寸都写在源码里"
-        ]
+          "tests/test_dialog_fit_v250.py::test_每个对话框的设计尺寸就是它自己的契约[PhysicsDialog]",
+          "tests/test_dialog_fit_v250.py::test_每个对话框的设计尺寸都写在源码里"
+        ],
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "M-D08",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "2 failed, 14 passed in 1.26s",
+        "tail": "2 failed, 14 passed in 1.35s",
         "failed": [
-          "test_每个对话框的设计尺寸就是它自己的契约[ResourceManagerDialog]",
-          "test_每个对话框的设计尺寸都写在源码里"
-        ]
+          "tests/test_dialog_fit_v250.py::test_每个对话框的设计尺寸就是它自己的契约[ResourceManagerDialog]",
+          "tests/test_dialog_fit_v250.py::test_每个对话框的设计尺寸都写在源码里"
+        ],
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "M-D09",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "2 failed, 14 passed in 1.26s",
+        "tail": "2 failed, 14 passed in 1.34s",
         "failed": [
-          "test_每个对话框的设计尺寸就是它自己的契约[RoleEditDialog]",
-          "test_每个对话框的设计尺寸都写在源码里"
-        ]
+          "tests/test_dialog_fit_v250.py::test_每个对话框的设计尺寸就是它自己的契约[RoleEditDialog]",
+          "tests/test_dialog_fit_v250.py::test_每个对话框的设计尺寸都写在源码里"
+        ],
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "M-D10",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "2 failed, 14 passed in 1.27s",
+        "tail": "2 failed, 14 passed in 1.37s",
         "failed": [
-          "test_每个对话框的设计尺寸就是它自己的契约[RoleImportDialog]",
-          "test_每个对话框的设计尺寸都写在源码里"
-        ]
+          "tests/test_dialog_fit_v250.py::test_每个对话框的设计尺寸就是它自己的契约[RoleImportDialog]",
+          "tests/test_dialog_fit_v250.py::test_每个对话框的设计尺寸都写在源码里"
+        ],
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "M-D11",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "2 failed, 14 passed in 1.30s",
+        "tail": "2 failed, 14 passed in 1.32s",
         "failed": [
-          "test_每个对话框的设计尺寸就是它自己的契约[VoiceDialog]",
-          "test_每个对话框的设计尺寸都写在源码里"
-        ]
+          "tests/test_dialog_fit_v250.py::test_每个对话框的设计尺寸就是它自己的契约[VoiceDialog]",
+          "tests/test_dialog_fit_v250.py::test_每个对话框的设计尺寸都写在源码里"
+        ],
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "M-D12",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "2 failed, 14 passed in 1.30s",
+        "tail": "2 failed, 14 passed in 1.37s",
         "failed": [
-          "test_每个对话框的设计尺寸就是它自己的契约[_VoicePickDialog]",
-          "test_每个对话框的设计尺寸都写在源码里"
-        ]
+          "tests/test_dialog_fit_v250.py::test_每个对话框的设计尺寸就是它自己的契约[_VoicePickDialog]",
+          "tests/test_dialog_fit_v250.py::test_每个对话框的设计尺寸都写在源码里"
+        ],
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "M-D13",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.93s",
+        "tail": "1 failed in 1.00s",
         "failed": [
-          "test_上限就是85百分比而不是写死像素"
-        ]
+          "tests/test_dialog_fit_v250.py::test_上限就是85百分比而不是写死像素"
+        ],
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "M-D14",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.60s",
+        "tail": "1 failed in 0.63s",
         "failed": [
-          "test_所有对话框都继承同一个可钳制基类"
-        ]
+          "tests/test_dialog_fit_v250.py::test_所有对话框都继承同一个可钳制基类"
+        ],
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "M-D15",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.94s",
+        "tail": "1 failed in 1.31s",
         "failed": [
-          "test_本来就小的框不被撑大"
-        ]
+          "tests/test_dialog_fit_v250.py::test_本来就小的框不被撑大"
+        ],
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "M-D16",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "20 failed in 1.42s",
+        "tail": "20 failed in 2.04s",
         "failed": [
-          "test_每个窗口都不超屏_能滚到底_按钮可见[RoleImportDialog]",
-          "test_每个窗口都不超屏_能滚到底_按钮可见[RoleEditDialog]",
-          "test_每个窗口都不超屏_能滚到底_按钮可见[BehaviorDialog]",
-          "test_每个窗口都不超屏_能滚到底_按钮可见[AlarmDialog]",
-          "test_每个窗口都不超屏_能滚到底_按钮可见[AISettingsDialog]",
-          "test_每个窗口都不超屏_能滚到底_按钮可见[RolePanel]",
-          "test_每个窗口都不超屏_能滚到底_按钮可见[SoundPanel]",
-          "test_每个窗口都不超屏_能滚到底_按钮可见[VoiceAssetPanel]",
-          "test_每个窗口都不超屏_能滚到底_按钮可见[ResourceManagerDialog]",
-          "test_每个窗口都不超屏_能滚到底_按钮可见[ResourceManagerDialog(tab2)]",
-          "test_每个窗口都不超屏_能滚到底_按钮可见[AmountNoteDialog]",
-          "test_每个窗口都不超屏_能滚到底_按钮可见[LedgerDialog]",
-          "test_每个窗口都不超屏_能滚到底_按钮可见[BubbleStyleDialog]",
-          "test_每个窗口都不超屏_能滚到底_按钮可见[LinesDialog]",
-          "test_每个窗口都不超屏_能滚到底_按钮可见[PhysicsDialog]",
-          "test_每个窗口都不超屏_能滚到底_按钮可见[VoiceDialog]",
-          "test_每个窗口都不超屏_能滚到底_按钮可见[IdleDialog]",
-          "test_每个窗口都不超屏_能滚到底_按钮可见[_VoicePickDialog]",
-          "test_每个窗口都不超屏_能滚到底_按钮可见[PluginManagerDialog]",
-          "test_每个窗口都不超屏_能滚到底_按钮可见[build_role_meta_dialog]"
-        ]
+          "tests/test_dialog_fit_v250.py::test_每个窗口都不超屏_能滚到底_按钮可见[RoleImportDialog]",
+          "tests/test_dialog_fit_v250.py::test_每个窗口都不超屏_能滚到底_按钮可见[RoleEditDialog]",
+          "tests/test_dialog_fit_v250.py::test_每个窗口都不超屏_能滚到底_按钮可见[BehaviorDialog]",
+          "tests/test_dialog_fit_v250.py::test_每个窗口都不超屏_能滚到底_按钮可见[AlarmDialog]",
+          "tests/test_dialog_fit_v250.py::test_每个窗口都不超屏_能滚到底_按钮可见[AISettingsDialog]",
+          "tests/test_dialog_fit_v250.py::test_每个窗口都不超屏_能滚到底_按钮可见[RolePanel]",
+          "tests/test_dialog_fit_v250.py::test_每个窗口都不超屏_能滚到底_按钮可见[SoundPanel]",
+          "tests/test_dialog_fit_v250.py::test_每个窗口都不超屏_能滚到底_按钮可见[VoiceAssetPanel]",
+          "tests/test_dialog_fit_v250.py::test_每个窗口都不超屏_能滚到底_按钮可见[ResourceManagerDialog]",
+          "tests/test_dialog_fit_v250.py::test_每个窗口都不超屏_能滚到底_按钮可见[ResourceManagerDialog(tab2)]",
+          "tests/test_dialog_fit_v250.py::test_每个窗口都不超屏_能滚到底_按钮可见[AmountNoteDialog]",
+          "tests/test_dialog_fit_v250.py::test_每个窗口都不超屏_能滚到底_按钮可见[LedgerDialog]",
+          "tests/test_dialog_fit_v250.py::test_每个窗口都不超屏_能滚到底_按钮可见[BubbleStyleDialog]",
+          "tests/test_dialog_fit_v250.py::test_每个窗口都不超屏_能滚到底_按钮可见[LinesDialog]",
+          "tests/test_dialog_fit_v250.py::test_每个窗口都不超屏_能滚到底_按钮可见[PhysicsDialog]",
+          "tests/test_dialog_fit_v250.py::test_每个窗口都不超屏_能滚到底_按钮可见[VoiceDialog]",
+          "tests/test_dialog_fit_v250.py::test_每个窗口都不超屏_能滚到底_按钮可见[IdleDialog]",
+          "tests/test_dialog_fit_v250.py::test_每个窗口都不超屏_能滚到底_按钮可见[_VoicePickDialog]",
+          "tests/test_dialog_fit_v250.py::test_每个窗口都不超屏_能滚到底_按钮可见[PluginManagerDialog]",
+          "tests/test_dialog_fit_v250.py::test_每个窗口都不超屏_能滚到底_按钮可见[build_role_meta_dialog]"
+        ],
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "M-D17",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "17 failed, 3 passed in 1.56s",
+        "tail": "17 failed, 3 passed in 1.89s",
         "failed": [
-          "test_每个窗口都不超屏_能滚到底_按钮可见[RoleImportDialog]",
-          "test_每个窗口都不超屏_能滚到底_按钮可见[RoleEditDialog]",
-          "test_每个窗口都不超屏_能滚到底_按钮可见[BehaviorDialog]",
-          "test_每个窗口都不超屏_能滚到底_按钮可见[AlarmDialog]",
-          "test_每个窗口都不超屏_能滚到底_按钮可见[AISettingsDialog]",
-          "test_每个窗口都不超屏_能滚到底_按钮可见[ResourceManagerDialog]",
-          "test_每个窗口都不超屏_能滚到底_按钮可见[ResourceManagerDialog(tab2)]",
-          "test_每个窗口都不超屏_能滚到底_按钮可见[AmountNoteDialog]",
-          "test_每个窗口都不超屏_能滚到底_按钮可见[LedgerDialog]",
-          "test_每个窗口都不超屏_能滚到底_按钮可见[BubbleStyleDialog]",
-          "test_每个窗口都不超屏_能滚到底_按钮可见[LinesDialog]",
-          "test_每个窗口都不超屏_能滚到底_按钮可见[PhysicsDialog]",
-          "test_每个窗口都不超屏_能滚到底_按钮可见[VoiceDialog]",
-          "test_每个窗口都不超屏_能滚到底_按钮可见[IdleDialog]",
-          "test_每个窗口都不超屏_能滚到底_按钮可见[_VoicePickDialog]",
-          "test_每个窗口都不超屏_能滚到底_按钮可见[PluginManagerDialog]",
-          "test_每个窗口都不超屏_能滚到底_按钮可见[build_role_meta_dialog]"
-        ]
+          "tests/test_dialog_fit_v250.py::test_每个窗口都不超屏_能滚到底_按钮可见[RoleImportDialog]",
+          "tests/test_dialog_fit_v250.py::test_每个窗口都不超屏_能滚到底_按钮可见[RoleEditDialog]",
+          "tests/test_dialog_fit_v250.py::test_每个窗口都不超屏_能滚到底_按钮可见[BehaviorDialog]",
+          "tests/test_dialog_fit_v250.py::test_每个窗口都不超屏_能滚到底_按钮可见[AlarmDialog]",
+          "tests/test_dialog_fit_v250.py::test_每个窗口都不超屏_能滚到底_按钮可见[AISettingsDialog]",
+          "tests/test_dialog_fit_v250.py::test_每个窗口都不超屏_能滚到底_按钮可见[ResourceManagerDialog]",
+          "tests/test_dialog_fit_v250.py::test_每个窗口都不超屏_能滚到底_按钮可见[ResourceManagerDialog(tab2)]",
+          "tests/test_dialog_fit_v250.py::test_每个窗口都不超屏_能滚到底_按钮可见[AmountNoteDialog]",
+          "tests/test_dialog_fit_v250.py::test_每个窗口都不超屏_能滚到底_按钮可见[LedgerDialog]",
+          "tests/test_dialog_fit_v250.py::test_每个窗口都不超屏_能滚到底_按钮可见[BubbleStyleDialog]",
+          "tests/test_dialog_fit_v250.py::test_每个窗口都不超屏_能滚到底_按钮可见[LinesDialog]",
+          "tests/test_dialog_fit_v250.py::test_每个窗口都不超屏_能滚到底_按钮可见[PhysicsDialog]",
+          "tests/test_dialog_fit_v250.py::test_每个窗口都不超屏_能滚到底_按钮可见[VoiceDialog]",
+          "tests/test_dialog_fit_v250.py::test_每个窗口都不超屏_能滚到底_按钮可见[IdleDialog]",
+          "tests/test_dialog_fit_v250.py::test_每个窗口都不超屏_能滚到底_按钮可见[_VoicePickDialog]",
+          "tests/test_dialog_fit_v250.py::test_每个窗口都不超屏_能滚到底_按钮可见[PluginManagerDialog]",
+          "tests/test_dialog_fit_v250.py::test_每个窗口都不超屏_能滚到底_按钮可见[build_role_meta_dialog]"
+        ],
+        "errors": [],
+        "errors_teardown": []
       }
     ],
     "spec": "mutations_dialog_fit_v250.json",
@@ -468,20 +502,43 @@
     ],
     "note": "变异只在 %TEMP% 影子副本里做，真实仓库只读（只写 _dev/.mutation.lock）",
     "repo_fingerprint": {
-      "桌宠.py": "6b20873532c6",
+      "桌宠.py": "59b2f99c52ba",
       "pet_export.py": "c01e1593efd2",
       "pet_lines.py": "5332f60b5f26",
       "pet_alarm.py": "1149e94deee3",
-      "pet_behaviors.py": "99f7dff343e4",
-      "_check_release.py": "5b25dd0d243d",
+      "pet_behaviors.py": "732273f95fb4",
+      "_check_release.py": "7377b3fad58e",
       "pet_balance.py": "66948e5514a4",
       "pet_plugin.py": "2f7853298fc3",
       "pet_plugin_host.py": "82fb7b1384c8",
-      "pet_dialogs.py": "4bc0e8c868bb",
-      "pet_menu.py": "920daac1b835",
+      "pet_dialogs.py": "7e1a11cff2a2",
+      "pet_menu.py": "d2f565537b3f",
       "pet_plugin_index.py": "e5e9845785e8",
       "pet_ai.py": "a5989e7fe646",
-      "pet_config.py": "7a4ad883d4e8"
+      "pet_config.py": "6fe2b20ae424",
+      "pet_io.py": "6b1e0413fb7f",
+      "pet_services.py": "ecebb6ab5891",
+      "pet_widgets.py": "b8de517121e1",
+      "pet_resources.py": "e28f38917052",
+      "pet_tools.py": "46e9030d073f",
+      "pet_voice.py": "9fe0a570ca81",
+      "pet_audio.py": "a6feadf4d653",
+      "pet_chat.py": "de979c429c2c",
+      "pet_log.py": "de14ecf338ab",
+      "pet_actions.py": "83eb11403fec",
+      "pet_book.py": "098676ac52d4",
+      "_check_static.py": "6286f9f493bd",
+      "pet_motion.py": "fcee7ab63bb2",
+      "tests/test_dialog_buttons_v270.py": "4f95acca7fc6",
+      "tests/test_import_thread.py": "1c6fc2ec5d05"
+    },
+    "pinned_ast": {
+      "tests/test_dialog_fit_v250.py::test_每个对话框的设计尺寸就是它自己的契约": "e431c5775cae",
+      "tests/test_dialog_fit_v250.py::test_每个对话框的设计尺寸都写在源码里": "10a1aa4ac1b9",
+      "tests/test_dialog_fit_v250.py::test_上限就是85百分比而不是写死像素": "0b0a3c94dfab",
+      "tests/test_dialog_fit_v250.py::test_所有对话框都继承同一个可钳制基类": "4f724a8f83b8",
+      "tests/test_dialog_fit_v250.py::test_本来就小的框不被撑大": "4c27413fbcf9",
+      "tests/test_dialog_fit_v250.py::test_每个窗口都不超屏_能滚到底_按钮可见": "6cb06ef866b8"
     }
   }
 }

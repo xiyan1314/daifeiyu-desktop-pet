@@ -126,7 +126,7 @@
   ],
   "results": {
     "title": "变异验证 spec：mutations_agent_c_v2100.json",
-    "checked_at": "2026-10-16 07:42:20",
+    "checked_at": "2026-10-16 09:42:21",
     "total": 9,
     "caught": 9,
     "not_caught": 0,
@@ -136,7 +136,7 @@
         "id": "M-C2100-R4-01-busy-not-reset",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 1.73s",
+        "tail": "1 failed in 1.16s",
         "failed": [
           "tests/test_import_thread.py::test_stop_silent_no_error_dialog"
         ],
@@ -147,7 +147,7 @@
         "id": "M-C2100-R4-02-path-lock-no-abspath",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.98s",
+        "tail": "1 failed in 0.70s",
         "failed": [
           "tests/test_io_v231.py::test_path_lock_merges_case_variants"
         ],
@@ -158,7 +158,7 @@
         "id": "M-C2100-R4-03-fp-named-separator",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 1.20s",
+        "tail": "1 failed in 0.97s",
         "failed": [
           "tests/test_plugin_host_v251.py::test_prompt指纹带文件名_文件名就是预设名"
         ],
@@ -169,7 +169,7 @@
         "id": "M-C2100-R4-04-touched-flags-no-remap",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 1.22s",
+        "tail": "1 failed in 1.28s",
         "failed": [
           "tests/test_dialogs_more_v24.py::test_role_edit_move_form_bounds_and_pending_follow"
         ],
@@ -180,7 +180,7 @@
         "id": "M-C2100-R5-01-judge-back-to-failed-only",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "2 failed in 0.63s",
+        "tail": "2 failed in 0.65s",
         "failed": [
           "tests/test_mutate_harness_v244.py::test_judge_counts_a_setup_error_of_the_pinned_test_as_caught",
           "tests/test_mutate_harness_v244.py::test_judge_requires_every_pinned_test_to_be_not_passed"
@@ -192,7 +192,7 @@
         "id": "M-C2100-R5-02-errored-nodeids-empty",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 2.82s",
+        "tail": "1 failed in 3.30s",
         "failed": [
           "tests/test_mutate_harness_v244.py::test_errored_nodeids_reads_a_real_setup_error"
         ],
@@ -203,7 +203,7 @@
         "id": "M-C2100-R4-05-guard-catches-a-reintroduced-tautology",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "2 failed, 1 warning in 1.27s",
+        "tail": "2 failed, 1 warning in 1.36s",
         "failed": [
           "tests/test_assertion_strength_v2100.py::test_no_tautological_asserts_in_the_test_suite",
           "tests/test_assertion_strength_v2100.py::test_the_four_assertions_cleaned_this_round_are_really_gone"
@@ -215,7 +215,7 @@
         "id": "M-C2100-P21-01-error-lines-whole-output",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 2.77s",
+        "tail": "1 failed in 2.83s",
         "failed": [
           "tests/test_mutate_harness_v244.py::test_errored_nodeids_ignores_a_captured_log_echo"
         ],
@@ -226,7 +226,7 @@
         "id": "M-C2100-P31-01-behavior-save-accepts-on-success",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 1.28s",
+        "tail": "1 failed in 1.64s",
         "failed": [
           "tests/test_dialogs_behavior_v290.py::test_submit_model_is_split_by_type_and_every_save_is_pinned"
         ],
@@ -250,23 +250,23 @@
     ],
     "note": "变异只在 %TEMP% 影子副本里做，真实仓库只读（只写 _dev/.mutation.lock）",
     "repo_fingerprint": {
-      "桌宠.py": "313e4e769a9f",
+      "桌宠.py": "59b2f99c52ba",
       "pet_export.py": "c01e1593efd2",
       "pet_lines.py": "5332f60b5f26",
       "pet_alarm.py": "1149e94deee3",
       "pet_behaviors.py": "732273f95fb4",
-      "_check_release.py": "02be277ea992",
+      "_check_release.py": "7377b3fad58e",
       "pet_balance.py": "66948e5514a4",
       "pet_plugin.py": "2f7853298fc3",
       "pet_plugin_host.py": "82fb7b1384c8",
-      "pet_dialogs.py": "0dcba5cf2532",
+      "pet_dialogs.py": "7e1a11cff2a2",
       "pet_menu.py": "d2f565537b3f",
       "pet_plugin_index.py": "e5e9845785e8",
       "pet_ai.py": "a5989e7fe646",
-      "pet_config.py": "7a4ad883d4e8",
+      "pet_config.py": "6fe2b20ae424",
       "pet_io.py": "6b1e0413fb7f",
       "pet_services.py": "ecebb6ab5891",
-      "pet_widgets.py": "f64844e82ba8",
+      "pet_widgets.py": "b8de517121e1",
       "pet_resources.py": "e28f38917052",
       "pet_tools.py": "46e9030d073f",
       "pet_voice.py": "9fe0a570ca81",
@@ -276,6 +276,7 @@
       "pet_actions.py": "83eb11403fec",
       "pet_book.py": "098676ac52d4",
       "_check_static.py": "6286f9f493bd",
+      "pet_motion.py": "fcee7ab63bb2",
       "tests/test_dialog_buttons_v270.py": "4f95acca7fc6",
       "tests/test_import_thread.py": "1c6fc2ec5d05"
     },

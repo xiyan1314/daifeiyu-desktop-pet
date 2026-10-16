@@ -237,7 +237,7 @@
   ],
   "results": {
     "title": "变异验证 spec：mutations_agent_b_v280.json",
-    "checked_at": "2026-10-16 02:12:47",
+    "checked_at": "2026-10-16 09:40:03",
     "total": 23,
     "caught": 23,
     "not_caught": 0,
@@ -247,209 +247,255 @@
         "id": "M-B01",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.61s",
+        "tail": "1 failed in 1.01s",
         "failed": [
-          "test_set_remote_base_成功才提交_写失败内存不变"
-        ]
+          "tests/test_plugin_phase3_v280.py::test_set_remote_base_成功才提交_写失败内存不变"
+        ],
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "M-B02",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.51s",
+        "tail": "1 failed in 0.74s",
         "failed": [
-          "test_set_remote_base_非https与本地路径一律拒_且不落盘"
-        ]
+          "tests/test_plugin_phase3_v280.py::test_set_remote_base_非https与本地路径一律拒_且不落盘"
+        ],
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "M-B03",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.53s",
+        "tail": "1 failed in 0.72s",
         "failed": [
-          "test_load_index_生产口径绝不联网_没缓存退回随包索引"
-        ]
+          "tests/test_plugin_phase3_v280.py::test_load_index_生产口径绝不联网_没缓存退回随包索引"
+        ],
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "M-B04",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.54s",
+        "tail": "1 failed in 0.88s",
         "failed": [
-          "test_load_index_生产口径缓存命中就能用远端清单"
-        ]
+          "tests/test_plugin_phase3_v280.py::test_load_index_生产口径缓存命中就能用远端清单"
+        ],
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "M-B05",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.55s",
+        "tail": "1 failed in 0.66s",
         "failed": [
-          "test_refresh_force语义_命中缓存不联网_force强制重取"
-        ]
+          "tests/test_plugin_phase3_v280.py::test_refresh_force语义_命中缓存不联网_force强制重取"
+        ],
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "M-B06",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.49s",
+        "tail": "1 failed in 0.65s",
         "failed": [
-          "test_refresh_取回校验落地并返回条目数"
-        ]
+          "tests/test_plugin_phase3_v280.py::test_refresh_取回校验落地并返回条目数"
+        ],
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "M-B07",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.49s",
+        "tail": "1 failed in 0.69s",
         "failed": [
-          "test_远端索引体积上限_前置传下去且事后仍判"
-        ]
+          "tests/test_plugin_phase3_v280.py::test_远端索引体积上限_前置传下去且事后仍判"
+        ],
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "M-B08",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.51s",
+        "tail": "1 failed in 0.67s",
         "failed": [
-          "test_配置键真的存得住_读得回来"
-        ]
+          "tests/test_plugin_phase3_v280.py::test_配置键真的存得住_读得回来"
+        ],
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "M-B09",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.90s",
+        "tail": "1 failed in 1.19s",
         "failed": [
-          "test_真加载器_老config读入写出不冒出这个键"
-        ]
+          "tests/test_plugin_phase3_v280.py::test_真加载器_老config读入写出不冒出这个键"
+        ],
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "M-B10",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.98s",
+        "tail": "1 failed in 1.27s",
         "failed": [
-          "test_set_api_key_写失败_内存不变且不说记住了"
-        ]
+          "tests/test_ai_write_first_v280.py::test_set_api_key_写失败_内存不变且不说记住了"
+        ],
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "M-B11",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.86s",
+        "tail": "1 failed in 1.21s",
         "failed": [
-          "test_set_ai_enabled_写失败_内存不变且不假装生效"
-        ]
+          "tests/test_ai_write_first_v280.py::test_set_ai_enabled_写失败_内存不变且不假装生效"
+        ],
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "M-B12",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.74s",
+        "tail": "1 failed in 1.23s",
         "failed": [
-          "test_set_chat_rounds_写失败_内存不变且不报成功"
-        ]
+          "tests/test_ai_write_first_v280.py::test_set_chat_rounds_写失败_内存不变且不报成功"
+        ],
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "M-B13",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.73s",
+        "tail": "1 failed in 1.14s",
         "failed": [
-          "test_set_chat_rounds_写失败_内存不变且不报成功"
-        ]
+          "tests/test_ai_write_first_v280.py::test_set_chat_rounds_写失败_内存不变且不报成功"
+        ],
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "M-B14",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.72s",
+        "tail": "1 failed in 1.22s",
         "failed": [
-          "test_set_ai_enabled_无Key回退落盘失败_内存保持已提交值"
-        ]
+          "tests/test_ai_write_first_v280.py::test_set_ai_enabled_无Key回退落盘失败_内存保持已提交值"
+        ],
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "M-B15",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.53s",
+        "tail": "1 failed in 0.72s",
         "failed": [
-          "test_对话框构建失败_有可见提示与日志"
-        ]
+          "tests/test_balance_feedback_v280.py::test_对话框构建失败_有可见提示与日志"
+        ],
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "M-B16",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.54s",
+        "tail": "1 failed in 0.75s",
         "failed": [
-          "test_金额不大于零_给提示且绝不记账"
-        ]
+          "tests/test_balance_feedback_v280.py::test_金额不大于零_给提示且绝不记账"
+        ],
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "M-B17",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.49s",
+        "tail": "1 failed in 0.71s",
         "failed": [
-          "test_换站点后旧站点的缓存不许冒充新站点"
-        ]
+          "tests/test_plugin_phase3_v280.py::test_换站点后旧站点的缓存不许冒充新站点"
+        ],
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "M-B18",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.48s",
+        "tail": "1 failed in 0.65s",
         "failed": [
-          "test_直接填index_json地址也收_不重复拼路径"
-        ]
+          "tests/test_plugin_phase3_v280.py::test_直接填index_json地址也收_不重复拼路径"
+        ],
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "M-B19",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.49s",
+        "tail": "1 failed in 0.85s",
         "failed": [
-          "test_load_index_随包也读不出来时把两条原因都说清"
-        ]
+          "tests/test_plugin_phase3_v280.py::test_load_index_随包也读不出来时把两条原因都说清"
+        ],
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "M-B20",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.78s",
+        "tail": "1 failed in 1.18s",
         "failed": [
-          "test_talk_自动开开关_写失败_内存不变且如实告知但对话照常"
-        ]
+          "tests/test_ai_write_first_v280.py::test_talk_自动开开关_写失败_内存不变且如实告知但对话照常"
+        ],
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "M-B21",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "2 failed in 0.82s",
+        "tail": "2 failed in 1.25s",
         "failed": [
-          "test_talk_自动开开关_写失败_内存不变且如实告知但对话照常",
-          "test_talk_自动开开关_成功路径落盘且勾选跟上"
-        ]
+          "tests/test_ai_write_first_v280.py::test_talk_自动开开关_写失败_内存不变且如实告知但对话照常",
+          "tests/test_ai_write_first_v280.py::test_talk_自动开开关_成功路径落盘且勾选跟上"
+        ],
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "M-B22",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.48s",
+        "tail": "1 failed in 0.66s",
         "failed": [
-          "test_无主机名地址两层都当场拒"
-        ]
+          "tests/test_plugin_phase3_v280.py::test_无主机名地址两层都当场拒"
+        ],
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "M-B23",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.52s",
+        "tail": "1 failed in 0.70s",
         "failed": [
-          "test_解析不了的地址只拒不抛"
-        ]
+          "tests/test_plugin_phase3_v280.py::test_解析不了的地址只拒不抛"
+        ],
+        "errors": [],
+        "errors_teardown": []
       }
     ],
     "spec": "mutations_agent_b_v280.json",
@@ -479,20 +525,59 @@
     ],
     "note": "变异只在 %TEMP% 影子副本里做，真实仓库只读（只写 _dev/.mutation.lock）",
     "repo_fingerprint": {
-      "桌宠.py": "6b20873532c6",
+      "桌宠.py": "59b2f99c52ba",
       "pet_export.py": "c01e1593efd2",
       "pet_lines.py": "5332f60b5f26",
       "pet_alarm.py": "1149e94deee3",
-      "pet_behaviors.py": "99f7dff343e4",
-      "_check_release.py": "5b25dd0d243d",
+      "pet_behaviors.py": "732273f95fb4",
+      "_check_release.py": "7377b3fad58e",
       "pet_balance.py": "66948e5514a4",
       "pet_plugin.py": "2f7853298fc3",
       "pet_plugin_host.py": "82fb7b1384c8",
-      "pet_dialogs.py": "4bc0e8c868bb",
-      "pet_menu.py": "920daac1b835",
+      "pet_dialogs.py": "7e1a11cff2a2",
+      "pet_menu.py": "d2f565537b3f",
       "pet_plugin_index.py": "e5e9845785e8",
       "pet_ai.py": "a5989e7fe646",
-      "pet_config.py": "7a4ad883d4e8"
+      "pet_config.py": "6fe2b20ae424",
+      "pet_io.py": "6b1e0413fb7f",
+      "pet_services.py": "ecebb6ab5891",
+      "pet_widgets.py": "b8de517121e1",
+      "pet_resources.py": "e28f38917052",
+      "pet_tools.py": "46e9030d073f",
+      "pet_voice.py": "9fe0a570ca81",
+      "pet_audio.py": "a6feadf4d653",
+      "pet_chat.py": "de979c429c2c",
+      "pet_log.py": "de14ecf338ab",
+      "pet_actions.py": "83eb11403fec",
+      "pet_book.py": "098676ac52d4",
+      "_check_static.py": "6286f9f493bd",
+      "pet_motion.py": "fcee7ab63bb2",
+      "tests/test_dialog_buttons_v270.py": "4f95acca7fc6",
+      "tests/test_import_thread.py": "1c6fc2ec5d05"
+    },
+    "pinned_ast": {
+      "tests/test_plugin_phase3_v280.py::test_set_remote_base_成功才提交_写失败内存不变": "845a921a7621",
+      "tests/test_plugin_phase3_v280.py::test_set_remote_base_非https与本地路径一律拒_且不落盘": "0b73204dd478",
+      "tests/test_plugin_phase3_v280.py::test_load_index_生产口径绝不联网_没缓存退回随包索引": "23a43d0b529a",
+      "tests/test_plugin_phase3_v280.py::test_load_index_生产口径缓存命中就能用远端清单": "0c05197d2ed6",
+      "tests/test_plugin_phase3_v280.py::test_refresh_force语义_命中缓存不联网_force强制重取": "6baef55774fd",
+      "tests/test_plugin_phase3_v280.py::test_refresh_取回校验落地并返回条目数": "e70f5881790c",
+      "tests/test_plugin_phase3_v280.py::test_远端索引体积上限_前置传下去且事后仍判": "04a957c9cc2e",
+      "tests/test_plugin_phase3_v280.py::test_配置键真的存得住_读得回来": "23efd3747b32",
+      "tests/test_plugin_phase3_v280.py::test_真加载器_老config读入写出不冒出这个键": "207566a0fa2f",
+      "tests/test_ai_write_first_v280.py::test_set_api_key_写失败_内存不变且不说记住了": "bc5a05e8df82",
+      "tests/test_ai_write_first_v280.py::test_set_ai_enabled_写失败_内存不变且不假装生效": "ddf6d379a4ba",
+      "tests/test_ai_write_first_v280.py::test_set_chat_rounds_写失败_内存不变且不报成功": "b87467c8ac9c",
+      "tests/test_ai_write_first_v280.py::test_set_ai_enabled_无Key回退落盘失败_内存保持已提交值": "004fd968ac86",
+      "tests/test_balance_feedback_v280.py::test_对话框构建失败_有可见提示与日志": "a749311d2de7",
+      "tests/test_balance_feedback_v280.py::test_金额不大于零_给提示且绝不记账": "e29c87543834",
+      "tests/test_plugin_phase3_v280.py::test_换站点后旧站点的缓存不许冒充新站点": "855e852aa095",
+      "tests/test_plugin_phase3_v280.py::test_直接填index_json地址也收_不重复拼路径": "a4a3f14ddd54",
+      "tests/test_plugin_phase3_v280.py::test_load_index_随包也读不出来时把两条原因都说清": "b9e0ad22afdc",
+      "tests/test_ai_write_first_v280.py::test_talk_自动开开关_写失败_内存不变且如实告知但对话照常": "7abc9783bc3e",
+      "tests/test_ai_write_first_v280.py::test_talk_自动开开关_成功路径落盘且勾选跟上": "a458e820662c",
+      "tests/test_plugin_phase3_v280.py::test_无主机名地址两层都当场拒": "652d431fb98a",
+      "tests/test_plugin_phase3_v280.py::test_解析不了的地址只拒不抛": "8cf6aa0290fe"
     }
   }
 }

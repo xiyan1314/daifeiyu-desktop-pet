@@ -195,7 +195,7 @@
   ],
   "results": {
     "title": "变异验证 spec：mutations_critic_v270.json",
-    "checked_at": "2026-10-16 02:18:34",
+    "checked_at": "2026-10-16 09:53:26",
     "total": 14,
     "caught": 14,
     "not_caught": 0,
@@ -205,130 +205,158 @@
         "id": "M-R5-F1",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 1.40s",
+        "tail": "1 failed in 1.41s",
         "failed": [
-          "test_bind_hint_quiet_on_healthy_library"
-        ]
+          "tests/test_dialogs_feedback_v270.py::test_bind_hint_quiet_on_healthy_library"
+        ],
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "M-R5-F2",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "2 failed in 0.94s",
+        "tail": "2 failed in 0.99s",
         "failed": [
-          "test_apply_result_treats_bare_error_string_as_failure",
-          "test_physics_dialog_keeps_window_open_on_bare_error_string"
-        ]
+          "tests/test_dialogs_feedback_v270.py::test_apply_result_treats_bare_error_string_as_failure",
+          "tests/test_dialogs_feedback_v270.py::test_physics_dialog_keeps_window_open_on_bare_error_string"
+        ],
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "M-R5-F4",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed, 1 passed in 0.96s",
+        "tail": "1 failed, 1 passed in 1.13s",
         "failed": [
-          "test_ai_apply_settings_failure_leaves_memory_untouched"
-        ]
+          "tests/test_dialogs_feedback_v270.py::test_ai_apply_settings_failure_leaves_memory_untouched"
+        ],
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "M-R5-F5",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.94s",
+        "tail": "1 failed in 1.33s",
         "failed": [
-          "test_toast_is_best_effort_not_a_delivery_receipt"
-        ]
+          "tests/test_dialogs_feedback_v270.py::test_toast_is_best_effort_not_a_delivery_receipt"
+        ],
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "M-R5-L2-1a",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed, 1 passed in 0.96s",
+        "tail": "1 failed, 1 passed in 1.09s",
         "failed": [
-          "test_sound_panel_treats_none_return_as_failure"
-        ]
+          "tests/test_dialogs_feedback_v270.py::test_sound_panel_treats_none_return_as_failure"
+        ],
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "M-R5-L2-1b",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 1.08s",
+        "tail": "1 failed in 1.06s",
         "failed": [
-          "test_sound_panel_backend_failure_does_not_claim_success"
-        ]
+          "tests/test_dialogs_feedback_v270.py::test_sound_panel_backend_failure_does_not_claim_success"
+        ],
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "M-R5-P2-4",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 1.00s",
+        "tail": "1 failed in 1.07s",
         "failed": [
-          "test_frame_action_cancel_is_not_reported_as_too_few"
-        ]
+          "tests/test_dialogs_feedback_v270.py::test_frame_action_cancel_is_not_reported_as_too_few"
+        ],
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "M-R5-P2-1",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.97s",
+        "tail": "1 failed in 1.04s",
         "failed": [
-          "test_clear_api_key_save_failure_keeps_key_and_says_so"
-        ]
+          "tests/test_dialogs_feedback_v270.py::test_clear_api_key_save_failure_keeps_key_and_says_so"
+        ],
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "M-R5-P3-1a",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 1.13s",
+        "tail": "1 failed in 1.00s",
         "failed": [
-          "test_bubble_style_and_physics_roll_back_cfg_on_write_failure"
-        ]
+          "tests/test_dialogs_feedback_v270.py::test_bubble_style_and_physics_roll_back_cfg_on_write_failure"
+        ],
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "M-R5-P3-1b",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.98s",
+        "tail": "1 failed in 1.00s",
         "failed": [
-          "test_bubble_style_and_physics_roll_back_cfg_on_write_failure"
-        ]
+          "tests/test_dialogs_feedback_v270.py::test_bubble_style_and_physics_roll_back_cfg_on_write_failure"
+        ],
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "M-R5-P3-2",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.84s",
+        "tail": "1 failed in 0.99s",
         "failed": [
-          "test_ai_toggle_second_save_failure_is_reported"
-        ]
+          "tests/test_dialogs_feedback_v270.py::test_ai_toggle_second_save_failure_is_reported"
+        ],
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "M-R5-P1-1",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.91s",
+        "tail": "1 failed in 1.06s",
         "failed": [
-          "test_bundle_import_reports_bubble_style_write_failure"
-        ]
+          "tests/test_critic_menu_e2e_v270.py::test_bundle_import_reports_bubble_style_write_failure"
+        ],
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "M-R6-P1-1",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "3 failed in 0.95s",
+        "tail": "3 failed in 1.11s",
         "failed": [
-          "test_import_receipt_keeps_bubble_style_failure_behind_two_other_warnings",
-          "test_import_receipt_never_silently_drops_warnings",
-          "test_import_receipt_must_show_and_rest_count_coexist"
-        ]
+          "tests/test_dialogs_feedback_v270.py::test_import_receipt_keeps_bubble_style_failure_behind_two_other_warnings",
+          "tests/test_dialogs_feedback_v270.py::test_import_receipt_never_silently_drops_warnings",
+          "tests/test_dialogs_feedback_v270.py::test_import_receipt_must_show_and_rest_count_coexist"
+        ],
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "M-R5-F6",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.84s",
+        "tail": "1 failed in 1.03s",
         "failed": [
-          "test_menu_export_role_item_runs_full_path"
-        ]
+          "tests/test_critic_menu_e2e_v270.py::test_menu_export_role_item_runs_full_path"
+        ],
+        "errors": [],
+        "errors_teardown": []
       }
     ],
     "spec": "mutations_critic_v270.json",
@@ -353,20 +381,54 @@
     ],
     "note": "变异只在 %TEMP% 影子副本里做，真实仓库只读（只写 _dev/.mutation.lock）",
     "repo_fingerprint": {
-      "桌宠.py": "6b20873532c6",
+      "桌宠.py": "59b2f99c52ba",
       "pet_export.py": "c01e1593efd2",
       "pet_lines.py": "5332f60b5f26",
       "pet_alarm.py": "1149e94deee3",
-      "pet_behaviors.py": "99f7dff343e4",
-      "_check_release.py": "5b25dd0d243d",
+      "pet_behaviors.py": "732273f95fb4",
+      "_check_release.py": "7377b3fad58e",
       "pet_balance.py": "66948e5514a4",
       "pet_plugin.py": "2f7853298fc3",
       "pet_plugin_host.py": "82fb7b1384c8",
-      "pet_dialogs.py": "4bc0e8c868bb",
-      "pet_menu.py": "920daac1b835",
+      "pet_dialogs.py": "7e1a11cff2a2",
+      "pet_menu.py": "d2f565537b3f",
       "pet_plugin_index.py": "e5e9845785e8",
       "pet_ai.py": "a5989e7fe646",
-      "pet_config.py": "7a4ad883d4e8"
+      "pet_config.py": "6fe2b20ae424",
+      "pet_io.py": "6b1e0413fb7f",
+      "pet_services.py": "ecebb6ab5891",
+      "pet_widgets.py": "b8de517121e1",
+      "pet_resources.py": "e28f38917052",
+      "pet_tools.py": "46e9030d073f",
+      "pet_voice.py": "9fe0a570ca81",
+      "pet_audio.py": "a6feadf4d653",
+      "pet_chat.py": "de979c429c2c",
+      "pet_log.py": "de14ecf338ab",
+      "pet_actions.py": "83eb11403fec",
+      "pet_book.py": "098676ac52d4",
+      "_check_static.py": "6286f9f493bd",
+      "pet_motion.py": "fcee7ab63bb2",
+      "tests/test_dialog_buttons_v270.py": "4f95acca7fc6",
+      "tests/test_import_thread.py": "1c6fc2ec5d05"
+    },
+    "pinned_ast": {
+      "tests/test_dialogs_feedback_v270.py::test_bind_hint_quiet_on_healthy_library": "17001f5c44a2",
+      "tests/test_dialogs_feedback_v270.py::test_apply_result_treats_bare_error_string_as_failure": "5419a53b3f3b",
+      "tests/test_dialogs_feedback_v270.py::test_physics_dialog_keeps_window_open_on_bare_error_string": "d6eb306f12ff",
+      "tests/test_dialogs_feedback_v270.py::test_ai_apply_settings_failure_leaves_memory_untouched": "25c180e42792",
+      "tests/test_dialogs_feedback_v270.py::test_ai_apply_settings_success_commit_is_bit_identical": "0867f8b665ca",
+      "tests/test_dialogs_feedback_v270.py::test_toast_is_best_effort_not_a_delivery_receipt": "502c1bb50b3d",
+      "tests/test_dialogs_feedback_v270.py::test_sound_panel_treats_none_return_as_failure": "2940327dfc50",
+      "tests/test_dialogs_feedback_v270.py::test_sound_panel_backend_failure_does_not_claim_success": "84d1378cc6a6",
+      "tests/test_dialogs_feedback_v270.py::test_frame_action_cancel_is_not_reported_as_too_few": "8165846ecb24",
+      "tests/test_dialogs_feedback_v270.py::test_clear_api_key_save_failure_keeps_key_and_says_so": "af02da318c30",
+      "tests/test_dialogs_feedback_v270.py::test_bubble_style_and_physics_roll_back_cfg_on_write_failure": "549c13d6d43c",
+      "tests/test_dialogs_feedback_v270.py::test_ai_toggle_second_save_failure_is_reported": "904a7b7d5fa0",
+      "tests/test_critic_menu_e2e_v270.py::test_bundle_import_reports_bubble_style_write_failure": "8f21d0369e9e",
+      "tests/test_dialogs_feedback_v270.py::test_import_receipt_keeps_bubble_style_failure_behind_two_other_warnings": "3b0b40901a30",
+      "tests/test_dialogs_feedback_v270.py::test_import_receipt_never_silently_drops_warnings": "e6c74c659f60",
+      "tests/test_dialogs_feedback_v270.py::test_import_receipt_must_show_and_rest_count_coexist": "c842ea61f79c",
+      "tests/test_critic_menu_e2e_v270.py::test_menu_export_role_item_runs_full_path": "a91c71d04a51"
     }
   }
 }

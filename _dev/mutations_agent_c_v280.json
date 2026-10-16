@@ -1242,7 +1242,7 @@
   ],
   "results": {
     "title": "变异验证 spec：mutations_agent_c_v280.json",
-    "checked_at": "2026-10-16 08:23:18",
+    "checked_at": "2026-10-16 09:49:13",
     "total": 97,
     "caught": 97,
     "not_caught": 0,
@@ -1252,7 +1252,7 @@
         "id": "M-C-H01",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.53s",
+        "tail": "1 failed in 0.95s",
         "failed": [
           "tests/test_plugin_market_v252.py::test_明文http一律拒_只收https"
         ],
@@ -1263,7 +1263,7 @@
         "id": "M-C-H02",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.53s",
+        "tail": "1 failed in 0.65s",
         "failed": [
           "tests/test_plugin_market_v252.py::test_明文http一律拒_只收https"
         ],
@@ -1274,7 +1274,7 @@
         "id": "M-C-H03",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.61s",
+        "tail": "1 failed in 0.73s",
         "failed": [
           "tests/test_plugin_market_v252.py::test_明文http一律拒_只收https"
         ],
@@ -1285,7 +1285,7 @@
         "id": "M-C-H04",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.53s",
+        "tail": "1 failed in 0.65s",
         "failed": [
           "tests/test_plugin_market_v252.py::test_明文http一律拒_只收https"
         ],
@@ -1296,7 +1296,7 @@
         "id": "M-C-H05",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.54s",
+        "tail": "1 failed in 0.69s",
         "failed": [
           "tests/test_plugin_market_v252.py::test_远端索引不许指向本地路径_随包索引不受限"
         ],
@@ -1307,7 +1307,7 @@
         "id": "M-C-H06",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.54s",
+        "tail": "1 failed in 0.67s",
         "failed": [
           "tests/test_plugin_market_v252.py::test_相对地址拒路径穿越与空段"
         ],
@@ -1318,7 +1318,7 @@
         "id": "M-C-H07",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.54s",
+        "tail": "1 failed in 0.67s",
         "failed": [
           "tests/test_plugin_market_v252.py::test_file_url折成本机路径"
         ],
@@ -1329,7 +1329,7 @@
         "id": "M-C-H08",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.54s",
+        "tail": "1 failed in 0.67s",
         "failed": [
           "tests/test_plugin_market_v252.py::test_远端ContentLength自报超限_一个字节都不读"
         ],
@@ -1340,7 +1340,7 @@
         "id": "M-C-H09",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.55s",
+        "tail": "1 failed in 0.66s",
         "failed": [
           "tests/test_plugin_market_v252.py::test_本地取数边读边判_到上限就停手"
         ],
@@ -1351,7 +1351,7 @@
         "id": "M-C-H10",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.53s",
+        "tail": "1 failed in 0.66s",
         "failed": [
           "tests/test_plugin_market_v252.py::test_注入取数也有容量上限_超了不落盘"
         ],
@@ -1362,7 +1362,7 @@
         "id": "M-C-H11",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.55s",
+        "tail": "1 failed in 0.68s",
         "failed": [
           "tests/test_plugin_market_v252.py::test_下载后走校验器与安装器_真装进宿主库"
         ],
@@ -1373,7 +1373,7 @@
         "id": "M-C-B01",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.46s",
+        "tail": "1 failed in 0.57s",
         "failed": [
           "tests/test_plugin_phase3_v280.py::test_set_remote_base_成功才提交_写失败内存不变"
         ],
@@ -1384,7 +1384,7 @@
         "id": "M-C-B02",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.46s",
+        "tail": "1 failed in 0.60s",
         "failed": [
           "tests/test_plugin_phase3_v280.py::test_set_remote_base_空串清除远端并丢掉它的缓存"
         ],
@@ -1395,7 +1395,7 @@
         "id": "M-C-B03",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.44s",
+        "tail": "1 failed in 0.58s",
         "failed": [
           "tests/test_plugin_phase3_v280.py::test_set_remote_base_非https与本地路径一律拒_且不落盘"
         ],
@@ -1406,7 +1406,7 @@
         "id": "M-C-B04",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.45s",
+        "tail": "1 failed in 0.59s",
         "failed": [
           "tests/test_plugin_phase3_v280.py::test_set_remote_base_没接线时如实报错不假装存下"
         ],
@@ -1417,7 +1417,7 @@
         "id": "M-C-B05",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.46s",
+        "tail": "1 failed in 0.88s",
         "failed": [
           "tests/test_plugin_phase3_v280.py::test_set_remote_base_非https与本地路径一律拒_且不落盘"
         ],
@@ -1428,7 +1428,7 @@
         "id": "M-C-B06",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.45s",
+        "tail": "1 failed in 0.64s",
         "failed": [
           "tests/test_plugin_phase3_v280.py::test_set_remote_base_非https与本地路径一律拒_且不落盘"
         ],
@@ -1439,7 +1439,7 @@
         "id": "M-C-B07",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.45s",
+        "tail": "1 failed in 0.76s",
         "failed": [
           "tests/test_plugin_phase3_v280.py::test_set_remote_base_非https与本地路径一律拒_且不落盘"
         ],
@@ -1450,7 +1450,7 @@
         "id": "M-C-B08",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.47s",
+        "tail": "1 failed in 0.76s",
         "failed": [
           "tests/test_plugin_phase3_v280.py::test_配置键名两处一致_单一来源"
         ],
@@ -1461,7 +1461,7 @@
         "id": "M-C-B09",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.46s",
+        "tail": "1 failed in 0.59s",
         "failed": [
           "tests/test_plugin_phase3_v280.py::test_配置键名两处一致_单一来源"
         ],
@@ -1472,7 +1472,7 @@
         "id": "M-C-B10",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.47s",
+        "tail": "1 failed in 0.89s",
         "failed": [
           "tests/test_plugin_phase3_v280.py::test_refresh_取回校验落地并返回条目数"
         ],
@@ -1483,7 +1483,7 @@
         "id": "M-C-B11",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.51s",
+        "tail": "1 failed in 0.64s",
         "failed": [
           "tests/test_plugin_phase3_v280.py::test_refresh_取回校验落地并返回条目数"
         ],
@@ -1494,7 +1494,7 @@
         "id": "M-C-B12",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.48s",
+        "tail": "1 failed in 0.64s",
         "failed": [
           "tests/test_plugin_phase3_v280.py::test_refresh_force语义_命中缓存不联网_force强制重取"
         ],
@@ -1505,7 +1505,7 @@
         "id": "M-C-B13",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.51s",
+        "tail": "1 failed in 0.60s",
         "failed": [
           "tests/test_plugin_phase3_v280.py::test_refresh_没有远端地址时如实拒绝"
         ],
@@ -1516,7 +1516,7 @@
         "id": "M-C-B14",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.49s",
+        "tail": "1 failed in 0.61s",
         "failed": [
           "tests/test_plugin_phase3_v280.py::test_refresh_失败不留假象_旧缓存与随包索引都不动"
         ],
@@ -1527,7 +1527,7 @@
         "id": "M-C-B15",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.51s",
+        "tail": "1 failed in 0.62s",
         "failed": [
           "tests/test_plugin_phase3_v280.py::test_load_index_生产口径绝不联网_没缓存退回随包索引"
         ],
@@ -1538,7 +1538,7 @@
         "id": "M-C-B16",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.48s",
+        "tail": "1 failed in 0.75s",
         "failed": [
           "tests/test_plugin_phase3_v280.py::test_load_index_生产口径缓存命中就能用远端清单"
         ],
@@ -1549,7 +1549,7 @@
         "id": "M-C-B17",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.48s",
+        "tail": "1 failed in 0.66s",
         "failed": [
           "tests/test_plugin_phase3_v280.py::test_来源信息_随包与远端两种口径"
         ],
@@ -1560,7 +1560,7 @@
         "id": "M-C-B18",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.50s",
+        "tail": "1 failed in 0.66s",
         "failed": [
           "tests/test_plugin_phase3_v280.py::test_来源信息_随包与远端两种口径"
         ],
@@ -1571,7 +1571,7 @@
         "id": "M-C-B19",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.49s",
+        "tail": "1 failed in 0.66s",
         "failed": [
           "tests/test_plugin_phase3_v280.py::test_远端索引体积上限_前置传下去且事后仍判"
         ],
@@ -1582,7 +1582,7 @@
         "id": "M-C-B20",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.51s",
+        "tail": "1 failed in 0.66s",
         "failed": [
           "tests/test_plugin_phase3_v280.py::test_远端索引体积上限_前置传下去且事后仍判"
         ],
@@ -1593,7 +1593,7 @@
         "id": "M-C-B21",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.49s",
+        "tail": "1 failed in 0.66s",
         "failed": [
           "tests/test_plugin_phase3_v280.py::test_远端包sha256与bytes不符一律拒收且不留残余"
         ],
@@ -1604,7 +1604,7 @@
         "id": "M-C-B22",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.50s",
+        "tail": "1 failed in 0.78s",
         "failed": [
           "tests/test_plugin_phase3_v280.py::test_远端包sha256与bytes不符一律拒收且不留残余"
         ],
@@ -1615,7 +1615,7 @@
         "id": "M-C-B23",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.49s",
+        "tail": "1 failed in 0.71s",
         "failed": [
           "tests/test_plugin_phase3_v280.py::test_非https的远端地址_刷新前就拒且不取数"
         ],
@@ -1626,7 +1626,7 @@
         "id": "M-C-B24",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.48s",
+        "tail": "1 failed in 0.75s",
         "failed": [
           "tests/test_plugin_phase3_v280.py::test_索引格式不认识_整份拒且不落地"
         ],
@@ -1637,7 +1637,7 @@
         "id": "M-C-B25",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.49s",
+        "tail": "1 failed in 0.68s",
         "failed": [
           "tests/test_plugin_phase3_v280.py::test_set_remote_base_成功才提交_写失败内存不变"
         ],
@@ -1648,7 +1648,7 @@
         "id": "M-C-B27",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.48s",
+        "tail": "1 failed in 0.68s",
         "failed": [
           "tests/test_plugin_phase3_v280.py::test_refresh_取回校验落地并返回条目数"
         ],
@@ -1659,7 +1659,7 @@
         "id": "M-C-B29",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.50s",
+        "tail": "1 failed in 0.67s",
         "failed": [
           "tests/test_plugin_phase3_v280.py::test_配置键名两处一致_单一来源"
         ],
@@ -1670,7 +1670,7 @@
         "id": "M-C-B30",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.88s",
+        "tail": "1 failed in 1.38s",
         "failed": [
           "tests/test_ai_write_first_v280.py::test_set_api_key_写失败_内存不变且不说记住了"
         ],
@@ -1681,7 +1681,7 @@
         "id": "M-C-B31",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.84s",
+        "tail": "1 failed in 1.10s",
         "failed": [
           "tests/test_ai_write_first_v280.py::test_set_api_key_成功路径与改前逐位等价"
         ],
@@ -1692,7 +1692,7 @@
         "id": "M-C-B32",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.83s",
+        "tail": "1 failed in 1.07s",
         "failed": [
           "tests/test_ai_write_first_v280.py::test_set_ai_enabled_写失败_内存不变且不假装生效"
         ],
@@ -1703,7 +1703,7 @@
         "id": "M-C-B33",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.83s",
+        "tail": "1 failed in 1.39s",
         "failed": [
           "tests/test_ai_write_first_v280.py::test_set_ai_enabled_无Key回退落盘失败_内存保持已提交值"
         ],
@@ -1714,7 +1714,7 @@
         "id": "M-C-B34",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.84s",
+        "tail": "1 failed in 1.06s",
         "failed": [
           "tests/test_ai_write_first_v280.py::test_set_chat_rounds_写失败_内存不变且不报成功"
         ],
@@ -1725,7 +1725,7 @@
         "id": "M-C-B35",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.86s",
+        "tail": "1 failed in 1.22s",
         "failed": [
           "tests/test_ai_write_first_v280.py::test_set_chat_rounds_成功路径落盘且内存同步"
         ],
@@ -1736,7 +1736,7 @@
         "id": "M-C-B36",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.84s",
+        "tail": "1 failed in 1.14s",
         "failed": [
           "tests/test_ai_write_first_v280.py::test_set_api_key_写失败_内存不变且不说记住了"
         ],
@@ -1747,7 +1747,7 @@
         "id": "M-C-B37",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.85s",
+        "tail": "1 failed in 1.05s",
         "failed": [
           "tests/test_ai_write_first_v280.py::test_set_ai_enabled_写失败_内存不变且不假装生效"
         ],
@@ -1758,7 +1758,7 @@
         "id": "M-C-B38",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.89s",
+        "tail": "1 failed in 1.07s",
         "failed": [
           "tests/test_ai_write_first_v280.py::test_set_chat_rounds_写失败_内存不变且不报成功"
         ],
@@ -1769,7 +1769,7 @@
         "id": "M-C-B39",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.86s",
+        "tail": "1 failed in 1.13s",
         "failed": [
           "tests/test_ai_write_first_v280.py::test_set_ai_enabled_无Key回退落盘失败_内存保持已提交值"
         ],
@@ -1780,7 +1780,7 @@
         "id": "M-C-B40",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.48s",
+        "tail": "1 failed in 0.65s",
         "failed": [
           "tests/test_plugin_phase3_v280.py::test_配置键默认值不进diff落盘_逐字节回归"
         ],
@@ -1791,7 +1791,7 @@
         "id": "M-C-B41",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.48s",
+        "tail": "1 failed in 0.64s",
         "failed": [
           "tests/test_plugin_phase3_v280.py::test_配置键真的存得住_读得回来"
         ],
@@ -1802,7 +1802,7 @@
         "id": "M-C-B42",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.48s",
+        "tail": "1 failed in 0.64s",
         "failed": [
           "tests/test_plugin_phase3_v280.py::test_配置键真的存得住_读得回来"
         ],
@@ -1813,7 +1813,7 @@
         "id": "M-C-B43",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.67s",
+        "tail": "1 failed in 0.87s",
         "failed": [
           "tests/test_plugin_phase3_v280.py::test_真加载器_老config读入写出不冒出这个键"
         ],
@@ -1824,7 +1824,7 @@
         "id": "M-C-A01",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.66s",
+        "tail": "1 failed in 0.91s",
         "failed": [
           "tests/test_dialogs_feedback_v280.py::test_source_shows_remote_from_config_without_network"
         ],
@@ -1835,7 +1835,7 @@
         "id": "M-C-A02",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.65s",
+        "tail": "1 failed in 0.85s",
         "failed": [
           "tests/test_dialogs_feedback_v280.py::test_source_shows_remote_from_config_without_network"
         ],
@@ -1846,7 +1846,7 @@
         "id": "M-C-A03",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.67s",
+        "tail": "1 failed in 0.92s",
         "failed": [
           "tests/test_dialogs_feedback_v280.py::test_empty_save_is_rejected_and_points_at_reset"
         ],
@@ -1857,7 +1857,7 @@
         "id": "M-C-A04",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "7 failed in 0.85s",
+        "tail": "7 failed in 1.14s",
         "failed": [
           "tests/test_dialogs_feedback_v280.py::test_bad_source_url_is_rejected_on_the_spot_with_a_reason[http://h.invalid/packs/index.json-https]",
           "tests/test_dialogs_feedback_v280.py::test_bad_source_url_is_rejected_on_the_spot_with_a_reason[file:///C:/packs/index.json-\\u672c\\u5730\\u8def\\u5f84]",
@@ -1874,7 +1874,7 @@
         "id": "M-C-A05",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.68s",
+        "tail": "1 failed in 0.87s",
         "failed": [
           "tests/test_dialogs_feedback_v280.py::test_backend_write_failure_keeps_window_and_reports_the_reason"
         ],
@@ -1885,7 +1885,7 @@
         "id": "M-C-A06",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.64s",
+        "tail": "1 failed in 0.89s",
         "failed": [
           "tests/test_dialogs_feedback_v280.py::test_backend_without_set_remote_base_degrades_with_a_human_message"
         ],
@@ -1896,7 +1896,7 @@
         "id": "M-C-A07",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.67s",
+        "tail": "1 failed in 0.86s",
         "failed": [
           "tests/test_dialogs_feedback_v280.py::test_saving_a_good_url_uses_the_backend_and_tells_the_next_step"
         ],
@@ -1907,7 +1907,7 @@
         "id": "M-C-A08",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.63s",
+        "tail": "1 failed in 0.91s",
         "failed": [
           "tests/test_dialogs_feedback_v280.py::test_dialog_wires_cfg_read_and_write_into_the_backend"
         ],
@@ -1918,7 +1918,7 @@
         "id": "M-C-A09",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.63s",
+        "tail": "1 failed in 0.85s",
         "failed": [
           "tests/test_dialogs_feedback_v280.py::test_refresh_missing_result_is_treated_as_failure"
         ],
@@ -1929,7 +1929,7 @@
         "id": "M-C-A10",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "4 failed in 0.78s",
+        "tail": "4 failed in 1.02s",
         "failed": [
           "tests/test_dialogs_feedback_v280.py::test_refresh_failure_shows_the_reason_and_keeps_a_way_back[\\u7f51\\u7edc\\u8bf7\\u6c42\\u5931\\u8d25\\uff1a\\u540d\\u79f0\\u89e3\\u6790\\u4e0d\\u4e86\\uff08\\u8fde\\u4e0d\\u4e0a\\u8fdc\\u7aef\\u7d22\\u5f15\\uff09]",
           "tests/test_dialogs_feedback_v280.py::test_refresh_failure_shows_the_reason_and_keeps_a_way_back[HTTP 404\\uff1a\\u627e\\u4e0d\\u5230\\u8fd9\\u4e2a\\u5730\\u5740]",
@@ -1943,7 +1943,7 @@
         "id": "M-C-A11",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "4 failed in 0.73s",
+        "tail": "4 failed in 0.98s",
         "failed": [
           "tests/test_dialogs_feedback_v280.py::test_refresh_failure_shows_the_reason_and_keeps_a_way_back[\\u7f51\\u7edc\\u8bf7\\u6c42\\u5931\\u8d25\\uff1a\\u540d\\u79f0\\u89e3\\u6790\\u4e0d\\u4e86\\uff08\\u8fde\\u4e0d\\u4e0a\\u8fdc\\u7aef\\u7d22\\u5f15\\uff09]",
           "tests/test_dialogs_feedback_v280.py::test_refresh_failure_shows_the_reason_and_keeps_a_way_back[HTTP 404\\uff1a\\u627e\\u4e0d\\u5230\\u8fd9\\u4e2a\\u5730\\u5740]",
@@ -1957,7 +1957,7 @@
         "id": "M-C-A12",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.63s",
+        "tail": "1 failed in 0.85s",
         "failed": [
           "tests/test_dialogs_feedback_v280.py::test_refresh_success_reports_count_and_repaints_the_list"
         ],
@@ -1968,7 +1968,7 @@
         "id": "M-C-A13",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.68s",
+        "tail": "1 failed in 0.91s",
         "failed": [
           "tests/test_dialogs_feedback_v280.py::test_refresh_runs_off_the_main_thread_and_lands_on_it"
         ],
@@ -1979,7 +1979,7 @@
         "id": "M-C-A14",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 20.62s",
+        "tail": "1 failed in 20.82s",
         "failed": [
           "tests/test_dialogs_feedback_v280.py::test_manual_refresh_forces_and_auto_refresh_prefers_cache"
         ],
@@ -1990,7 +1990,7 @@
         "id": "M-C-A15",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "2 failed in 0.95s",
+        "tail": "2 failed in 1.33s",
         "failed": [
           "tests/test_dialogs_feedback_v280.py::test_toast_returns_false_and_logs_when_bubble_is_refused",
           "tests/test_dialogs_feedback_v280.py::test_toast_falls_back_to_the_dialog_status_line"
@@ -2002,7 +2002,7 @@
         "id": "M-C-A16",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.89s",
+        "tail": "1 failed in 1.23s",
         "failed": [
           "tests/test_dialogs_feedback_v280.py::test_toast_falls_back_to_the_dialog_status_line"
         ],
@@ -2013,7 +2013,7 @@
         "id": "M-C-A17",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.88s",
+        "tail": "1 failed in 1.17s",
         "failed": [
           "tests/test_dialogs_feedback_v280.py::test_toast_returns_false_and_logs_when_bubble_is_refused"
         ],
@@ -2024,7 +2024,7 @@
         "id": "M-C-A18",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "2 failed in 0.93s",
+        "tail": "2 failed in 1.27s",
         "failed": [
           "tests/test_dialogs_feedback_v280.py::test_show_bubble_reports_false_while_closing",
           "tests/test_dialogs_feedback_v280.py::test_toast_returns_false_and_logs_when_bubble_is_refused"
@@ -2036,7 +2036,7 @@
         "id": "M-C-A19",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 1.09s",
+        "tail": "1 failed in 1.48s",
         "failed": [
           "tests/test_dialogs_feedback_v280.py::test_compose_dialog_has_cancel_and_reject_adds_nothing"
         ],
@@ -2047,7 +2047,7 @@
         "id": "M-C-A20",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.90s",
+        "tail": "1 failed in 1.24s",
         "failed": [
           "tests/test_dialogs_feedback_v280.py::test_ask_helpers_go_through_modal"
         ],
@@ -2058,7 +2058,7 @@
         "id": "M-C-A21",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.87s",
+        "tail": "1 failed in 1.24s",
         "failed": [
           "tests/test_dialogs_feedback_v280.py::test_ask_helpers_go_through_modal"
         ],
@@ -2069,7 +2069,7 @@
         "id": "M-C-A22",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.62s",
+        "tail": "1 failed in 0.98s",
         "failed": [
           "tests/test_dialogs_feedback_v280.py::test_static_input_dialogs_are_gone"
         ],
@@ -2080,7 +2080,7 @@
         "id": "M-C-A23",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.90s",
+        "tail": "1 failed in 1.24s",
         "failed": [
           "tests/test_dialogs_feedback_v280.py::test_wording_table_is_applied_to_new_and_add_buttons"
         ],
@@ -2091,7 +2091,7 @@
         "id": "M-C-A24",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.87s",
+        "tail": "1 failed in 1.21s",
         "failed": [
           "tests/test_dialogs_feedback_v280.py::test_import_wizard_add_form_gives_a_receipt_and_construction_stays_quiet"
         ],
@@ -2102,7 +2102,7 @@
         "id": "M-C-A25",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.83s",
+        "tail": "1 failed in 1.21s",
         "failed": [
           "tests/test_dialogs_feedback_v280.py::test_import_wizard_add_form_gives_a_receipt_and_construction_stays_quiet"
         ],
@@ -2113,7 +2113,7 @@
         "id": "M-C-A26",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.87s",
+        "tail": "1 failed in 1.25s",
         "failed": [
           "tests/test_dialogs_feedback_v280.py::test_voice_event_import_receipt_and_clear_confirm"
         ],
@@ -2124,7 +2124,7 @@
         "id": "M-C-A27",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.95s",
+        "tail": "1 failed in 1.22s",
         "failed": [
           "tests/test_dialogs_feedback_v280.py::test_voice_event_import_receipt_and_clear_confirm"
         ],
@@ -2135,7 +2135,7 @@
         "id": "M-C-A28",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.92s",
+        "tail": "1 failed in 1.26s",
         "failed": [
           "tests/test_dialogs_feedback_v280.py::test_voice_event_import_receipt_and_clear_confirm"
         ],
@@ -2146,7 +2146,7 @@
         "id": "M-C-A29",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.92s",
+        "tail": "1 failed in 1.21s",
         "failed": [
           "tests/test_dialogs_feedback_v280.py::test_dialogue_remove_member_reports_what_was_removed"
         ],
@@ -2157,7 +2157,7 @@
         "id": "M-C-A30",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "2 failed in 0.69s",
+        "tail": "2 failed in 0.95s",
         "failed": [
           "tests/test_dialogs_feedback_v280.py::test_role_edit_delete_action_needs_no_confirm_and_is_undoable",
           "tests/test_dialogs_behavior_v290.py::test_delete_custom_action_can_be_undone_by_cancelling"
@@ -2169,7 +2169,7 @@
         "id": "M-C-A31",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.94s",
+        "tail": "1 failed in 1.44s",
         "failed": [
           "tests/test_dialogs_feedback_v280.py::test_role_edit_delete_action_toasts_with_a_pet"
         ],
@@ -2180,7 +2180,7 @@
         "id": "M-C-A32",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.64s",
+        "tail": "1 failed in 0.87s",
         "failed": [
           "tests/test_dialogs_feedback_v280.py::test_reset_to_bundled_takes_effect_and_reports"
         ],
@@ -2191,7 +2191,7 @@
         "id": "M-C-B44",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.60s",
+        "tail": "1 failed in 0.81s",
         "failed": [
           "tests/test_balance_feedback_v280.py::test_对话框构建失败_有可见提示与日志"
         ],
@@ -2202,7 +2202,7 @@
         "id": "M-C-B45",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.54s",
+        "tail": "1 failed in 0.75s",
         "failed": [
           "tests/test_balance_feedback_v280.py::test_金额不大于零_给提示且绝不记账"
         ],
@@ -2213,7 +2213,7 @@
         "id": "M-C-B46",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.49s",
+        "tail": "1 failed in 0.66s",
         "failed": [
           "tests/test_plugin_phase3_v280.py::test_换站点后旧站点的缓存不许冒充新站点"
         ],
@@ -2224,7 +2224,7 @@
         "id": "M-C-B47",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.48s",
+        "tail": "1 failed in 0.84s",
         "failed": [
           "tests/test_plugin_phase3_v280.py::test_直接填index_json地址也收_不重复拼路径"
         ],
@@ -2235,7 +2235,7 @@
         "id": "M-C-B48",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.47s",
+        "tail": "1 failed in 0.64s",
         "failed": [
           "tests/test_plugin_phase3_v280.py::test_load_index_随包也读不出来时把两条原因都说清"
         ],
@@ -2246,7 +2246,7 @@
         "id": "M-C-A33",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 1.04s",
+        "tail": "1 failed in 1.32s",
         "failed": [
           "tests/test_dialogs_feedback_v280.py::test_new_proc_action_is_selected_and_scrolled_into_view"
         ],
@@ -2257,7 +2257,7 @@
         "id": "M-C-A34",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.92s",
+        "tail": "1 failed in 1.18s",
         "failed": [
           "tests/test_dialogs_feedback_v280.py::test_alarm_new_gives_a_receipt"
         ],
@@ -2268,7 +2268,7 @@
         "id": "M-C-A35",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.90s",
+        "tail": "1 failed in 1.17s",
         "failed": [
           "tests/test_dialogs_feedback_v280.py::test_alarm_delete_reports_exactly_once"
         ],
@@ -2279,7 +2279,7 @@
         "id": "M-C-A36",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "2 failed in 1.19s",
+        "tail": "2 failed in 1.55s",
         "failed": [
           "tests/test_dialogs_feedback_v280.py::test_behavior_step_receipts",
           "tests/test_dialogs_behavior_v290.py::test_step_receipts_use_the_inline_status_line_not_the_bubble"
@@ -2291,7 +2291,7 @@
         "id": "M-C-A37",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "2 failed in 1.15s",
+        "tail": "2 failed in 2.45s",
         "failed": [
           "tests/test_dialogs_feedback_v280.py::test_behavior_step_receipts",
           "tests/test_dialogs_behavior_v290.py::test_step_receipts_use_the_inline_status_line_not_the_bubble"
@@ -2303,7 +2303,7 @@
         "id": "M-C-A38",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.97s",
+        "tail": "1 failed in 1.51s",
         "failed": [
           "tests/test_dialogs_feedback_v280.py::test_move_line_at_boundary_tells_the_user"
         ],
@@ -2314,7 +2314,7 @@
         "id": "M-C-A39",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.94s",
+        "tail": "1 failed in 1.12s",
         "failed": [
           "tests/test_dialogs_feedback_v280.py::test_lines_move_member_at_boundary_uses_the_same_wording"
         ],
@@ -2325,7 +2325,7 @@
         "id": "M-C-A40",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 1.13s",
+        "tail": "1 failed in 1.28s",
         "failed": [
           "tests/test_dialogs_feedback_v280.py::test_new_line_scrolls_into_view"
         ],
@@ -2410,7 +2410,7 @@
     ],
     "note": "变异只在 %TEMP% 影子副本里做，真实仓库只读（只写 _dev/.mutation.lock）",
     "repo_fingerprint": {
-      "桌宠.py": "2351a1ad9737",
+      "桌宠.py": "59b2f99c52ba",
       "pet_export.py": "c01e1593efd2",
       "pet_lines.py": "5332f60b5f26",
       "pet_alarm.py": "1149e94deee3",
@@ -2419,14 +2419,14 @@
       "pet_balance.py": "66948e5514a4",
       "pet_plugin.py": "2f7853298fc3",
       "pet_plugin_host.py": "82fb7b1384c8",
-      "pet_dialogs.py": "d80d04497146",
+      "pet_dialogs.py": "7e1a11cff2a2",
       "pet_menu.py": "d2f565537b3f",
       "pet_plugin_index.py": "e5e9845785e8",
       "pet_ai.py": "a5989e7fe646",
-      "pet_config.py": "7a4ad883d4e8",
+      "pet_config.py": "6fe2b20ae424",
       "pet_io.py": "6b1e0413fb7f",
       "pet_services.py": "ecebb6ab5891",
-      "pet_widgets.py": "dc7f5dc4a7f2",
+      "pet_widgets.py": "b8de517121e1",
       "pet_resources.py": "e28f38917052",
       "pet_tools.py": "46e9030d073f",
       "pet_voice.py": "9fe0a570ca81",
@@ -2436,7 +2436,7 @@
       "pet_actions.py": "83eb11403fec",
       "pet_book.py": "098676ac52d4",
       "_check_static.py": "6286f9f493bd",
-      "pet_motion.py": "28d79c516f46",
+      "pet_motion.py": "fcee7ab63bb2",
       "tests/test_dialog_buttons_v270.py": "4f95acca7fc6",
       "tests/test_import_thread.py": "1c6fc2ec5d05"
     },

@@ -71,7 +71,7 @@
   ],
   "results": {
     "title": "变异验证 spec：mutations_fastci_slices_v251.json",
-    "checked_at": "2026-10-16 02:20:00",
+    "checked_at": "2026-10-16 09:55:16",
     "total": 5,
     "caught": 5,
     "not_caught": 0,
@@ -81,47 +81,57 @@
         "id": "F1 分片步忽略预算（一整批一片解完）",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 2.13s",
+        "tail": "1 failed in 2.81s",
         "failed": [
-          "test_cold_big_frame_set_is_sliced_and_completes"
-        ]
+          "tests/test_anim_slice_v241.py::test_cold_big_frame_set_is_sliced_and_completes"
+        ],
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "F2 进异步分支不再自损",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 1.15s",
+        "tail": "1 failed in 1.69s",
         "failed": [
-          "test_async_window_does_not_play_the_previous_roles_frames"
-        ]
+          "tests/test_anim_slice_v241.py::test_async_window_does_not_play_the_previous_roles_frames"
+        ],
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "F3 首片同步段忽略预算",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "2 failed in 2.45s",
+        "tail": "2 failed in 2.84s",
         "failed": [
-          "test_cold_big_frame_set_is_sliced_and_completes",
-          "test_async_window_does_not_play_the_previous_roles_frames"
-        ]
+          "tests/test_anim_slice_v241.py::test_cold_big_frame_set_is_sliced_and_completes",
+          "tests/test_anim_slice_v241.py::test_async_window_does_not_play_the_previous_roles_frames"
+        ],
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "F4 UI 侧不分片（budget_ms=None）",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 1.21s",
+        "tail": "1 failed in 2.29s",
         "failed": [
-          "test_export_role_drives_the_writer_in_slices"
-        ]
+          "tests/test_export_slice_v242.py::test_export_role_drives_the_writer_in_slices"
+        ],
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "F5 BundleWriter.step 忽略 budget_ms",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 1.22s",
+        "tail": "1 failed in 2.07s",
         "failed": [
-          "test_export_role_drives_the_writer_in_slices"
-        ]
+          "tests/test_export_slice_v242.py::test_export_role_drives_the_writer_in_slices"
+        ],
+        "errors": [],
+        "errors_teardown": []
       }
     ],
     "spec": "mutations_fastci_slices_v251.json",
@@ -132,20 +142,40 @@
     ],
     "note": "变异只在 %TEMP% 影子副本里做，真实仓库只读（只写 _dev/.mutation.lock）",
     "repo_fingerprint": {
-      "桌宠.py": "6b20873532c6",
+      "桌宠.py": "59b2f99c52ba",
       "pet_export.py": "c01e1593efd2",
       "pet_lines.py": "5332f60b5f26",
       "pet_alarm.py": "1149e94deee3",
-      "pet_behaviors.py": "99f7dff343e4",
-      "_check_release.py": "5b25dd0d243d",
+      "pet_behaviors.py": "732273f95fb4",
+      "_check_release.py": "7377b3fad58e",
       "pet_balance.py": "66948e5514a4",
       "pet_plugin.py": "2f7853298fc3",
       "pet_plugin_host.py": "82fb7b1384c8",
-      "pet_dialogs.py": "4bc0e8c868bb",
-      "pet_menu.py": "920daac1b835",
+      "pet_dialogs.py": "7e1a11cff2a2",
+      "pet_menu.py": "d2f565537b3f",
       "pet_plugin_index.py": "e5e9845785e8",
       "pet_ai.py": "a5989e7fe646",
-      "pet_config.py": "7a4ad883d4e8"
+      "pet_config.py": "6fe2b20ae424",
+      "pet_io.py": "6b1e0413fb7f",
+      "pet_services.py": "ecebb6ab5891",
+      "pet_widgets.py": "b8de517121e1",
+      "pet_resources.py": "e28f38917052",
+      "pet_tools.py": "46e9030d073f",
+      "pet_voice.py": "9fe0a570ca81",
+      "pet_audio.py": "a6feadf4d653",
+      "pet_chat.py": "de979c429c2c",
+      "pet_log.py": "de14ecf338ab",
+      "pet_actions.py": "83eb11403fec",
+      "pet_book.py": "098676ac52d4",
+      "_check_static.py": "6286f9f493bd",
+      "pet_motion.py": "fcee7ab63bb2",
+      "tests/test_dialog_buttons_v270.py": "4f95acca7fc6",
+      "tests/test_import_thread.py": "1c6fc2ec5d05"
+    },
+    "pinned_ast": {
+      "tests/test_anim_slice_v241.py::test_cold_big_frame_set_is_sliced_and_completes": "0848c62f61a4",
+      "tests/test_anim_slice_v241.py::test_async_window_does_not_play_the_previous_roles_frames": "c5b754bc38ca",
+      "tests/test_export_slice_v242.py::test_export_role_drives_the_writer_in_slices": "a3c1db1766fb"
     }
   }
 }

@@ -250,7 +250,7 @@
   ],
   "results": {
     "title": "变异验证 spec：mutations_agent_a_v2110.json",
-    "checked_at": "2026-10-16 08:12:38",
+    "checked_at": "2026-10-16 09:27:46",
     "total": 24,
     "caught": 24,
     "not_caught": 0,
@@ -260,7 +260,7 @@
         "id": "M-A2110-01-press-scale-returns",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "2 failed in 1.63s",
+        "tail": "2 failed in 1.92s",
         "failed": [
           "tests/test_motion_v2110.py::test_press_outline_appears_and_geometry_is_untouched",
           "tests/test_motion_v2110.py::test_press_does_not_fight_an_inflight_breathing_animation"
@@ -272,7 +272,7 @@
         "id": "M-A2110-02-hover-scales",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.78s",
+        "tail": "1 failed in 1.47s",
         "failed": [
           "tests/test_motion_v2110.py::test_hover_glow_does_not_change_geometry"
         ],
@@ -295,7 +295,7 @@
         "id": "M-A2110-04-ripple-ignores-reduce-motion",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 1.32s",
+        "tail": "1 failed in 1.01s",
         "failed": [
           "tests/test_motion_v2110.py::test_every_animation_point_is_covered_by_the_switch"
         ],
@@ -306,7 +306,7 @@
         "id": "M-A2110-05-edge-instant-move",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.84s",
+        "tail": "1 failed in 0.91s",
         "failed": [
           "tests/test_motion_v2110.py::test_edge_slide_eases_to_the_old_target"
         ],
@@ -317,7 +317,7 @@
         "id": "M-A2110-06-edge-duration-hardcoded",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.96s",
+        "tail": "1 failed in 0.91s",
         "failed": [
           "tests/test_motion_v2110.py::test_edge_slide_eases_to_the_old_target"
         ],
@@ -340,7 +340,7 @@
         "id": "M-A2110-08-auto-downgrades-user",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.81s",
+        "tail": "1 failed in 0.75s",
         "failed": [
           "tests/test_motion_v2110.py::test_default_follows_system_and_never_downgrades"
         ],
@@ -351,7 +351,7 @@
         "id": "M-A2110-09-drag-threshold-gone",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 1.04s",
+        "tail": "1 failed in 0.99s",
         "failed": [
           "tests/test_motion_v2110.py::test_drag_threshold_blocks_micro_moves"
         ],
@@ -362,7 +362,7 @@
         "id": "M-A2110-10-drag-cursor-gone",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.96s",
+        "tail": "1 failed in 0.99s",
         "failed": [
           "tests/test_motion_v2110.py::test_drag_cursor_states"
         ],
@@ -373,7 +373,7 @@
         "id": "M-A2110-11-double-click-second-release",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.95s",
+        "tail": "1 failed in 1.18s",
         "failed": [
           "tests/test_motion_v2110.py::test_double_click_uses_the_event_and_swallows_the_second_release"
         ],
@@ -384,7 +384,7 @@
         "id": "M-A2110-12-bubble-always-fades-in",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.93s",
+        "tail": "1 failed in 0.92s",
         "failed": [
           "tests/test_motion_v2110.py::test_new_bubble_text_never_fades_in_over_old_one"
         ],
@@ -395,7 +395,7 @@
         "id": "M-A2110-13-bubble-hold-zeroed",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.94s",
+        "tail": "1 failed in 0.92s",
         "failed": [
           "tests/test_motion_v2110.py::test_bubble_fade_is_instant_when_motion_reduced"
         ],
@@ -406,7 +406,7 @@
         "id": "M-A2110-14-bubble-does-not-follow",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.96s",
+        "tail": "1 failed in 1.05s",
         "failed": [
           "tests/test_motion_v2110.py::test_bubble_follows_the_character_without_restarting_the_timer"
         ],
@@ -417,7 +417,7 @@
         "id": "M-A2110-15-petting-no-hearts",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.79s",
+        "tail": "1 failed in 0.91s",
         "failed": [
           "tests/test_motion_v2110.py::test_petting_spawns_one_string_of_hearts_that_retire"
         ],
@@ -428,7 +428,7 @@
         "id": "M-A2110-16-ai-inflight-invisible",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.78s",
+        "tail": "1 failed in 0.88s",
         "failed": [
           "tests/test_motion_v2110.py::test_ai_inflight_is_visible_and_survives_reduce_motion"
         ],
@@ -439,7 +439,7 @@
         "id": "M-A2110-17-contrast-palette-fails",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.74s",
+        "tail": "1 failed in 0.93s",
         "failed": [
           "tests/test_motion_v2110.py::test_contrast_is_computed_not_eyeballed"
         ],
@@ -450,7 +450,7 @@
         "id": "M-A2110-18-escape-does-nothing",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.79s",
+        "tail": "1 failed in 0.95s",
         "failed": [
           "tests/test_motion_v2110.py::test_keyboard_escape_and_enter_route_to_window_actions"
         ],
@@ -461,7 +461,7 @@
         "id": "M-A2110-19-reduce-toggle-not-persisted",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "2 failed in 0.83s",
+        "tail": "2 failed in 0.98s",
         "failed": [
           "tests/test_motion_v2110.py::test_reduce_motion_toggle_persists_and_clears_inflight",
           "tests/test_motion_v2110.py::test_tray_menu_carries_primary_action_and_toggles"
@@ -473,7 +473,7 @@
         "id": "M-A2110-20-high-contrast-no-restore",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.78s",
+        "tail": "1 failed in 0.89s",
         "failed": [
           "tests/test_motion_v2110.py::test_high_contrast_switch_applies_and_restores"
         ],
@@ -484,7 +484,7 @@
         "id": "M-A2110-21-emote-hidden-under-reduce",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.89s",
+        "tail": "1 failed in 0.99s",
         "failed": [
           "tests/test_motion_v2110.py::test_every_animation_point_is_covered_by_the_switch"
         ],
@@ -495,7 +495,7 @@
         "id": "M-A2110-22-proc-action-ignores-reduce",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.77s",
+        "tail": "1 failed in 0.97s",
         "failed": [
           "tests/test_motion_v2110.py::test_proc_actions_are_covered_by_the_switch"
         ],
@@ -506,7 +506,7 @@
         "id": "M-A2110-23-lines-note-back-to-toast",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "2 failed in 1.09s",
+        "tail": "2 failed in 1.32s",
         "failed": [
           "tests/test_dialogs_feedback_v280.py::test_move_line_at_boundary_tells_the_user",
           "tests/test_dialogs_feedback_v280.py::test_lines_move_member_at_boundary_uses_the_same_wording"
@@ -518,7 +518,7 @@
         "id": "M-A2110-24-bubble-fadeout-not-instant",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.81s",
+        "tail": "1 failed in 0.97s",
         "failed": [
           "tests/test_motion_v2110.py::test_bubble_fade_is_instant_when_motion_reduced"
         ],
@@ -555,7 +555,7 @@
     ],
     "note": "变异只在 %TEMP% 影子副本里做，真实仓库只读（只写 _dev/.mutation.lock）",
     "repo_fingerprint": {
-      "桌宠.py": "2351a1ad9737",
+      "桌宠.py": "59b2f99c52ba",
       "pet_export.py": "c01e1593efd2",
       "pet_lines.py": "5332f60b5f26",
       "pet_alarm.py": "1149e94deee3",
@@ -564,14 +564,14 @@
       "pet_balance.py": "66948e5514a4",
       "pet_plugin.py": "2f7853298fc3",
       "pet_plugin_host.py": "82fb7b1384c8",
-      "pet_dialogs.py": "d80d04497146",
+      "pet_dialogs.py": "7e1a11cff2a2",
       "pet_menu.py": "d2f565537b3f",
       "pet_plugin_index.py": "e5e9845785e8",
       "pet_ai.py": "a5989e7fe646",
-      "pet_config.py": "7a4ad883d4e8",
+      "pet_config.py": "6fe2b20ae424",
       "pet_io.py": "6b1e0413fb7f",
       "pet_services.py": "ecebb6ab5891",
-      "pet_widgets.py": "dc7f5dc4a7f2",
+      "pet_widgets.py": "b8de517121e1",
       "pet_resources.py": "e28f38917052",
       "pet_tools.py": "46e9030d073f",
       "pet_voice.py": "9fe0a570ca81",
@@ -581,7 +581,7 @@
       "pet_actions.py": "83eb11403fec",
       "pet_book.py": "098676ac52d4",
       "_check_static.py": "6286f9f493bd",
-      "pet_motion.py": "28d79c516f46",
+      "pet_motion.py": "fcee7ab63bb2",
       "tests/test_dialog_buttons_v270.py": "4f95acca7fc6",
       "tests/test_import_thread.py": "1c6fc2ec5d05"
     },
