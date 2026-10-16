@@ -193,8 +193,13 @@ def test_tray_menu_represents_three_states_and_auto_is_reachable(win, monkeypatc
     """菜单勾选态反映三态，且"回到跟随系统"**任何时候都点得到**。
 
     表示法：主项勾 = 生效值为真（auto 时也照实显示系统那份）；「跟随系统」项勾 = 配置是 auto。
+
+    ⚠ **两个方向都由本用例自己钉住**（不靠 conftest 的固定值）：系统说"减少动效"（True）与
+    系统说"动画全开"（False）下，auto 的勾选态都必须说真话 —— 只钉一个方向的用例在换台
+    机器（或 CI 的 windows-latest）上会静默变成"测的是另一件事"。
     """
-    monkeypatch.setattr(pet_motion, "system_reduce_motion", lambda: True)
+    sys_reduce = {"v": True}      # 先钉成"系统动画 = 关"（= 应当减少动效）
+    monkeypatch.setattr(pet_motion, "system_reduce_motion", lambda: sys_reduce["v"])
     rm = _tray_action(win, "减少动效", not_needle=("跟随系统",))
     rm_auto = _tray_action(win, "跟随系统（减少动效）")
     hc_auto = _tray_action(win, "跟随系统（高对比度）")
@@ -231,6 +236,18 @@ def test_tray_menu_represents_three_states_and_auto_is_reachable(win, monkeypatc
     hc_auto.trigger()
     assert win.cfg["high_contrast"] == "auto" and hc_auto.isChecked() is True
     assert hc.isChecked() == win._high_contrast()
+
+    # ④ **反方向**（系统动画 = 开）：auto 必须重读出来，勾选态两边都说真话。
+    # 旧实现在这里同样是"点过就回不去"的重灾区；只覆盖 ③ 的话，本用例在
+    # "系统动画 = 开"的机器上测的其实是另一件事（初始勾选态相反）。
+    sys_reduce["v"] = False
+    rm_auto.trigger()
+    assert win.cfg["reduce_motion"] == "auto"
+    assert win._sys_reduce_motion is False, "切回 auto 没重读系统设置（还留着上一个方向的值）"
+    assert win._reduce_motion() is False, "系统动画全开时 auto 的生效值应当是「不减少动效」"
+    assert rm_auto.isChecked() is True, "auto 时「跟随系统（减少动效）」应当勾着"
+    assert rm.isChecked() is False, "系统动画全开时，主项不该显示已勾选"
+    assert _cfg_on_disk().get("reduce_motion", "auto") == "auto", _cfg_on_disk()
 
 
 # ===================== D1：素材帧帧率倍率 =====================

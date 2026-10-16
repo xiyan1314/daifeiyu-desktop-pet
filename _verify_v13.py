@@ -53,6 +53,23 @@ main.USAGE_PATH = os.path.join(_tmp, "usage.json")
 main.MEMORY_PATH = os.path.join(_tmp, "memory.json")  # P1-6：对话记忆同样隔离到临时目录
 main.pet_log.set_data_dir(_tmp)  # P0-2：pet_* 直连日志同样隔离，不污染仓库目录
 
+# ---- 动效确定性（公开 CI #58）：把宿主的「系统动画开没开」这一层钉死 ----
+# 下面 proc 段的 4 条 check（proc action starts / proc transform applied / proc resets to
+# idle / feed during proc releases busy）断言的是"合成动作**确实起播**、按 2 个周期驱动、
+# 播完复位"——成立的前提是「减少动效」的**生效值 = off**。而生效值默认是 auto，**跟随系统**
+# （pet_motion.system_reduce_motion → SystemParametersInfoW(SPI_GETCLIENTAREAANIMATION)）：
+# GitHub Actions 的 windows-latest 上「动画效果」是**关**的 → 生效值 on → 桌宠._play_proc
+# 一次都不播（它是提前返回）→ 上面四条整片红。实测（本机把这一层钉成"关"复跑）：
+# TOTAL CHECKS: 273, FAILS: 4 —— 逐字就是那四条，与 pytest 那侧 CI #58 的红同一个根因
+# （上一次 CI 绿是 v2.9.0 的 209875e：这批动效代码从没在 CI 上跑过，这是第一跑）。
+# 产品行为是对的（「跟随系统」是设计意图），坏的是脚本依赖宿主设置 → 这里只把那一层钉成
+# "系统动画 = 开"（与开发机默认一致），**产品代码零改动**。
+# 「减少动效 = on」下的产品行为由 pytest 侧**显式**覆盖（tests/test_motion_v2110.py 的 A2 段 +
+# tests/test_host_v2100_round.py 的三态用例），不靠本脚本"顺手撞上"。
+# 同一件事的 pytest 版本在 tests/conftest.py 的 _pin_system_animations 夹具里。
+import pet_motion  # noqa: E402
+pet_motion.system_reduce_motion = lambda: False            # 确定性：系统动画 = 开
+
 # ---- P1-3：配置 schema 版本 / diff 存储 / 坏值修正提示 ----
 check("config schema const", main.CONFIG_SCHEMA_VERSION == 2, main.CONFIG_SCHEMA_VERSION)
 _cfg_tmp = main.CONFIG_PATH
