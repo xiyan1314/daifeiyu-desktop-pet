@@ -187,6 +187,35 @@ def _to_bool(v, default=False):
     return bool(v)
 
 
+# ---------------- v2.10.0（C-13）：两个无障碍开关的**三态词表**（单一来源） ----------------
+# 合法值只有这三个：auto（跟随系统）/ on（总是开）/ off（总是关）。
+# ⚠ **不许在别处再造一套字符串**（"true"/"1"/"always"/"system"…）：那会让手写的配置值
+# 从"生效"静默变成"跟随系统"（语义窄化）。
+# 消费点：pet_menu 的三态菜单（勾选态 + 写回）、桌宠._set_reduce_motion / _set_high_contrast
+# （落盘与立即生效）、pet_motion.reduce_motion_enabled / high_contrast_enabled（换算生效值）。
+MOTION_MODES = ("auto", "on", "off")
+MOTION_MODE_KEYS = ("reduce_motion", "high_contrast")
+
+
+def normalize_motion_mode(value):
+    """三态开关的配置值 → auto/on/off 之一；其余（null / 坏值 / 空串）一律回 auto。
+
+    回 auto 而不是 off：这不是"默认开"，是**不擅自替用户做无障碍决定**——与
+    pet_motion.reduce_motion_enabled 的"读得到系统设置就跟随、读不到保持动效开启"同口径。
+    """
+    v = str(value if value is not None else "auto").strip().lower()
+    return v if v in MOTION_MODES else "auto"
+
+
+def is_auto_motion_mode(value):
+    """配置值是否＝三态里的 auto（跟随系统）。
+
+    给"跟随系统"这种**第三条菜单项**的勾选态用；调用方不许自己比字符串——
+    词表的单一来源在本模块（pet_menu 的三态菜单与桌宠的托盘菜单共用它）。
+    """
+    return normalize_motion_mode(value) == "auto"
+
+
 # ---------------- P1-3：配置归一化（load_config 用，就地修正） ----------------
 def normalize_cfg(cfg, defaults, persona_ids):
     """P1-3 配置归一化：就地修正坏值 / 美化合法值，返回 cfg。
@@ -277,14 +306,14 @@ def normalize_cfg(cfg, defaults, persona_ids):
     except (TypeError, ValueError):
         cfg["transform_seconds"] = _bcfg["transform_seconds"]
     cfg["sound_group"] = "custom" if cfg.get("sound_group") == "custom" else "default"
-    # v2.11.0 第 9 轮收尾：无障碍两键（reduce_motion / high_contrast）——枚举字符串，
-    # 合法值是 "auto"/"on"/"off"，其余一律回 "auto"（跟随系统；不是擅自替用户开或关）。
+    # v2.11.0 第 9 轮收尾 / v2.10.0（C-13）收口：无障碍两键（reduce_motion / high_contrast）
+    # 是**三态枚举**，词表与归一都走本模块顶部的 MOTION_MODES / normalize_motion_mode
+    # ——菜单的「跟随系统」与桌宠的落地点从同一处取词，别处不许再抄第二套字符串。
     # 为什么必须在这里归一化：DEFAULT_CONFIG 里它们是 str，而 tests/test_config_robustness.py
     # 对每个键灌坏值后要求"归一化后类型必须仍然可用"——此前这两键漏在归一化之外，
     # 手改 config.json 塞 null/[]/123 会一路带进 桌宠._reduce_motion()（枚举比较恒假）。
-    for _k in ("reduce_motion", "high_contrast"):
-        _v = str(cfg.get(_k, "auto") or "").strip().lower()
-        cfg[_k] = _v if _v in ("auto", "on", "off") else "auto"
+    for _k in MOTION_MODE_KEYS:
+        cfg[_k] = normalize_motion_mode(cfg.get(_k, "auto"))
     try:
         bs = cfg.get("bubble_style")
         if not isinstance(bs, dict):

@@ -418,7 +418,7 @@
   ],
   "results": {
     "title": "变异验证 spec：mutations_agent_a_v270.json",
-    "checked_at": "2026-10-16 09:29:33",
+    "checked_at": "2026-10-16 16:27:20",
     "total": 31,
     "caught": 31,
     "not_caught": 0,
@@ -428,7 +428,7 @@
         "id": "M-A-01",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "5 failed in 2.40s",
+        "tail": "5 failed in 2.44s",
         "failed": [
           "tests/test_dialog_buttons_v270.py::test_role_meta_ok_button_accepts",
           "tests/test_dialog_buttons_v270.py::test_role_meta_cancel_button_rejects",
@@ -443,7 +443,7 @@
         "id": "M-A-02",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.68s",
+        "tail": "1 failed in 0.71s",
         "failed": [
           "tests/test_dialog_buttons_v270.py::test_role_meta_dialog_has_both_buttons"
         ],
@@ -454,7 +454,7 @@
         "id": "M-A-03",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "2 failed in 0.96s",
+        "tail": "2 failed in 0.79s",
         "failed": [
           "tests/test_dialog_buttons_v270.py::test_role_meta_esc_or_close_returns_none",
           "tests/test_dialog_buttons_v270.py::test_role_meta_cancel_button_rejects"
@@ -466,7 +466,7 @@
         "id": "M-A-04",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 1.21s",
+        "tail": "1 failed in 1.27s",
         "failed": [
           "tests/test_dialogs_feedback_v270.py::test_ai_settings_save_failure_keeps_window_open"
         ],
@@ -477,7 +477,7 @@
         "id": "M-A-05",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 1.07s",
+        "tail": "1 failed in 1.11s",
         "failed": [
           "tests/test_dialogs_feedback_v270.py::test_ai_settings_save_success_closes_and_toasts"
         ],
@@ -488,7 +488,7 @@
         "id": "M-A-06",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 1.41s",
+        "tail": "1 failed in 1.06s",
         "failed": [
           "tests/test_dialogs_feedback_v270.py::test_ai_settings_save_exception_stays_open_without_modal"
         ],
@@ -499,7 +499,7 @@
         "id": "M-A-07",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 1.10s",
+        "tail": "1 failed in 1.09s",
         "failed": [
           "tests/test_dialogs_feedback_v270.py::test_ai_settings_none_return_is_failure"
         ],
@@ -510,7 +510,7 @@
         "id": "M-A-08",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.76s",
+        "tail": "1 failed in 0.73s",
         "failed": [
           "tests/test_dialogs_feedback_v270.py::test_apply_call_normalizes_new_and_old_contracts"
         ],
@@ -521,7 +521,7 @@
         "id": "M-A-09",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 1.06s",
+        "tail": "1 failed in 1.13s",
         "failed": [
           "tests/test_dialogs_feedback_v270.py::test_toast_degrades_without_bubble"
         ],
@@ -532,7 +532,7 @@
         "id": "M-A-10",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 1.14s",
+        "tail": "1 failed in 1.13s",
         "failed": [
           "tests/test_dialogs_feedback_v270.py::test_behavior_export_ok_toasts_filename"
         ],
@@ -554,7 +554,7 @@
         "id": "M-A-12",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 1.07s",
+        "tail": "1 failed in 1.09s",
         "failed": [
           "tests/test_dialogs_feedback_v270.py::test_behavior_delete_needs_confirm"
         ],
@@ -565,7 +565,7 @@
         "id": "M-A-13",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 1.07s",
+        "tail": "1 failed in 1.09s",
         "failed": [
           "tests/test_dialogs_feedback_v270.py::test_behavior_delete_without_selection_prompts"
         ],
@@ -576,7 +576,7 @@
         "id": "M-A-14",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 1.12s",
+        "tail": "1 failed in 1.58s",
         "failed": [
           "tests/test_dialogs_feedback_v270.py::test_behavior_delete_step_without_selection_prompts"
         ],
@@ -587,7 +587,7 @@
         "id": "M-A-15",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 1.09s",
+        "tail": "1 failed in 1.51s",
         "failed": [
           "tests/test_dialogs_feedback_v270.py::test_behavior_delete_step_removes_selected"
         ],
@@ -598,7 +598,7 @@
         "id": "M-A-16",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 1.07s",
+        "tail": "1 failed in 1.42s",
         "failed": [
           "tests/test_dialogs_feedback_v270.py::test_behavior_save_selects_new_row"
         ],
@@ -609,7 +609,7 @@
         "id": "M-A-17",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "2 failed in 1.70s",
+        "tail": "2 failed in 1.76s",
         "failed": [
           "tests/test_dialogs_feedback_v270.py::test_physics_save_reports_no_change",
           "tests/test_dialogs_feedback_v270.py::test_physics_save_failure_keeps_window_open"
@@ -621,7 +621,7 @@
         "id": "M-A-18",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 1.24s",
+        "tail": "1 failed in 1.43s",
         "failed": [
           "tests/test_dialogs_feedback_v270.py::test_bubble_style_save_failure_keeps_window_open"
         ],
@@ -632,7 +632,7 @@
         "id": "M-A-19",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 1.86s",
+        "tail": "1 failed in 1.08s",
         "failed": [
           "tests/test_dialogs_feedback_v270.py::test_bubble_style_save_success_toasts"
         ],
@@ -643,7 +643,7 @@
         "id": "M-A-20",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 1.07s",
+        "tail": "1 failed in 1.09s",
         "failed": [
           "tests/test_dialogs_feedback_v270.py::test_delete_bad_one_surfaces_failure"
         ],
@@ -654,7 +654,7 @@
         "id": "M-A-21",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 1.19s",
+        "tail": "1 failed in 1.13s",
         "failed": [
           "tests/test_dialogs_feedback_v270.py::test_delete_all_bad_surfaces_failure_and_success"
         ],
@@ -665,7 +665,7 @@
         "id": "M-A-22",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.98s",
+        "tail": "1 failed in 1.11s",
         "failed": [
           "tests/test_dialogs_feedback_v270.py::test_role_set_active_failure_warns_and_success_toasts"
         ],
@@ -676,7 +676,7 @@
         "id": "M-A-23",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.93s",
+        "tail": "1 failed in 1.07s",
         "failed": [
           "tests/test_dialogs_feedback_v270.py::test_role_reset_default_failure_warns"
         ],
@@ -687,7 +687,7 @@
         "id": "M-A-24",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.94s",
+        "tail": "1 failed in 1.10s",
         "failed": [
           "tests/test_dialogs_feedback_v270.py::test_bind_empty_state_shows_hint_and_import_entry"
         ],
@@ -698,7 +698,7 @@
         "id": "M-A-25",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 1.00s",
+        "tail": "1 failed in 1.09s",
         "failed": [
           "tests/test_dialogs_feedback_v270.py::test_bind_broken_library_logs_and_says_why"
         ],
@@ -709,7 +709,7 @@
         "id": "M-A-26",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.95s",
+        "tail": "1 failed in 1.16s",
         "failed": [
           "tests/test_dialogs_feedback_v270.py::test_bind_index_unusable_is_not_the_empty_state"
         ],
@@ -720,7 +720,7 @@
         "id": "M-A-27",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.99s",
+        "tail": "1 failed in 1.13s",
         "failed": [
           "tests/test_dialogs_feedback_v270.py::test_sound_rename_empty_name_warns"
         ],
@@ -731,7 +731,7 @@
         "id": "M-A-28",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.96s",
+        "tail": "1 failed in 1.10s",
         "failed": [
           "tests/test_dialogs_feedback_v270.py::test_lines_save_new_line_clears_filters_and_toasts"
         ],
@@ -742,7 +742,7 @@
         "id": "M-A-29",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 1.25s",
+        "tail": "1 failed in 1.49s",
         "failed": [
           "tests/test_dialog_buttons_v270.py::test_state_inputs_are_declared_and_actually_read"
         ],
@@ -753,7 +753,7 @@
         "id": "M-A-30",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "2 failed in 0.78s",
+        "tail": "2 failed in 0.95s",
         "failed": [
           "tests/test_dialog_buttons_v270.py::test_scanner_is_not_vacuous",
           "tests/test_dialog_buttons_v270.py::test_every_action_button_is_wired_or_whitelisted"
@@ -765,7 +765,7 @@
         "id": "M-A-31",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 1.21s",
+        "tail": "1 failed in 1.46s",
         "failed": [
           "tests/test_dialog_buttons_v270.py::test_action_whitelist_checker_is_not_vacuous"
         ],
@@ -814,33 +814,33 @@
     ],
     "note": "变异只在 %TEMP% 影子副本里做，真实仓库只读（只写 _dev/.mutation.lock）",
     "repo_fingerprint": {
-      "桌宠.py": "59b2f99c52ba",
-      "pet_export.py": "c01e1593efd2",
+      "桌宠.py": "b33888cadc15",
+      "pet_export.py": "db474bdd6670",
       "pet_lines.py": "5332f60b5f26",
       "pet_alarm.py": "1149e94deee3",
       "pet_behaviors.py": "732273f95fb4",
-      "_check_release.py": "7377b3fad58e",
-      "pet_balance.py": "66948e5514a4",
+      "_check_release.py": "dca4541e2829",
+      "pet_balance.py": "045129227ee2",
       "pet_plugin.py": "2f7853298fc3",
       "pet_plugin_host.py": "82fb7b1384c8",
-      "pet_dialogs.py": "7e1a11cff2a2",
-      "pet_menu.py": "d2f565537b3f",
+      "pet_dialogs.py": "ae3e1a1c76b0",
+      "pet_menu.py": "44224c3320c6",
       "pet_plugin_index.py": "e5e9845785e8",
       "pet_ai.py": "a5989e7fe646",
-      "pet_config.py": "6fe2b20ae424",
+      "pet_config.py": "b46e0f180880",
       "pet_io.py": "6b1e0413fb7f",
       "pet_services.py": "ecebb6ab5891",
       "pet_widgets.py": "b8de517121e1",
-      "pet_resources.py": "e28f38917052",
+      "pet_resources.py": "5d8df41558df",
       "pet_tools.py": "46e9030d073f",
-      "pet_voice.py": "9fe0a570ca81",
+      "pet_voice.py": "3a9c9cc3324e",
       "pet_audio.py": "a6feadf4d653",
       "pet_chat.py": "de979c429c2c",
       "pet_log.py": "de14ecf338ab",
-      "pet_actions.py": "83eb11403fec",
+      "pet_actions.py": "a4871b371ea0",
       "pet_book.py": "098676ac52d4",
       "_check_static.py": "6286f9f493bd",
-      "pet_motion.py": "fcee7ab63bb2",
+      "pet_motion.py": "e4fbc789b327",
       "tests/test_dialog_buttons_v270.py": "4f95acca7fc6",
       "tests/test_import_thread.py": "1c6fc2ec5d05"
     },

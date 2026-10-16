@@ -19,7 +19,7 @@
 | 1 | `BehaviorDialog` | 面板 R1① | **不关窗**（不变） | 「试播」= 先保存再播，关窗就没得播 |
 | 2 | `AlarmDialog` | 面板 R1③ | **不关窗**（不变） | 列表：新建→保存→落库并选中；接着建第二条不该重开窗口 |
 | 3 | `LinesDialog` | 面板 R1③ | **不关窗**（不变） | — |
-| 4 | **`VoiceDialog`** | 面板 **R1①②** | **改：保存不关窗** ✅已做 | 窗内**已有 5 处 `_save(silent=True)` 就地落盘**（`:5536/:5624/:5804/:5866/:5894`），**本来就是工作台**，只有「保存」在关窗 |
+| 4 | **`VoiceDialog`** | 面板 **R1①②** | **改：保存不关窗** ✅已做 | 窗内**已有 5 处 `_save(silent=True)` 就地落盘**（锚点片段 `self._save(silent=True)`；**写时实测 5 处调用点，行号已漂——不写行号**），**本来就是工作台**，只有「保存」在关窗 |
 | 5 | **`IdleDialog`** | 面板 R1③ | **走退路：第二枚按钮改名「取消」，保存仍关窗** ✅已做 | **零额外点击**；它第二枚按钮叫「关闭」却执行 `reject()` ＝ **标签在说谎** |
 | 6 | `RoleEditDialog` | 面板 R1③ | **维持"保存即关窗"** | 它第二枚按钮**已经**叫「取消」；改成不关窗会让"走人"读起来像"放弃刚保存的东西" |
 | 7 | `AISettingsDialog` | 表单 R2 | **不变** | — |
@@ -120,11 +120,20 @@ count=0                      # 旧写法在 HEAD 里**一个都没有**
 >                           ("删除", self._delete), ("取消", self._cancel)):
 ```
 
-**现树（`pet_dialogs.py`）**：`AlarmDialog` 的第二枚按钮是 `("取消", self._cancel)`（`:3938`）；
-`LinesDialog` 是 `close_btn = QPushButton("取消")`（`:5418`）+ `clicked.connect(self._cancel)`（`:5419`）。
-**仍叫「关闭」的两处**是 `ResourceManagerDialog`（`:5062`）与 `LedgerDialog`（`:5151`），
-**两处都是 `→ self.reject`、没有暂存态** → 与原文"另几处 `关闭→reject` 不是反例"的判断**一致**。
+**现树（`pet_dialogs.py`）** —— ⚠ **本节一律写「类名.方法 + 锚点片段」，不写行号**：行号必然漂
+（本节原先写的 `:5418` 在 **2026-10-16 v2.10.0 发版轮实测复核**时已经是 **`:5453`**，漂了 35 行），
+下一个人只要 `grep` 那个片段就一定能定位到。
+
+- `AlarmDialog.__init__`：第二枚按钮是那行**四按钮元组**里的 `("取消", self._cancel)`
+  （可 grep 的锚点片段：`("删除", self._delete), ("取消", self._cancel)`）；
+- `LinesDialog.__init__`：`close_btn = QPushButton("取消")` + `close_btn.clicked.connect(self._cancel)`
+  （两条相邻语句；⚠ 现树有 **2 处** `close_btn = QPushButton("取消")`，另一处在 `PluginManagerDialog.__init__`，别认错条）；
+- **仍叫「关闭」的两处**在 `ResourceManagerDialog.__init__` 与 `LedgerDialog.__init__`，锚点片段都是
+  `close_btn = QPushButton("关闭")`（写时实测 `:5090` / `:5179`——**同样只是写时读数**），
+  **两处都是 `→ self.reject`、没有暂存态** → 与原文"另几处 `关闭→reject` 不是反例"的判断**一致**。
+
 （⚠ 记账更正 · 兼容审查：**现树全仓只有 2 枚** `close_btn = QPushButton("关闭")`，原文的"另三处"应读作 **2 处**；
+**2026-10-16 发版轮复核：`grep` 实测仍是恰好 2 处**，与这条一致；
 引用这类计数前先 grep 现树——**旧修订的行号与计数都会漂**。）
 （原文里的行号 `3652/5090/4740/4829/7359` 是**旧修订**的行号，现已漂移——引用旧行号前先 `grep`。）
 实测用例：`tests/test_dialogs_behavior_v290.py::test_alarm_second_button_is_cancel_and_guards_the_draft`

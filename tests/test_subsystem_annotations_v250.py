@@ -8,7 +8,7 @@
 **故意不在范围内**（不是漏了）：
   · pet_dialogs.py / pet_voice.py / pet_resources.py —— 本轮别的代理在动（任务书点名不要动）；
   · pet_anim.py / pet_actions.py —— README「类型注解口径」表把它们的 (已注解, 总数) 钉成
-    (0, 9) / (0, 7)；补注解会让 tests/test_round3_a_fixes 的 README 用例变红，而"改 README
+    (0, 13) / (0, 7)；补注解会让 tests/test_round3_a_fixes 的 README 用例变红，而"改 README
     其它数字"不在本轮的授权口径里。下一轮连同 README 一起做；
   · pet_chat / pet_balance / pet_alarm / pet_behaviors / pet_book —— 同一个 README 表把它们
     写成"❌ 0 / 本轮未新增注解"，补了会让那张表当场变成假话。
@@ -31,7 +31,7 @@ sys.path.insert(0, HERE)
 SCOPE = ("pet_services.py", "pet_wander.py", "pet_weather.py", "pet_menu.py",
          "pet_mood.py", "pet_ai.py")
 # 到期复核的"范围外"对照：README 表钉住的三个（值变了就要连 README 一起改，见上）
-OUT_OF_SCOPE_PINNED = {"pet_anim.py": (0, 9), "pet_actions.py": (0, 7)}
+OUT_OF_SCOPE_PINNED = {"pet_anim.py": (0, 13), "pet_actions.py": (0, 7)}
 
 
 def _read(name):

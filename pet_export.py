@@ -8,7 +8,7 @@ MIT License
 校验素材完整性、生成新 id 防覆盖、缺资源明确报错。纯逻辑、Qt-free，可无 GUI 单测。
 
 敏感内容默认不导出：config 只取白名单键（api_key 等密钥一律排除，manifest 里
-记录被排除的键名）；语音只导出开关/合成参数，不导出用户音频片段文件。
+记录被排除的键名）；语音只导出开关/合成参数，不导出用户音效片段文件。
 
 包结构：
   manifest.json  {"format":"dfypet-role","version":1,"role":{...},"behaviors":[...],

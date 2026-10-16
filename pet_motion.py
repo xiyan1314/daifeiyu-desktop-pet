@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""动效令牌表（v2.11.0 第 9 轮 · A1）——**全仓动效时长 / 缓动 / 幅度 / 阈值的单一来源**。
+"""动效令牌表（v2.11.0 第 9 轮 · A1）——**全仓动效时长 / 速率倍率 / 缓动 / 幅度 / 阈值的单一来源**。
 
 为什么要有这张表
 ----------------
@@ -38,10 +38,10 @@ DUR = {
     # —— 局部反馈档（≤100ms）——
     "FEEDBACK": 100,     # 悬停光晕淡入 / 按下描边的出现（跟手感的上限）
     # —— 状态转换档（150–250ms）——
-    "TRANSITION": 200,   # 通用状态转换（备用档位；消费点用下面更具体的键）
+    "TRANSITION": 200,   # 通用状态转换（**备用档位**：产品侧今天 0 个消费点，见本表末尾的说明）
     "BUBBLE_FADE": 180,  # 气泡淡入 / 淡出（B2）
     # —— 大位移档（≈300ms）——
-    "LARGE": 300,        # 大位移通用档
+    "LARGE": 300,        # 大位移通用档（**备用档位**：产品侧今天 0 个消费点，见本表末尾的说明）
     "EDGE": 300,         # A5 贴边滑动：目标位置计算不变，位移走这个时长
     "RIPPLE": 320,       # A4 点击涟漪：一次性扩散（比 300 略长是因为它还要"自己消失"）
     "HEART": 700,        # B4 摸头心形：一串上浮后自己消失
@@ -51,6 +51,24 @@ DUR = {
     "EAT_SQUASH": 900,    # 原 桌宠.py _play_eat 无吃帧分支的 _run_anim(900, ...)
     "PET_HOLD": 1500,     # 原 桌宠.py mousePressEvent 的 _hold_timer.start(1500)
     "BUBBLE_HOLD": 5000,  # 原 pet_widgets.Bubble.show_text 的 self._timer.start(5000)
+    # —— v2.11.0 定版补漏（A-04：三个动效点漏接「减少动效」开关）——
+    "JUMP": 520,          # 原 pet_actions.py 跳跃的 _run_anim(520, ...) 字面量
+    "BALANCE_ROLL": 700,  # 原 pet_balance.py 余额徽章数字滚动的 anim.setDuration(700)
+    # —— 备用档位（C-09：显式登记，不许被读成"有人正在用"）——
+    # TRANSITION / LARGE 是 **HCI 档位的定义值**（"状态转换 150–250ms" / "大位移 ≈300ms"），
+    # 保留它们是为了让档位本身有名字可引；**产品侧当前 0 个消费点**（消费点都用更具体的键：
+    # BUBBLE_FADE / EDGE / RIPPLE）。这条事实由 tests/test_motion_v2110.py 的
+    # test_every_token_in_the_table_is_actually_used **反向钉住**：表里新出现的死键
+    # 不在那份祖父名单里 → 当场红（死配置不会再悄悄堆积）。
+}
+
+# ---------------- 速率倍率（D1） ----------------
+# 「减少动效」对**角色素材帧序列**（assets/idle_f* 的"呼吸帧"、用户配的命名帧动作）的处置
+# 不是"停帧"而是"放慢"（用户裁决原话「纳入，折中」）——停掉等于把角色冻成一张图，正是被
+# 否掉的那一支。倍率**不进 DUR**（DUR 是"一次动画的时长"，这里是"帧推进速率"，量纲不同）：
+# 消费点用 frame_rate_factor()。**petpet/money 特效帧不纳入**（装饰帧、pet_fx 无倍率入口）。
+RATE = {
+    "FRAME_REDUCED": 0.5,  # 减少动效下的帧率倍率：半速（必须 0 < x < 1；0 = 冻帧，不许）
 }
 
 # ---------------- 缓动 ----------------
@@ -137,9 +155,22 @@ def effective_duration(ms, reduce_motion=False):
     动效用（例如自定义角色的合成动作 period_ms）——它们**同样**必须能被开关关掉，
     但它们的基准值不该进令牌表（那是角色数据，不是 HCI 决策）。
 
-    **已知边界（有意划定）**：素材帧序列（assets/idle_f* 的"呼吸帧"、petpet/money 特效帧）
-    **不**随本开关停——那是角色的表现素材、不是代码驱动的动效，且没有"瞬时"语义
-    （停掉等于把角色冻成一张图）。要覆盖它得先有产品决策。
+    **已知边界（有意划定 · v2.11.0 裁决为"收窄声明"：只改声明，不改产品行为）**：
+    本开关（以及本函数）**只管"代码驱动的时长动画"**。下面这四处**不纳入**——
+    它们是"位移 / 物理"，不是时长：
+
+      · **走路**：pet_wander 按 WALK_INTERVAL_MS 一步一挪（tick 里全是睡眠 / busy / 飞行分支，
+        没有一处问 _reduce_motion()）；
+      · **甩抛飞行**：桌宠._flight_timer 按 pet_physics.FLIGHT_TICK_MS（16ms）推进物理积分；
+      · **食物托盘飞行**：桌宠._fly_timer 按 30ms 推进；
+      · **拖拽弹簧**：桌宠拖拽时的 K / C 弹簧跟随（K=200.0, C=30.0）。
+
+    关掉开关只关掉"时长"，**不关掉"位移"**（走路是被甩出去飞、是角色的核心行为/物理，
+    真要纳入得先有产品决策——见 _dev/REMAINING.md 的 U-16）。
+
+    **角色素材帧序列**（assets/idle_f* 的"呼吸帧"、用户配的命名帧动作）：v2.11.0 裁决为
+    **纳入、折中**（放慢帧率、不停帧）—— 走 frame_rate_factor()，**不**走本函数：那是
+    "帧推进速率"不是时长，停掉=冻成一张图；**petpet/money 特效帧不纳入**（装饰帧、pet_fx 无入口）。
     """
     if reduce_motion:
         return 0
@@ -147,6 +178,30 @@ def effective_duration(ms, reduce_motion=False):
         return max(0, int(ms))
     except (TypeError, ValueError):
         return 0
+
+
+def frame_rate_factor(reduce_motion=False):
+    """素材帧序列在「减少动效」下的**播放速率倍率**（D1：用户裁决「纳入，折中」）。
+
+    开着减少动效 → RATE["FRAME_REDUCED"]（0.5：帧更慢，角色照常动）；否则 1.0（原速）。
+    **为什么是折中而不是 0**：素材帧是角色的表现素材，停掉等于把角色冻成一张图 ——
+    那是用户明确否掉的方案。
+
+    **用法（写给消费点，别反着用）**：这是"**播放速率**"的倍率 ——
+    帧间隔 = **基准帧间隔 / frame_rate_factor(...)**（0.5 → 帧间隔翻倍 = 半速 = 放慢）。
+    直接把帧间隔"乘 0.5"是**加快**，与"折中放慢"正好相反。
+
+    回退契约（由 tests/test_motion_v2110.py 逐条断言）：
+      · 表里没有这个键 / 表值坏（非数值）/ 表值不是正数 → **1.0（原速）**，不抛。
+        这是安全侧：宁可"没放慢"，也绝不返回 0 或负数（0 倍速 = 冻帧，正是被否掉的那一支）。
+    """
+    if not reduce_motion:
+        return 1.0
+    try:
+        factor = float(RATE.get("FRAME_REDUCED", 1.0))
+    except (TypeError, ValueError):
+        return 1.0
+    return factor if factor > 0 else 1.0
 
 
 def animation_enabled(reduce_motion=False):

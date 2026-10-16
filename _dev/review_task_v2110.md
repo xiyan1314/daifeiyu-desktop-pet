@@ -70,7 +70,7 @@ python -B _dev/check_mutation_nodeids.py    # 期望：校验范围内 1311 条�
 | 3 | `pet_widgets.BUBBLE_STYLE_CANON` + `tests/test_motion_v2110.py` 的 `win` 夹具 pinned/断言/复原 | **夹具污染**（不是产品缺陷） | 全局 `BUBBLE_STYLE` 被别的用例改成 `#445566` 不还原 → 全量跑红、单跑绿 |
 | 4 | `_LEFTOVER_IN_INIT` 登记两个只读系统探针 + 写清"什么算合法残留" | **红线口径**（父代理裁决） | ⚠ **这一条必须由三审独立判** |
 | 5 | `pet_dialogs._route_voice_event`：`except Exception` → `except RuntimeError` | **收紧**（审计裁决） | 原来会把重构引入的 `AttributeError`/`TypeError` 也吞掉 —— 那正是 B8 要修的那条路 |
-| 6 | `pet_motion.duration_ms` 去掉不可能的 `TypeError` + 新增 `test_every_token_value_is_numeric` | **收紧 + 补判据** | `str(name)` 之后 `ValueError` 只可能来自"表里写了非数值"＝自己写错，不许静默回 0 |
+| 6 | `pet_motion.duration_ms` 去掉不可能的 `ValueError` + 新增 `test_every_token_value_is_numeric` | **收紧 + 补判据** | `str(name)` 之后 `ValueError` 只可能来自"表里写了非数值"＝自己写错，不许静默回 0 |
 | 7 | `_dev/silent_except_whitelist_summary.json` 登记 17 条新键 + 1 条 count 变化 | **数据** | 见 `_dev/silent_except_whitelist.py --check`（现 323 条 / `unreviewed` 0） |
 | 8 | `_dev/errors.md`（新增） | 文档 | 审计员建议的追加型错误留痕；第一条家族＝夹具没有复原全局状态 |
 | 9 | 版本五处升 2.11.0 + `CHANGELOG` 首条 + `_release_notes_v2110.md`（新增） | 定版 | 含"本版包含 v2.10.0 清账内容"与"明确没做/登记"一节 |
@@ -81,10 +81,10 @@ python -B _dev/check_mutation_nodeids.py    # 期望：校验范围内 1311 条�
 |---|---|---|
 | pytest | `python -B -m pytest tests` | **1462 passed, 25 warnings in 268.97s（exit 0）** |
 | 护栏 v13 | `python -B _verify_v13.py` | **TOTAL CHECKS: 273, FAILS: 0 / V13 VERIFY ALL OK（exit 0，26s）** |
-| 静态体检 | `python -B _check_static.py` | **问题 0 条，待确认 0 条（exit 0）** |
+| 静态体检 | `python -B _check_static.py` | **问题 0 条，待确认 0 条（exit 0）** | ⚠ **2026-10-16 第 10 轮复跑更正**：现为「**问题 0 条 / 待确认 1 条**」（`BUBBLE_STYLE_CANON` 零引用 @ `pet_widgets.py`，启发式误报档）—— **本条不改写上面的历史读数**，只加更正。
 | 锚点体检 | `python -B _dev/mutate_batch_v270.py --scan-only` | **锚点合计 556 条，坏 0 条（exit 0）** |
 | nodeid 体检 | `python -B _dev/check_mutation_nodeids.py` | **校验范围内 1311 条，坏 0 条（exit 0）** |
-| pinned 体检 | `python -B _dev/check_pinned_ast.py` | **8 份 / 205 条 / 过期 0（exit 0）** |
+| pinned 体检 | `python -B _dev/check_pinned_ast.py` | **33 份 / 519 条 / 过期 0（exit 0）** |
 | 变异体 AST | `python -B _dev/check_mutation_ast.py` | **531 条 / 0 不过（exit 0）** |
 | 静默 except | `python -B _dev/silent_except_whitelist.py --check` | **判定通过：323 条 / unreviewed 0（exit 0）** |
 | 版本 | `_check_release.check_version()` | **fails=[]（空）** |

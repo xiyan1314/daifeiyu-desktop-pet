@@ -94,6 +94,24 @@ def mutation_ids_for(data, nodeids):
     return out
 
 
+def spec_files_of(data):
+    """这份证据**引用过的测试文件**（口径与写入端 mutate_check.spec_pinned_ast 逐字一致）。
+
+    **为什么必须有它**（v2.11.0 定版实测出来的假红）：spec 里可以写**裸用例名**
+    （不带 `文件::` 前缀，例如 _dev/mutations_agent_d_v280.json 的 expect_fail），
+    而 _mutate_lib.resolve_pin() 解析裸名**必须知道"这份 spec 引用过哪些测试文件"**。
+    写入端一直在传（所以 pinned_ast 段里键是裸名、值是算得出来的摘要），
+    本工具此前**漏传** → 那两个裸名在检查时永远算不出摘要 → 被误记成"已消失"。
+    **两条常驻假红会把将来真消失的用例淹没**，正是这个工具存在的意义被反噬。
+
+    附注：check_mutation_nodeids.py 一直是接受裸名的 —— 同一份 spec 在那边过、在这边红，
+    本来就是口径不一致；补上 spec_files 后两边一致。
+    """
+    muts = data.get("mutations") or []
+    return {str(t).split("::")[0] if "::" in str(t) else str(t)
+            for m in muts for t in (m.get("tests") or [])}
+
+
 def run_check(root=None):
     """证据里记的 pinned 用例体摘要 vs 当前树 → 逐条点名。"""
     root = os.path.abspath(root or ROOT)
@@ -114,7 +132,8 @@ def run_check(root=None):
             if fp:
                 no_pinned.append(name)
             continue
-        cur = pinned_ast_map(root, list(rec.keys()))
+        # spec_files_of：解析裸用例名要用（见它的 docstring —— 漏传就是那两条假红的根因）
+        cur = pinned_ast_map(root, list(rec.keys()), spec_files_of(data))
         stale = stale_pinned(rec, cur)
         gone = sorted(n for n in rec if n not in cur)
         total_pins += len(rec)
@@ -136,8 +155,9 @@ def run_check(root=None):
     print("合计：%d 份证据带 pinned 摘要 / 记录 pinned nodeid %d 条；**过期 %d 条**、"
           "已消失 %d 条" % (len(rows), total_pins, stale_n, gone_n))
     if no_pinned:
-        print("另有 %d 份证据**还没有 pinned_ast 段**（定版整批复跑后自动带上；"
-              "在那之前它们只受文件指纹保护）：%s%s"
+        print("另有 %d 份证据**按设计不带 pinned_ast 段**（它们没有 repo_fingerprint 记录、"
+              "判据是 _verify_v13 的 FAIL 名而不是 pytest nodeid —— 对它们 pinned_ast 不适用；"
+              "它们仍受文件指纹保护）：%s%s"
               % (len(no_pinned), "、".join(no_pinned[:6]),
                  "…" if len(no_pinned) > 6 else ""))
     if not rows:

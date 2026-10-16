@@ -321,7 +321,7 @@
   ],
   "results": {
     "title": "变异验证 spec：mutations_relay_v243.json",
-    "checked_at": "2026-10-16 10:04:09",
+    "checked_at": "2026-10-16 16:55:42",
     "total": 23,
     "caught": 23,
     "not_caught": 0,
@@ -331,7 +331,7 @@
         "id": "M-R1",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 1.51s",
+        "tail": "1 failed in 1.37s",
         "failed": [
           "tests/test_relay_v243.py::test_stop_voice_clip_uses_modern_stop_flags"
         ],
@@ -342,7 +342,7 @@
         "id": "M-R2",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "2 failed in 1.54s",
+        "tail": "2 failed in 1.05s",
         "failed": [
           "tests/test_relay_v243.py::test_money_preload_is_sliced_and_matches_eager_load",
           "tests/test_relay_v243.py::test_money_preload_is_sliced_even_with_a_zero_budget"
@@ -354,7 +354,7 @@
         "id": "M-R3",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 1.19s",
+        "tail": "1 failed in 1.26s",
         "failed": [
           "tests/test_relay_v243.py::test_money_preload_defers_to_the_consumer"
         ],
@@ -365,7 +365,7 @@
         "id": "M-R4",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "2 failed in 1.33s",
+        "tail": "2 failed in 1.25s",
         "failed": [
           "tests/test_relay_v243.py::test_frame_relay_slice_is_exactly_one_group_per_round",
           "tests/test_startup_defer_v242.py::test_startup_task_is_chunked_not_one_shot"
@@ -377,7 +377,7 @@
         "id": "M-R5",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 1.26s",
+        "tail": "1 failed in 1.18s",
         "failed": [
           "tests/test_relay_v243.py::test_custom_role_skips_default_frame_sets_but_keeps_petpet"
         ],
@@ -388,7 +388,7 @@
         "id": "M-R6",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 1.00s",
+        "tail": "1 failed in 0.94s",
         "failed": [
           "tests/test_relay_v243.py::test_custom_role_skips_default_frame_sets_but_keeps_petpet"
         ],
@@ -399,7 +399,7 @@
         "id": "M-R7",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 1.01s",
+        "tail": "1 failed in 0.91s",
         "failed": [
           "tests/test_relay_v243.py::test_relay_chain_closes_when_a_step_raises"
         ],
@@ -410,7 +410,7 @@
         "id": "M-R8",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "3 failed, 1 passed in 1.24s",
+        "tail": "3 failed, 1 passed in 1.10s",
         "failed": [
           "tests/test_relay_v243.py::test_state_slice_selflocks_on_zero_progress",
           "tests/test_relay_v243.py::test_relay_terminates_with_unbuildable_pending",
@@ -423,7 +423,7 @@
         "id": "M-R9",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 1.04s",
+        "tail": "1 failed in 0.92s",
         "failed": [
           "tests/test_relay_v243.py::test_custom_role_switching_back_to_default_loads_idle"
         ],
@@ -434,7 +434,7 @@
         "id": "M-R10",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 1.02s",
+        "tail": "1 failed in 0.89s",
         "failed": [
           "tests/test_relay_v243.py::test_money_preload_is_sliced_even_with_a_zero_budget"
         ],
@@ -445,7 +445,7 @@
         "id": "M-R11",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 1.16s",
+        "tail": "1 failed in 0.97s",
         "failed": [
           "tests/test_relay_v243.py::test_default_relay_keeps_one_phase_per_round"
         ],
@@ -456,7 +456,7 @@
         "id": "M-R12",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "2 failed in 1.13s",
+        "tail": "2 failed in 1.19s",
         "failed": [
           "tests/test_relay_v243.py::test_state_pix_recovers_after_one_build_exception",
           "tests/test_relay_v243.py::test_production_step_entry_keeps_pending_after_an_exception"
@@ -468,7 +468,7 @@
         "id": "M-R13",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "2 failed in 1.36s",
+        "tail": "2 failed in 0.98s",
         "failed": [
           "tests/test_relay_v243.py::test_state_slice_selflocks_on_zero_progress",
           "tests/test_relay_v243.py::test_relay_terminates_with_unbuildable_pending"
@@ -480,7 +480,7 @@
         "id": "M-R14",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 1.14s",
+        "tail": "1 failed in 0.93s",
         "failed": [
           "tests/test_relay_v243.py::test_tried_but_unbuilt_names_are_retired_so_the_relay_converges"
         ],
@@ -491,7 +491,7 @@
         "id": "M-R15",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "2 failed in 1.07s",
+        "tail": "2 failed in 0.97s",
         "failed": [
           "tests/test_relay_v243.py::test_zero_progress_with_a_zero_budget_keeps_the_untried_names",
           "tests/test_relay_v243.py::test_state_slice_selflocks_on_zero_progress"
@@ -503,7 +503,7 @@
         "id": "M-V1",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "2 failed in 0.85s",
+        "tail": "2 failed in 0.73s",
         "failed": [
           "tests/test_round3_a_fixes.py::test_worker_hands_the_result_to_the_slot_which_releases_the_generation",
           "tests/test_round3_a_fixes.py::test_second_click_queues_instead_of_starting_a_second_thread"
@@ -515,7 +515,7 @@
         "id": "M-V2",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "2 failed in 0.82s",
+        "tail": "2 failed in 0.69s",
         "failed": [
           "tests/test_round3_a_fixes.py::test_stale_generation_result_is_dropped_without_side_effects",
           "tests/test_round3_a_fixes.py::test_stale_generation_error_is_dropped_too"
@@ -527,7 +527,7 @@
         "id": "M-V3",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.76s",
+        "tail": "1 failed in 0.68s",
         "failed": [
           "tests/test_round3_a_fixes.py::test_second_click_queues_instead_of_starting_a_second_thread"
         ],
@@ -538,7 +538,7 @@
         "id": "M-V4",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.75s",
+        "tail": "1 failed in 0.67s",
         "failed": [
           "tests/test_round3_a_fixes.py::test_auto_poll_landing_has_no_manual_side_effects"
         ],
@@ -549,7 +549,7 @@
         "id": "M-V5",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 1.28s",
+        "tail": "1 failed in 1.12s",
         "failed": [
           "tests/test_startup_defer_v242.py::test_startup_task_is_chunked_not_one_shot"
         ],
@@ -560,7 +560,7 @@
         "id": "M-V6",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 1.02s",
+        "tail": "1 failed in 0.97s",
         "failed": [
           "tests/test_relay_v243.py::test_money_preload_is_sliced_and_matches_eager_load"
         ],
@@ -571,7 +571,7 @@
         "id": "M-V7",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.63s",
+        "tail": "1 failed in 0.64s",
         "failed": [
           "tests/test_round3_a_fixes.py::test_retire_only_touches_its_own_generation"
         ],
@@ -582,7 +582,7 @@
         "id": "M-V8",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.76s",
+        "tail": "1 failed in 0.81s",
         "failed": [
           "tests/test_relay_v243.py::test_slice_budget_is_pinned_so_the_bounds_cannot_be_loosened"
         ],
@@ -619,33 +619,33 @@
     ],
     "note": "变异只在 %TEMP% 影子副本里做，真实仓库只读（只写 _dev/.mutation.lock）",
     "repo_fingerprint": {
-      "桌宠.py": "59b2f99c52ba",
-      "pet_export.py": "c01e1593efd2",
+      "桌宠.py": "b33888cadc15",
+      "pet_export.py": "db474bdd6670",
       "pet_lines.py": "5332f60b5f26",
       "pet_alarm.py": "1149e94deee3",
       "pet_behaviors.py": "732273f95fb4",
-      "_check_release.py": "7377b3fad58e",
-      "pet_balance.py": "66948e5514a4",
+      "_check_release.py": "dca4541e2829",
+      "pet_balance.py": "045129227ee2",
       "pet_plugin.py": "2f7853298fc3",
       "pet_plugin_host.py": "82fb7b1384c8",
-      "pet_dialogs.py": "7e1a11cff2a2",
-      "pet_menu.py": "d2f565537b3f",
+      "pet_dialogs.py": "ae3e1a1c76b0",
+      "pet_menu.py": "44224c3320c6",
       "pet_plugin_index.py": "e5e9845785e8",
       "pet_ai.py": "a5989e7fe646",
-      "pet_config.py": "6fe2b20ae424",
+      "pet_config.py": "b46e0f180880",
       "pet_io.py": "6b1e0413fb7f",
       "pet_services.py": "ecebb6ab5891",
       "pet_widgets.py": "b8de517121e1",
-      "pet_resources.py": "e28f38917052",
+      "pet_resources.py": "5d8df41558df",
       "pet_tools.py": "46e9030d073f",
-      "pet_voice.py": "9fe0a570ca81",
+      "pet_voice.py": "3a9c9cc3324e",
       "pet_audio.py": "a6feadf4d653",
       "pet_chat.py": "de979c429c2c",
       "pet_log.py": "de14ecf338ab",
-      "pet_actions.py": "83eb11403fec",
+      "pet_actions.py": "a4871b371ea0",
       "pet_book.py": "098676ac52d4",
       "_check_static.py": "6286f9f493bd",
-      "pet_motion.py": "fcee7ab63bb2",
+      "pet_motion.py": "e4fbc789b327",
       "tests/test_dialog_buttons_v270.py": "4f95acca7fc6",
       "tests/test_import_thread.py": "1c6fc2ec5d05"
     },

@@ -103,7 +103,7 @@ spec 里的 nodeid 不会跟着动，于是 `MA11` 与 `M-C-A22` 指向了**不�
 **校验范围（v2.9.0 三审 F-6 更正）**：**只查 `mutations[].tests` / `mutations[].expect_fail`** —— 这两份才是判定真正会用到的 nodeid；
 spec 顶层 `evidence.tests`、`results.tests` / `results.items[].failed` 是**历史记录**（记的是"当时跑出什么"，保留当时的用例名本来就是对的），
 **不在校验范围、也不该改**；工具会把范围外还剩多少条**一并报出来**（本轮实测 **429 条**），免得读的人以为措辞比范围大。
-退出码 0/1 可直接进定版流水。本轮实测：**校验范围内 1139 条 / 坏 0**（F-C 之后：`A7-M2` 的 tests/expect_fail 从 3 条 nodeid 收到 2 条；修掉那几条之前是**坏 2**）。
+退出码 0/1 可直接进定版流水。本轮实测：**校验范围内 1311 条 / 坏 0**（F-C 之后：`A7-M2` 的 tests/expect_fail 从 3 条 nodeid 收到 2 条；修掉那几条之前是**坏 2**）。
 
 **改了源码的人，收工前必须跑一次 `python -B _dev/mutate_batch_v270.py --scan-only`（v2.9.0 第 7 轮定为规矩）**。
 理由：**锚点是源码字面量**，你**有意**改写一处实现（改名、改文案、把回执从 `_toast` 换成 `_note`、把函数搬进另一个模块）
@@ -135,7 +135,7 @@ spec 顶层 `evidence.tests`、`results.tests` / `results.items[].failed` 是**�
 秒级、只读）。`--selftest` 喂一份"每类各一条 + 5 条反例"的样本、逐条对标记——
 **没有这一步，"扫描 0 条"与"扫描器坏了"长得一模一样**（这条规矩本身就是本轮加的）。
 
-**全仓实测（2026-10-16，`.` 共扫 .py，含产品代码）** —— 工具命中 **6 条**（**活树 3 条 + 冻结副本 3 条**），
+**全仓实测（2026-10-16，`.` 共扫 .py，含产品代码；⚠ 这是 R4「清账之前」的读数——清完之后的读数见本节末尾那段）** —— 工具命中 **6 条**（**活树 3 条 + 冻结副本 3 条**），
 **产品代码 0 条**；另有 **1 条不是工具判据的弱断言**（`test_dialogs_more_v24.py:880` 的 `and`/`or` 优先级写错，
 是**人读出来**的）→ **要处理的共 4 条（活树）+ 3 条（冻结副本留档）**。逐条处置：
 
@@ -147,8 +147,10 @@ spec 顶层 `evidence.tests`、`results.tests` / `results.items[].failed` 是**�
 | 4 | `tests/test_dialogs_more_v24.py:880` `0 in t and 1 not in t or 1 in t` | （非恒真，是**优先级写错**） | **加强**：`and` 比 `or` 紧 → 它等价于"0 或 1 在里面"，把 `_move_form` 的重映射删掉照样绿 → 改成 `dlg._touched_flags == {1}` |
 | 5·6·7 | `_dev/_compat270/base/tests/**` **同样三处**（`test_import_thread.py` 恒真-T 1 + `test_io_v231.py` / `test_plugin_host_v251.py` 重复调用-W 2） | 恒真-T / 重复调用-W | **不改**：那是**冻结的对照基线副本**（v2.7.0 兼容审查的"当时那份树"），改了它就不再是"当时那份"——**留档即为正确处置** |
 
-**清完之后的实测（2026-10-16 复核；v2.11.0 第 9 轮再复核一次）**：全仓 **385 个 .py / 3 条**，**全在冻结副本里**——活 `tests/` = 0、
-产品代码 = 0（.py 总数会随每轮新增文件漂，**看命中数**；复跑：`python -B _dev/audit_tautology_asserts_v2100.py .`）。（⚠ 记账更正：本节初稿写"命中 6 条 / compat270 同样两处"把工具口径与人眼口径混在了一起，
+**清完之后的实测（2026-10-16 · v2.10.0 发版轮再复核一次）**：全仓 **387 个 .py / 3 条**，**全在冻结副本里**——活 `tests/` = 0、
+产品代码 = 0（.py 总数会随每轮新增文件漂，**看命中数**；复跑：`python -B _dev/audit_tautology_asserts_v2100.py . --strict`
+→ 实测原文 `扫描 387 个 .py（根：.）` / `活树合计 0 条：无` / `冻结副本另计 3 条（恒真-T 1 · 重复调用-W 2）` /
+`--strict 只看活树的 恒真/恒假/死块：0 条`，**rc=0**）。（⚠ 记账更正：本节初稿写"命中 6 条 / compat270 同样两处"把工具口径与人眼口径混在了一起，
 兼容审按现树复核为 **compat270 三处**——"6 条"是工具口径（活 3 + 冻结 3），"同样两处"是错的。）
 
 **误报口径（工具第一版真踩过）**：`x = []` 之后 `assert x == []` **不是**恒真——它是**捕获列表**，
@@ -180,7 +182,8 @@ spec 顶层 `evidence.tests`、`results.tests` / `results.items[].failed` 是**�
 2. `_dev/mutations_agent_c_v2100.json` 的 `M-C2100-R4-05`：把那句恒真断言**原样塞回** `tests/test_import_thread.py`，
    守卫必须当场红（实测：两条用例同时红）。**守卫本身也要有"能真失败"的证据，否则它自己就是新的假覆盖。**
    同批 `M-C2100-R4-01/02/03/04` 分别钉上面四条加强；该 spec 现共 **9 条**（R4 五条 + R5 两条 + 收尾两条）
-   → **`9/9 CAUGHT`**（见该文件 `results`）。⚠ 本节初稿写的 `7/7` 是 R5 两条落进去之前的读数（v2.11.0 第 9 轮更正）。
+   → **`9/9 CAUGHT`**（见该文件 `results`；**2026-10-16 v2.10.0 发版轮复核**：读 `_dev/mutations_agent_c_v2100.json` 的 `results` 段
+   → `total=9 / caught=9 / not_caught=0`，`checked_at = 2026-10-16 09:42:21`，9 条 `verdict` **全是 `CAUGHT`**）。⚠ 本节初稿写的 `7/7` 是 R5 两条落进去之前的读数（v2.11.0 第 9 轮更正）。
 
 **判据的形状要贴题：别拿"代理量"当判据（v2.11.0 第 9 轮 · 代理 C · P1 登记）。**
 
@@ -240,13 +243,13 @@ spec 顶层 `evidence.tests`、`results.tests` / `results.items[].failed` 是**�
 乱码字符可以用 `/[\uFFFD]/` 或 `grep -P '\xef\xbf\xbd'` 扫出来。
 
 **一条命令跑完整批（v2.7.0 代理 C 落成脚本）**：`python -B _dev/mutate_batch_v270.py` ——
-自动收全 ① 带 `mutations` 段的 `_dev/mutations_*.json`（当前 **26 份 / 471 条锚点** —— v2.8.0 第 6 轮是 22 份 / 392 条，v2.7.0 当时是 20 份 / 270 条，验收员
+自动收全 ① 带 `mutations` 段的 `_dev/mutations_*.json`（当前 **34 份 / 531 条锚点** —— v2.8.0 第 6 轮是 22 份 / 392 条，v2.7.0 当时是 20 份 / 270 条，验收员
 定版实测为 20 份 / **269** 条，本轮 P1-1 回执修复新增 `M-R6-P1-1` 一条 → **270**）走 `mutate_check.py`；
 ② 三份**旧形态单脚本驱动**（`mutate_export_slice.py` 5/5 · `mutate_startup_defer.py` 8/8 ·
 `mutate_proc_reset_v26.py` 12/12，**共 25 条**）；③ 两份独立结果（`verify_fastci_slices_v251.py`
 11 组 · `verify_guardrails_can_fail.py` 9/9）。
-**合计 445 条锚点**（420 + 25）—— 这个数字**以 `python -B _dev/mutate_batch_v270.py --scan-only`
-的实测输出为准**（`--scan-only` 末行现为「锚点合计 **496** 条，坏 0 条」，2026-10-15 v2.9.0 第 7 轮实测；每加/删一条变异它都会变，
+**合计 556 条锚点**（531 + 25）—— 这个数字**以 `python -B _dev/mutate_batch_v270.py --scan-only`
+的实测输出为准**（`--scan-only` 末行现为「锚点合计 **556** 条，坏 0 条」，2026-10-16 v2.11.0 定版复跑实测；每加/删一条变异它都会变，
 本行此前写的「18 份 / 203 条」是 v2.7.0 代理 C 落成脚本当天的快照，已过期）。
 v2.7.0 三份新 spec 的条数：`mutations_agent_a_v270.json` **31** · `mutations_agent_b_v270.json` **35** ·
 `mutations_critic_v270.json` **14**（A/B 由验收员复跑 **31/31 · 35/35 全 CAUGHT**）。
@@ -356,11 +359,11 @@ pytest 都在影子里跑，真仓只读），或自己在 `%TEMP%` 里复制一
 | `verify_d7a_v250_agent_c.py` | v2.5.0 D7-A 三条改动的定向变异（6 条，旧形态，**不产出结果 JSON**） | `python _dev/verify_d7a_v250_agent_c.py` | —（报告里贴输出） |
 | `verify_services_ast_v250.py` | **AST 实参对照**（不是变异）：旧 `__init__`（git `2a6563c`）vs 新 `pet_services.py` 的每一处构造实参；`--selftest` 现场验"对调两个实参一定报差异" | `python -B _dev/verify_services_ast_v250.py [--selftest]` | —（stdout 的 `compared=` / `mismatches=`） |
 | `mutate_batch_v270.py` | **整批复跑 = 铁律 5 的可执行形态**（v2.7.0 代理 C）：26 份 spec（471 条锚点，条数以 `--scan-only` 为准）+ 3 份旧形态单脚本驱动（25 条）+ 2 份独立结果，一条命令跑完；记录跑前跑后源码指纹，不一致就明确喊"这批不作数" | `python -B _dev/mutate_batch_v270.py [--scan-only]` | `results_batch_v270.json` |
-| `check_mutation_nodeids.py` | **nodeid 体检（v2.9.0 第 7 轮 代理 C）**：spec 点名的用例在当前树里**还存不存在**。改用例名（哪怕是加强式改名）会让 `tests`/`expect_fail` 里的 nodeid 指向不存在的用例 → pytest node-not-found → **这条变异永远判不成 CAUGHT**，且只有定版整批跑才暴露。锚点有 `--scan-only`，nodeid 在此之前没有体检——这是清单完整性的另一面。秒级、只读、退出码 0/1 可进流水；**范围 = `mutations[].tests`/`expect_fail`**（历史记录不在内，工具会报出范围外条数）；本轮实测校验范围内 1139 条 / 坏 0。⚠ **它管不了"用例体被清空而名字不动"**（v2.11.0 实测：那种改动它照样 rc=0）——下一层是 `check_pinned_ast.py` | `python -B _dev/check_mutation_nodeids.py [_dev/mutations_x.json …]`（不带参数＝自动收全） | —（stdout） |
+| `check_mutation_nodeids.py` | **nodeid 体检（v2.9.0 第 7 轮 代理 C）**：spec 点名的用例在当前树里**还存不存在**。改用例名（哪怕是加强式改名）会让 `tests`/`expect_fail` 里的 nodeid 指向不存在的用例 → pytest node-not-found → **这条变异永远判不成 CAUGHT**，且只有定版整批跑才暴露。锚点有 `--scan-only`，nodeid 在此之前没有体检——这是清单完整性的另一面。秒级、只读、退出码 0/1 可进流水；**范围 = `mutations[].tests`/`expect_fail`**（历史记录不在内，工具会报出范围外条数）；本轮实测校验范围内 1311 条 / 坏 0。⚠ **它管不了"用例体被清空而名字不动"**（v2.11.0 实测：那种改动它照样 rc=0）——下一层是 `check_pinned_ast.py` | `python -B _dev/check_mutation_nodeids.py [_dev/mutations_x.json …]`（不带参数＝自动收全） | —（stdout） |
 | `check_mutation_ast.py` | **变异体语法自检（v2.8.0 代理 C）**：逐条在内存里应用 `old → new` 再 `ast.parse` —— 抓"把 `if x:` 的缩进体一起换掉"这类错（pytest 收集期才炸，判定只能落 WRONG TEST，整批白跑）。非 `.py` 目标跳过。秒级，**跑批之前先过一遍** | `python -B _dev/check_mutation_ast.py [_dev/mutations_x.json …]`（不带参数＝自动收全） | —（stdout） |
-| `check_pinned_ast.py` | **pinned 用例体检（v2.11.0 第 9 轮 · 代理 C · V1）**：`check_mutation_nodeids.py` 的下一层——那个只问"def 还在不在"，这个问"**用例体还是原来那一段吗**"。证据 JSON 里的 `pinned_ast`（pinned nodeid → 用例体 AST 摘要）与当前树逐条比；**用例体被清空而 nodeid 不动**这种静默失效它才抓得到（实测：清空 pinned 用例体 → CAUGHT 变 NOT CAUGHT，而 nodeid 体检 rc=0、文件指纹一声不吭）。`--probe` 出"改前 7/489 → 改后 489/489"的覆盖数；`--selftest` 是它自己的"能真失败"自检；秒级、只读、rc 0/1 可进流水 | `python -B _dev/check_pinned_ast.py [--probe] [--selftest] [--json out]` | —（stdout） |
+| `check_pinned_ast.py` | **pinned 用例体检（v2.11.0 第 9 轮 · 代理 C · V1）**：`check_mutation_nodeids.py` 的下一层——那个只问"def 还在不在"，这个问"**用例体还是原来那一段吗**"。证据 JSON 里的 `pinned_ast`（pinned nodeid → 用例体 AST 摘要）与当前树逐条比；**用例体被清空而 nodeid 不动**这种静默失效它才抓得到（实测：清空 pinned 用例体 → CAUGHT 变 NOT CAUGHT，而 nodeid 体检 rc=0、文件指纹一声不吭）。`--probe` 出"改前 7/531 → 改后 531/531"的覆盖数；`--selftest` 是它自己的"能真失败"自检；秒级、只读、rc 0/1 可进流水 | `python -B _dev/check_pinned_ast.py [--probe] [--selftest] [--json out]` | —（stdout） |
 | `probe_judge_error_lines_v2100.py` | **判定口径变更的对照探针（v2.10.0 代理 C · R5）**：默认 `--dry-run` 不跑 pytest，把全库 `results` 里**非 CAUGHT** 的条目逐条列出并预测「能不能翻」（`rc=0` → 不会翻；`rc!=0` 且 `failed` 为空 → **只能靠 ERROR 行翻**）；`--run` 把候选**真在影子里重跑**，同一份输出喂旧口径 `judge(m, rc, failed)` 与新口径 `judge(m, rc, failed, errored_nodeids(out))`，逐条打印 旧→新 与 ERROR 行原文 + 相位（setup/call/teardown）。**改判定口径之前先跑它**——results JSON 里不存 ERROR 行，光读盘上的证据算不出影响面 | `python -B _dev/probe_judge_error_lines_v2100.py [--run] [--spec _dev/mutations_x.json]` | —（stdout） |
-| `audit_tautology_asserts_v2100.py` | **恒真/弱断言扫描（v2.10.0 代理 C · R4）**：AST 层判 5 类——恒真-T（`X or True` / `assert True` / `a == a`）/ 恒假-F（`X and False`）/ 死块-D（`if False:` 里）/ 已保证-R（刚赋过的不可变字面量）/ 重复调用-W（`assert f(x) == f(x)`，只列不挡）。`--selftest` 是它自己的「能真失败」自检。**全仓实测（2026-10-16 v2.11.0 复核）385 个 .py 命中 3 条（全在冻结副本）、活树/产品代码 0 条**（`python -B _dev/audit_tautology_asserts_v2100.py . --strict` 实测 exit **0**——它只看活树；本行初稿写的「378 个 .py 命中 6 条」是清账前的读数，已过期），逐条处置见 §零「恒真/弱断言 = 假覆盖」。**冻结副本**（`_dev/_compat270/base/`）的命中单独列段、**不计入 `--strict`**（否则照文档复跑会误判成回归）；**边界**：只走函数体、不下钻 `match`，质量审造 21 种形态抓 11 漏 10 但**那些位置全仓 0 条真恒真** | `python -B _dev/audit_tautology_asserts_v2100.py [根…] [--json out] [--strict] [--selftest]` | `--json out.json`（可选；**原始读数不入库**——`_dev/*` 被 gitignore，复跑即得） |
+| `audit_tautology_asserts_v2100.py` | **恒真/弱断言扫描（v2.10.0 代理 C · R4）**：AST 层判 5 类——恒真-T（`X or True` / `assert True` / `a == a`）/ 恒假-F（`X and False`）/ 死块-D（`if False:` 里）/ 已保证-R（刚赋过的不可变字面量）/ 重复调用-W（`assert f(x) == f(x)`，只列不挡）。`--selftest` 是它自己的「能真失败」自检。**全仓实测（2026-10-16 · v2.10.0 发版轮复核）387 个 .py 命中 3 条（全在冻结副本）、活树/产品代码 0 条**（`python -B _dev/audit_tautology_asserts_v2100.py . --strict` 实测 exit **0**——它只看活树；本行初稿写的「378 个 .py 命中 6 条」与上一版复核写的「385 个 .py」都是更早的读数，已过期——**.py 总数随树长，只有「命中数」是稳的**），逐条处置见 §零「恒真/弱断言 = 假覆盖」。**冻结副本**（`_dev/_compat270/base/`）的命中单独列段、**不计入 `--strict`**（否则照文档复跑会误判成回归）；**边界**：只走函数体、不下钻 `match`，质量审造 21 种形态抓 11 漏 10 但**那些位置全仓 0 条真恒真** | `python -B _dev/audit_tautology_asserts_v2100.py [根…] [--json out] [--strict] [--selftest]` | `--json out.json`（可选；**原始读数不入库**——`_dev/*` 被 gitignore，复跑即得） |
 | `probe_c_mutation_output_v270.py` | 小账 a~d 的**变异原文证据**：逐条打印"改了什么 / 锚点命中几次 / 失败断言原文 / 还原后是否绿"（`mutate_check.py` 抓到时不打印输出，这份补的就是那段原文） | `python -B _dev/probe_c_mutation_output_v270.py` | —（stdout，贴报告） |
 
 这三条**旧形态**驱动的 2026-10-11 v2.4.4 复跑结果：导出 **5/5**（`E3` 已重锚到"固定时间戳
@@ -560,7 +563,7 @@ spec 清单（**状态列的 CAUGHT 数 = 该文件 `results` 段当前的实测
    所以本轮**临时**在 `_check_release.py` 加了两个文件名字符串（**未改一行逻辑**，`pytest tests/test_release_check.py` = 37 passed）。
 ③ **本轮变异随做随落**：`mutations_agent_b_v290.json`（B1，11 条，11/11 CAUGHT）已入库；A 侧与 B 的 B4~B8 等它们落地后补。
 
-`--scan-only` 现为 **锚点合计 496 条 / 坏 0**（471 条 spec 形态 + 25 条旧形态驱动）；nodeid 体检 **1141 个 / 坏 0**（体检当场抓出并修掉 1 条转述错的 nodeid）。
+`--scan-only` 现为 **锚点合计 556 条 / 坏 0**（531 条 spec 形态 + 25 条旧形态驱动）；nodeid 体检 **1311 个 / 坏 0**（体检当场抓出并修掉 1 条转述错的 nodeid）。
 **A 批 28 条判定（收尾实测）**：**CAUGHT 23 / WRONG TEST 4 / NOT CAUGHT 1**——其中 2 条是**测试不够健壮挂死**（⚠ 本轮新增「**测试健壮性第一条**」规矩：被测路径可能弹真框的用例必须 stub `_confirm`/`_info`/`_warn`）、1 条是代理 C 的 `expect_fail` 写宽（已按实测改正）、1 条是**真覆盖缺口**（`_human_import_error` 被测、它的使用点没被测）、1 条是**判据口径缺口**（ERROR 行不算检出）。
 **同轮还修掉 9 条被有意改写改死的旧锚点**（`agent_a_v280` MA18/MA19/MA22/MA23 · `agent_c_v280` M-C-A30/A31/A36/A37 · `critic_v270` M-R5-P2-4，其中 MA18/M-C-A30 是**语义反转**）＋ 2 条指向已改名用例的 nodeid（MA11 / M-C-A22）＋ 1 条历史笔误（`agent_a_v270` M-A-01 的 expect_fail 文件名）。
 ⚠ 三轮并行仍在改树：**本批只证明"当前源码上每条变异都能被抓住"**；定版按铁律 5 在安静窗口整批再跑一次。

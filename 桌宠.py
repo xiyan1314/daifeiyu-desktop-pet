@@ -82,7 +82,7 @@ from pet_plugin_host import PluginHost as _PluginHost  # v2.5.1：PetHub 插件�
 
 
 APP_NAME = "大肥鱼桌宠"
-VERSION = "2.11.0"
+VERSION = "2.10.0"
 PAD = 1.25  # 窗口相对角色的透明边距（为压扁/回弹预留空间）
 IDLE_FRAME_MS = 140      # 待机帧间隔
 IDLE_FORM_HOLD_SECS = 8  # v2.1.3：只有形态、没有动作可播时的展示期上限（到期回用户形态）
@@ -821,6 +821,24 @@ def _service_deps():
     }
 
 
+# ---------------- v2.11.0 发版轮（C-13）：无障碍两键的**三态**口径 ----------------
+# 三态词表（auto / on / off）的**单一来源是 pet_config**（MOTION_MODES /
+# normalize_motion_mode / is_auto_motion_mode）——本模块**不抄第二套字符串**，
+# 也不自己比字符串。为什么菜单给的是 bool 而落地收三态：勾选框只有两态（勾/不勾），
+#   · 勾 → "on"、不勾 → "off"（显式选择，覆盖系统）；
+#   · "auto" 只能由明确的"跟随系统"入口给出（托盘菜单那一项，见 __init__）。
+def _motion_state(value):
+    """菜单开关实参 → pet_config.MOTION_MODES 里的一个值。
+
+    bool（勾选框）→ True 记 "on"、False 记 "off"：**必须先拦 bool**——bool 经 str()
+    会变成 "true"/"false"，那是归一化认不出的值，会被退回 auto，用户点一下开关就
+    悄悄变成"跟随系统"了。其余一律交给 pet_config.normalize_motion_mode（坏值 → auto）。
+    """
+    if isinstance(value, bool):
+        return "on" if value else "off"
+    return pet_config.normalize_motion_mode(value)
+
+
 class PetWindow(QWidget):
     # v2.0.1：帧间隔默认值以类属性暴露（pet_actions 等服务不 import 桌宠，须经实例访问）
     IDLE_FRAME_MS = IDLE_FRAME_MS
@@ -1136,8 +1154,11 @@ class PetWindow(QWidget):
         # 也不注册任何全局快捷键，所以绝不会"抢全局 Esc"。
         self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
         self._apply_contrast()        # A3：高对比度（配置/系统主题）落地
-        self._reduce_motion_act = None   # 托盘菜单里的两个勾选项（建菜单时回填）
+        # 托盘菜单里的勾选项（建菜单时回填）。每个开关两项：主项 = 生效值，auto 项 = 配置是 auto。
+        self._reduce_motion_act = None
         self._high_contrast_act = None
+        self._reduce_motion_auto_act = None
+        self._high_contrast_auto_act = None
         self.bubble.set_motion_reduced(self._reduce_motion())  # A2：气泡淡入淡出跟随开关
 
         scale = self.cfg.get("scale", 1.0)
@@ -1273,16 +1294,37 @@ class PetWindow(QWidget):
         # 所以"键盘也够得着它"这件事只能由托盘菜单承担（窗口自身的键位见 keyPressEvent）。
         poke_act = tray_menu.addAction("👉 戳一下")
         poke_act.triggered.connect(lambda checked=False: self._primary_action())
+        # C-13（v2.11.0 发版轮）：开关是**三态**（auto / on / off），而勾选框只有两态。
+        # 表示法：主项勾 = **生效值**为真（auto 时照实显示系统那份，界面不说谎）；
+        # 紧跟的「跟随系统」项勾 = 配置值就是 auto —— 两项合起来把三态表示全，
+        # 且"回到跟随系统"这条路**任何时候都点得到**（旧实现点过一次就回不去）。
         rm_act = tray_menu.addAction("🌊 减少动效")
         rm_act.setCheckable(True)
         rm_act.setChecked(self._reduce_motion())
         rm_act.toggled.connect(self._set_reduce_motion)
         self._reduce_motion_act = rm_act
+        rm_auto_act = tray_menu.addAction("🔁 跟随系统（减少动效）")
+        rm_auto_act.setCheckable(True)
+        rm_auto_act.triggered.connect(
+            lambda checked=False: self._set_reduce_motion("auto"))  # 词表见 pet_config.MOTION_MODES
+        self._reduce_motion_auto_act = rm_auto_act
         hc_act = tray_menu.addAction("🔲 高对比度")
         hc_act.setCheckable(True)
         hc_act.setChecked(self._high_contrast())
         hc_act.toggled.connect(self._set_high_contrast)
         self._high_contrast_act = hc_act
+        hc_auto_act = tray_menu.addAction("🔁 跟随系统（高对比度）")
+        hc_auto_act.setCheckable(True)
+        hc_auto_act.triggered.connect(
+            lambda checked=False: self._set_high_contrast("auto"))  # 词表见 pet_config.MOTION_MODES
+        self._high_contrast_auto_act = hc_auto_act
+        # 四个勾选项的**初值**统一由 _sync_motion_acts() 落（含"配置是不是 auto"这一项）。
+        # 为什么不就在这里 setChecked(...)：那会给 __init__ 多塞两处
+        # pet_config.is_auto_motion_mode(...) 调用，而 tests/test_services_registry_v250.py 的
+        # _LEFTOVER_IN_INIT 只允许"服务构造 + 只读系统探针"留在 __init__ —— 菜单勾选态既不是
+        # 探针、也不持有任何资源/生命周期，本来就不该进那份清单（扩名单 = 为了让用例继续绿而
+        # 放宽红线，C-04 刚批评过）。判据放 _sync_motion_acts()：勾选态只有那一个落点。
+        self._sync_motion_acts()
         tray_menu.addSeparator()
         quit_act = tray_menu.addAction("⏹ 退出")
         quit_act.triggered.connect(self._quit)
@@ -3255,7 +3297,9 @@ class PetWindow(QWidget):
             if (self.anim_mode != "idle" or self.anim._name != "idle"
                     or self.anim._frames is not idle_frames):
                 self.anim_mode = "idle"
-                self.anim.play("idle", interval, loops=-1)
+                # D1：素材帧走**帧率倍率**——「减少动效」开着时帧照播，只是更慢（不是停帧）
+                self.anim.play("idle", interval, loops=-1,
+                               rate_factor=self._frame_rate_factor())
         else:
             if self.anim_mode != "idle":
                 self.anim.stop()
@@ -3277,11 +3321,17 @@ class PetWindow(QWidget):
         if self._custom_role:
             interval = self._cur_form_anim().get("interval_ms") or EAT_FRAME_MS
         # 若 "eat" 帧集未注册（空集），play() 会立即回调 on_finish 并返回 False，无需兜底分支
-        self.anim.play("eat", interval, loops=2, on_finish=self._eat_done)
+        # D1：素材帧走**帧率倍率**（减少动效 = 吃帧更慢，帧照播）
+        self.anim.play("eat", interval, loops=2, on_finish=self._eat_done,
+                       rate_factor=self._frame_rate_factor())
         # v2.1.4 修复（S1）：看门狗——吃帧回调可能被任何 anim.play()/stop() 顶掉（stop 不回调），
         # 那样 busy 永远没人释放。这里按"吃帧理论时长 + 余量"兜底释放，保证不会永久卡死。
         _frames = len(self.anim._sets.get("eat") or []) or 7
-        _ms = max(800, int(_frames * 2 * interval) + 600)
+        # ⚠ 用**实际生效的**帧间隔（= 基准 ÷ 帧率倍率），不是基准 interval：减少动效下
+        # 吃帧本来就慢一倍，看门狗还按原速算的话会在播到一半时抢着收尾（帧还没播完
+        # busy 就释放 → 之后喂食被判成"嘴里还有呢"）。看门狗是兜底，兜底的时长必须
+        # 与它兜的那件事同口径。
+        _ms = max(800, int(_frames * 2 * self.anim.effective_interval_ms()) + 600)
         if self._eat_watchdog is not None:
             try:
                 self._eat_watchdog.stop()
@@ -3490,7 +3540,8 @@ class PetWindow(QWidget):
                 self._cur_state = state
                 self._state_timer.stop()
                 interval = self._cur_form_anim().get("interval_ms") or EAT_FRAME_MS
-                self.anim.play("poke", interval, loops=1, on_finish=self._state_done)
+                self.anim.play("poke", interval, loops=1, on_finish=self._state_done,
+                               rate_factor=self._frame_rate_factor())
                 return
         pix = self._state_pix(state)
         if pix is None:
@@ -3528,7 +3579,8 @@ class PetWindow(QWidget):
         sleep_frames = (self.anim._sets.get("sleep") or []) if self._custom_role else []
         if sleep_frames:
             interval = self._cur_form_anim().get("interval_ms") or IDLE_FRAME_MS
-            self.anim.play("sleep", interval, loops=-1)
+            self.anim.play("sleep", interval, loops=-1,
+                           rate_factor=self._frame_rate_factor())
         else:
             pix = self._state_pix("sleep")
             if pix is not None:
@@ -4257,9 +4309,21 @@ class PetWindow(QWidget):
         #   ② _idle_form_active 残留为 True，之后任何点击都会把形态再拉回用户形态。
         self._touch_activity()  # 记交互 + 结束待机展示期（恢复用户形态、清旗标）
         self.busy = True
-        if self.cfg.get("sound", True):
+        # D2（v2.10.0）：语音库与内置音效两个独立播放器合成**一条显式优先级链** ——
+        # **语音库有这个事件片段 → 只走语音；没有 → 落回内置音效**（不是删掉哪一边的调用，
+        # 那会让没配音的用户丢掉内置音效）。判据只有 EventClipResult.fallback_allowed 一个。
+        # ⚠ 三条不许：
+        #   ① 不许用真假值判断（那个对象**没定义 __bool__**，"if res:" 恒为真）；
+        #   ② 不许拿 "not res.has_clip" 当回落判据 —— 语音总开关关着时片段**可能配了**
+        #      （clip() 不看总开关），那样"配过片段 + 关掉语音"的用户会连内置音效一起丢，
+        #      那正是 D2 要避免的那件事；
+        #   ③ failed（有片段但这次播不出来）**不许落回** —— 内置音效会把语音的事故盖住，
+        #      用户以为响的就是他配的那条，而语音侧的失败只剩一行日志。
+        # 两边各自的总开关照旧：语音归 cfg.voice.enabled（play_event 内判），
+        # 内置音效归 cfg.sound（下面这一句）。
+        _clip = self.voice.play_event("feed")
+        if _clip.fallback_allowed and self.cfg.get("sound", True):
             play_sound("feed")
-        self.voice.play_event("feed")  # v2.0：喂食语音片段
         # v2.1：喂食台词来自台词库（用户可增删改；库空则回落内置 FOOD_LINES）
         line = random.choice(self.lines_lib.food_texts(food))
         # v2.1.4（L3）：吃帧是**首形态**的形象 → 判定要看"喂到的目标形态"是不是首形态，
@@ -4411,17 +4475,36 @@ class PetWindow(QWidget):
 
     # ---------- v2.11.0 第 9 轮：动效地基（A1/A2/A3）+ 视觉三件套（A4/A5） ----------
     def _reduce_motion(self):
-        """「减少动效」的**生效值**（A2）：配置优先；配置是 auto 时用启动时读到的系统设置。
+        """「减少动效」的**生效值**（A2）：配置优先；配置是 auto 时用 self._sys_reduce_motion。
 
+        那份系统值在**建窗时读一次**，并在每次切回 auto 时（_set_reduce_motion("auto")）
+        **重读一次**——所以 auto 跟随的是"切到 auto 那一刻"的系统设置，不是启动那一刻的
+        （C-13：旧实现 auto 只在建窗时读一次，且开关写死 on/off，点过就回不去 auto）。
         系统设置读不到 → `_sys_reduce_motion is None` → **保持动效开启**（不擅自替用户降级）。
         """
         return pet_motion.reduce_motion_enabled(self.cfg.get("reduce_motion", "auto"),
                                                 self._sys_reduce_motion)
 
     def _high_contrast(self):
-        """高对比度的**生效值**（A3）：配置优先；auto 时跟随启动时读到的系统深色主题。"""
+        """高对比度的**生效值**（A3）：配置优先；auto 时跟随 self._sys_dark。
+
+        与 _reduce_motion 同口径：建窗读一次，每次切回 auto 重读一次（C-13）。
+        """
         return pet_motion.high_contrast_enabled(self.cfg.get("high_contrast", "auto"),
                                                 self._sys_dark)
+
+    def _frame_rate_factor(self):
+        """D1：素材帧的**帧率倍率**（「减少动效」开着 = 放慢，**不是停帧**）。
+
+        真源是 pet_motion.frame_rate_factor(reduce_motion)：关着 1.0（原速）、
+        开着 0.5（半速 → 相邻帧间隔 ×2）。这里只做一次转发，**不塞任何字面量**
+        ——倍率是令牌，散在各调用点就没人守得住它。
+
+        令牌本体在 pet_motion.RATE["FRAME_REDUCED"]（倍率的真源在那一侧，本模块不复制数值）。
+        ⚠ 这是**硬依赖**，且刻意**不做兜底**：pet_motion 里没有这个纯函数时，这里抛的
+        AttributeError 是故意的 —— 静默回 1.0 等于"这条功能没接线却看起来是绿的"。
+        """
+        return pet_motion.frame_rate_factor(self._reduce_motion())
 
     def _ease(self, name):
         """缓动令牌名 → QEasingCurve.Type（全仓唯一映射点；名字的真源是 pet_motion.EASE）。"""
@@ -4735,22 +4818,73 @@ class PetWindow(QWidget):
         if self.cfg.get("sound", True):
             play_sound("pop")
 
-    # ---- A2/A3：两个开关的落地点 ----
-    def _set_reduce_motion(self, on):
-        """菜单开关：显式选择覆盖 auto（写死 on/off），立即生效。"""
-        self.cfg["reduce_motion"] = "on" if on else "off"
-        save_config(self.cfg)
-        self._clear_motion_overlays()  # 刚打开：把在途的一次性动效收干净
-        self.bubble.set_motion_reduced(self._reduce_motion())
-        self._sync_thinking()  # B8：在途指示只停脉动，**绝不消失**（它是信息）
-        self.show_bubble("动效已关掉，只留瞬时反馈~" if on else "动效已恢复~")
+    # ---- A2/A3：两个开关的落地点（v2.11.0 发版轮 C-13：三态 auto / on / off） ----
+    def _set_reduce_motion(self, state):
+        """菜单开关：三态 "auto" / "on" / "off"（勾选框给出的 bool 记为 on/off），立即生效。
 
-    def _set_high_contrast(self, on):
-        """菜单开关：显式选择覆盖 auto（写死 on/off），立即生效。"""
-        self.cfg["high_contrast"] = "on" if on else "off"
+        C-13：传 "auto" 时**重新读一次系统设置**，不再沿用建窗时缓存下来的
+        self._sys_reduce_motion —— 旧实现把入参写死成 on/off，于是"跟随系统"这条路
+        **点过一次就回不去**（配置里再也出现不了 auto）。现在 auto 是真的 auto。
+        读不到系统设置 → pet_motion.reduce_motion_enabled 按"不擅自替用户降级"处理。
+        """
+        state = _motion_state(state)
+        self.cfg["reduce_motion"] = state
+        if state == "auto":
+            self._sys_reduce_motion = pet_motion.system_reduce_motion()  # 重读，不用旧缓存
         save_config(self.cfg)
+        on = self._reduce_motion()
+        self._clear_motion_overlays()  # 刚打开：把在途的一次性动效收干净
+        self.bubble.set_motion_reduced(on)
+        self._sync_thinking()  # B8：在途指示只停脉动，**绝不消失**（它是信息）
+        self.anim.set_rate_factor(self._frame_rate_factor())  # D1：在播的素材帧当场换速
+        self._sync_motion_acts()
+        if state == "auto":
+            self.show_bubble("动效：跟随系统（现在是%s）~" % ("减少" if on else "全开"))
+        else:
+            self.show_bubble("动效已关掉，只留瞬时反馈~" if on else "动效已恢复~")
+
+    def _set_high_contrast(self, state):
+        """菜单开关：三态 "auto" / "on" / "off"（勾选框给出的 bool 记为 on/off），立即生效。
+
+        C-13：传 "auto" 时重新读一次系统深色主题（不是沿用 self._sys_dark 那份旧缓存）。
+        """
+        state = _motion_state(state)
+        self.cfg["high_contrast"] = state
+        if state == "auto":
+            self._sys_dark = pet_motion.system_dark_theme()  # 重读，不用旧缓存
+        save_config(self.cfg)
+        on = self._high_contrast()
         self._apply_contrast(restore_style=not on)
-        self.show_bubble("高对比度已开启（正文 ≥ 4.5:1）~" if on else "高对比度已关闭~")
+        self._sync_motion_acts()
+        if state == "auto":
+            self.show_bubble("高对比度：跟随系统（现在是%s）~" % ("开启" if on else "关闭"))
+        else:
+            self.show_bubble("高对比度已开启（正文 ≥ 4.5:1）~" if on else "高对比度已关闭~")
+
+    def _sync_motion_acts(self):
+        """把两个无障碍开关的**勾选态**刷成当前值（三态在菜单里的表示法）。
+
+        每个开关有两个勾选项（都在托盘菜单里，见 __init__）：
+          · 「减少动效 / 高对比度」——勾 = **生效值**为真（auto 时也照实显示系统那份）；
+          · 「跟随系统」——勾 = 配置值就是 "auto"。
+        两项合起来把三态表示全：主项勾/不勾 + 跟随项勾/不勾 = on / off / auto。
+        写回自己时 blockSignals，免得 setChecked 再触发一轮 toggled（回环）。
+        菜单可能还没建（构造期先于托盘菜单）→ 取不到就跳过。
+        """
+        pairs = ((getattr(self, "_reduce_motion_act", None), self._reduce_motion()),
+                 (getattr(self, "_high_contrast_act", None), self._high_contrast()),
+                 (getattr(self, "_reduce_motion_auto_act", None),
+                  pet_config.is_auto_motion_mode(self.cfg.get("reduce_motion"))),
+                 (getattr(self, "_high_contrast_auto_act", None),
+                  pet_config.is_auto_motion_mode(self.cfg.get("high_contrast"))))
+        for act, val in pairs:
+            if act is None:
+                continue
+            act.blockSignals(True)
+            try:
+                act.setChecked(bool(val))
+            finally:
+                act.blockSignals(False)
 
     def _apply_contrast(self, restore_style=False):
         """A3：高对比度落地——气泡三色 + 挂件/托盘配色。
@@ -5093,8 +5227,12 @@ class PetWindow(QWidget):
             self.squash_y = 1.0
             self._apply_transform()
 
+        # A-04（v2.11.0 定版补漏）：这一处此前也绕开了「减少动效」。基准时长来自**物理数据**
+        # （pet_physics.BOUNCE_DURATION），按 pet_motion 的分工**不进令牌表**，走 effective_duration：
+        # 关掉动效 → 0 → 立刻落到终态（_bounce_done 照常执行）。
         self._run_anim(
-            int(pet_physics.BOUNCE_DURATION * 1000),
+            pet_motion.effective_duration(int(pet_physics.BOUNCE_DURATION * 1000),
+                                          self._reduce_motion()),
             lambda v: self._set_bounce_scale(v, squash),
             on_finished=_bounce_done)
 

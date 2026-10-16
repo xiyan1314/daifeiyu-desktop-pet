@@ -65,8 +65,9 @@ import sys
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 # 冻结的对照基线副本（v2.7.0 兼容审查的"当时那份树"）：里面的命中**故意不改**，
-# 单独列出、**不计入 --strict 的退出码**（质量审：全仓跑 --strict 会 exit=1，
-# 下一个人照文档复跑会误判成"回归了"）。
+# 单独列出、**不计入 --strict 的退出码**——换句话说：**若不把冻结副本排除在退出码之外**，
+# 全仓跑 --strict 才会 exit=1（实测是 rc=0，见上面 docstring 里那段更正）；
+# 照"全仓会 exit=1"那句初稿复跑，会把**预期**读成"回归了"。
 FROZEN_PREFIXES = ("_dev/_compat270/base/",)
 
 TAUTOLOGY = "恒真-T"

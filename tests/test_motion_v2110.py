@@ -16,6 +16,18 @@
 驱动方式：QVariantAnimation 用 setCurrentTime(duration) 推到终态——
 _dev/probe_qt_setcurrenttime_v26.py 验过它是**确定性**驱动（不看钟），
 与 tests/test_idle_settle_v26.py 的驱动口径一致。
+
+v2.11.0 定版补漏（A-04 的三个新接动效点 + 两条"没牙齿"的守卫）：
+· A-08 / A-12：跳跃（pet_actions 的 JUMP）/ 落地 Q 弹（桌宠 _play_landing_bounce）/
+  余额徽章滚动（pet_balance 的 BALANCE_ROLL）三处**并在验收主用例里逐条列举**——
+  开着开关不产生在途动画、瞬时到终态，且**结果值与开动效时逐项相同**；
+· A-11①：`duration_ms` / `effective_duration` 的**第二个实参形状**由 AST 判
+  （不再是"字符串在不在"——那种判据对桌上现成的 `duration_ms("RIPPLE", False)` 无感）；
+· A-11② / C-10：令牌名守卫的扫描面扩到产品侧四个文件，正则放宽到含小写；
+· C-09：反向钉子——表里每个键都要有消费点（备用档位显式祖父化）；
+· C-20：高对比度的**挂件/托盘**那一半（pet_widgets._pal()）也要真换、关掉逐键复原；
+· C-21：520 / 700 进"原处不许再有字面量"名单；
+· D1：素材帧的折中倍率 frame_rate_factor() 的契约（坏值回退不抛、且**绝不返回 0**）。
 """
 import ast
 import io
@@ -33,6 +45,7 @@ if HERE not in sys.path:
 
 import 桌宠 as main  # noqa: E402
 import pet_motion  # noqa: E402
+import pet_physics  # noqa: E402
 import pet_widgets  # noqa: E402
 from PySide6.QtCore import (QAbstractAnimation, QCoreApplication, QEasingCurve,  # noqa: E402
                             QEvent, QPoint, QPointF, Qt, QVariantAnimation)
@@ -175,18 +188,33 @@ def test_token_table_shape_and_hci_values():
 
 
 def test_moved_durations_are_gone_from_their_old_homes():
-    """「沿用的既有时长常量必须显式搬家」：原处**不许再有字面量**，且原处留了指路注释。"""
+    """「沿用的既有时长常量必须显式搬家」：原处**不许再有字面量**，且原处留了指路注释。
+
+    C-21（v2.11.0 定版）：A-04 新搬的 **520（JUMP）/ 700（BALANCE_ROLL）** 必须在**同一张名单**上
+    ——旧版只钉了 1500 / 900 / 1500 / 5000 四个，新两个可以悄悄回到原处而无人红。
+    """
     src_main = _src("桌宠.py")
     src_wid = _src("pet_widgets.py")
+    src_act = _src("pet_actions.py")
+    src_bal = _src("pet_balance.py")
     # 原处的硬编码必须一个不剩
     assert "anim.setDuration(1500)" not in src_main
     assert "_run_anim(900," not in src_main
     assert "_hold_timer.start(1500)" not in src_main
     assert "_timer.start(5000)" not in src_wid
+    # A-04（v2.11.0 定版补漏）新搬的两处：原处同样不许再有字面量
+    assert "_run_anim(520," not in src_act
+    assert "setDuration(700)" not in src_bal
     # 原处必须留"搬家去哪"的指路注释（两处并存 = 改一处漏一处）
     for _token in ("EMOTE_FLOAT", "EAT_SQUASH", "PET_HOLD"):
         assert ('pet_motion.DUR["%s"]' % _token) in src_main, _token
     assert 'pet_motion.DUR["BUBBLE_HOLD"]' in src_wid
+    # 新两处走的是 duration_ms（不是 DUR[...]）：名字必须落在调用点上，
+    # 且**搬走的那个数一个毫秒都不许漂**（520 / 700 就是搬家前原处的字面量）
+    assert 'duration_ms("JUMP"' in src_act, "跳跃的时长没走令牌表"
+    assert 'duration_ms("BALANCE_ROLL"' in src_bal, "余额滚动的时长没走令牌表"
+    assert pet_motion.DUR["JUMP"] == 520
+    assert pet_motion.DUR["BALANCE_ROLL"] == 700
 
 
 def test_pure_function_fallbacks_are_asserted_contracts():
@@ -217,22 +245,61 @@ def test_pure_function_fallbacks_are_asserted_contracts():
     assert pet_motion.ensure_min_contrast("#ffee00", "#ffffff") == "#7f7700"  # 确定性
 
 
+def test_frame_rate_factor_is_a_compromise_and_never_freezes(monkeypatch):
+    """D1：素材帧在「减少动效」下**放慢不停帧**（用户裁决「纳入，折中」）—— 契约在这里钉住。
+
+    · 关着 → 1.0（原速）；开着 → RATE["FRAME_REDUCED"]，且必须落在 **(0, 1) 开区间**
+      （0 = 把角色冻成一张图，正是被否掉的那一支；≥1 = 根本没放慢，等于没纳入）；
+    · 表里没有这个键 / 表值坏（非数值）/ 表值不是正数 → **1.0（原速）**，不抛：
+      宁可"没放慢"，也绝不返回 0 把角色冻住。
+    """
+    assert pet_motion.frame_rate_factor(False) == 1.0
+    factor = pet_motion.frame_rate_factor(True)
+    assert factor == pet_motion.RATE["FRAME_REDUCED"]
+    assert 0.0 < factor < 1.0, "折中倍率必须落在 (0,1)：0 = 冻帧（被否掉），≥1 = 没纳入"
+    for _bad in ("坏值", None, [], 0, -0.5):
+        monkeypatch.setitem(pet_motion.RATE, "FRAME_REDUCED", _bad)
+        assert pet_motion.frame_rate_factor(True) == 1.0, \
+            "坏表值必须回 1.0（原速）：不许抛，更不许返回 0 把角色冻住：%r" % (_bad,)
+    monkeypatch.delitem(pet_motion.RATE, "FRAME_REDUCED", raising=False)
+    assert pet_motion.frame_rate_factor(True) == 1.0, "表里没有这个键时必须回 1.0（原速）"
+    assert pet_motion.frame_rate_factor(False) == 1.0
+    assert pet_motion.frame_rate_factor(None) == 1.0  # 关着时给什么值都一样：原速
+
+
+# 调用点令牌名的形状：名字出现在 duration_ms 的**第一个实参**上。
+# ⚠ 必须含小写：C-10 实测旧正则 `[A-Z_]+` 对"小写打错令牌名"无感（NOT CAUGHT）。
+_TOKEN_CALL_RE = r'duration_ms\(\s*"([A-Za-z_][A-Za-z0-9_]*)"'
+
+
 def test_every_token_name_used_at_a_call_site_exists():
     """调用点写下的令牌名**必须真的在表里**——否则 duration_ms 静默回退 0（动效静默失效）。
 
     这条把 pet_motion.duration_ms 那个"坏键 → 0"的静默回退关在门外：改名不改调用点、
     或调用点打错一个字母，这里当场红（不靠人眼、也不靠运行时日志）。
+
+    A-11② / C-10（v2.11.0 定版）：扫描面从 桌宠.py + pet_widgets.py 扩到**产品侧四个文件**——
+    A-04 新接的两处就在 pet_actions.py / pet_balance.py，漏掉它们的话"JUMP"打成"JMP"
+    会静默回退 0ms 而**零红**；正则同时放宽到含**小写**（大小写写错都算打错）。
+    四个文件必须**各自**贡献调用点：否则"扩了扫描面"这件事本身会悄悄回退。
     """
+    files = ("桌宠.py", "pet_widgets.py", "pet_actions.py", "pet_balance.py")
     sites = []
-    for name in ("桌宠.py", "pet_widgets.py"):
-        for m in re.finditer(r'duration_ms\(\s*"([A-Z_]+)"', _src(name)):
+    for name in files:
+        for m in re.finditer(_TOKEN_CALL_RE, _src(name)):
             sites.append((name, m.group(1)))
     assert len(sites) >= 8, "扫描面太小（这条会退化成空检查）：%r" % (sites,)
+    # 反向对照：这个正则必须**大小写都认**（C-10：旧版只认 [A-Z_]+，小写打错时 NOT CAUGHT）
+    assert re.findall(_TOKEN_CALL_RE, 'x = duration_ms("jmp", True)') == ["jmp"]
+    assert re.findall(_TOKEN_CALL_RE, 'x = duration_ms("JUMP", True)') == ["JUMP"]
+    for name in files:
+        assert any(f == name for f, _ in sites), \
+            "扫描面漏了 %s（它的调用点从此无人看管）" % name
     missing = [(f, t) for f, t in sites if t not in pet_motion.DUR]
     assert missing == [], "调用点用了表里没有的令牌名（会静默退化成 0ms）：%r" % (missing,)
     for token in ("FEEDBACK", "TRANSITION", "BUBBLE_FADE", "LARGE", "EDGE", "RIPPLE",
                   "HEART", "THINKING_PULSE", "EMOTE_FLOAT", "EAT_SQUASH", "PET_HOLD",
-                  "BUBBLE_HOLD"):
+                  "BUBBLE_HOLD", "JUMP", "BALANCE_ROLL"):
         assert token in pet_motion.DUR, token
 
 
@@ -258,14 +325,137 @@ def test_every_token_value_is_numeric():
     assert pet_motion.duration_ms(None) == 0, "表里没有的键 -> 0（既有口径）"
 
 
+# ---------------- A-11①：时长取用处的**实参形状**判据 ----------------
+
+# 产品侧"时长从哪来"的两个入口：令牌表（HCI 档位）与数据驱动时长。两者都是
+# `(…, reduce_motion=False)` 的签名 —— 所以第二个实参就是"开关有没有被带进去"。
+_DURATION_ENTRY_POINTS = ("duration_ms", "effective_duration")
+
+# 扫描面 = 产品侧全部会取时长的文件（少一个，那个文件的调用点就无人看管）
+_DURATION_SOURCE_FILES = ("桌宠.py", "pet_widgets.py", "pet_actions.py", "pet_balance.py")
+
+# 祖父条款：这些令牌的调用点**拿不到**开关表达式，但语义等价（"为什么"就写在值里）。
+# ⚠ 新令牌不许往这里加 —— 要加，先在评审里解释"它为什么不是动效"。
+_GRANDFATHERED_SWITCH_FREE = {
+    "RIPPLE": "上面已有 `if not pet_motion.animation_enabled(self._reduce_motion()): return None` 早退",
+    "HEART": "上面已有 `if not pet_motion.animation_enabled(self._reduce_motion()): return 0` 早退",
+    "EMOTE_FLOAT": "展示时长：一处**就在** `if self._reduce_motion():` 的分支里，另一处在它的 return 之后（等价 False）",
+    "BUBBLE_HOLD": "气泡**展示时长**（这条信息该看多久）刻意不随开关归零 —— 归零 = 闪一下就没",
+    "PET_HOLD": "长按阈值是**交互阈值不是动效**：归零 = 按下即摸头（行为改变，不是降级）",
+    "THINKING_PULSE": "唯一调用点只在动效开着时被调用（减少动效只停脉动、留着指示）",
+}
+
+
+def _duration_call_sites(src):
+    """所有 `…duration_ms(…)` / `…effective_duration(…)` 调用。
+
+    返回 [(行号, 函数名, 令牌名或 None, 第二个实参 AST 或 None)]。
+    """
+    out = []
+    for node in ast.walk(ast.parse(src)):
+        if not isinstance(node, ast.Call):
+            continue
+        fn = node.func
+        name = fn.attr if isinstance(fn, ast.Attribute) else \
+            (fn.id if isinstance(fn, ast.Name) else None)
+        if name not in _DURATION_ENTRY_POINTS:
+            continue
+        token = None
+        if node.args and isinstance(node.args[0], ast.Constant) \
+                and isinstance(node.args[0].value, str):
+            token = node.args[0].value
+        out.append((node.lineno, name, token, node.args[1] if len(node.args) > 1 else None))
+    return out
+
+
+def _is_switch_expr(node):
+    """第二个实参是不是"开关表达式"：`…_reduce_motion()` 调用，或 `…_motion_reduced` 属性。
+
+    后者是气泡自己那份开关副本，由 set_motion_reduced 从「减少动效」的生效值写入。
+    """
+    for sub in ast.walk(node):
+        if isinstance(sub, ast.Call) and isinstance(sub.func, ast.Attribute) \
+                and sub.func.attr == "_reduce_motion":
+            return True
+        if isinstance(sub, ast.Attribute) and sub.attr == "_motion_reduced":
+            return True
+    return False
+
+
 def test_all_animation_durations_go_through_the_table():
-    """时长都从表里取：_show_emote / _play_eat / BUBBLE_HOLD / EDGE / RIPPLE 五处点名的取用处。"""
-    src_main = _src("桌宠.py")
-    src_wid = _src("pet_widgets.py")
-    for _token in ("EMOTE_FLOAT", "EAT_SQUASH", "EDGE", "RIPPLE", "PET_HOLD", "THINKING_PULSE"):
-        assert ('duration_ms("%s"' % _token) in src_main, _token
-    assert 'duration_ms("BUBBLE_HOLD")' in src_wid
-    assert 'duration_ms("BUBBLE_FADE"' in src_wid
+    """时长都从表里取 —— 而且**取的时候必须把开关带进去**（A-11①：AST 判实参形状，不判字符串）。
+
+    旧版只断言 `duration_ms("X"` 这个**字符串**在源码里出现过：桌上现成的反例照样绿
+    （桌宠.py 写死 `duration_ms("RIPPLE", False)` / `duration_ms("HEART", False)`），
+    把任意一处的 `self._reduce_motion()` 改成 `False` 也照样绿 —— 那是"没牙齿"的守卫。
+    现在按 AST 查**第二个实参的形状**：开关表达式 → 过；其余形状 → 该令牌必须在
+    _GRANDFATHERED_SWITCH_FREE 里（逐个祖父化，每条的"为什么等价"写在那张表上）。
+
+    effective_duration **一并查**：它是同一条政策的另一半（数据驱动的时长同样要能被开关
+    关掉），A-04 的第三处（落地 Q 弹）正落在它上面。
+    """
+    sites = []
+    for name in _DURATION_SOURCE_FILES:
+        for lineno, fn, token, arg in _duration_call_sites(_src(name)):
+            sites.append((name, lineno, fn, token, arg))
+    # 判据不许退化成空检查：产品侧真的有一批调用点，且四个文件都在扫描面内
+    assert len(sites) >= 12, "扫描面太小（这条会退化成空检查）：%r" % (
+        [(s[0], s[1], s[3]) for s in sites],)
+    for name in _DURATION_SOURCE_FILES:
+        assert any(s[0] == name for s in sites), "扫描面漏了 %s" % name
+    # 反向对照：形状判据必须真能区分 —— 这两行正是 A-11① 要堵的那个洞
+    assert _is_switch_expr(ast.parse("f(1, self._reduce_motion())").body[0].value.args[1])
+    assert _is_switch_expr(ast.parse("f(1, pet._reduce_motion())").body[0].value.args[1])
+    assert _is_switch_expr(ast.parse("f(1, self._motion_reduced)").body[0].value.args[1])
+    assert not _is_switch_expr(ast.parse("f(1, False)").body[0].value.args[1])
+    assert not _is_switch_expr(ast.parse("f(1)").body[0].value)
+    bad = [(f, ln, fn, tok) for f, ln, fn, tok, arg in sites
+           if not (arg is not None and _is_switch_expr(arg))
+           and tok not in _GRANDFATHERED_SWITCH_FREE]
+    assert bad == [], ("这些调用点的第二个实参不是开关表达式、又不在祖父条款里"
+                       "（「减少动效」对它们静默失效）：%r" % (bad,))
+    # 换成 AST 之后不许把"谁在消费这些令牌"这件事丢掉
+    used = {tok for _, _, _, tok, _ in sites if tok}
+    for _token in ("EMOTE_FLOAT", "EAT_SQUASH", "EDGE", "RIPPLE", "PET_HOLD",
+                   "THINKING_PULSE", "BUBBLE_HOLD", "BUBBLE_FADE", "FEEDBACK",
+                   "JUMP", "BALANCE_ROLL"):
+        assert _token in used, "%s 在产品侧已经没有调用点了" % _token
+    # A-04 的三处必须在扫描面内，且**走的是开关**（不是靠祖父条款混过去的）
+    strict = {(f, tok) for f, _, fn, tok, arg in sites
+              if arg is not None and _is_switch_expr(arg)}
+    assert ("pet_actions.py", "JUMP") in strict, "跳跃的时长没把开关带进去（A-04 会被静默推翻）"
+    assert ("pet_balance.py", "BALANCE_ROLL") in strict, "余额滚动的时长没把开关带进去"
+    assert any(f == "桌宠.py" and fn == "effective_duration" and tok is None
+               and arg is not None and _is_switch_expr(arg)
+               for f, _, fn, tok, arg in sites), "落地 Q 弹的时长没把开关带进去"
+
+
+# ---------------- C-09：反向钉子——表里每个键都要有人用 ----------------
+
+# 备用档位（**显式祖父化**，每个带理由）；新加的死键不在这张名单里 → 上面那条用例会红。
+_DUR_RESERVED = {
+    "TRANSITION": "HCI「状态转换」档的定义值（150–250ms）；消费点都用更具体的 BUBBLE_FADE",
+    "LARGE": "HCI「大位移」档的定义值（≈300ms）；消费点都用更具体的 EDGE / RIPPLE",
+}
+
+
+def test_every_token_in_the_table_is_actually_used():
+    """C-09：反向钉子 —— 表里**每个键**都要有消费点（死配置会让下一个人以为有档位在用）。
+
+    只钉"调用点用的名字在表里"是单向的：表里多出来的键（没人用的档位）永远不会红。
+    DUR["TRANSITION"] / DUR["LARGE"] 今天产品侧 **0 个消费点** → 显式登记在 _DUR_RESERVED
+    并写明理由；**新出现的死键不在名单里 → 这里当场红**。
+    """
+    used = {tok for name in _DURATION_SOURCE_FILES
+            for _, _, tok, _ in _duration_call_sites(_src(name)) if tok}
+    dead = sorted(set(pet_motion.DUR) - used - set(_DUR_RESERVED))
+    assert dead == [], "这些令牌在表里、产品侧却没有消费点（死配置）：%r" % (dead,)
+    # 反向对照：上面那个表达式必须真能报出死键（否则它是一条恒过的空检查）
+    assert sorted({"TRANSITION", "LARGE", "没人用的键"} - used - set(_DUR_RESERVED)) == ["没人用的键"]
+    # 祖父条款自己也要被钉住：它们真的还没人用（哪天被用上了，就该从名单里删掉）
+    for _k in _DUR_RESERVED:
+        assert _k not in used, "%s 已经有消费点了 —— 把它从 _DUR_RESERVED 里删掉" % _k
+    assert set(_DUR_RESERVED) <= set(pet_motion.DUR), "祖父名单里混进了表里没有的键"
 
 
 # ===================== A2：减少动效 =====================
@@ -285,11 +475,20 @@ def test_default_follows_system_and_never_downgrades():
     assert pet_motion.animation_enabled(False) is True
 
 
-def test_every_animation_point_is_covered_by_the_switch(win):
-    """**逐条列举**每个动效点：开关打开后"该动的都不动了"，关掉后又动了。
+def test_every_animation_point_is_covered_by_the_switch(win, monkeypatch):
+    """**逐条列举**本用例覆盖的动效点（v2.11.0 定版：①–⑧ + 本轮新增 ⑩⑪⑫ = 11 条；
+    第 ⑨ 条"合成动作"在同文件的 test_proc_actions_are_covered_by_the_switch）：
+    开关打开后"该动的都不动了"，关掉后又动了；**新补的三条还要结果值与开动效时逐项相同**。
 
-    这是 A2 的验收主用例——任何一个动效点漏接开关，这里就红。
+    ⚠ 名字里的 "every" 指的是**本用例逐条列举的这些点**，不是"全仓穷举"：
+    A-07 那 4 处代码驱动的**位移**（走路 / 甩抛飞行 / 食物托盘飞行 / 拖拽弹簧）按裁决
+    **不纳入**「减少动效」（收窄声明 —— 边界写在 pet_motion.effective_duration 的「已知边界」里）。
+    ⚠ 名字**故意没改**：这个 nodeid 被 _dev/mutations_agent_a_v2110.json 多处引用
+    （含一条 pinned 用例体摘要），改名 = 让那些变异锚点变成"node not found"，
+    而那份 spec 不在本轮的独占文件里 → 用 docstring 把覆盖面写准，不动名字。
     """
+    # 跳跃会随机喊一句台词（走 show_bubble）→ 与本用例的判据无关，去掉噪音
+    monkeypatch.setattr(win, "_say_line", lambda *a, **k: None)
     win._set_reduce_motion(True)
     assert win._reduce_motion() is True
     # ① 悬停光晕：不建动画对象，瞬时到位
@@ -334,6 +533,34 @@ def test_every_animation_point_is_covered_by_the_switch(win):
     assert win._thinking_item.isVisible(), "减少动效把在途指示也关掉了（那是信息不是装饰）"
     assert win._thinking_anim is None
     win._ai_inflight = False
+    # ⑩ 跳跃（pet_actions.py 的 do_jump，令牌 JUMP）：不产生在途动画，瞬时到终态
+    win.busy = False
+    win.move(420, 420)
+    jump_home = (win.x(), win.y())
+    win.actions.do_jump()
+    assert win._tween_anim is None, "减少动效下跳跃仍挂着在途动画"
+    assert (win.x(), win.y()) == jump_home, "减少动效下跳跃没落到终态（起点=终点）"
+    # ⑪ 落地 Q 弹（桌宠.py 的 _play_landing_bounce）：时长来自**物理数据** → effective_duration
+    win._land_squash = 0.6            # 落地压缩量（默认 1.0 = 根本没有 Q 弹）
+    win.squash_x = win.squash_y = 1.0
+    win._play_landing_bounce()
+    # "不产生动画对象"的口径与 test_proc_actions_are_covered_by_the_switch 一致：0ms 的动画在
+    # start() 里**同步收尾**（实测 state=Stopped / duration=0），但它的收尾回调是 _bounce_done，
+    # 不负责清 _tween_anim 槽 → 在途判据 = "槽为空 **或** 已不在跑"，再加"形变已到终态"。
+    assert win._tween_anim is None or \
+        win._tween_anim.state() != QAbstractAnimation.State.Running, \
+        "减少动效下落地 Q 弹仍在跑（应当是 0ms 瞬时收尾）"
+    assert (win.squash_x, win.squash_y) == (1.0, 1.0), "减少动效下落地 Q 弹留下了半截形变"
+    # ⑫ 余额徽章滚动（pet_balance.py 的 on_updated，令牌 BALANCE_ROLL）：不滚数字，直接落终值
+    win.cfg["api_key"] = "sk-test"    # on_updated 在 Key 为空时会早退（这里要走到滚动那一段）
+    win._shown_balance = 1.0
+    win._balance_active_gen = 11
+    win._manual_pending = False
+    win.balance.on_updated(11, 9.0, "CNY", 0.0)
+    assert win._balance_anim is None, "减少动效下余额徽章仍挂着滚动动画"
+    assert win._shown_balance == 9.0, "减少动效下余额没有落到终值"
+    # 三处的"结果值"留档：下面反向那一半要**逐项**比对（减少动效 = 没有过程，结果一样）
+    reduced_results = (jump_home, (win.squash_x, win.squash_y), win._shown_balance)
 
     # ---- 反向：开关关掉之后，同样的动作**又动了** ----
     win._set_reduce_motion(False)
@@ -351,6 +578,35 @@ def test_every_animation_point_is_covered_by_the_switch(win):
     win._ai_inflight = True
     assert win._thinking_anim is not None
     win._ai_inflight = False
+    # ⑩⑪⑫ 反向：同三处，开着动效**真的起播**；推到终态后**结果值与上面逐项相同**
+    win.busy = False
+    win.move(420, 420)
+    win.actions.do_jump()
+    assert win._tween_anim is not None, "前提不成立：开着动效时跳跃也没起播"
+    _drive(win._tween_anim)
+    assert (win.x(), win.y()) == reduced_results[0], "跳跃终态与减少动效下的结果不一致"
+    win._land_squash = 0.6
+    win.squash_x = win.squash_y = 1.0
+    win._play_landing_bounce()
+    assert win._tween_anim is not None, "前提不成立：开着动效时落地 Q 弹也没起播"
+    assert win._tween_anim.state() == QAbstractAnimation.State.Running, \
+        "开着动效时落地 Q 弹没有真的在跑（上面那条'不在跑'就失去对照）"
+    assert win._tween_anim.duration() == \
+        pet_motion.effective_duration(int(pet_physics.BOUNCE_DURATION * 1000), False), \
+        "落地 Q 弹的基准时长没走 pet_physics 的物理数据"
+    win._tween_anim.setCurrentTime(win._tween_anim.duration() // 4)
+    assert win.squash_y != 1.0, "落地 Q 弹起了个空动画（形变没动）"
+    _drive(win._tween_anim)
+    assert (win.squash_x, win.squash_y) == reduced_results[1], \
+        "落地 Q 弹终态与减少动效下的结果不一致"
+    win._shown_balance = 1.0
+    win._balance_active_gen = 12
+    win._manual_pending = False
+    win.balance.on_updated(12, 9.0, "CNY", 0.0)
+    assert win._balance_anim is not None, "前提不成立：开着动效时余额也没滚动"
+    assert win._balance_anim.duration() == pet_motion.DUR["BALANCE_ROLL"], "余额滚动没走令牌表"
+    _drive(win._balance_anim)
+    assert win._shown_balance == reduced_results[2], "余额终值与减少动效下的结果不一致"
 
 
 def test_proc_actions_are_covered_by_the_switch(win):
@@ -743,6 +999,31 @@ def test_high_contrast_switch_applies_and_restores(win):
     assert saved.get("high_contrast") == "on"
     win._set_high_contrast(False)
     assert main.BUBBLE_STYLE["fg"] == before["fg"], "关掉高对比度没有回到用户那份样式"
+
+
+def test_high_contrast_reaches_widgets_and_restores_them_key_by_key(win):
+    """C-20：高对比度**不止气泡那一半** —— 挂件/托盘配色（pet_widgets._pal()）也要真的换，
+    关掉后**逐键不变**（发布说明原文：「气泡**与挂件**换成两套高对比调色板……
+    关闭时挂件/托盘配色一个字节都不变」）。
+
+    旧判据只断言了 main.BUBBLE_STYLE 那一半；最小变异是让 _pal() 恒返回历史配色
+    （删掉 if _HC["on"] 那一支）→ 旧判据全绿、这条红。
+    _pal() 的消费点是挂件/托盘的 paintEvent（食物托盘 / 余额徽章）与 thinking_pixmap，
+    这条用例钉的就是它。
+    """
+    win._set_high_contrast(False)
+    before_pal = dict(pet_widgets._pal())
+    before_style = dict(main.BUBBLE_STYLE)
+    win._set_high_contrast(True)
+    want = pet_motion.palette(bool(win._sys_dark))
+    after_pal = dict(pet_widgets._pal())
+    assert after_pal == want, "挂件/托盘配色没换成高对比度调色板：%r" % (after_pal,)
+    assert after_pal != before_pal, "挂着高对比度，挂件/托盘配色却和原来一模一样"
+    for _key in ("fg", "border", "muted"):
+        assert pet_motion.contrast_ratio(after_pal[_key], after_pal["bg"]) >= 4.5, _key
+    win._set_high_contrast(False)
+    assert dict(pet_widgets._pal()) == before_pal, "关掉高对比度后挂件/托盘配色没有逐键复原"
+    assert dict(main.BUBBLE_STYLE) == before_style, "关掉高对比度后气泡样式没有逐键复原"
 
 
 def test_keyboard_escape_and_enter_route_to_window_actions(win):

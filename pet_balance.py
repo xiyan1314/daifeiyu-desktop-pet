@@ -14,6 +14,7 @@ from PySide6.QtCore import QEasingCurve, QTimer, QVariantAnimation
 from PySide6.QtWidgets import QDialog
 
 import pet_dialogs  # 账本 / 记一笔对话框（pet_dialogs 不 import 桌宠，无循环）
+import pet_motion  # A-04：余额徽章数字滚动的时长走令牌表
 import pet_log  # v2.2.5：start() 里用 pet_log.guard_slot 包轮询槽，此前漏 import → 开启余额监控直接 NameError
 
 
@@ -299,8 +300,15 @@ class BalanceService:
             pet._update_badge()
             return
         start = pet._shown_balance
+        # A-04（v2.11.0 定版补漏）：700 原来既是字面量、又让这一处绕开「减少动效」。
+        # 关掉动效 → 时长 0 → 不滚数字，直接落到终值（**结果一样**，只是没有过程）。
+        _roll_ms = pet_motion.duration_ms("BALANCE_ROLL", pet._reduce_motion())
+        if _roll_ms <= 0:
+            pet._shown_balance = float(total)
+            pet._update_badge()
+            return
         anim = QVariantAnimation(pet)
-        anim.setDuration(700)
+        anim.setDuration(_roll_ms)
         anim.setStartValue(float(start))
         anim.setEndValue(float(total))
         anim.setEasingCurve(QEasingCurve.Type.OutCubic)

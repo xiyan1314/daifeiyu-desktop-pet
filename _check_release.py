@@ -815,7 +815,8 @@ def missing_fingerprint_keys(recorded, current):
 
 
 # ---- v2.11.0 第 9 轮（代理 C · 任务 V1）：pinned 用例体的 AST 摘要 ----
-# 为什么发布门也要读它：文件指纹只覆盖 MUTATION_FINGERPRINT_FILES 那 28 个键，而
+# 为什么发布门也要读它：文件指纹只覆盖 MUTATION_FINGERPRINT_FILES 那 29 个键
+# （v2.11.0 补齐 pet_motion.py 之后逐项数过：27 个产品模块 + 那 2 个测试文件 = 29），而
 # **承载锚点的测试文件有 39 个** —— 把某个 pinned 用例的**用例体清空、nodeid 一个字不动**时：
 # nodeid 体检照样 rc=0（def 还在）、文件指纹一声不吭（文件不在清单里）、那条变异 CAUGHT→NOT CAUGHT。
 # 只有"用例体摘要"能出声。算法与 _dev/_mutate_lib.pin_digest **必须逐位一致**（两处口径由

@@ -33,7 +33,7 @@ Transparent frameless window, always-on-top, draggable, feedable, chatty — per
 - 📌 Single instance, tray icon, follow mouse / wander, wheel resize, edge snapping
 - 🚀 **Auto-start on boot** (off by default, right-click → "⚙️ 设置…" to enable): HKCU Run key, greets you every morning
 - 🐳 **v1.3 customization & bookkeeping (inspired by the dsh-whale-widget plugin)**:
-  - 🖼️ **Character import**: right-click → "🐟 角色" to import png/jpg/bmp/webp with auto background-removal / trim / scale; **1~8 custom forms with your own names and images** (feeding cycles through forms, back to the first after 12s); switch/delete/restore anytime
+  - 🖼️ **Character import**: right-click → "📦 资源管理…" (Character tab) to import png/jpg/bmp/webp with auto background-removal / trim / scale; **1~8 custom forms with your own names and images** (feeding cycles through forms, back to the first after 12s); switch/delete/restore anytime
   - 🎞️ **Animated characters (v1.3.2)**: pick multiple images as a frame sequence, or auto-extract frames from a **video / GIF** (video: 3~20 sampled frames, GIF: 3~24); every frame gets the same auto-processing; idle loops the animation, feeding switches to the full form
   - Custom characters get **procedural expression art** (blush/anger/sleep marks composited onto your image, v1.3.3) plus bubble & head emote; squish/edge/follow effects kept
   - 🔊 **Sound import + custom sound groups**: import wav/mp3 clips with preview; each of the 5 events (poke/release/feed/AI reply/coin) can use any clip or stay silent
@@ -105,12 +105,12 @@ python main.py   # canonical entry (桌宠.py kept as compat shim)
 
 ## 🎨 Customize your pet
 
-- **Character**: right-click → "🐟 角色" → "导入角色…" — material is auto-processed (background removed when opaque, transparent margins trimmed, oversized images scaled; png/jpg/bmp/webp supported):
+- **Character**: right-click → "📦 资源管理…" (opens on the Character tab) — material is auto-processed (background removed when opaque, transparent margins trimmed, oversized images scaled; png/jpg/bmp/webp supported):
   - **Single form**: pick one image; normal/full forms share it
   - **Dual form**: also pick a "full" image; feeding switches between the two (you choose the mode)
   - **Animated**: pick multiple images as an ordered frame sequence, or auto-extract frames from a video / GIF (video 3~20, GIF 3~24 frames)
   - Emotions = procedural expression art + bubble + head emote; squish/edge/follow effects kept
-- **Sounds**: right-click → "🎵 音效设置" → "管理音频片段…" to import wav/mp3 and audition; assign a clip (or silence) per event in the custom group
+- **Sounds**: right-click → "🎵 音效设置" → "管理音效片段…" to import wav/mp3 and audition; assign a clip (or silence) per event in the custom group
 - **Bubble**: right-click → "🎨 气泡样式…" to tweak background/text/border colors, font size and corner radius
 - **Lines**: right-click → "💬 自定义台词…" to append your own lines to four pools
 - Custom data lives next to the app (roles/, audio/, config.json) — copy these to migrate
@@ -179,7 +179,7 @@ AST, counting return annotations per module):
 | `pet_io.py` | ✅ 25/28 | every public API and pure function; the 3 missing are `_MergeGuard.__init__/__enter__/__exit__` |
 | `pet_book.py` | ⚠️ 25/34 | missing: 8 private helpers (`_load`/`_save_all`/`_archive_day`…) plus module-level `esc` |
 | `pet_chat.py` / `pet_balance.py` / `pet_widgets.py` / `pet_export.py` / `pet_config.py` / `pet_alarm.py` / `pet_behaviors.py` | ❌ 0 | unchanged this round |
-| `桌宠.py` (291 funcs) / `pet_dialogs.py` (398) / `pet_voice.py` (87) / `pet_resources.py` (80) / `pet_anim.py` (9) / `pet_actions.py` (7) | ❌ 0 | **tracked separately**, outside the "82/82" claim |
+| `桌宠.py` (294 funcs) / `pet_dialogs.py` (421) / `pet_voice.py` (93) / `pet_resources.py` (80) / `pet_anim.py` (13) / `pet_actions.py` (7) | ❌ 0 | **tracked separately**, outside the "82/82" claim |
 
 So: annotations exist for the Qt-free modules `pet_tools` / `pet_lines` / `pet_io` / `pet_book`
 (fully for the first two); the three core files and the other GUI modules still have none.

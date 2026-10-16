@@ -428,9 +428,10 @@ def test_mutation_evidence_notes_flags_evidence_missing_keys(tmp_path):
 
 # ---------------- v2.11.0 第 9 轮（代理 C · 任务 V1）：pinned 用例体的 AST 摘要 ----------------
 #
-# 洞：文件指纹只覆盖 28 个键，而**承载锚点的测试文件有 39 个** —— 把某个 pinned 用例的
-# **用例体清空、nodeid 一个字不动**时：nodeid 体检照样 rc=0（def 还在）、文件指纹一声不吭
-# （文件不在清单里）、那条变异 CAUGHT→NOT CAUGHT。只有"用例体摘要"能出声。
+# 洞：文件指纹只覆盖 29 个键（MUTATION_FINGERPRINT_FILES 实测逐项数 = 29），而**承载锚点的测试
+# 文件有 39 个** —— 把某个 pinned 用例的**用例体清空、nodeid 一个字不动**时：nodeid 体检照样
+# rc=0（def 还在）、文件指纹一声不吭（文件不在清单里）、那条变异 CAUGHT→NOT CAUGHT。
+# 只有"用例体摘要"能出声。
 
 def test_stale_pinned_reports_only_mismatches():
     """纯函数：pinned 摘要只报**不一致**的项（缺一边就不报）。"""

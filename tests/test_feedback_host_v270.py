@@ -100,6 +100,32 @@ def pet(tmp_path_factory):
         "拆完还有 %d 个活跃定时器（顺序污染源）" % active_timer_count(win)
 
 
+@pytest.fixture(autouse=True)
+def bubble_style_back():
+    """**污染源侧**的复原守卫（v2.11.0 收尾 · C-12）：`main.BUBBLE_STYLE` 是**模块全局字典**。
+
+    本文件会在用例体里就地写它（`:244` 的 `{"bg": "#112233", "fg": "#445566", ...}` 经
+    `apply_bubble_style` → `BUBBLE_STYLE.update(...)`，:248/:259 就地断言）——**用例体自己
+    没有 try/finally**：断言在哪一步红，后面那些赋值就留在全局里，全量套件里排在本文件之后的
+    `tests/test_motion_v2110.py`（"关掉高对比度要回到用户那份样式"）就会拿到被改过的样式而假红。
+
+    `cfg_back`（下面那条）只保护**点名叫了它**的用例；这条 autouse 把整个文件罩住
+    （与 `tests/test_motion_v2110.py` 的 `win` 夹具同一手法：进入时快照、`finally` 里原样复原）。
+    """
+    before = dict(main.BUBBLE_STYLE)
+    try:
+        yield
+    finally:
+        main.BUBBLE_STYLE.clear()
+        main.BUBBLE_STYLE.update(before)
+        pet = globals().get("pet")
+        if pet is not None:
+            try:
+                pet.bubble.update()
+            except Exception:
+                pass  # 窗口已拆/已析构：没有要重画的话
+
+
 @pytest.fixture
 def cfg_back(pet):
     """用例级还原：真 PetWindow 是模块级共享的，配置 / 气泡样式必须在用例后复原。"""

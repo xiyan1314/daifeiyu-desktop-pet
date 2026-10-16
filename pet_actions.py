@@ -8,6 +8,8 @@ import random
 import time
 
 import psutil
+
+import pet_motion
 from PySide6.QtCore import QEasingCurve, QPoint
 
 
@@ -30,7 +32,11 @@ class ActionService:
         pet.busy = True
         start = pet.pos()
         h = int(60 * pet.scale)
-        pet._run_anim(520, lambda v: pet.move(start + QPoint(0, -int(h * v))),
+        # A-04（v2.11.0 定版补漏）：520 原来既是**字面量**、又让这一处**绕开了「减少动效」**
+        # （_run_anim 自身不看开关）。现在走令牌表：关掉动效时 duration_ms 返回 0 →
+        # Qt 立刻落到终态（瞬时完成），而不是"动得快一点"。
+        pet._run_anim(pet_motion.duration_ms("JUMP", pet._reduce_motion()),
+                      lambda v: pet.move(start + QPoint(0, -int(h * v))),
                       keyframes=[(0.5, 1.0)], end=0.0, easing=QEasingCurve.Type.InOutQuad)
         pet._show_emote("heart")
         # v2.1：跳跃台词取台词库"开心"类别；v2.1.2 修复（M-2）：**库可用时不回落内置常量**
@@ -76,7 +82,11 @@ class ActionService:
             interval = pet._cur_form_anim().get("interval_ms") or pet.EAT_FRAME_MS
             pet.anim_mode = "state"
             pet._state_timer.stop()
-            pet.anim.play(name, interval, loops=1, on_finish=pet._play_idle)
+            # D1（v2.11.0 必-1）：命名帧动作就是**用户给角色配的素材帧序列**，与 桌宠.py 的
+            # 四条路径同口径——不带令牌时 pet_anim.play() 会把倍率重置回形参默认的 1.0
+            # （_rate 每次 play 都重算），减少动效开着也会以原速把这一段整段播完。
+            pet.anim.play(name, interval, loops=1, on_finish=pet._play_idle,
+                          rate_factor=pet._frame_rate_factor())
         else:
             procs = pet._cur_procs()
             if name in procs:

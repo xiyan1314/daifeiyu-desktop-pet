@@ -66,8 +66,10 @@ MUTATIONS = [
      ["proc transform applied"],
      "sway 的 squash_y 分量不生效 → 振幅判据（sy 上界/下界）"),
     ("M-P09", "pet_actions.py",
-     "            pet.anim.play(name, interval, loops=1, on_finish=pet._play_idle)",
-     "            pet.anim.play(name, interval, loops=-1, on_finish=pet._play_idle)  # MUT",
+     "            pet.anim.play(name, interval, loops=1, on_finish=pet._play_idle,\n"
+     "                          rate_factor=pet._frame_rate_factor())",
+     "            pet.anim.play(name, interval, loops=-1, on_finish=pet._play_idle,\n"
+     "                          rate_factor=pet._frame_rate_factor())  # MUT",
      ["frame action back to idle"],
      "命名帧动作改成无限循环 → 永远不回调收尾、不回待机"),
     ("M-P10", "pet_anim.py",

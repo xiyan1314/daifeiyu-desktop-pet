@@ -250,7 +250,7 @@
   ],
   "results": {
     "title": "变异验证 spec：mutations_dialog_fit_v250.json",
-    "checked_at": "2026-10-16 09:54:31",
+    "checked_at": "2026-10-16 16:48:21",
     "total": 17,
     "caught": 17,
     "not_caught": 0,
@@ -260,7 +260,7 @@
         "id": "M-D01",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "2 failed, 14 passed in 1.73s",
+        "tail": "2 failed, 14 passed in 1.97s",
         "failed": [
           "tests/test_dialog_fit_v250.py::test_每个对话框的设计尺寸就是它自己的契约[AISettingsDialog]",
           "tests/test_dialog_fit_v250.py::test_每个对话框的设计尺寸都写在源码里"
@@ -272,7 +272,7 @@
         "id": "M-D02",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "2 failed, 14 passed in 1.34s",
+        "tail": "2 failed, 14 passed in 1.28s",
         "failed": [
           "tests/test_dialog_fit_v250.py::test_每个对话框的设计尺寸就是它自己的契约[AlarmDialog]",
           "tests/test_dialog_fit_v250.py::test_每个对话框的设计尺寸都写在源码里"
@@ -284,7 +284,7 @@
         "id": "M-D03",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "2 failed, 14 passed in 1.35s",
+        "tail": "2 failed, 14 passed in 1.31s",
         "failed": [
           "tests/test_dialog_fit_v250.py::test_每个对话框的设计尺寸就是它自己的契约[BehaviorDialog]",
           "tests/test_dialog_fit_v250.py::test_每个对话框的设计尺寸都写在源码里"
@@ -296,7 +296,7 @@
         "id": "M-D04",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "2 failed, 14 passed in 1.37s",
+        "tail": "2 failed, 14 passed in 1.29s",
         "failed": [
           "tests/test_dialog_fit_v250.py::test_每个对话框的设计尺寸就是它自己的契约[IdleDialog]",
           "tests/test_dialog_fit_v250.py::test_每个对话框的设计尺寸都写在源码里"
@@ -308,7 +308,7 @@
         "id": "M-D05",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "2 failed, 14 passed in 1.33s",
+        "tail": "2 failed, 14 passed in 1.34s",
         "failed": [
           "tests/test_dialog_fit_v250.py::test_每个对话框的设计尺寸就是它自己的契约[LedgerDialog]",
           "tests/test_dialog_fit_v250.py::test_每个对话框的设计尺寸都写在源码里"
@@ -320,7 +320,7 @@
         "id": "M-D06",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "2 failed, 14 passed in 1.41s",
+        "tail": "2 failed, 14 passed in 1.29s",
         "failed": [
           "tests/test_dialog_fit_v250.py::test_每个对话框的设计尺寸就是它自己的契约[LinesDialog]",
           "tests/test_dialog_fit_v250.py::test_每个对话框的设计尺寸都写在源码里"
@@ -332,7 +332,7 @@
         "id": "M-D07",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "2 failed, 14 passed in 1.35s",
+        "tail": "2 failed, 14 passed in 1.29s",
         "failed": [
           "tests/test_dialog_fit_v250.py::test_每个对话框的设计尺寸就是它自己的契约[PhysicsDialog]",
           "tests/test_dialog_fit_v250.py::test_每个对话框的设计尺寸都写在源码里"
@@ -344,7 +344,7 @@
         "id": "M-D08",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "2 failed, 14 passed in 1.35s",
+        "tail": "2 failed, 14 passed in 1.32s",
         "failed": [
           "tests/test_dialog_fit_v250.py::test_每个对话框的设计尺寸就是它自己的契约[ResourceManagerDialog]",
           "tests/test_dialog_fit_v250.py::test_每个对话框的设计尺寸都写在源码里"
@@ -356,7 +356,7 @@
         "id": "M-D09",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "2 failed, 14 passed in 1.34s",
+        "tail": "2 failed, 14 passed in 1.30s",
         "failed": [
           "tests/test_dialog_fit_v250.py::test_每个对话框的设计尺寸就是它自己的契约[RoleEditDialog]",
           "tests/test_dialog_fit_v250.py::test_每个对话框的设计尺寸都写在源码里"
@@ -368,7 +368,7 @@
         "id": "M-D10",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "2 failed, 14 passed in 1.37s",
+        "tail": "2 failed, 14 passed in 1.33s",
         "failed": [
           "tests/test_dialog_fit_v250.py::test_每个对话框的设计尺寸就是它自己的契约[RoleImportDialog]",
           "tests/test_dialog_fit_v250.py::test_每个对话框的设计尺寸都写在源码里"
@@ -380,7 +380,7 @@
         "id": "M-D11",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "2 failed, 14 passed in 1.32s",
+        "tail": "2 failed, 14 passed in 1.31s",
         "failed": [
           "tests/test_dialog_fit_v250.py::test_每个对话框的设计尺寸就是它自己的契约[VoiceDialog]",
           "tests/test_dialog_fit_v250.py::test_每个对话框的设计尺寸都写在源码里"
@@ -392,7 +392,7 @@
         "id": "M-D12",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "2 failed, 14 passed in 1.37s",
+        "tail": "2 failed, 14 passed in 1.31s",
         "failed": [
           "tests/test_dialog_fit_v250.py::test_每个对话框的设计尺寸就是它自己的契约[_VoicePickDialog]",
           "tests/test_dialog_fit_v250.py::test_每个对话框的设计尺寸都写在源码里"
@@ -404,7 +404,7 @@
         "id": "M-D13",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 1.00s",
+        "tail": "1 failed in 0.91s",
         "failed": [
           "tests/test_dialog_fit_v250.py::test_上限就是85百分比而不是写死像素"
         ],
@@ -426,7 +426,7 @@
         "id": "M-D15",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 1.31s",
+        "tail": "1 failed in 0.92s",
         "failed": [
           "tests/test_dialog_fit_v250.py::test_本来就小的框不被撑大"
         ],
@@ -437,7 +437,7 @@
         "id": "M-D16",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "20 failed in 2.04s",
+        "tail": "20 failed in 1.41s",
         "failed": [
           "tests/test_dialog_fit_v250.py::test_每个窗口都不超屏_能滚到底_按钮可见[RoleImportDialog]",
           "tests/test_dialog_fit_v250.py::test_每个窗口都不超屏_能滚到底_按钮可见[RoleEditDialog]",
@@ -467,7 +467,7 @@
         "id": "M-D17",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "17 failed, 3 passed in 1.89s",
+        "tail": "17 failed, 3 passed in 1.42s",
         "failed": [
           "tests/test_dialog_fit_v250.py::test_每个窗口都不超屏_能滚到底_按钮可见[RoleImportDialog]",
           "tests/test_dialog_fit_v250.py::test_每个窗口都不超屏_能滚到底_按钮可见[RoleEditDialog]",
@@ -502,33 +502,33 @@
     ],
     "note": "变异只在 %TEMP% 影子副本里做，真实仓库只读（只写 _dev/.mutation.lock）",
     "repo_fingerprint": {
-      "桌宠.py": "59b2f99c52ba",
-      "pet_export.py": "c01e1593efd2",
+      "桌宠.py": "b33888cadc15",
+      "pet_export.py": "db474bdd6670",
       "pet_lines.py": "5332f60b5f26",
       "pet_alarm.py": "1149e94deee3",
       "pet_behaviors.py": "732273f95fb4",
-      "_check_release.py": "7377b3fad58e",
-      "pet_balance.py": "66948e5514a4",
+      "_check_release.py": "dca4541e2829",
+      "pet_balance.py": "045129227ee2",
       "pet_plugin.py": "2f7853298fc3",
       "pet_plugin_host.py": "82fb7b1384c8",
-      "pet_dialogs.py": "7e1a11cff2a2",
-      "pet_menu.py": "d2f565537b3f",
+      "pet_dialogs.py": "ae3e1a1c76b0",
+      "pet_menu.py": "44224c3320c6",
       "pet_plugin_index.py": "e5e9845785e8",
       "pet_ai.py": "a5989e7fe646",
-      "pet_config.py": "6fe2b20ae424",
+      "pet_config.py": "b46e0f180880",
       "pet_io.py": "6b1e0413fb7f",
       "pet_services.py": "ecebb6ab5891",
       "pet_widgets.py": "b8de517121e1",
-      "pet_resources.py": "e28f38917052",
+      "pet_resources.py": "5d8df41558df",
       "pet_tools.py": "46e9030d073f",
-      "pet_voice.py": "9fe0a570ca81",
+      "pet_voice.py": "3a9c9cc3324e",
       "pet_audio.py": "a6feadf4d653",
       "pet_chat.py": "de979c429c2c",
       "pet_log.py": "de14ecf338ab",
-      "pet_actions.py": "83eb11403fec",
+      "pet_actions.py": "a4871b371ea0",
       "pet_book.py": "098676ac52d4",
       "_check_static.py": "6286f9f493bd",
-      "pet_motion.py": "fcee7ab63bb2",
+      "pet_motion.py": "e4fbc789b327",
       "tests/test_dialog_buttons_v270.py": "4f95acca7fc6",
       "tests/test_import_thread.py": "1c6fc2ec5d05"
     },

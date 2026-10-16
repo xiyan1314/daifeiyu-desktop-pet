@@ -6,7 +6,7 @@ v2.1 新增 VoiceAssetLibrary（声音素材/参考音）：与音效片段**分
 （data/voice_ref/ + voice_assets.json），专供声音克隆后端；
 RoleLibrary / VoiceAssetLibrary 都提供 on_deleted 回调，供上层清理失效引用。
 
-职责：参考 dsh-whale-widget 的「角色管理 / 音频片段管理 / 音效组」设计，把
+职责：参考 dsh-whale-widget 的「角色管理 / 音效片段管理 / 音效组」设计，把
 自定义角色（透明 PNG）与自定义音频（wav/mp3）的导入、切换、重命名、删除，
 以及自定义音效组（5 个事件槽位）的管理统一封装。供 pet_dialogs 的面板与
 主程序（桌宠.py）调用。
@@ -1326,7 +1326,7 @@ _AUDIO_EXTS = (".wav", ".mp3")
 
 
 class AudioLibrary:
-    """自定义音频片段与音效组管理：导入 / 重命名 / 删除 / 槽位映射，索引 audio.json。"""
+    """自定义音效片段与音效组管理：导入 / 重命名 / 删除 / 槽位映射，索引 audio.json。"""
 
     MAX_BYTES = 20 * 1024 * 1024  # 20MB 上限
 
@@ -1472,7 +1472,7 @@ class AudioLibrary:
         """删除片段（文件 + 索引项）；被音效组槽位引用的槽位同步置 ""（静音）。"""
         f = self._get(fid)
         if f is None:
-            return False, "音频片段不存在"
+            return False, "音效片段不存在"
         try:
             p = f.get("file") or ""
             if not os.path.isabs(p):
@@ -1494,7 +1494,7 @@ class AudioLibrary:
         """重命名片段；空名字返回错误。返回 (bool, err)。"""
         f = self._get(fid)
         if f is None:
-            return False, "音频片段不存在"
+            return False, "音效片段不存在"
         name = str(new_name or "").strip()
         if not name:
             return False, "名字不能为空"
@@ -1820,7 +1820,7 @@ if __name__ == "__main__":
     assert os.path.isfile(al.fragment_path(frag["id"]))
     assert al.rename(frag["id"], "  新名字 ") == (True, "")
     assert al.fragments()[0]["name"] == "新名字"
-    assert al.rename("不存在", "x") == (False, "音频片段不存在")
+    assert al.rename("不存在", "x") == (False, "音效片段不存在")
     assert al.set_slot("press", frag["id"]) is True
     assert al.set_slot("release", "") is True
     assert al.set_slot("feed", None) is True
@@ -1832,7 +1832,7 @@ if __name__ == "__main__":
     assert al.delete(frag["id"]) == (True, "")
     assert al.group_slots()["custom"]["press"] == ""  # 被引用的槽位同步置 ""
     assert al.group_paths()["press"] == ""
-    assert al.delete(frag["id"]) == (False, "音频片段不存在")
+    assert al.delete(frag["id"]) == (False, "音效片段不存在")
     mp3 = os.path.join(tmp, "t.mp3")
     with open(mp3, "wb") as f:
         f.write(b"ID3" + b"\x00" * 50)

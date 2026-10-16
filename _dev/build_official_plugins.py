@@ -158,7 +158,7 @@ def _audio_payload():
     obj = {
         "format": "dfypet-audio",
         "version": 1,
-        "note": ("装上后这 6 段会进「资源管理 → 音频片段」，可在音效组里指派给"
+        "note": ("装上后这 6 段会进「资源管理 → 音效片段」，可在音效组里指派给"
                  "点击/松开/喂食/AI 回复/金币（装完不会自动改你现在的音效组）。"),
         "files": [{"file": "audio/" + fn, "name": nm} for fn, nm, _slot in AUDIO_ITEMS],
         "suggested_slots": {"press": "audio/ya1.wav", "release": "audio/ya2.wav",
@@ -233,7 +233,7 @@ PACKS = (
         "summary": "6 段系统音效：点击 / 松开 / 被戳 / 喂食 / AI 回复完成 / 金币到账",
         "description": ("包含什么：assets/sounds 里的 6 个 wav（ya1 / ya2 / d1 / d2 / "
                         "task-end-a / exp-orb），素材约 394 KB（压成包 165 KB）。\n"
-                        "装上会看到什么：「资源管理 → 音频片段」里多 6 条，可在「音效组」里"
+                        "装上会看到什么：「资源管理 → 音效片段」里多 6 条，可在「音效组」里"
                         "指派给点击/松开/喂食/AI 回复/金币，也可以只留几条。\n"
                         "落地方式：对每个 wav 调 AudioLibrary.import_file（拷进 <数据目录>/audio/ "
                         "并写 audio.json）。"),

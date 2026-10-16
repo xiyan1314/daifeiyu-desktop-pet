@@ -33,6 +33,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
+import pet_motion  # noqa: E402
 import pet_export  # noqa: E402
 import pet_io  # noqa: E402
 import pet_lines  # noqa: E402
@@ -632,6 +633,9 @@ class _AnimPet:
 
     def _cur_procs(self):
         return {}
+
+    def _frame_rate_factor(self):
+        return pet_motion.frame_rate_factor(False)   # 桩：没有减少动效 = 原速（D1 令牌真源）
 
 
 def test_play_action_ensures_frames_before_frame_action():

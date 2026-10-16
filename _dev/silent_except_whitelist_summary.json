@@ -57,6 +57,20 @@
       ]
     },
     {
+      "key": "pet_anim.py|_safe_rate_factor|8a172e7f74",
+      "file": "pet_anim.py",
+      "func": "_safe_rate_factor",
+      "shape": "8a172e7f74",
+      "count": 1,
+      "tier": "B",
+      "reason": "fallback",
+      "why": "坏值回默认（反序列化/归一化/类型转换）：帧率倍率不是数值 → 回 1.0（原速）。与 pet_motion.frame_rate_factor 同一口径的**安全侧**回退（绝不返回 0/负 → 不把角色冻成一张图，D1 用户明确否掉的那一支）。契约出处：令牌真源侧 tests/test_motion_v2110.py::test_frame_rate_factor_is_a_compromise_and_never_freezes（:260-267）；本函数是 pet_anim 侧的消费闸，行为级由 tests/test_host_v2100_round.py::test_frame_rate_token_contract（:236-238 关 1.0 / 开 0.5 / >0）、::test_idle_material_frames_slow_down_and_never_freeze（:251-277 倍率 0.5 → 间隔 ×2、关掉恢复原速、帧仍在推进）、::test_eat_watchdog_covers_the_slowed_frames（:280-301）钉住。⚠ 如实登记：全仓 tests/ 里 _safe_rate_factor 0 命中（它没有专属坏值用例），改这个回退值前先补一条。",
+      "evidence": "except (TypeError, ValueError): return 1.0",
+      "lines": [
+        43
+      ]
+    },
+    {
       "key": "pet_anim.py|load_frame_set|7e0edba79a",
       "file": "pet_anim.py",
       "func": "load_frame_set",
@@ -2150,6 +2164,20 @@
       "evidence": "except (TypeError, ValueError): return 0",
       "lines": [
         148
+      ]
+    },
+    {
+      "key": "pet_motion.py|frame_rate_factor|8a172e7f74",
+      "file": "pet_motion.py",
+      "func": "frame_rate_factor",
+      "shape": "8a172e7f74",
+      "count": 1,
+      "tier": "B",
+      "reason": "fallback",
+      "why": "坏值回默认（反序列化/归一化/类型转换）：RATE 表的 FRAME_REDUCED 键不是数值 → 回 1.0（原速）。D1 的安全侧：宁可「没放慢」，也绝不返回 0/负（0 倍速 = 把角色冻成一张图，是用户明确否掉的那一支）。契约出处：tests/test_motion_v2110.py::test_frame_rate_factor_is_a_compromise_and_never_freezes（:260-267 逐条喂 「坏值」/None/[]/0/-0.5 与「删掉该键」都断言 == 1.0，不抛）；令牌口径另由 tests/test_host_v2100_round.py::test_frame_rate_token_contract（:236-238）钉住。",
+      "evidence": "except (TypeError, ValueError): return 1.0",
+      "lines": [
+        202
       ]
     },
     {

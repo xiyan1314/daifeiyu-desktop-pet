@@ -2,7 +2,7 @@
 """
 大肥鱼桌宠 —— 全部 Qt 对话框 / 面板（v1.3.0 新增）。
 
-职责：参考 dsh-whale-widget 的「角色管理 / 音频片段管理 / 音效组 / 记账账本」
+职责：参考 dsh-whale-widget 的「角色管理 / 音效片段管理 / 音效组 / 记账账本」
 面板设计，提供资源管理、记账账本、气泡样式、台词设置四个交互界面。
 
 对外接口（全部在主线程使用；构造签名 parent 为桌宠主窗口）：
@@ -19,10 +19,12 @@
   支持多帧动画素材（多选图片 = 帧序列、视频/GIF 自动抽帧，统一画布处理）。
   P1-1 起：素材处理与视频/GIF 抽帧在 _ImportWorker 工作线程执行（可取消、
   进度信号回主线程），UI 不阻塞、无 QApplication.processEvents。
-- class SoundPanel(QWidget)：音频片段列表（试听 / 导入 / 重命名 / 删除）+
+- class SoundPanel(QWidget)：音效片段列表（试听 / 导入 / 重命名 / 删除）+
   自定义音效组 5 行槽位（默认 / 静音 / 片段）。
-- class ResourceManagerDialog(QDialog)：QTabWidget 三页签（角色 / 音效 / 声音素材），
-  内嵌 RolePanel / SoundPanel / VoiceAssetPanel；initial_tab=0/1/2。
+- class ResourceManagerDialog(QDialog)：QTabWidget 四页签（角色 / 音效 / 声音素材 / 动作），
+  内嵌 RolePanel / SoundPanel / VoiceAssetPanel / ActionPanel；initial_tab=0/1/2/3。
+- class ActionPanel(QWidget)：v2.12.0（F1）「动作」页签——**纯视图**（角色 → 形态 → 动作，
+  只读 + 删除 + 定位到所属角色），数据只从 roles.json 读，不新建库、不搬数据。
 - class LedgerDialog(QDialog)：今日 / 近 7 天 / 全部 三个页签 + 实时搜索 +
   记一笔（AmountNoteDialog）+ 导出 CSV。
 - class AmountNoteDialog(QDialog)：金额 QDoubleSpinBox(0.01~99999) + 备注输入。
@@ -46,7 +48,8 @@
   （上限 = 可用区域 × DIALOG_MAX_RATIO，另给下限保护，全部按逻辑像素）；
   scroll_content(dlg) —— 内容区进 QScrollArea，返回内容布局；
   stick_buttons(dlg, row) —— 按钮行钉在滚动区**之外**（确定/取消永远不会被滚走）；
-  class _FitDialog(QDialog) —— 14 个对话框的公共基类，showEvent 里按所在屏幕再钳一次。
+  class _FitDialog(QDialog) —— 15 个对话框的公共基类，showEvent 里按所在屏幕再钳一次；
+  v2.12.0（E3）起它同时是**对话框键盘路径**的唯一落点（Enter/Space 触发主按钮、Esc 关窗）。
   背景：用户报"有些窗口内容多、窗口大、看不到底，而且缩小不了"——实测根因是尺寸写死
   加上全文件没有一个滚动容器（详见 _dev/dialog_size_report.md）。
 
@@ -99,7 +102,10 @@ import pet_log
 from PySide6.QtCore import QEventLoop, QTime, QTimer, Qt, QThread, QUrl, Signal
 from PySide6.QtGui import QColor, QImage, QImageReader, QPainter, QPixmap
 from PySide6.QtWidgets import (
+    QAbstractButton,
     QAbstractItemView,
+    QAbstractScrollArea,
+    QAbstractSpinBox,
     QApplication,
     QCheckBox,
     QColorDialog,
@@ -128,6 +134,8 @@ from PySide6.QtWidgets import (
     QTableWidgetItem,
     QTabWidget,
     QTimeEdit,
+    QTreeWidget,
+    QTreeWidgetItem,
     QVBoxLayout,
     QWidget,
 )
@@ -1020,17 +1028,97 @@ def stick_buttons(dlg, row):
     return row
 
 
+# ---------------- v2.12.0（E3）：对话框侧的键盘路径 ----------------
+# 任务书 E3：PetWindow 只有一个交互面（画布不接收焦点）→ 没有可排的 Tab 链；
+# **对话框侧**没做。键盘可达性写在**基类**（_FitDialog）而不是逐个对话框：
+# 逐个改必然漏一个，写在基类里，15 个对话框与以后新加的都自动继承（与 v2.5.0 把
+# 尺寸兜底放进 showEvent 同一个理由）。
+#
+# 实测（本机 PySide6 6.11.2 / offscreen）：
+#   · Esc：QDialog 自带 reject —— 已经是"关窗"，本类显式写出来只为**统一出口 + 可断言**；
+#   · Enter：Qt 自带"触发默认按钮"（默认按钮 = 显式 setDefault，或第一个 autoDefault），
+#     所以本类这一支**与 Qt 原行为等价**，价值是让"主按钮"这个概念在基类有一个落点；
+#   · Space：Qt **不会**把它给默认按钮（只给焦点控件）→ 这一支是本轮**新增**的行为；
+#   · Tab：**不需要动** —— 实测 15 个对话框（VoiceDialog 116 个控件的链在内）里，
+#     Qt 按创建顺序串出来的链**本来就把底排按钮行排在最后**，且行内按左→右。
+#     本轮试过"基类里再排一次链"，实测零行为收益，反而在 showEvent 里走
+#     nextInFocusChain() 让整进程崩在 0xC0000374（堆损坏，见本轮回报）→ 代码撤掉，
+#     改成**用例钉住这条不变量**（谁往按钮行后面再加控件就会红）。
+_SPACE_OWNERS = (QAbstractButton, QAbstractItemView, QAbstractScrollArea,
+                 QAbstractSpinBox, QComboBox, QLineEdit, QPlainTextEdit)
+"""空格键有**自己语义**的控件：它们拿着焦点时，空格不算「主按钮」的快捷键。
+
+- QLineEdit / QPlainTextEdit 里空格是**字符**（抢了 = 输入框打不出空格）；
+- QAbstractButton 上是"按下这个按钮"（抢了 = 按钮被点两次）；
+- 列表/表格/下拉/微调框里空格各有语义（勾选、翻页、展开、解释文本）；
+- **QAbstractScrollArea（滚动区，含它的全部子类）**：内容区就是滚动区，而
+  **开窗默认焦点恰恰在它身上**（实测：内容区套过 scroll_content 的对话框，show() 之后
+  focusWidget() 都是 QScrollArea）—— 不豁免的话，用户刚打开窗口按一下空格，主按钮就被
+  click 了（「记一笔」直接落库一笔默认 ¥1.00，见本轮 Z-1）。Qt 自己**不**把空格当翻页键
+  （QAbstractScrollArea 只认 PageUp/PageDown；实测按住焦点发空格，滚动条 value 不变），
+  所以豁免它 = 空格在这里**什么都不做**，与本轮 E3 之前的行为一致。
+"""
+
+
 class _FitDialog(QDialog):
     """所有对话框的公共基类（v2.5.0 B）：**显示前**按所在屏幕再钳一次尺寸。
 
     单在这一处重钳，是为了覆盖全部打开路径（modal() 的 show+exec、桌宠.py 里的裸
     exec()、测试里的 show()），以及"构造时在一屏、显示时在另一屏"（多屏用户把桌宠
     拖到副屏再打开设置）。子类自己在 __init__ 里已经钳过一次，这里只做兜底。
+
+    v2.12.0（E3）起它同时是**对话框键盘路径**的唯一落点：Enter/Space 触发主按钮、
+    Esc 关窗（Tab 顺序本身不用排——实测 Qt 默认就把底排按钮排在链尾，由用例钉住）。
+    写在基类而不是逐个对话框，是为了"新加的对话框自动就有"。
     """
 
     def showEvent(self, event):
         clamp_dialog(self)
         super().showEvent(event)
+
+    # ---------- v2.12.0（E3）：键盘 ----------
+    def primary_button(self):
+        """本窗口的「主按钮」= Qt 认定的**默认按钮**；没有这样的按钮就返回 None。
+
+        为什么就是"默认按钮"而不是自己猜一个：默认按钮是 Qt 里"回车该触发谁"的既有口径
+        （QSS 的 QPushButton:default 画的就是它），另立一套只会与界面上的高亮不一致。
+        取不到（纯查看型窗口、默认按钮被禁用、控件已析构）→ None：Enter/Space 交回 Qt
+        原样处理，**不把"关窗"偷偷绑到回车/空格上**。
+        """
+        for b in self.findChildren(QPushButton):
+            if b.isDefault() and b.isEnabled():
+                return b
+        return None
+
+    def _space_is_free(self):
+        """空格现在算不算「主按钮」的快捷键（焦点不在自己要用空格的控件上才算）。"""
+        fw = self.focusWidget()
+        if fw is None or fw is self:
+            return True
+        return not isinstance(fw, _SPACE_OWNERS)
+
+    def keyPressEvent(self, event):
+        """对话框的键盘出口：Esc → 关窗；Enter/Space → 主按钮。
+
+        Esc 与 Qt 默认一致（QDialog 自己就是 reject），显式写出来是为了**统一出口**并让
+        "关窗"这件事可以在基类上断言；各对话框自己的 reject（_DiscardGuard 的"未保存
+        改动先问一次"）照旧生效 —— 它拦的是 reject，不是按键。
+        """
+        key = event.key()
+        if key == Qt.Key.Key_Escape:
+            self.reject()
+            event.accept()
+            return
+        if key in (Qt.Key.Key_Return, Qt.Key.Key_Enter) or (
+                key == Qt.Key.Key_Space and self._space_is_free()):
+            btn = self.primary_button()
+            if btn is not None:
+                # click 之前**不**调 super()：Qt 自己也会在 Return 上触发默认按钮，
+                # 交给它就会点两次（实测：本机 PySide6 6.11.2 offscreen）。
+                btn.click()
+                event.accept()
+                return
+        super().keyPressEvent(event)
 
 
 # ---------------- 视频 / GIF 抽帧 ----------------
@@ -4701,10 +4789,27 @@ class RolePanel(QWidget):
         self._refresh()
         _toast(self._pet, "已恢复默认角色")
 
+    def select_role(self, rid):
+        """选中某个角色（给「动作」页签的「定位到所属角色」用）。返回是否找到。
+
+        为什么用方法而不是让调用方自己遍历列表：列表是**本面板**的控件，行的 data 里
+        存的是什么也只有这里知道（换个地方再写一遍 = 两处口径）。
+        """
+        rid = str(rid or "")
+        if not rid:
+            return False
+        for i in range(self._list.count()):
+            it = self._list.item(i)
+            if it is not None and it.data(Qt.ItemDataRole.UserRole) == rid:
+                self._list.setCurrentItem(it)
+                self._list.scrollToItem(it)
+                return True
+        return False
+
 
 # ---------------- b) 音效面板 ----------------
 class SoundPanel(QWidget):
-    """音频片段列表（试听 / 导入 / 重命名 / 删除）+ 自定义音效组 5 行槽位。"""
+    """音效片段列表（试听 / 导入 / 重命名 / 删除）+ 自定义音效组 5 行槽位。"""
 
     def __init__(self, parent=None):
         super().__init__(_qt_parent(parent))
@@ -4713,7 +4818,7 @@ class SoundPanel(QWidget):
         self.setStyleSheet(DIALOG_QSS)
 
         root = scroll_content(self)   # v2.5.0 B：面板内容可滚动
-        root.addWidget(QLabel("音频片段（自定义音效素材）"))
+        root.addWidget(QLabel("音效片段（自定义音效素材）"))
         top = QHBoxLayout()
         self._list = QListWidget()
         self._list.setMinimumHeight(130)
@@ -4824,7 +4929,7 @@ class SoundPanel(QWidget):
             return
         it = self._list.currentItem()
         if it is None:
-            _warn(self._parent_widget(), "试听", "先在列表里选中一个音频片段")
+            _warn(self._parent_widget(), "试听", "先在列表里选中一个音效片段")
             return
         fid = it.data(Qt.ItemDataRole.UserRole)
         path = self._lib.fragment_path(fid)
@@ -4855,7 +4960,7 @@ class SoundPanel(QWidget):
             return
         it = self._list.currentItem()
         if it is None:
-            _warn(self._parent_widget(), "重命名", "先在列表里选中一个音频片段")
+            _warn(self._parent_widget(), "重命名", "先在列表里选中一个音效片段")
             return
         fid = it.data(Qt.ItemDataRole.UserRole)
         f = None
@@ -4891,7 +4996,7 @@ class SoundPanel(QWidget):
             return
         it = self._list.currentItem()
         if it is None:
-            _warn(self._parent_widget(), "删除音频", "先在列表里选中一个音频片段")
+            _warn(self._parent_widget(), "删除音频", "先在列表里选中一个音效片段")
             return
         fid = it.data(Qt.ItemDataRole.UserRole)
         f = None
@@ -4911,7 +5016,7 @@ class SoundPanel(QWidget):
             return
         self._refresh()
         _call(self._pet, "apply_sound_group", self._lib.group_paths())
-        _toast(self._pet, "已删除音频片段「%s」" % f["name"])
+        _toast(self._pet, "已删除音效片段「%s」" % f["name"])
 
     def _select_fragment(self, fid):
         """按 id 选中并滚到可见处（新建/重命名后的落点反馈）。返回是否找到。"""
@@ -5068,8 +5173,212 @@ class VoiceAssetPanel(QWidget):
         _toast(self._pet, "已删除声音素材「%s」" % _name)
 
 
+# ---------------- c) 「动作」页签（v2.12.0 · F1 / 审计 §12.5 第 4 条） ----------------
+class ActionPanel(QWidget):
+    """资源管理第 4 页签「动作」：**纯视图** —— 角色 → 形态 → 动作。
+
+    口径（_dev/audit_behavior_assets_v290.md §E.4 第 4 条）：
+      只读列表 +「删除」+「定位到所属角色」，列「角色 → 形态 → 动作（帧 N 张 / 合成 类型·幅度·周期）」。
+      **不新建库、不搬数据**：数据全部从既有索引读（roles.json → forms[i].animations / procs），
+      本页签只做展示与两件就地动作（删一条动作、跳到所属角色）。
+
+    为什么值得有：审计 §E.2 实测「动作（帧/合成）没有资源视图」—— 用户无法回答
+    "我到底有哪些动作 / 它们挂在哪个角色哪个形态上"（角色编辑里只看得到**当前形态**）。
+    """
+
+    def __init__(self, parent=None, locate=None):
+        super().__init__(_qt_parent(parent))
+        self._pet = parent
+        self._lib = _get(parent, "role_lib")
+        self._locate = locate          # 定位到所属角色：由 ResourceManagerDialog 提供（切页签+选中）
+        self.setStyleSheet(DIALOG_QSS)
+
+        root = scroll_content(self)   # v2.5.0 B：面板内容也可滚动
+        root.addWidget(QLabel("所有角色形态上的**自定义动作**（只读清单；内建动作 "
+                             "idle/eat/poke/sleep 不在这里）。选中一条可以删除它，"
+                             "或定位到它所属的角色。"))
+        self._tree = QTreeWidget()
+        self._tree.setColumnCount(3)
+        self._tree.setHeaderLabels(["角色 → 形态 → 动作", "类型", "详情"])
+        self._tree.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)  # 只读
+        self._tree.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
+        self._tree.setRootIsDecorated(True)
+        root.addWidget(self._tree, 1)
+        # 状态行：本页签的回执/解释都写这里（不新开气泡、不弹框——"没选中"在纯视图里不是错误）
+        self._hint = QLabel("")
+        self._hint.setWordWrap(True)
+        root.addWidget(self._hint)
+        row = QHBoxLayout()
+        self._btn_del = QPushButton("删除动作")
+        self._btn_del.clicked.connect(self._delete_action)
+        self._btn_locate = QPushButton("定位到所属角色")
+        self._btn_locate.clicked.connect(self._locate_role)
+        row.addWidget(self._btn_del)
+        row.addWidget(self._btn_locate)
+        row.addStretch(1)
+        root.addLayout(row)
+        self._refresh()
+
+    # ---------- 数据 ----------
+    def _roles(self):
+        """[(role_id, name, [form...])]；角色库不可用 → []（并留痕，不静默）。"""
+        out = []
+        if self._lib is not None:
+            try:
+                for r in self._lib.list_roles():
+                    out.append((r["id"], r.get("name") or r["id"], list(r.get("forms") or [])))
+            except Exception as e:
+                pet_log.log_error("action panel roles read failed: %r" % (e,))
+                out = []
+        return out
+
+    def _refresh(self):
+        """重建整棵树。默认角色也列一行 —— 审计 §E.2 的「默认角色不能加动作且**不说明**」，
+        说明就放在它这一行（它用的是随包 assets/，本来就不该有自定义动作）。"""
+        self._tree.clear()
+        n_roles = 0
+        n_acts = 0
+        for rid, name, forms in self._roles():
+            top = QTreeWidgetItem(["%s（%s）" % (name, rid), "角色", "%d 个形态" % len(forms)])
+            top.setData(0, Qt.ItemDataRole.UserRole, None)   # 角色/形态行不是动作，不能删
+            self._tree.addTopLevelItem(top)
+            n_roles += 1
+            for fi, fm in enumerate(forms):
+                acts = self._form_actions(fm)
+                node = QTreeWidgetItem(["形态 %d：%s" % (fi + 1, fm.get("name") or ""),
+                                        "形态", "%d 个自定义动作" % len(acts)])
+                node.setData(0, Qt.ItemDataRole.UserRole, None)
+                top.addChild(node)
+                if not acts:
+                    empty = QTreeWidgetItem(["—（这个形态没有自定义动作）", "", ""])
+                    empty.setData(0, Qt.ItemDataRole.UserRole, None)
+                    node.addChild(empty)
+                    continue
+                for act in acts:
+                    leaf = QTreeWidgetItem([act["name"], act["kind_label"], act["detail"]])
+                    leaf.setData(0, Qt.ItemDataRole.UserRole,
+                                 (rid, fi, act["name"], act["kind"]))
+                    node.addChild(leaf)
+                    n_acts += 1
+            top.setExpanded(n_roles == 1)   # 默认只展开第一个角色，其余折叠
+        self._tree.addTopLevelItem(self._default_role_node())
+        self._tree.resizeColumnToContents(0)
+        self._hint.setText("共 %d 个角色、%d 条自定义动作（只读清单；"
+                           "「删除动作」会立刻写回角色索引，帧文件本身不删）" % (n_roles, n_acts))
+
+    def _default_role_node(self):
+        """默认角色那一行：它不在 roles.json 里，所以动作恒为空 —— 把原因写出来。"""
+        top = QTreeWidgetItem(["默认角色", "角色", "随包素材，不能加动作"])
+        top.setData(0, Qt.ItemDataRole.UserRole, None)
+        why = QTreeWidgetItem(["默认角色用的是随包的 assets/ 素材（不在角色库里），"
+                               "所以没有自定义动作，也不能在这里加", "", ""])
+        why.setData(0, Qt.ItemDataRole.UserRole, None)
+        top.addChild(why)
+        return top
+
+    @staticmethod
+    def _form_actions(fm):
+        """单个形态的自定义动作 → [{"name", "kind", "kind_label", "detail"}]。
+
+        与 RoleLibrary.custom_actions() 同一口径：帧动作 = animations 里非内建键，
+        合成动作 = procs。详情按审计给的三样写：帧 N 张 / 合成 类型·幅度·周期。
+        """
+        out = []
+        for act, frames in (fm.get("animations") or {}).items():
+            if act in pet_resources.ANIM_ACTIONS:
+                continue
+            out.append({"name": act, "kind": "frames", "kind_label": "帧",
+                        "detail": "帧 %d 张" % len(frames or [])})
+        for name, p in sorted((fm.get("procs") or {}).items()):
+            p = p if isinstance(p, dict) else {}
+            out.append({"name": name, "kind": "proc", "kind_label": "合成",
+                        "detail": "合成 %s · 幅度 %s · 周期 %sms"
+                                  % (p.get("kind") or "?", p.get("amp"), p.get("period_ms"))})
+        return out
+
+    def _selected(self):
+        """选中的**动作叶子** → (rid, form_idx, name, kind)；选中的不是动作 → None。"""
+        it = self._tree.currentItem()
+        if it is None:
+            return None
+        data = it.data(0, Qt.ItemDataRole.UserRole)
+        if not (isinstance(data, tuple) and len(data) == 4):
+            return None
+        return data
+
+    # ---------- 动作 ----------
+    def _delete_action(self):
+        """删除选中的自定义动作（**立即写回** roles.json）。
+
+        为什么这里要二次确认、而角色编辑里那条删动作**不加**确认（v2.9.0 A6 的裁决）：
+        那条是**暂存态**（点取消就恢复，本来就是可撤销的）；本页签是纯视图，没有暂存区，
+        删了就是删了。与同仓「破坏性 → 二次确认 + 说清后果」的口径一致（见事件片段「清除」）。
+        """
+        info = self._selected()
+        if info is None:
+            self._note("先在清单里选中一条动作（角色行 / 形态行不能删）")
+            return
+        rid, fi, name, kind = info
+        role = self._lib.get(rid) if self._lib is not None else None
+        if role is None:
+            self._note("角色已经不在了（可能刚被删过），重新打开这个窗口看看")
+            return
+        forms = list(role.get("forms") or [])
+        if not (0 <= fi < len(forms)):
+            self._note("形态对不上了（可能刚被改过），重新打开这个窗口看看")
+            return
+        form_name = forms[fi].get("name") or ("形态 %d" % (fi + 1))
+        kind_label = "帧" if kind == "frames" else "合成"
+        if not _confirm(self._parent_widget(), "删除动作",
+                        "删除角色「%s」· %s 上的%s动作「%s」吗？\n\n"
+                        "· 只解除引用：磁盘上的帧文件/配置本身不删；\n"
+                        "· 这一步**立即生效**（这个页签是只读清单，没有「取消就恢复」）。"
+                        % (role.get("name") or rid, form_name, kind_label, name)):
+            return
+        new_forms = copy.deepcopy(forms)
+        fm = new_forms[fi]
+        if kind == "frames":
+            (fm.get("animations") or {}).pop(name, None)
+        else:
+            (fm.get("procs") or {}).pop(name, None)
+        ok, err = self._lib.update(rid, {"forms": new_forms})
+        if not ok:
+            _warn(self._parent_widget(), "删除动作", err or "删除失败")
+            return
+        self._refresh()
+        self._hint.setText("已删除 %s 上的%s动作「%s」（磁盘上的帧文件没删）"
+                           % (form_name, kind_label, name))
+        _toast(self._pet, "已删除动作「%s」" % name)
+
+    def _locate_role(self):
+        """定位到所属角色：交给容器切到「角色」页签并选中它（**不新开窗口**）。"""
+        info = self._selected()
+        if info is None:
+            self._note("先在清单里选中一条动作，再点「定位到所属角色」")
+            return
+        rid = info[0]
+        if self._locate is None:
+            self._note("这个窗口不支持定位（没有角色页签）")
+            return
+        if not self._locate(rid):
+            self._note("在「角色」页签里找不到角色 %s（可能刚被删过）" % rid)
+
+    def _note(self, text):
+        """本页签的状态行回执（成功 / 没选中 / 找不到都走这里，不弹框）。"""
+        self._hint.setText(str(text))
+
+    def _parent_widget(self):
+        return self._pet if isinstance(self._pet, QWidget) else self
+
+    def showEvent(self, event):
+        """切到本页签就刷新一次（角色/动作可能在别的页签里刚改过）。"""
+        super().showEvent(event)
+        self._refresh()
+
+
 class ResourceManagerDialog(_FitDialog):
-    """QTabWidget 三页签（角色 / 音效 / 声音素材），内嵌 RolePanel / SoundPanel / VoiceAssetPanel。"""
+    """QTabWidget 四页签（角色 / 音效 / 声音素材 / 动作），内嵌 RolePanel / SoundPanel /
+    VoiceAssetPanel / ActionPanel。"""
 
     def __init__(self, parent=None, initial_tab=0):
         super().__init__(_qt_parent(parent))
@@ -5080,10 +5389,14 @@ class ResourceManagerDialog(_FitDialog):
 
         root = scroll_content(self)   # v2.5.0 B：内容区可滚动
         self._tabs = QTabWidget()
-        self._tabs.addTab(RolePanel(parent), "角色")
+        # v2.12.0（F1）：角色面板留引用 —— 「动作」页签的「定位到所属角色」要用它选中行
+        self._role_panel = RolePanel(parent)
+        self._tabs.addTab(self._role_panel, "角色")
         self._tabs.addTab(SoundPanel(parent), "音效")
         self._tabs.addTab(VoiceAssetPanel(parent), "声音素材")  # v2.1：与音效分开
-        self._tabs.setCurrentIndex(max(0, min(2, int(initial_tab))))
+        self._action_panel = ActionPanel(parent, locate=self._locate_role)
+        self._tabs.addTab(self._action_panel, "动作")           # v2.12.0（F1）
+        self._tabs.setCurrentIndex(max(0, min(3, int(initial_tab))))
         root.addWidget(self._tabs, 1)
         row = QHBoxLayout()
         row.addStretch(1)
@@ -5091,6 +5404,17 @@ class ResourceManagerDialog(_FitDialog):
         close_btn.clicked.connect(self.reject)
         row.addWidget(close_btn)
         stick_buttons(self, row)   # v2.5.0 B：按钮行在滚动区之外
+
+    def _locate_role(self, rid):
+        """「动作」页签的「定位到所属角色」：切到「角色」页签并选中它（v2.12.0 · F1）。
+
+        返回是否找到——找不到由调用方（ActionPanel）写状态行说清楚，这里不弹框：
+        "这个角色被删了"不是错误，是清单刷新的时机差。
+        """
+        found = self._role_panel.select_role(rid)
+        if found:
+            self._tabs.setCurrentIndex(self._tabs.indexOf(self._role_panel))
+        return found
 
 
 # ---------------- d) 记账账本对话框 ----------------
@@ -6327,6 +6651,47 @@ def open_physics(pet):
         _dialog_failed(pet, "物理参数", e)
 
 
+class _StatusLine(object):
+    """公共「试听/合成：在途 → 结果」状态行（v2.12.0 · E1）。
+
+    **三处复用同一份实现**（每处绑一个已有控件，不新开窗口、不动设计尺寸）：
+      1. 朗读台词页 → VoiceDialog._play_label（异步：合成线程发事件回来，见 _on_voice_event）
+      2. 角色绑定页 → VoiceDialog._preview_hint（试听参考音；服务侧也是**入队即返回**，
+         真结果同样由语音事件回来）
+      3. 事件音效页 → 该行的状态位 _row_labels[key]（试听事件片段，同步调用）
+
+    为什么"在途"必须写一句：点下去到出声之间要几秒（云端后端十几秒），此前这期间界面上
+    **一个字都不变**——用户分不清"没点上"和"正在合成"（B 当初只在朗读页做了这件事）。
+    """
+
+    PENDING = "⏳ 试听中…（正在合成，好了会在这里说结果）"
+
+    def __init__(self, label, restore=None):
+        self._label = label
+        self._restore = restore   # 落定后要恢复的原文（None = 由调用方自己写结果）
+
+    def set(self, text):
+        # 不包 try：写的是**活窗口自己的**标签 —— 关窗/析构那条路在 _route_voice_event
+        # 就被挡住了（那边是已登记的静默出口），这里再包一层只会多一条无主的静默 except。
+        self._label.setText(str(text))
+
+    def pending(self, text=None, pump=False):
+        """进入「在途」。pump=True 时顺手过一次事件循环——**阻塞调用前必须画出来**。"""
+        self.set(text if text else self.PENDING)
+        if pump:
+            _app_events()
+
+    def ok(self, text):
+        self.set(text)
+
+    def fail(self, text):
+        self.set("❌ " + str(text or "失败"))
+
+    def reset(self):
+        """回到"没有在途"的样子（行状态位用：试听完了仍要能看出这行配没配）。"""
+        self.set("" if self._restore is None else self._restore)
+
+
 class VoiceDialog(_FitDialog):
     """v2.1 语言系统（AI 配音）：可插拔克隆后端 + 角色声音绑定 + 台词朗读 + 事件片段。
 
@@ -6386,6 +6751,13 @@ class VoiceDialog(_FitDialog):
         btns.addWidget(ok)
         btns.addWidget(cancel)
         stick_buttons(self, btns)   # v2.5.0 B：按钮行在滚动区之外
+        # v2.12.0（E1）：三处「试听/合成：在途 → 结果」共用 _StatusLine。四个页签都建好
+        # 之后再绑（_play_label 在朗读页、_preview_hint 在绑定页、_row_labels 在事件页）。
+        # _pending_line = **这次在途的那一次**落在哪个状态行 —— 结论写回发起它的那一页，
+        # 而不是一律写朗读页（站在绑定页发起的试听，此前结论写在用户看不见的另一页）。
+        self._play_line = _StatusLine(self._play_label)
+        self._preview_line = _StatusLine(self._preview_hint)
+        self._pending_line = self._play_line
 
     # ---------- 页 1：后端与开关 ----------
     def _build_voice_tab(self):
@@ -6748,7 +7120,13 @@ class VoiceDialog(_FitDialog):
         self._btn_import_assets = QPushButton("去导入参考音…")
         self._btn_import_assets.clicked.connect(self._open_assets)
         _imp_row.addWidget(self._btn_import_assets)
-        _imp_row.addStretch(1)
+        # v2.12.0（E1）：这一页的「试听：在途 → 结果」状态行。**另起一个控件、绝不写
+        # _bind_hint**：那一行是素材库的健康提示（空库 / 索引读不出 / 库故障三种态），
+        # 硬塞试听结果会把用户刚看到的健康提示冲掉（B 当初没做的理由之一）。
+        # 放在**已有的**按钮行里而不是新加一行：行高由按钮决定，设计尺寸契约不受影响。
+        self._preview_hint = QLabel("")
+        self._preview_hint.setWordWrap(True)
+        _imp_row.addWidget(self._preview_hint, 1)
         lay.addLayout(_imp_row)
         self._refresh_bindings()
         return w
@@ -6893,14 +7271,28 @@ class VoiceDialog(_FitDialog):
         _toast(self._pet, "绑定已保存~")
 
     def _preview(self, vs):
+        """试听参考音（角色绑定页）：在途 → 结果都写**这一页**的状态行。
+
+        v2.12.0（E1）：服务侧的 preview_asset() 也是**入队即返回**（真合成在 worker
+        线程），所以"在途"这句得在这里先写上；结果由 _on_voice_event 回填到
+        _pending_line —— 也就是发起它的这一页（此前一律写朗读页：站在绑定页点试听，
+        结论写在用户看不见的另一页，等于没有反馈）。
+        """
         if not vs:
             _warn(self, "试听", "先选一个声音素材（没有就去「管理声音素材…」导入参考音）")
             return
         if self._svc is None:
+            self._preview_line.fail("语音服务不可用，这次没有试听")
             return
         self._save(silent=True)
+        self._voice_waiting = True          # 落定之前，语音事件归这一页
+        self._pending_line = self._preview_line
+        self._preview_line.pending(pump=True)
         ok, err = self._svc.preview_asset(vs)
         if not ok:
+            self._voice_waiting = False
+            self._pending_line = self._play_line   # 归位：下一次朗读的结论仍写朗读页
+            self._preview_line.fail(err or "试听失败")
             _warn(self, "试听失败", err or "试听失败")
 
     # ---------- 页 3：朗读台词 ----------
@@ -6958,21 +7350,26 @@ class VoiceDialog(_FitDialog):
         为什么只在 _voice_waiting 时写标签：这个服务是**全局**的——宠物自己在读日常台词、
         闹钟在播报时也会发同样的事件。没有这道闸，窗口里那条结论会被别处的朗读覆盖掉
         （用户刚看到"❌ 台词不存在"，一转眼变成"✅ 这条读完了。"）。
+
+        v2.12.0（E1）：写进 _pending_line（= **发起这次合成的那一页**的状态行）而不是
+        写死 _play_label —— 绑定页发起的试听，结论就写在绑定页。
         """
         if not self._voice_waiting:
             return
         if key == "started":
-            self._play_label.setText("▶ 正在播放……（合成好了，这就读出来）")
+            self._pending_line.set("▶ 正在播放……（合成好了，这就读出来）")
             return
         self._voice_waiting = False
         if key == "error":
             # 原则 5：错误 = 发生了什么 + 下一步能做什么。合成失败的原因由服务给
             # （"参考音不见了"/"合成失败"/"缓存写不进去"），下一步固定指向两个能自己动手的入口。
-            self._play_label.setText(
+            self._pending_line.set(
                 "❌ 配音失败：%s\n（下一步：点「测试后端」看配置；或去「资源管理 → 声音素材」"
                 "确认素材还在。详情见数据目录的 error.log）" % (text or "服务没有给出原因"))
+            self._pending_line = self._play_line
             return
-        self._play_label.setText("✅ 这条读完了。")
+        self._pending_line.set("✅ 这条读完了。")
+        self._pending_line = self._play_line
 
     def _speak_line(self):
         if self._svc is None or self._lines is None:
@@ -6990,15 +7387,27 @@ class VoiceDialog(_FitDialog):
             return
         # v2.11.0（B8）：入队成功≠已经在播——首次合成要几秒（云端十几秒）。这句话如实说
         # "还在合成"，随后的 started / error / finished 由 _on_voice_event 接着写。
+        # v2.12.0（C-15）：措辞只能是**进行态**。旧文案"✅ 已开始朗读：正在合成…"自己跟
+        # 自己打架（"已开始"是完成态、"正在合成"是进行态），用户读到的是"已经在读了"。
         self._voice_waiting = True
-        self._play_label.setText("✅ 已开始朗读：正在合成（首次会慢一点），合成好自动播放；"
-                                 "失败会在这里说明")
+        self._pending_line = self._play_line
+        self._play_line.set("✅ 已排上队：正在合成……（首次会慢一点），"
+                            "合成好会自动播放；失败会在这里说明")
 
     def _regen_line(self):
+        """丢掉缓存重新合成并朗读。
+
+        v2.12.0（E2 / 发布说明 A-05 的**实现侧**）：服务不可用时**不许静默 return** ——
+        旧实现这里一个字都不说，用户点「重新生成」看到的是"界面毫无反应"；而发布说明
+        写的是"服务不可用时会说明"，差的正是这一句。同理，没选台词也不再静默。
+        """
         if self._svc is None:
+            self._pending_line = self._play_line
+            self._play_line.fail("语音服务不可用，这次没有重新生成")
             return
         lid = self._line_combo.currentData()
         if not lid:
+            self._play_line.fail("还没有选中台词，这次没有重新生成")
             return
         ok, err = self._svc.regenerate(lid)
         if not ok:
@@ -7011,10 +7420,15 @@ class VoiceDialog(_FitDialog):
         if self._svc is not None:
             self._svc.stop()
         self._voice_waiting = False   # v2.11.0（B8）：用户喊停后，迟到的事件不许再盖这句
+        self._pending_line = self._play_line
         self._play_label.setText("已停止。")
 
     def _speak_dialogue(self):
         if self._svc is None:
+            # v2.12.0（E2 同族）：与 _regen_line 一模一样的静默 return —— 同页同语义，
+            # 一处补了"有交代"、另一处继续不吭声就是不一致（同页 _speak_line 也会说）。
+            self._pending_line = self._play_line
+            self._play_line.fail("语音服务不可用，这次没有朗读对白")
             return
         did = self._dlg_combo.currentData()
         if not did:
@@ -7027,8 +7441,9 @@ class VoiceDialog(_FitDialog):
             self._play_label.setText("❌ " + (err or "朗读失败"))
             return
         self._voice_waiting = True
-        self._play_label.setText("✅ 已开始按顺序朗读：正在合成（首次会慢一点），"
-                                 "一条条播完；失败会在这里说明")
+        self._pending_line = self._play_line
+        self._play_line.set("✅ 已排上队：正在合成（首次会慢一点），"
+                            "一条条按顺序播完；失败会在这里说明")
 
     # ---------- 页 4：事件音效（v2.0 能力，保留） ----------
     def _build_event_tab(self):
@@ -7080,13 +7495,39 @@ class VoiceDialog(_FitDialog):
         self._refresh_rows()
         _toast(self._pet, "「%s」的事件片段已配好（立即生效）" % self._event_label(key))
 
+    def _row_status(self, key):
+        """事件行的「试听：在途 → 结果」状态行（E1 第三处）。
+
+        **复用已有的状态位** _row_labels[key]（本来就是这一行的状态："—" / "✓ 已配"），
+        不新加控件；restore 按当前配置算，所以试听完仍能看出这行配没配。
+        """
+        voice = _get(self._pet, "voice")
+        try:
+            cur = voice.clip(key) if voice is not None else None
+        except Exception as e:
+            # 读不出来按"没配"显示（_test 还会再取一次，取不到就走既有提示），但要留痕：
+            # 静默 except 判据里"①补限流日志"比登记成无主的静默更省事，也更好查。
+            pet_log.log_throttled("action_row_status", "读事件片段配置失败：%r" % (e,))
+            cur = None
+        return _StatusLine(self._row_labels[key], restore="✓ 已配" if cur else "—")
+
     def _test(self, key):
+        """试听事件片段（E1）：在途 → 结果都写在**这一行**的状态位上。
+
+        这一段是**同步**调用（pet.preview_audio 立即返回成没成），所以不需要事件回填：
+        pending → 调 → 结果三步走完，用户至少在慢路径上看得到"点上了"。
+        """
         p = _get(self._pet, "voice").clip(key)
         if p is None:
             _warn(self, "试听", "该事件还没配片段")
             return
+        status = self._row_status(key)
+        status.pending("⏳ 试听中…", pump=True)
         if _call(self._pet, "preview_audio", p) is not True:
+            status.reset()   # 失败原因走既有的警告框，状态位回到"配没配"的原义
             _warn(self, "试听", "播放失败：音频文件可能已损坏")
+            return
+        status.ok("✓ 已配（刚试听过）")
 
     def _clear(self, key):
         """清除事件片段（P3-5 / S15）：破坏性 → 二次确认（带事件名与后果）+ 成功回执。"""

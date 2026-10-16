@@ -16,6 +16,7 @@ from PySide6.QtGui import QActionGroup
 from PySide6.QtWidgets import (QHBoxLayout, QLabel, QMenu, QSlider, QWidget,
                                QWidgetAction)
 
+import pet_config  # v2.10.0（C-13）：三态词表（auto/on/off）的单一来源，本模块不抄字符串
 import pet_dialogs  # 资源管理 / 气泡样式 / 台词 / AI 设置 / 帧数上限对话框入口
 
 
@@ -100,8 +101,11 @@ class MenuBuilder:
             act.triggered.connect(lambda checked=False, rid=r.get("id"): pet.apply_role(rid))
             role_group.addAction(act)
         role_menu.addSeparator()
-        role_import_act = role_menu.addAction("导入角色…")
-        role_import_act.triggered.connect(lambda: pet_dialogs.open_resource_manager(pet, 0))
+        # v2.10.0（D3）**去重**：此处原有「导入角色…」，它和顶层「📦 资源管理…」是**同一个调用**
+        # （pet_dialogs.open_resource_manager(pet, 0)，同一个页签），而文案承诺"导入"却只打开面板
+        # —— 两个入口一个目的地，用户不知道哪个是正门。删掉子菜单里这条，保留顶层那条
+        # （顶层还顶着 <=18 项的硬断言，少一条不加一条）。真要导入角色：资源管理 → 角色 →
+        # 「导入角色…」；要分享包：下面两条「导出/导入角色包…」是**另一件事**，不受影响。
         # v2.0.3：角色包导出/导入（分享含素材/行为/可分享配置，敏感键默认不导出）
         role_export_act = role_menu.addAction("📦 导出角色包…")
         role_export_act.triggered.connect(lambda checked=False: pet._export_role())
@@ -154,14 +158,34 @@ class MenuBuilder:
         # · 菜单每次 open 重建，所以天然读的就是"此刻的值"，不需要额外的同步信号；
         # · 立即生效（不重启）由 _set_reduce_motion / _set_high_contrast 内部负责，
         #   它们自己会弹一条回执气泡——这里不再重复回执。
+        # v2.10.0（C-13）：**三态**——此前只有一个勾选框，点过一次就写死 on/off，
+        # 用户**再也回不到 auto**（只能手改 config.json）。现在每个开关两条：
+        #   ① 开关本身：勾选＝**生效值**（auto 时跟随系统），点它＝显式 on/off；
+        #   ②「🔁 跟随系统（…）」：勾选＝配置值就是 auto（pet_config.is_auto_motion_mode），
+        #      点它＝写回 auto。
+        # 三态的词表**只有** pet_config.MOTION_MODES 那一份（auto/on/off），这里不另造字符串；
+        # 落盘与立即生效由 _set_reduce_motion / _set_high_contrast 负责（它们收三态字符串，
+        # 并各自弹一条回执气泡——这里不再重复回执）。
+        # ⚠ 文案与托盘菜单那份（桌宠.py 的 __init__）**逐字一致**——同语义同表现，
+        # 改了这里就要同步改那里。
         rm_act = set_menu.addAction("🌊 减少动效")
         rm_act.setCheckable(True)
         rm_act.setChecked(pet._reduce_motion())
         rm_act.toggled.connect(pet._set_reduce_motion)
+        rm_auto_act = set_menu.addAction("🔁 跟随系统（减少动效）")
+        rm_auto_act.setCheckable(True)
+        rm_auto_act.setChecked(pet_config.is_auto_motion_mode(pet.cfg.get("reduce_motion")))
+        rm_auto_act.triggered.connect(
+            lambda checked=False: pet._set_reduce_motion("auto"))   # 词表见 pet_config.MOTION_MODES
         hc_act = set_menu.addAction("🔲 高对比度")
         hc_act.setCheckable(True)
         hc_act.setChecked(pet._high_contrast())
         hc_act.toggled.connect(pet._set_high_contrast)
+        hc_auto_act = set_menu.addAction("🔁 跟随系统（高对比度）")
+        hc_auto_act.setCheckable(True)
+        hc_auto_act.setChecked(pet_config.is_auto_motion_mode(pet.cfg.get("high_contrast")))
+        hc_auto_act.triggered.connect(
+            lambda checked=False: pet._set_high_contrast("auto"))   # 词表见 pet_config.MOTION_MODES
         # P3-5+：帧数上限用户可调（导入与加载共用）
         fm_act = set_menu.addAction("🎞️ 帧数上限…")
         # P1-手感：物理参数设置（重力/反弹/摩擦/顶边/力度）
@@ -197,7 +221,11 @@ class MenuBuilder:
         grp_cus.triggered.connect(lambda checked=False: pet._set_sound_group("custom"))
         grp_group.addAction(grp_cus)
         snd_set.addSeparator()
-        snd_manage_act = snd_set.addAction("管理音频片段…")
+        # v2.10.0（D4）**命名统一**：全仓把音效库的片段一律叫「音效片段」（与「🎵 音效设置」
+        # 这个子菜单、与资源管理里那页签「音效」同一套词），"音频片段"这个名字**退役**——
+        # 它和另一条「管理声音素材…」（语音设置里，去的是**另一个库**的页签）长得像同义词，
+        # 用户分不出哪个是哪个。⚠ 另一处（pet_dialogs.py 的「管理声音素材…」）不归本包。
+        snd_manage_act = snd_set.addAction("管理音效片段…")
         snd_manage_act.triggered.connect(lambda: pet_dialogs.open_resource_manager(pet, 1))
         lines_act = set_menu.addAction("💬 自定义台词…")
         lines_act.triggered.connect(lambda: pet_dialogs.open_lines(pet))

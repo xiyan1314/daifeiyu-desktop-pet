@@ -1,6 +1,6 @@
 {
   "title": "v2.6.0 proc-reset 结构性判据牙齿实测（影子副本）",
-  "checked_at": "2026-10-16 10:17:06",
+  "checked_at": "2026-10-16 17:08:46",
   "total": 13,
   "caught": 12,
   "not_caught": 0,
@@ -17,7 +17,7 @@
       "id": "M-P01",
       "verdict": "CAUGHT",
       "rc": 1,
-      "tail": "rc=1 total=273 fails=6 命中=['proc resets to idle'] 用时=23.2s",
+      "tail": "rc=1 total=273 fails=6 命中=['proc resets to idle'] 用时=23.5s",
       "failed": [
         "proc resets to idle"
       ]
@@ -26,7 +26,7 @@
       "id": "M-P02",
       "verdict": "CAUGHT",
       "rc": 1,
-      "tail": "rc=1 total=273 fails=3 命中=['proc resets to idle'] 用时=23.0s",
+      "tail": "rc=1 total=273 fails=1 命中=['proc resets to idle'] 用时=23.5s",
       "failed": [
         "proc resets to idle"
       ]
@@ -35,7 +35,7 @@
       "id": "M-P03",
       "verdict": "CAUGHT",
       "rc": 1,
-      "tail": "rc=1 total=273 fails=1 命中=['proc resets to idle'] 用时=23.1s",
+      "tail": "rc=1 total=273 fails=1 命中=['proc resets to idle'] 用时=23.5s",
       "failed": [
         "proc resets to idle"
       ]
@@ -44,7 +44,7 @@
       "id": "M-P04",
       "verdict": "CAUGHT",
       "rc": 1,
-      "tail": "rc=1 total=273 fails=2 命中=['proc resets to idle'] 用时=22.1s",
+      "tail": "rc=1 total=273 fails=2 命中=['proc resets to idle'] 用时=23.7s",
       "failed": [
         "proc resets to idle"
       ]
@@ -53,7 +53,7 @@
       "id": "M-P05",
       "verdict": "CAUGHT",
       "rc": 1,
-      "tail": "rc=1 total=273 fails=3 命中=['proc resets to idle'] 用时=22.9s",
+      "tail": "rc=1 total=273 fails=3 命中=['proc resets to idle'] 用时=23.5s",
       "failed": [
         "proc resets to idle"
       ]
@@ -62,7 +62,7 @@
       "id": "M-P06",
       "verdict": "CAUGHT",
       "rc": 1,
-      "tail": "rc=1 total=273 fails=3 命中=['proc resets to idle'] 用时=23.0s",
+      "tail": "rc=1 total=273 fails=3 命中=['proc resets to idle'] 用时=23.4s",
       "failed": [
         "proc resets to idle"
       ]
@@ -71,7 +71,7 @@
       "id": "M-P07",
       "verdict": "CAUGHT",
       "rc": 1,
-      "tail": "rc=1 total=273 fails=3 命中=['proc transform applied'] 用时=22.8s",
+      "tail": "rc=1 total=273 fails=3 命中=['proc transform applied'] 用时=23.5s",
       "failed": [
         "proc transform applied"
       ]
@@ -80,7 +80,7 @@
       "id": "M-P08",
       "verdict": "CAUGHT",
       "rc": 1,
-      "tail": "rc=1 total=273 fails=1 命中=['proc transform applied'] 用时=22.6s",
+      "tail": "rc=1 total=273 fails=1 命中=['proc transform applied'] 用时=23.5s",
       "failed": [
         "proc transform applied"
       ]
@@ -89,7 +89,7 @@
       "id": "M-P09",
       "verdict": "CAUGHT",
       "rc": 1,
-      "tail": "rc=1 total=273 fails=2 命中=['frame action back to idle'] 用时=22.6s",
+      "tail": "rc=1 total=273 fails=2 命中=['frame action back to idle'] 用时=23.5s",
       "failed": [
         "frame action back to idle"
       ]
@@ -98,7 +98,7 @@
       "id": "M-P10",
       "verdict": "CAUGHT",
       "rc": 1,
-      "tail": "rc=1 total=273 fails=2 命中=['frame action back to idle'] 用时=22.8s",
+      "tail": "rc=1 total=273 fails=2 命中=['frame action back to idle'] 用时=23.6s",
       "failed": [
         "frame action back to idle"
       ]
@@ -107,7 +107,7 @@
       "id": "M-P11",
       "verdict": "CAUGHT",
       "rc": 1,
-      "tail": "rc=1 total=273 fails=1 命中=['feed during proc releases busy'] 用时=22.5s",
+      "tail": "rc=1 total=273 fails=1 命中=['feed during proc releases busy'] 用时=23.5s",
       "failed": [
         "feed during proc releases busy"
       ]
@@ -116,7 +116,7 @@
       "id": "M-P12",
       "verdict": "CAUGHT",
       "rc": 1,
-      "tail": "rc=1 total=273 fails=4 命中=['feed during proc releases busy'] 用时=22.6s",
+      "tail": "rc=1 total=273 fails=4 命中=['feed during proc releases busy'] 用时=23.5s",
       "failed": [
         "feed during proc releases busy"
       ]

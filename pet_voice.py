@@ -17,7 +17,7 @@ VoiceBackend.synthesize(reference_audio_path, text, params, key) -> (bytes|None,
 backend_infos() / get_backend(id) / BACKENDS / DEFAULT_BACKEND / BACKEND_PARAM_LABELS
 VoiceService(data_dir, cfg_getter, play_clip, log=None, stop_clip=None, save_cfg=None,
              lines=None, roles=None, voice_assets=None)
-  事件片段：clip / set_clip / play_event
+  事件片段：clip / set_clip / play_event（后者返回 EventClipResult，见其 docstring）
   绑定：bind_voice / unbind_voice / bindings / resolve_voice
   朗读：speak_line / speak_dialogue / speak_text / speak（旧：AI 回复朗读）
   控制：stop / regenerate / preview_asset / check_ready / test_backend
@@ -882,6 +882,88 @@ def _flat_clips(data):
     return out
 
 
+# ---------------- v2.10.0（D2 第一步）：事件片段的播放结果 ----------------
+# play_event() 的原因码（**单一来源**：方法 docstring / 调用方 / 测试共用，别手抄字面量）
+EVENT_CLIP_PLAYED = "played"        # 有片段，且这次已交给播放器
+EVENT_CLIP_MISSING = "missing"      # 没有可用片段（未配置 / 绑定指向的文件不在盘上）
+EVENT_CLIP_FAILED = "failed"        # 有片段，但这次播不出来（播放器抛了异常）
+EVENT_CLIP_VOICE_OFF = "voice_off"  # 语音总开关关着：本次不发语音
+
+
+class EventClipResult:
+    """`VoiceService.play_event()` 的返回值：把「有没有片段」与「这次播没播出去」分开。
+
+    **为什么要有它（v2.10.0 / D2 第一步）**：内置音效库（`pet_audio`）与本模块的事件片段库
+    （`voice.json`）要在**同一处**合并成一条显式优先级链 —— 「语音库有该事件片段 → 只走语音；
+    没有 → 落回内置音效」，**不是**删掉一边的调用（那会让没配音的用户丢掉内置音效）。
+    而 `play_event` 此前在三条路径上全是**裸 return**（没有任何返回值），调用方无从知道
+    "这个事件到底有没有片段"，这条链就写不出来 —— 这就是 D2 的实现前提。
+
+    契约（`reason` 是单一真源，其余几个只读属性都由它 + `clip_path` 推出）：
+
+      · `EVENT_CLIP_PLAYED`    → `has_clip=True`  `played=True` ：语音已交给播放器，
+            内置音效**不要再响**（同一事件只响一次）。
+      · `EVENT_CLIP_MISSING`   → `has_clip=False` `played=False`：**没有可用片段** →
+            **允许落回内置音效**。
+      · `EVENT_CLIP_FAILED`    → `has_clip=True`  `played=False`：**有片段但这次播不出来**
+            （`play_clip` 抛了异常）→ **不许落回**。把这一条与上面那条分开，正是本类存在的
+            理由：否则语音开着却播不出时，内置音效会把事故盖住（用户以为响的就是他配的那条），
+            而语音侧的失败只剩一行日志。
+      · `EVENT_CLIP_VOICE_OFF` → 语音总开关关着，本次不发语音 → **允许落回内置音效**。
+            ⚠ 这一条与 `has_clip` **故意分开**：总开关关着时片段可能**是配了的**
+            （`clip()` 不看总开关），所以**不能**拿 `if not result.has_clip` 当回落判据 ——
+            那会让"配过片段 + 关掉语音"的用户连内置音效也一起丢掉。
+
+    **回落判据只有一个：`fallback_allowed`。** 调用方不要用真假值判断 —— 本对象没定义
+    `__bool__`，`if result:` 恒为真。
+
+    用法：
+
+        res = svc.play_event("feed")
+        if res.fallback_allowed:      # 没有片段 / 语音总开关关着 → 内置音效接手
+            play_sound("feed")
+        elif res.failed:              # 有片段但这次播不出来：不落回，但要留痕
+            log("事件片段播不出来：%s" % res.clip_path)
+
+    兼容性：改动前 `play_event` 返回 `None`，而现有调用点全部只把它当**语句**调用
+    （`桌宠.py` 的六处 + 两个测试文件），没有一处消费返回值 → 本返回值是**纯增量**，
+    既有行为一个字节都没变。
+    """
+
+    __slots__ = ("reason", "clip_path")
+
+    def __init__(self, reason, clip_path=None):
+        self.reason = reason        # EVENT_CLIP_* 之一（单一真源）
+        self.clip_path = clip_path  # 本次找到的片段绝对路径；没有可用片段时为 None
+
+    @property
+    def has_clip(self):
+        """语音库里这个事件**有没有可用片段**（配了且文件在盘上）。不受总开关影响。"""
+        return self.clip_path is not None
+
+    @property
+    def played(self):
+        """这次是否已把片段交给播放器（为 True 时 reason 必是 EVENT_CLIP_PLAYED）。"""
+        return self.reason == EVENT_CLIP_PLAYED
+
+    @property
+    def failed(self):
+        """有片段、但这次播不出来（播放器抛了异常）。"""
+        return self.reason == EVENT_CLIP_FAILED
+
+    @property
+    def fallback_allowed(self):
+        """内置音效是否该接手 —— **唯一允许的回落判据**。
+
+        只有"没有可用片段"与"语音总开关关着"为 True；`EVENT_CLIP_FAILED` 为 **False**
+        （有片段但这次播不出来 → 不许落回）。
+        """
+        return self.reason in (EVENT_CLIP_MISSING, EVENT_CLIP_VOICE_OFF)
+
+    def __repr__(self):
+        return "<EventClipResult %s clip=%r>" % (self.reason, self.clip_path)
+
+
 # ---------------- v2.1：语言系统服务 ----------------
 class VoiceService:
     """语言系统：事件片段 + 角色声音绑定 + 克隆合成队列 + 播放控制。主线程调用。
@@ -1045,17 +1127,40 @@ class VoiceService:
             return False, "导入失败：%s" % e
 
     def play_event(self, event):
-        """事件触发：仅播放事件片段（不合成朗读）；语音关闭则静默。"""
+        """事件触发：仅播放事件片段（不合成朗读）。返回 EventClipResult（契约见该类 docstring）。
+
+        v2.10.0（D2 第一步）：此前本方法在三条路径上全是**裸 return** —— 调用方拿不到
+        "这个事件到底有没有片段"，也就写不出 D2 要求的显式优先级链。现在返回值把四件事
+        分开（`reason` 是单一真源）：
+
+          · 没有可用片段（未配置 / 片段文件不在）→ `EVENT_CLIP_MISSING`，
+            `fallback_allowed=True`：**落回内置音效**；
+          · 有片段且这次已交给播放器 → `EVENT_CLIP_PLAYED`，`fallback_allowed=False`：
+            内置音效不要再响（同一事件只响一次）；
+          · **有片段但这次播不出来**（`play_clip` 抛异常）→ `EVENT_CLIP_FAILED`，
+            `fallback_allowed=False`：**不许落回**（别拿内置音效把语音的失败盖住）；
+          · 语音总开关关着 → `EVENT_CLIP_VOICE_OFF`，`fallback_allowed=True`：本次不发语音，
+            落回**允许** —— 这与改动前一致（那时本方法静默返回，调用方的内置音效照常响）。
+
+        ⚠ 与改动前的差异只有一处：即使总开关关着，现在也会调一次 `clip()`（纯查表 +
+        `isfile`，无副作用），只为让 `voice_off` 也能如实回答"片段配没配"。
+        ⚠ 「绑定了但片段文件被删/移走」算 **MISSING**（`clip()` 的既有口径：这种绑定它一律
+        返回 None）—— 语音此时**不可能**出声，落回内置音效与改动前一致；桌宠.py 的
+        `_on_reply_voice` 也是按这个口径回落到 TTS 的。
+        """
         cfg = self._cfg() or {}
         vcfg = cfg.get("voice") or {}
+        p = self.clip(event)   # 先取片段：voice_off 时也要如实回答"配没配"
         if not vcfg.get("enabled"):
-            return
-        p = self.clip(event)
-        if p is not None:
-            try:
-                self._play_clip(p)
-            except Exception as e:
-                self._log("voice clip play failed: %r" % (e,))
+            return EventClipResult(EVENT_CLIP_VOICE_OFF, p)
+        if p is None:
+            return EventClipResult(EVENT_CLIP_MISSING)
+        try:
+            self._play_clip(p)
+        except Exception as e:
+            self._log("voice clip play failed: %r" % (e,))
+            return EventClipResult(EVENT_CLIP_FAILED, p)
+        return EventClipResult(EVENT_CLIP_PLAYED, p)
 
     # ---------------- v2.1.1：本地后端启动 / 结束 ----------------
     def local_service_cfg(self, backend_id=None):
@@ -1529,34 +1634,45 @@ class VoiceService:
     def speak(self, text, on_error=None):
         """AI 回复朗读：绑定了声音素材就走克隆后端；否则沿用旧固定音色（sapi/api）。
 
-        语音关闭/空文本 → 静默返回（与 v2.0 语义一致）。"""
+        v2.10.0（D2 第一步）：补上明确的返回值 **`(ok, err)`**，与同族入口
+        （speak_line / speak_dialogue / speak_text / preview_asset）一个口径 ——
+        `ok=True` = 这次已交给播放器（入队或转交 speak_text）；`ok=False` = 这次不会发声。
+
+        ⚠ 两条边界（免得下游把"没说成"读成"出错"）：
+          · 「静默」（v2.0 语义）指**用户可见行为** —— 不发声、不弹提示；**不是**"没有返回值"。
+            语音关闭 / 空文本 / `tts_mode=off` 现在都返回 `(False, 原因)`；
+          · `(False, …)` **不等于出错**：总开关关着是用户的正常选择，调用方**不要**照着 err
+            无条件弹提示（真要提示请用 `on_error`，它只在真错误时触发）。
+        返回值是纯增量：改动前本方法返回 `None`，三个调用点（桌宠.py 的闹钟两处 +
+        AI 回复朗读一处）都只当语句调用，没有一处消费它。
+        """
         cfg = self._cfg() or {}
         vcfg = cfg.get("voice") or {}
         if not vcfg.get("enabled"):
-            return
+            return False, "配音总开关是关的（语音设置里打开「开启语音」）"
         text = (text or "").strip()
         if not text:
-            return
+            return False, "没有可朗读的文本"
         # 优先：绑定/兜底声音 → 克隆后端
         binds = self.bindings()
         _has_binding = bool(binds.get("") )
         vs, _verr = self.resolve_voice("", None)
         if vs:
-            self.speak_text(text, "", vs, on_error=on_error)
-            return
+            return self.speak_text(text, "", vs, on_error=on_error)
         if _has_binding:
             # v2.1 修复：绑定了声音但素材已失效 —— 明确报错，**不得**退化到固定音色糊弄
             err = _verr or "绑定的声音素材不存在了（去语音设置重新绑定）"
             self._emit("error", err)
             if on_error:
                 on_error(err)
-            return
+            return False, err
         mode = vcfg.get("tts_mode", "off")
         if mode == "off":
-            return
+            return False, "没绑声音素材，固定音色朗读也是关的（语音设置 → tts_mode）"
         bid = "sapi" if mode == "sapi" else "openai"
         self._enqueue([{"kind": "line", "text": text, "voice_slot": "",
                         "role_slot": "", "line_id": "", "backend": bid, "gen": self._gen}])
+        return True, ""
 
 
 def _to_bool(v):

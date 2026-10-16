@@ -441,7 +441,7 @@
   ],
   "results": {
     "title": "变异验证 spec：mutations_agent_b_v290.json",
-    "checked_at": "2026-10-16 09:41:28",
+    "checked_at": "2026-10-16 16:36:54",
     "total": 23,
     "caught": 23,
     "not_caught": 0,
@@ -451,7 +451,7 @@
         "id": "B1-M1-empty-candidate-source",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "4 failed, 3 passed in 1.60s",
+        "tail": "4 failed, 3 passed in 1.27s",
         "failed": [
           "tests/test_behavior_v290.py::test_action_choices_always_has_builtins_even_without_custom_actions",
           "tests/test_behavior_v290.py::test_action_choices_includes_custom_actions",
@@ -465,7 +465,7 @@
         "id": "B1-M2-missing-custom-actions",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "3 failed, 4 passed in 1.23s",
+        "tail": "3 failed, 4 passed in 0.88s",
         "failed": [
           "tests/test_behavior_v290.py::test_action_choices_includes_custom_actions",
           "tests/test_behavior_v290.py::test_action_choices_tolerates_missing_pet_and_odd_shapes",
@@ -478,7 +478,7 @@
         "id": "B1-M3-no-dedup-no-sort",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "3 failed, 4 passed in 1.10s",
+        "tail": "3 failed, 4 passed in 0.91s",
         "failed": [
           "tests/test_behavior_v290.py::test_action_choices_is_deduped_and_stably_sorted",
           "tests/test_behavior_v290.py::test_action_choices_tolerates_missing_pet_and_odd_shapes",
@@ -491,7 +491,7 @@
         "id": "B1-M4-candidates-become-whitelist",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed, 6 passed in 1.11s",
+        "tail": "1 failed, 6 passed in 0.85s",
         "failed": [
           "tests/test_behavior_v290.py::test_unknown_action_name_survives_read_and_write"
         ],
@@ -502,7 +502,7 @@
         "id": "B1-M5-keep-none-in-candidates",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed, 6 passed in 1.06s",
+        "tail": "1 failed, 6 passed in 0.86s",
         "failed": [
           "tests/test_behavior_v290.py::test_action_choices_excludes_the_noop_name"
         ],
@@ -513,7 +513,7 @@
         "id": "B1-M6-no-getattr-guard",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed, 6 passed in 1.09s",
+        "tail": "1 failed, 6 passed in 0.89s",
         "failed": [
           "tests/test_behavior_v290.py::test_action_choices_tolerates_missing_pet_and_odd_shapes"
         ],
@@ -524,7 +524,7 @@
         "id": "B1-M7-drop-anim-actions-source",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "3 failed, 4 passed in 1.09s",
+        "tail": "3 failed, 4 passed in 0.90s",
         "failed": [
           "tests/test_behavior_v290.py::test_action_choices_always_has_builtins_even_without_custom_actions",
           "tests/test_behavior_v290.py::test_action_choices_includes_custom_actions",
@@ -537,7 +537,7 @@
         "id": "B4-M1-dead-branch-legacy-key",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "3 failed, 2 passed in 0.75s",
+        "tail": "3 failed, 2 passed in 0.63s",
         "failed": [
           "tests/test_behavior_v290.py::test_remove_idle_refs_clears_the_reference",
           "tests/test_behavior_v290.py::test_remove_idle_refs_does_not_hurt_other_entries",
@@ -550,7 +550,7 @@
         "id": "B4-M2-rewrite-with-normalized-entries",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed, 4 passed in 0.73s",
+        "tail": "1 failed, 4 passed in 0.58s",
         "failed": [
           "tests/test_behavior_v290.py::test_remove_idle_refs_does_not_hurt_other_entries"
         ],
@@ -561,7 +561,7 @@
         "id": "B4-M3-write-back-even-without-hit",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed, 4 passed in 0.73s",
+        "tail": "1 failed, 4 passed in 0.58s",
         "failed": [
           "tests/test_behavior_v290.py::test_remove_idle_refs_is_idempotent_and_touches_nothing_when_no_hit"
         ],
@@ -572,7 +572,7 @@
         "id": "B5-M1-hardcoded-not-enabled",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "2 failed, 4 passed in 0.76s",
+        "tail": "2 failed, 4 passed in 0.59s",
         "failed": [
           "tests/test_behavior_v290.py::test_idle_combo_state_two_entries_is_not_off",
           "tests/test_behavior_v290.py::test_idle_combo_state_single_and_first_only"
@@ -584,7 +584,7 @@
         "id": "B5-M2-silent-drop",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "3 failed, 3 passed in 0.80s",
+        "tail": "3 failed, 3 passed in 0.61s",
         "failed": [
           "tests/test_behavior_v290.py::test_idle_single_change_dry_run_does_not_touch_cfg",
           "tests/test_behavior_v290.py::test_idle_single_change_apply_reports_every_entry_it_drops",
@@ -597,7 +597,7 @@
         "id": "B5-M3-keep-legacy-key-on-apply",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed, 5 passed in 0.75s",
+        "tail": "1 failed, 5 passed in 0.59s",
         "failed": [
           "tests/test_behavior_v290.py::test_idle_single_change_clears_legacy_key_so_dropped_do_not_resurrect"
         ],
@@ -608,7 +608,7 @@
         "id": "B5-M4-dry-run-also-writes",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed, 5 passed in 0.73s",
+        "tail": "1 failed, 5 passed in 0.58s",
         "failed": [
           "tests/test_behavior_v290.py::test_idle_single_change_dry_run_does_not_touch_cfg"
         ],
@@ -619,7 +619,7 @@
         "id": "B5-M5-chosen-entry-stays-disabled",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed, 5 passed in 0.74s",
+        "tail": "1 failed, 5 passed in 0.58s",
         "failed": [
           "tests/test_behavior_v290.py::test_idle_single_change_enables_the_chosen_entry_and_keeps_its_fields"
         ],
@@ -630,7 +630,7 @@
         "id": "B6-M1-play-even-if-save-failed",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "3 failed, 2 passed in 0.74s",
+        "tail": "3 failed, 2 passed in 0.58s",
         "failed": [
           "tests/test_behavior_v290.py::test_test_play_target_refuses_when_save_failed",
           "tests/test_behavior_v290.py::test_test_play_target_never_plays_a_stale_id",
@@ -643,7 +643,7 @@
         "id": "B7-M1-checkbox-hardcoded-false",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 1.50s",
+        "tail": "1 failed in 0.92s",
         "failed": [
           "tests/test_ai_write_first_v280.py::test_set_ai_enabled_无Key回退写盘失败_菜单勾选必须回读cfg"
         ],
@@ -654,7 +654,7 @@
         "id": "B7-M2-no-blocksignals",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "2 failed in 1.14s",
+        "tail": "2 failed in 0.95s",
         "failed": [
           "tests/test_ai_write_first_v280.py::test_talk_自动开开关_写失败_内存不变且如实告知但对话照常",
           "tests/test_ai_write_first_v280.py::test_talk_自动开开关_成功路径落盘且勾选跟上"
@@ -666,7 +666,7 @@
         "id": "M-B290-01",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "5 failed, 2 passed in 1.16s",
+        "tail": "5 failed, 2 passed in 0.87s",
         "failed": [
           "tests/test_behavior_v290.py::test_action_choices_always_has_builtins_even_without_custom_actions",
           "tests/test_behavior_v290.py::test_action_choices_includes_custom_actions",
@@ -681,7 +681,7 @@
         "id": "M-B290-03",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "3 failed, 4 passed in 1.14s",
+        "tail": "3 failed, 4 passed in 0.88s",
         "failed": [
           "tests/test_behavior_v290.py::test_action_choices_always_has_builtins_even_without_custom_actions",
           "tests/test_behavior_v290.py::test_action_choices_includes_custom_actions",
@@ -694,7 +694,7 @@
         "id": "M-B290-06",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed, 6 passed in 1.10s",
+        "tail": "1 failed, 6 passed in 0.89s",
         "failed": [
           "tests/test_behavior_v290.py::test_action_choices_tolerates_missing_pet_and_odd_shapes"
         ],
@@ -705,7 +705,7 @@
         "id": "M-B290-07",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "3 failed, 4 passed in 1.11s",
+        "tail": "3 failed, 4 passed in 0.88s",
         "failed": [
           "tests/test_behavior_v290.py::test_action_choices_is_deduped_and_stably_sorted",
           "tests/test_behavior_v290.py::test_action_choices_tolerates_missing_pet_and_odd_shapes",
@@ -718,7 +718,7 @@
         "id": "M-B290-08",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed, 6 passed in 1.07s",
+        "tail": "1 failed, 6 passed in 0.87s",
         "failed": [
           "tests/test_behavior_v290.py::test_unknown_action_name_survives_read_and_write"
         ],
@@ -757,33 +757,33 @@
     ],
     "note": "变异只在 %TEMP% 影子副本里做，真实仓库只读（只写 _dev/.mutation.lock）",
     "repo_fingerprint": {
-      "桌宠.py": "59b2f99c52ba",
-      "pet_export.py": "c01e1593efd2",
+      "桌宠.py": "b33888cadc15",
+      "pet_export.py": "db474bdd6670",
       "pet_lines.py": "5332f60b5f26",
       "pet_alarm.py": "1149e94deee3",
       "pet_behaviors.py": "732273f95fb4",
-      "_check_release.py": "7377b3fad58e",
-      "pet_balance.py": "66948e5514a4",
+      "_check_release.py": "dca4541e2829",
+      "pet_balance.py": "045129227ee2",
       "pet_plugin.py": "2f7853298fc3",
       "pet_plugin_host.py": "82fb7b1384c8",
-      "pet_dialogs.py": "7e1a11cff2a2",
-      "pet_menu.py": "d2f565537b3f",
+      "pet_dialogs.py": "ae3e1a1c76b0",
+      "pet_menu.py": "44224c3320c6",
       "pet_plugin_index.py": "e5e9845785e8",
       "pet_ai.py": "a5989e7fe646",
-      "pet_config.py": "6fe2b20ae424",
+      "pet_config.py": "b46e0f180880",
       "pet_io.py": "6b1e0413fb7f",
       "pet_services.py": "ecebb6ab5891",
       "pet_widgets.py": "b8de517121e1",
-      "pet_resources.py": "e28f38917052",
+      "pet_resources.py": "5d8df41558df",
       "pet_tools.py": "46e9030d073f",
-      "pet_voice.py": "9fe0a570ca81",
+      "pet_voice.py": "3a9c9cc3324e",
       "pet_audio.py": "a6feadf4d653",
       "pet_chat.py": "de979c429c2c",
       "pet_log.py": "de14ecf338ab",
-      "pet_actions.py": "83eb11403fec",
+      "pet_actions.py": "a4871b371ea0",
       "pet_book.py": "098676ac52d4",
       "_check_static.py": "6286f9f493bd",
-      "pet_motion.py": "fcee7ab63bb2",
+      "pet_motion.py": "e4fbc789b327",
       "tests/test_dialog_buttons_v270.py": "4f95acca7fc6",
       "tests/test_import_thread.py": "1c6fc2ec5d05"
     },

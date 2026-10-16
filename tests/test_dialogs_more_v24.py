@@ -1413,12 +1413,21 @@ def test_voice_dialog_play_tab_reports_missing_and_failure(pet, ui, monkeypatch)
         dlg._speak_line()
         assert "不可用" in dlg._play_label.text(), dlg._play_label.text()
         dlg._speak_dialogue()
+        assert "不可用" in dlg._play_label.text(), dlg._play_label.text()
         dlg._stop()
         assert dlg._play_label.text() == "已停止。"
-        dlg._regen_line()          # 无服务：空操作，不崩
-        assert dlg._play_label.text() == "已停止。"
-        dlg._speak_dialogue()      # 无服务：空操作
-        assert dlg._play_label.text() == "已停止。"
+        # v2.12.0（E2）加强式改写：原来这两条断言是"无服务 = 空操作，不崩"，把"什么都不说"
+        # 钉住了（= 发布说明 A-05 承诺的"服务不可用会说明"没有实现）。现在改成钉住**交代**
+        # —— 不崩，且必须有一句人话。能真失败：把 _regen_line / _speak_dialogue 的无服务
+        # 分支改回静默 return → 下面四条立刻红。
+        dlg._regen_line()
+        assert "不可用" in dlg._play_label.text(), dlg._play_label.text()
+        assert "没有重新生成" in dlg._play_label.text(), \
+            "点了「重新生成」却没有任何交代：%r" % dlg._play_label.text()
+        dlg._speak_dialogue()
+        assert dlg._play_label.text() != "已停止。", "无服务又变回静默空操作了"
+        assert "不可用" in dlg._play_label.text(), dlg._play_label.text()
+        assert "没有朗读对白" in dlg._play_label.text(), dlg._play_label.text()
 
         monkeypatch.setattr(dlg, "_svc", pet.voice)
         dlg._line_combo.addItem("假台词", "ghost_line")
