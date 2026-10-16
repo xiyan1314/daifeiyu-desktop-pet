@@ -1,0 +1,326 @@
+{
+  "title": "v2.11.0 第 9 轮 · 代理 B（第 2 波速胜与交互）· B5/B6/B8 与 A2/A3 菜单接线的「能真失败」证据（**10 条**）",
+  "note": "每条都把本轮**新加的那句话/那个接线**拿掉或改回旧写法，点名用例必须红。全部在 %TEMP% 影子副本里跑（铁律 6），真仓只读。B1/B2/B3/B4/B7 不在本 spec（它们落在 桌宠.py / pet_widgets.py，归代理 A）。",
+  "mutations": [
+    {
+      "id": "M-B2110-01-bad-reply-falls-back",
+      "file": "pet_chat.py",
+      "old": "                except (KeyError, IndexError, TypeError, ValueError, AttributeError) as e:\n                    self._log(\"ai_worker bad response: %r\" % (e,))\n                    self.signals.reply.emit(\n                        \"服务商回复看不懂（%s）：这条回复不是标准格式——去「AI设置…」核对接口地址\"\n                        \"（要 OpenAI 兼容端点）与模型名，或点「测试连接」看看\" % (type(e).__name__,))\n                    return\n",
+      "new": "                except (KeyError, IndexError, TypeError, ValueError, AttributeError):\n                    raise  # MUTANT: 不再归类「回复看不懂」，让它落回最外层兜底\n",
+      "tests": [
+        "tests/test_feedback_v2110_b.py"
+      ],
+      "expect_fail": [
+        "tests/test_feedback_v2110_b.py::test_回复结构看不懂_说成服务商回复看不懂并给下一步"
+      ],
+      "why": "把「服务商回复看不懂」这一支拿掉（重新落回最外层兜底去说「网络不好」）：依赖它的三条用例必须红。旧实现就是这样——用户被指去查网络，而下一步其实在「AI设置…」。"
+    },
+    {
+      "id": "M-B2110-02-400-back-to-question",
+      "file": "pet_chat.py",
+      "old": "        return \"请求参数不被接受（400/422）：多半是模型名或地址跟这家服务对不上——去「AI设置…」点「测试连接」看它怎么说\"",
+      "new": "        return \"请求参数不被接受（400/422）：模型名与接口不兼容？\"",
+      "tests": [
+        "tests/test_feedback_v2110_b.py"
+      ],
+      "expect_fail": [
+        "tests/test_feedback_v2110_b.py::test_400_422给的是下一步而不是反问"
+      ],
+      "why": "退回那句反问（不告诉用户下一步）：那条用例必须红——它钉的就是「不是反问、要点名去哪儿动手」。"
+    },
+    {
+      "id": "M-B2110-03-fallback-back-to-network",
+      "file": "pet_chat.py",
+      "old": "            # v2.11.0（B6）：兜底不再说\"网络不好\"——它把**我们自己的意外**（磁盘写失败、\n            # 注入契约不符等）也说成网络问题，用户查网络永远查不出结果。现在如实点名\n            # 异常类型，并给一条**在这个窗口里就能做**的下一步。\n            self._log(\"ai_worker: %r\" % (e,))\n            self.signals.reply.emit(\n                \"出了个意外（%s）：先再发一次试试；还不行就去「AI设置…」点「测试连接」，\"\n                \"详情见数据目录的 error.log\" % (type(e).__name__,))",
+      "new": "            self._log(\"ai_worker: %r\" % (e,))\n            self.signals.reply.emit(\"网络不好，听不清啦……\")",
+      "tests": [
+        "tests/test_feedback_v2110_b.py"
+      ],
+      "expect_fail": [
+        "tests/test_feedback_v2110_b.py::test_我们自己的意外不再谎称网络不好"
+      ],
+      "why": "把兜底改回 v2.10.0 的「网络不好，听不清啦……」：用户被指去查网络，而本地故障（磁盘/注入）永远查不出来。用例必须红。"
+    },
+    {
+      "id": "M-B2110-04-import-tip-points-at-save",
+      "file": "pet_dialogs.py",
+      "old": "        self._add_form_btn.setToolTip(BTN_ADD_TIP_IMPORT)",
+      "new": "        self._add_form_btn.setToolTip(BTN_ADD_TIP)   # MUTANT: 又指向本窗口没有的「保存」",
+      "tests": [
+        "tests/test_feedback_v2110_b.py",
+        "tests/test_dialogs_feedback_v280.py"
+      ],
+      "expect_fail": [
+        "tests/test_feedback_v2110_b.py::test_导入向导的添加形态_tooltip_指向本窗口真有的按钮",
+        "tests/test_dialogs_feedback_v280.py::test_wording_table_is_applied_to_new_and_add_buttons"
+      ],
+      "why": "把导入向导的 tooltip 退回通用那句（说「点保存才会写进库里」，而这个窗口根本没有「保存」）：B 的新用例与 v2.8.0 那条改过的用例都必须红（两侧一起有牙）。"
+    },
+    {
+      "id": "M-B2110-05-save-note-into-scroll-area",
+      "file": "pet_dialogs.py",
+      "old": "        _outer_lay = self.layout()\n        if _outer_lay is not None:\n            _outer_lay.addWidget(self._save_note)",
+      "new": "        root.addWidget(self._save_note)   # MUTANT: 挂进滚动区（内容一滚就看不见）",
+      "tests": [
+        "tests/test_feedback_v2110_b.py"
+      ],
+      "expect_fail": [
+        "tests/test_feedback_v2110_b.py::test_AI设置的关键信息在窗口里看得见而不是只在tooltip里"
+      ],
+      "why": "把那句「保存才生效」从外层布局挪进滚动区：内容一滚就看不见了——关键信息可见性这条用例必须红。"
+    },
+    {
+      "id": "M-B2110-06-menu-items-missing",
+      "file": "pet_menu.py",
+      "old": "        rm_act = set_menu.addAction(\"🌊 减少动效\")\n        rm_act.setCheckable(True)\n        rm_act.setChecked(pet._reduce_motion())\n        rm_act.toggled.connect(pet._set_reduce_motion)\n        hc_act = set_menu.addAction(\"🔲 高对比度\")\n        hc_act.setCheckable(True)\n        hc_act.setChecked(pet._high_contrast())\n        hc_act.toggled.connect(pet._set_high_contrast)",
+      "new": "        pass  # MUTANT: 无障碍开关没有接进设置子菜单",
+      "tests": [
+        "tests/test_feedback_v2110_b.py"
+      ],
+      "expect_fail": [
+        "tests/test_feedback_v2110_b.py::test_设置子菜单有两个无障碍开关_勾选状态读生效值",
+        "tests/test_feedback_v2110_b.py::test_菜单开关的勾选会调到A的方法",
+        "tests/test_feedback_v2110_b.py::test_无障碍开关在设置子菜单里_不在顶层"
+      ],
+      "why": "菜单项整块拿掉（A2/A3 没有入口）：三条接线用例必须红。"
+    },
+    {
+      "id": "M-B2110-07-checked-reads-raw-config",
+      "file": "pet_menu.py",
+      "old": "        rm_act.setChecked(pet._reduce_motion())",
+      "new": "        rm_act.setChecked(str(pet.cfg.get(\"reduce_motion\", \"auto\")) == \"on\")  # MUTANT: 读原始配置",
+      "tests": [
+        "tests/test_feedback_v2110_b.py"
+      ],
+      "expect_fail": [
+        "tests/test_feedback_v2110_b.py::test_设置子菜单有两个无障碍开关_勾选状态读生效值"
+      ],
+      "why": "改成读配置字符串：auto 且系统开着减少动效时，菜单会显示成未勾选（界面在说谎）——那条用例必须红。"
+    },
+    {
+      "id": "M-B2110-08-voice-event-gate-removed",
+      "file": "pet_dialogs.py",
+      "old": "        if not self._voice_waiting:\n            return\n        if key == \"started\":",
+      "new": "        if key == \"started\":   # MUTANT: 拿掉「只反映本窗口发起的那一次」的闸门",
+      "tests": [
+        "tests/test_feedback_v2110_b.py"
+      ],
+      "expect_fail": [
+        "tests/test_feedback_v2110_b.py::test_没发起朗读时别处的事件不许动窗口",
+        "tests/test_feedback_v2110_b.py::test_朗读成功走完会说读完了_停止后迟到事件不许再写"
+      ],
+      "why": "拿掉闸门：全局语音服务的事件会写进这个窗口，用户刚看到的结论会被别处的朗读覆盖（会不会覆盖用户刚看的东西）。两条用例必须红。"
+    },
+    {
+      "id": "M-B2110-09-speak-optimistic-no-inflight",
+      "file": "pet_dialogs.py",
+      "old": "        self._voice_waiting = True\n        self._play_label.setText(\"✅ 已开始朗读：正在合成（首次会慢一点），合成好自动播放；\"\n                                 \"失败会在这里说明\")",
+      "new": "        self._play_label.setText(\"✅ 开始朗读…\")   # MUTANT: 入队成功即宣称已开始",
+      "tests": [
+        "tests/test_feedback_v2110_b.py"
+      ],
+      "expect_fail": [
+        "tests/test_feedback_v2110_b.py::test_朗读入队后说正在合成而不是已经开播",
+        "tests/test_feedback_v2110_b.py::test_合成失败写进窗口并给下一步_且不覆盖别的朗读"
+      ],
+      "why": "退回「入队成功就说已经开始朗读」：既没有在途反馈，合成失败也写不进窗口（用户永远等不到结果）。两条用例必须红。"
+    },
+    {
+      "id": "M-B2110-10-hook-log-on-happy-path",
+      "file": "pet_dialogs.py",
+      "old": "    if svc is None:\n        return\n    try:\n        if svc in _VOICE_UI_HOOKED:",
+      "new": "    if svc is None:\n        return\n    pet_log.log_throttled(\"voice_ui_hook\", \"MUTANT: 把异常出口的日志挪到正常路径\")\n    try:\n        if svc in _VOICE_UI_HOOKED:",
+      "tests": [
+        "tests/test_feedback_v2110_b.py"
+      ],
+      "expect_fail": [
+        "tests/test_feedback_v2110_b.py::test_正常路径一次都不许命中语音UI的异常日志"
+      ],
+      "why": "把「挂钩失败」那条日志从异常出口挪到**正常路径**（每次开语音设置都会写一条 error.log）：新加的那条用例必须红——它钉的就是「这种补日志只许在真异常出口」。"
+    }
+  ],
+  "results": {
+    "title": "变异验证 spec：mutations_agent_b_v2110.json",
+    "checked_at": "2026-10-16 08:54:46",
+    "total": 10,
+    "caught": 10,
+    "not_caught": 0,
+    "blocked": 0,
+    "items": [
+      {
+        "id": "M-B2110-01-bad-reply-falls-back",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "3 failed, 18 passed in 2.34s",
+        "failed": [
+          "tests/test_feedback_v2110_b.py::test_回复结构看不懂_说成服务商回复看不懂并给下一步",
+          "tests/test_feedback_v2110_b.py::test_响应体不是JSON也算服务商回复看不懂",
+          "tests/test_feedback_v2110_b.py::test_choices是空表也算回复看不懂"
+        ],
+        "errors": [],
+        "errors_teardown": []
+      },
+      {
+        "id": "M-B2110-02-400-back-to-question",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed, 20 passed in 1.82s",
+        "failed": [
+          "tests/test_feedback_v2110_b.py::test_400_422给的是下一步而不是反问"
+        ],
+        "errors": [],
+        "errors_teardown": []
+      },
+      {
+        "id": "M-B2110-03-fallback-back-to-network",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed, 20 passed in 2.00s",
+        "failed": [
+          "tests/test_feedback_v2110_b.py::test_我们自己的意外不再谎称网络不好"
+        ],
+        "errors": [],
+        "errors_teardown": []
+      },
+      {
+        "id": "M-B2110-04-import-tip-points-at-save",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "2 failed, 69 passed in 34.33s",
+        "failed": [
+          "tests/test_feedback_v2110_b.py::test_导入向导的添加形态_tooltip_指向本窗口真有的按钮",
+          "tests/test_dialogs_feedback_v280.py::test_wording_table_is_applied_to_new_and_add_buttons"
+        ],
+        "errors": [],
+        "errors_teardown": []
+      },
+      {
+        "id": "M-B2110-05-save-note-into-scroll-area",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed, 20 passed in 2.63s",
+        "failed": [
+          "tests/test_feedback_v2110_b.py::test_AI设置的关键信息在窗口里看得见而不是只在tooltip里"
+        ],
+        "errors": [],
+        "errors_teardown": []
+      },
+      {
+        "id": "M-B2110-06-menu-items-missing",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "3 failed, 18 passed in 2.30s",
+        "failed": [
+          "tests/test_feedback_v2110_b.py::test_设置子菜单有两个无障碍开关_勾选状态读生效值",
+          "tests/test_feedback_v2110_b.py::test_菜单开关的勾选会调到A的方法",
+          "tests/test_feedback_v2110_b.py::test_无障碍开关在设置子菜单里_不在顶层"
+        ],
+        "errors": [],
+        "errors_teardown": []
+      },
+      {
+        "id": "M-B2110-07-checked-reads-raw-config",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed, 20 passed in 2.16s",
+        "failed": [
+          "tests/test_feedback_v2110_b.py::test_设置子菜单有两个无障碍开关_勾选状态读生效值"
+        ],
+        "errors": [],
+        "errors_teardown": []
+      },
+      {
+        "id": "M-B2110-08-voice-event-gate-removed",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "3 failed, 18 passed in 2.41s",
+        "failed": [
+          "tests/test_feedback_v2110_b.py::test_合成失败写进窗口并给下一步_且不覆盖别的朗读",
+          "tests/test_feedback_v2110_b.py::test_朗读成功走完会说读完了_停止后迟到事件不许再写",
+          "tests/test_feedback_v2110_b.py::test_没发起朗读时别处的事件不许动窗口"
+        ],
+        "errors": [],
+        "errors_teardown": []
+      },
+      {
+        "id": "M-B2110-09-speak-optimistic-no-inflight",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "3 failed, 18 passed in 2.29s",
+        "failed": [
+          "tests/test_feedback_v2110_b.py::test_朗读入队后说正在合成而不是已经开播",
+          "tests/test_feedback_v2110_b.py::test_合成失败写进窗口并给下一步_且不覆盖别的朗读",
+          "tests/test_feedback_v2110_b.py::test_朗读成功走完会说读完了_停止后迟到事件不许再写"
+        ],
+        "errors": [],
+        "errors_teardown": []
+      },
+      {
+        "id": "M-B2110-10-hook-log-on-happy-path",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed, 20 passed in 2.40s",
+        "failed": [
+          "tests/test_feedback_v2110_b.py::test_正常路径一次都不许命中语音UI的异常日志"
+        ],
+        "errors": [],
+        "errors_teardown": []
+      }
+    ],
+    "spec": "mutations_agent_b_v2110.json",
+    "tests": [
+      "tests/test_dialogs_feedback_v280.py",
+      "tests/test_feedback_v2110_b.py"
+    ],
+    "note": "变异只在 %TEMP% 影子副本里做，真实仓库只读（只写 _dev/.mutation.lock）",
+    "repo_fingerprint": {
+      "桌宠.py": "2351a1ad9737",
+      "pet_export.py": "c01e1593efd2",
+      "pet_lines.py": "5332f60b5f26",
+      "pet_alarm.py": "1149e94deee3",
+      "pet_behaviors.py": "732273f95fb4",
+      "_check_release.py": "7377b3fad58e",
+      "pet_balance.py": "66948e5514a4",
+      "pet_plugin.py": "2f7853298fc3",
+      "pet_plugin_host.py": "82fb7b1384c8",
+      "pet_dialogs.py": "5775968ec8a6",
+      "pet_menu.py": "d2f565537b3f",
+      "pet_plugin_index.py": "e5e9845785e8",
+      "pet_ai.py": "a5989e7fe646",
+      "pet_config.py": "7a4ad883d4e8",
+      "pet_io.py": "6b1e0413fb7f",
+      "pet_services.py": "ecebb6ab5891",
+      "pet_widgets.py": "dc7f5dc4a7f2",
+      "pet_resources.py": "e28f38917052",
+      "pet_tools.py": "46e9030d073f",
+      "pet_voice.py": "9fe0a570ca81",
+      "pet_audio.py": "a6feadf4d653",
+      "pet_chat.py": "de979c429c2c",
+      "pet_log.py": "de14ecf338ab",
+      "pet_actions.py": "83eb11403fec",
+      "pet_book.py": "098676ac52d4",
+      "_check_static.py": "6286f9f493bd",
+      "pet_motion.py": "28d79c516f46",
+      "tests/test_dialog_buttons_v270.py": "4f95acca7fc6",
+      "tests/test_import_thread.py": "1c6fc2ec5d05"
+    },
+    "pinned_ast": {
+      "tests/test_feedback_v2110_b.py": "4abb5778a6d4",
+      "tests/test_feedback_v2110_b.py::test_回复结构看不懂_说成服务商回复看不懂并给下一步": "7899b58eca9e",
+      "tests/test_feedback_v2110_b.py::test_400_422给的是下一步而不是反问": "8d4fa0e78cee",
+      "tests/test_feedback_v2110_b.py::test_我们自己的意外不再谎称网络不好": "9a8d861d90ec",
+      "tests/test_dialogs_feedback_v280.py": "3cb488b1d9a3",
+      "tests/test_feedback_v2110_b.py::test_导入向导的添加形态_tooltip_指向本窗口真有的按钮": "ceb4c287d4da",
+      "tests/test_dialogs_feedback_v280.py::test_wording_table_is_applied_to_new_and_add_buttons": "aebd8af23760",
+      "tests/test_feedback_v2110_b.py::test_AI设置的关键信息在窗口里看得见而不是只在tooltip里": "8548a3ba28a2",
+      "tests/test_feedback_v2110_b.py::test_设置子菜单有两个无障碍开关_勾选状态读生效值": "77b7d83b747d",
+      "tests/test_feedback_v2110_b.py::test_菜单开关的勾选会调到A的方法": "f60ebf719161",
+      "tests/test_feedback_v2110_b.py::test_无障碍开关在设置子菜单里_不在顶层": "2a0190d9d752",
+      "tests/test_feedback_v2110_b.py::test_没发起朗读时别处的事件不许动窗口": "c5332341c740",
+      "tests/test_feedback_v2110_b.py::test_朗读成功走完会说读完了_停止后迟到事件不许再写": "c532835f9dc7",
+      "tests/test_feedback_v2110_b.py::test_朗读入队后说正在合成而不是已经开播": "7d7f5e35d4a4",
+      "tests/test_feedback_v2110_b.py::test_合成失败写进窗口并给下一步_且不覆盖别的朗读": "c21064674b40",
+      "tests/test_feedback_v2110_b.py::test_正常路径一次都不许命中语音UI的异常日志": "4dfd3b82afbb"
+    }
+  }
+}

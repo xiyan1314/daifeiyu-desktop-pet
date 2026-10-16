@@ -152,7 +152,18 @@ _GOLDEN_SHAPES = (
 
 
 # __init__ 里允许**留在原地**的构造（见 pet_services.py 模块 docstring 的"没有搬的三处"）
-_LEFTOVER_IN_INIT = ["pet_fx.AnimatedEmote", "pet_fx.AnimatedEmote", "pet_audio.init"]
+#
+# v2.11.0 第 9 轮收尾 · 口径（由父代理裁决，**登记而不是搬迁**）：这份清单钉的是
+# 「__init__ 里不许再长出**服务/资源**构造」。合法残留 = **只读系统探针**：
+#   · 不构造服务、不持有生命周期或资源、不 import 重物、失败即安全默认值；
+#   · 一次性读、结果当普通属性存着（无 start/stop/close 语义）。
+# 任何**持有生命周期/资源**的东西（线程、定时器、播放器、网络会话、文件句柄…）都不算残留，
+# 该进 pet_services（或各自的服务对象）。
+# 两个 pet_motion 探针属前者：system_reduce_motion() / system_dark_theme() 只是问一次系统
+# 无障碍设置，读不到就返回 None，窗口自己决定"不擅自替用户降级"。
+# ⚠ 这条口径**已列入 v2.11.0 三审重点**：放宽红线必须由独立审查判，不许改的人自己定。
+_LEFTOVER_IN_INIT = ["pet_fx.AnimatedEmote", "pet_fx.AnimatedEmote", "pet_audio.init",
+                     "pet_motion.system_reduce_motion", "pet_motion.system_dark_theme"]
 
 
 def _pet_calls(node):
@@ -441,7 +452,9 @@ def test_init_calls_the_registry_once_in_the_one_line_form():
 
 
 def test_init_keeps_only_the_three_documented_constructions():
-    """搬完之后 __init__ 里只剩三处 pet_xxx 构造（fx×2 / pet_audio.init），且顺序不变。
+    """搬完之后 __init__ 里只剩三处 pet_xxx**服务**构造（fx×2 / pet_audio.init），
+    外加两个**只读系统探针**（pet_motion.system_reduce_motion / system_dark_theme，见上表口径），
+    且顺序不变。
 
     能真失败：把 _service_deps() 那行换成把某个服务构造写回 __init__ → 列表里多一项。
     """

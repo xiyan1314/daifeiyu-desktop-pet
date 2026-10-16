@@ -418,7 +418,7 @@
   ],
   "results": {
     "title": "变异验证 spec：mutations_agent_a_v270.json",
-    "checked_at": "2026-10-16 02:07:05",
+    "checked_at": "2026-10-16 07:27:39",
     "total": 31,
     "caught": 31,
     "not_caught": 0,
@@ -428,287 +428,318 @@
         "id": "M-A-01",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "5 failed in 5.65s",
+        "tail": "5 failed in 3.39s",
         "failed": [
           "test_role_meta_ok_button_accepts",
           "test_role_meta_cancel_button_rejects",
           "test_every_action_button_is_wired_or_whitelisted",
           "test_export_role_bundle_end_to_end",
           "test_export_role_bundle_cancel_writes_nothing"
-        ]
+        ],
+        "errors": []
       },
       {
         "id": "M-A-02",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.72s",
+        "tail": "1 failed in 0.90s",
         "failed": [
           "test_role_meta_dialog_has_both_buttons"
-        ]
+        ],
+        "errors": []
       },
       {
         "id": "M-A-03",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "2 failed in 0.87s",
+        "tail": "2 failed in 1.29s",
         "failed": [
           "test_role_meta_esc_or_close_returns_none",
           "test_role_meta_cancel_button_rejects"
-        ]
+        ],
+        "errors": []
       },
       {
         "id": "M-A-04",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 1.26s",
+        "tail": "1 failed in 1.68s",
         "failed": [
           "test_ai_settings_save_failure_keeps_window_open"
-        ]
+        ],
+        "errors": []
       },
       {
         "id": "M-A-05",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 1.12s",
+        "tail": "1 failed in 1.32s",
         "failed": [
           "test_ai_settings_save_success_closes_and_toasts"
-        ]
+        ],
+        "errors": []
       },
       {
         "id": "M-A-06",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 1.11s",
+        "tail": "1 failed in 1.61s",
         "failed": [
           "test_ai_settings_save_exception_stays_open_without_modal"
-        ]
+        ],
+        "errors": []
       },
       {
         "id": "M-A-07",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 1.14s",
+        "tail": "1 failed in 1.31s",
         "failed": [
           "test_ai_settings_none_return_is_failure"
-        ]
+        ],
+        "errors": []
       },
       {
         "id": "M-A-08",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.84s",
+        "tail": "1 failed in 1.18s",
         "failed": [
           "test_apply_call_normalizes_new_and_old_contracts"
-        ]
+        ],
+        "errors": []
       },
       {
         "id": "M-A-09",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 1.10s",
+        "tail": "1 failed in 1.79s",
         "failed": [
           "test_toast_degrades_without_bubble"
-        ]
+        ],
+        "errors": []
       },
       {
         "id": "M-A-10",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 1.18s",
+        "tail": "1 failed in 2.20s",
         "failed": [
           "test_behavior_export_ok_toasts_filename"
-        ]
+        ],
+        "errors": []
       },
       {
         "id": "M-A-11",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 1.11s",
+        "tail": "1 failed in 1.60s",
         "failed": [
           "test_behavior_export_without_selection_prompts"
-        ]
+        ],
+        "errors": []
       },
       {
         "id": "M-A-12",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 1.12s",
+        "tail": "1 failed in 1.40s",
         "failed": [
           "test_behavior_delete_needs_confirm"
-        ]
+        ],
+        "errors": []
       },
       {
         "id": "M-A-13",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 1.11s",
+        "tail": "1 failed in 1.71s",
         "failed": [
           "test_behavior_delete_without_selection_prompts"
-        ]
+        ],
+        "errors": []
       },
       {
         "id": "M-A-14",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 1.16s",
+        "tail": "1 failed in 1.65s",
         "failed": [
           "test_behavior_delete_step_without_selection_prompts"
-        ]
+        ],
+        "errors": []
       },
       {
         "id": "M-A-15",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 1.20s",
+        "tail": "1 failed in 1.56s",
         "failed": [
           "test_behavior_delete_step_removes_selected"
-        ]
+        ],
+        "errors": []
       },
       {
         "id": "M-A-16",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 1.15s",
+        "tail": "1 failed in 1.60s",
         "failed": [
           "test_behavior_save_selects_new_row"
-        ]
+        ],
+        "errors": []
       },
       {
         "id": "M-A-17",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "2 failed in 1.68s",
+        "tail": "2 failed in 1.51s",
         "failed": [
           "test_physics_save_reports_no_change",
           "test_physics_save_failure_keeps_window_open"
-        ]
+        ],
+        "errors": []
       },
       {
         "id": "M-A-18",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 1.16s",
+        "tail": "1 failed in 1.20s",
         "failed": [
           "test_bubble_style_save_failure_keeps_window_open"
-        ]
+        ],
+        "errors": []
       },
       {
         "id": "M-A-19",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 1.04s",
+        "tail": "1 failed in 1.68s",
         "failed": [
           "test_bubble_style_save_success_toasts"
-        ]
+        ],
+        "errors": []
       },
       {
         "id": "M-A-20",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 1.02s",
+        "tail": "1 failed in 1.55s",
         "failed": [
           "test_delete_bad_one_surfaces_failure"
-        ]
+        ],
+        "errors": []
       },
       {
         "id": "M-A-21",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 1.09s",
+        "tail": "1 failed in 1.45s",
         "failed": [
           "test_delete_all_bad_surfaces_failure_and_success"
-        ]
+        ],
+        "errors": []
       },
       {
         "id": "M-A-22",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.97s",
+        "tail": "1 failed in 1.27s",
         "failed": [
           "test_role_set_active_failure_warns_and_success_toasts"
-        ]
+        ],
+        "errors": []
       },
       {
         "id": "M-A-23",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.83s",
+        "tail": "1 failed in 1.29s",
         "failed": [
           "test_role_reset_default_failure_warns"
-        ]
+        ],
+        "errors": []
       },
       {
         "id": "M-A-24",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.87s",
+        "tail": "1 failed in 0.97s",
         "failed": [
           "test_bind_empty_state_shows_hint_and_import_entry"
-        ]
+        ],
+        "errors": []
       },
       {
         "id": "M-A-25",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.85s",
+        "tail": "1 failed in 0.93s",
         "failed": [
           "test_bind_broken_library_logs_and_says_why"
-        ]
+        ],
+        "errors": []
       },
       {
         "id": "M-A-26",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 1.01s",
+        "tail": "1 failed in 0.99s",
         "failed": [
           "test_bind_index_unusable_is_not_the_empty_state"
-        ]
+        ],
+        "errors": []
       },
       {
         "id": "M-A-27",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 4.16s",
+        "tail": "1 failed in 0.97s",
         "failed": [
           "test_sound_rename_empty_name_warns"
-        ]
+        ],
+        "errors": []
       },
       {
         "id": "M-A-28",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.84s",
+        "tail": "1 failed in 1.09s",
         "failed": [
           "test_lines_save_new_line_clears_filters_and_toasts"
-        ]
+        ],
+        "errors": []
       },
       {
         "id": "M-A-29",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 1.22s",
+        "tail": "1 failed in 1.36s",
         "failed": [
           "test_state_inputs_are_declared_and_actually_read"
-        ]
+        ],
+        "errors": []
       },
       {
         "id": "M-A-30",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "2 failed in 0.76s",
+        "tail": "2 failed in 0.83s",
         "failed": [
           "test_scanner_is_not_vacuous",
           "test_every_action_button_is_wired_or_whitelisted"
-        ]
+        ],
+        "errors": []
       },
       {
         "id": "M-A-31",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 1.16s",
+        "tail": "1 failed in 1.30s",
         "failed": [
           "test_action_whitelist_checker_is_not_vacuous"
-        ]
+        ],
+        "errors": []
       }
     ],
     "spec": "mutations_agent_a_v270.json",
@@ -752,20 +783,34 @@
     ],
     "note": "变异只在 %TEMP% 影子副本里做，真实仓库只读（只写 _dev/.mutation.lock）",
     "repo_fingerprint": {
-      "桌宠.py": "6b20873532c6",
+      "桌宠.py": "1ebbedad0f2c",
       "pet_export.py": "c01e1593efd2",
       "pet_lines.py": "5332f60b5f26",
       "pet_alarm.py": "1149e94deee3",
-      "pet_behaviors.py": "99f7dff343e4",
-      "_check_release.py": "5b25dd0d243d",
+      "pet_behaviors.py": "732273f95fb4",
+      "_check_release.py": "ed892a64f797",
       "pet_balance.py": "66948e5514a4",
       "pet_plugin.py": "2f7853298fc3",
       "pet_plugin_host.py": "82fb7b1384c8",
-      "pet_dialogs.py": "4bc0e8c868bb",
+      "pet_dialogs.py": "1d46810817ab",
       "pet_menu.py": "920daac1b835",
       "pet_plugin_index.py": "e5e9845785e8",
       "pet_ai.py": "a5989e7fe646",
-      "pet_config.py": "7a4ad883d4e8"
+      "pet_config.py": "7a4ad883d4e8",
+      "pet_io.py": "6b1e0413fb7f",
+      "pet_services.py": "ecebb6ab5891",
+      "pet_widgets.py": "429688679fb6",
+      "pet_resources.py": "e28f38917052",
+      "pet_tools.py": "46e9030d073f",
+      "pet_voice.py": "9fe0a570ca81",
+      "pet_audio.py": "a6feadf4d653",
+      "pet_chat.py": "02a223b8849a",
+      "pet_log.py": "de14ecf338ab",
+      "pet_actions.py": "83eb11403fec",
+      "pet_book.py": "098676ac52d4",
+      "_check_static.py": "6286f9f493bd",
+      "tests/test_dialog_buttons_v270.py": "4f95acca7fc6",
+      "tests/test_import_thread.py": "1c6fc2ec5d05"
     }
   }
 }

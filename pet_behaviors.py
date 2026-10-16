@@ -767,6 +767,26 @@ class BehaviorService:
         b = self._behaviors.get(str(bid or ""))
         return copy.deepcopy(b) if b is not None else None
 
+    def find_by_name(self, name, exclude_id=None):
+        """按名字找一条行为（**R3：重名判据的唯一来源**）。返回深拷贝或 None。
+
+        为什么要有它：`add` 只管名字合不合法、不查重名，于是两次 `add("same")` 都进库，
+        列表里出现两条同名条目、用户分辨不出哪条是哪条（三审记账为"静默"）。判据只写在
+        这里一份，UI 侧（`pet_dialogs.BehaviorDialog`）用它决定"要不要问用户"——
+        **判据与问法是两件事**：这里答"撞没撞"，问不问、怎么问由调用方决定。
+        `exclude_id` 用于"改自己名字"的场景（自己不算撞名，否则每次改名都会撞上自己）。
+        """
+        key = str(name or "").strip()
+        if not key:
+            return None
+        ex = str(exclude_id or "")
+        for b in sorted(self._behaviors.values(), key=lambda x: x["id"]):
+            if ex and b["id"] == ex:
+                continue
+            if str(b.get("name") or "").strip() == key:
+                return copy.deepcopy(b)
+        return None
+
     def add(self, name, steps):
         """新增行为。返回 (behavior|None, err)。"""
         name = str(name or "").strip()

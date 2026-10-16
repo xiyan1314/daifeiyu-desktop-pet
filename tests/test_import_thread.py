@@ -103,9 +103,17 @@ def test_stop_silent_no_error_dialog(qapp):
     real_warn = pet_dialogs._warn
     pet_dialogs._warn = lambda *a, **k: warned.append(a)
     try:
+        dlg._set_busy(True)  # R4 加强：先真的进忙碌态，否则"busy 已复位"这句断言无从谈起
         dlg._on_worker_failed("已取消处理")
         assert warned == []  # 主动停止不弹错误框
-        assert not dlg._ok.isEnabled() or True  # busy 已复位（_set_busy(False) 在槽内）
+        # R4（v2.10.0 第 8 轮 · 代理 C）：这里原来是
+        #     assert not dlg._ok.isEnabled() or True   # busy 已复位（_set_busy(False) 在槽内）
+        # —— "X or True" 恒真，等于这条断言从未执行过（_ok 本来就是 enabled 的，
+        # 而"没复位"这件事只有先 busy 过才看得见）。现在按 _set_busy(False) 的可见后果钉：
+        assert dlg._busy_state is False, "主动停止后仍处在忙碌态"
+        assert dlg._ok.isEnabled(), "导入按钮没恢复可用（忙碌态没复位）"
+        assert dlg._cancel.isEnabled(), "取消按钮没恢复可用（忙碌态没复位）"
+        assert dlg._stop_btn.isHidden(), "「停止处理」没收起来（忙碌态没复位）"
     finally:
         pet_dialogs._warn = real_warn
         dlg.close()

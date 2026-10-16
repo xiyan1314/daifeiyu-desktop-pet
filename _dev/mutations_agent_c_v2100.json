@@ -1,0 +1,296 @@
+{
+  "title": "v2.10.0 第 8 轮 · 代理 C · R4 加强式断言 + R5 judge 新口径的「能真失败」证据（**9 条**：7 条 + 收尾按两审必修补的 2 条口径回归）",
+  "note": "这份 spec 钉两件事：① R4 把 4 条弱/恒真断言**加强**之后，它们真的会红（每条变异都把「加强所针对的那段实现」拿掉）；② R5 的 judge 新口径（FAILED 行 + 点名到用例的 ERROR 行）**本身**也有牙齿——把它退回旧口径、把 errored_nodeids 抽空，对应的回归用例必须红。全部在 %TEMP% 影子副本里跑（铁律 6），真仓只读。",
+  "mutations": [
+    {
+      "id": "M-C2100-R4-01-busy-not-reset",
+      "file": "pet_dialogs.py",
+      "old": "    def _on_worker_failed(self, err):\n        kind = self._worker_kind\n        self._worker = None\n        self._worker_kind = None\n        self._stopping = False\n        self._set_busy(False)\n",
+      "new": "    def _on_worker_failed(self, err):\n        kind = self._worker_kind\n        self._worker = None\n        self._worker_kind = None\n        self._stopping = False\n",
+      "tests": [
+        "tests/test_import_thread.py::test_stop_silent_no_error_dialog"
+      ],
+      "why": "拿掉 _on_worker_failed 里的 _set_busy(False)：主动停止之后界面卡在忙碌态（_busy_state 仍 True、导入/取消按钮仍是灰的、「停止处理」没收起来）。原来那条断言是 assert not dlg._ok.isEnabled() or True（恒真，等于从未执行），这条变异在它面前**全绿**；加强后必须红。",
+      "expect_fail": [
+        "tests/test_import_thread.py::test_stop_silent_no_error_dialog"
+      ]
+    },
+    {
+      "id": "M-C2100-R4-02-path-lock-no-abspath",
+      "file": "pet_io.py",
+      "old": "    key = os.path.normcase(os.path.abspath(str(path)))",
+      "new": "    key = os.path.normcase(str(path))",
+      "tests": [
+        "tests/test_io_v231.py::test_path_lock_merges_case_variants"
+      ],
+      "why": "去掉 abspath 归一：同一个文件的另一种写法（带 ./）会拿到**另一把锁**（写者之间形同无锁）。原来那条 pet_io.path_lock(p) is pet_io.path_lock(p) 在它面前照样绿——同一个字符串两次取键，还是同一个 key（而且它写在 Windows 走不到的那一支里）。",
+      "expect_fail": [
+        "tests/test_io_v231.py::test_path_lock_merges_case_variants"
+      ]
+    },
+    {
+      "id": "M-C2100-R4-03-fp-named-separator",
+      "file": "pet_plugin_host.py",
+      "old": "    return hashlib.sha256(str(name).encode(\"utf-8\") + b\"\\x00\"\n",
+      "new": "    return hashlib.sha256(str(name).encode(\"utf-8\") + b\"\"\n",
+      "tests": [
+        "tests/test_plugin_host_v251.py::test_prompt指纹带文件名_文件名就是预设名"
+      ],
+      "why": "把带名字指纹里的 0x00 分隔符拿掉（公式变了）：落账格式一变，旧账里的指纹全部对不上，插件落下的人设会被当成用户自己的东西（该覆盖的不覆盖、该撤销的不撤销）。原来那条 _fp_named(甲) == _fp_named(甲) 在它面前照样绿——自比较两侧一起变。",
+      "expect_fail": [
+        "tests/test_plugin_host_v251.py::test_prompt指纹带文件名_文件名就是预设名"
+      ]
+    },
+    {
+      "id": "M-C2100-R4-04-touched-flags-no-remap",
+      "file": "pet_dialogs.py",
+      "old": "                touched.clear()\n                touched.update(new_t)\n",
+      "new": "                pass  # MUTANT: 不重映射（触碰集合留在旧下标）\n",
+      "tests": [
+        "tests/test_dialogs_more_v24.py::test_role_edit_move_form_bounds_and_pending_follow"
+      ],
+      "why": "拿掉 _move_form 里对 _touched_* 集合的重映射：形态换序后触碰标记留在**旧下标**（换序后按旧下标提交会把标记写到错的形态上）。原来那句 0 in touched and 1 not in touched or 1 in touched 等价于「0 或 1 在里面」（and 比 or 结合紧），在这条变异面前**照样绿**；改成 == {1} 后必须红。",
+      "expect_fail": [
+        "tests/test_dialogs_more_v24.py::test_role_edit_move_form_bounds_and_pending_follow"
+      ]
+    },
+    {
+      "id": "M-C2100-R5-01-judge-back-to-failed-only",
+      "file": "_dev/mutate_check.py",
+      "old": "    not_passed = failed + kept\n",
+      "new": "    not_passed = failed   # MUTANT: 回到旧口径（只看 FAILED 行）\n",
+      "tests": [
+        "tests/test_mutate_harness_v244.py::test_judge_counts_a_setup_error_of_the_pinned_test_as_caught",
+        "tests/test_mutate_harness_v244.py::test_judge_requires_every_pinned_test_to_be_not_passed"
+      ],
+      "why": "把 R5 的新口径退回旧口径（只认 FAILED 行）：A11-M2 那种「pinned 用例在 setup 期抛异常」会被重新判成 WRONG TEST。这两条用例就是钉这个口径的（能真失败）。（v2.11.0 第 9 轮 代理 C · V2 重锚：judge 的 error 口径收紧成 setup/call 期，这行从 `not_passed = failed + list(errors or [])` 变成 `failed + kept`；语义没变——仍是「把 ERROR 行整段退回只看 FAILED」。）",
+      "expect_fail": [
+        "tests/test_mutate_harness_v244.py::test_judge_counts_a_setup_error_of_the_pinned_test_as_caught",
+        "tests/test_mutate_harness_v244.py::test_judge_requires_every_pinned_test_to_be_not_passed"
+      ]
+    },
+    {
+      "id": "M-C2100-R5-02-errored-nodeids-empty",
+      "file": "_dev/_mutate_lib.py",
+      "old": "    for ln in test_error_lines(out):\n",
+      "new": "    for ln in []:   # MUTANT: 不再抽 ERROR 行\n",
+      "tests": [
+        "tests/test_mutate_harness_v244.py::test_errored_nodeids_reads_a_real_setup_error"
+      ],
+      "why": "让 errored_nodeids 什么都抽不出来（真跑 pytest 的那条用例必须红）——证明那条用例钉的是**抽取本身**，不只是 judge 的入参。",
+      "expect_fail": [
+        "tests/test_mutate_harness_v244.py::test_errored_nodeids_reads_a_real_setup_error"
+      ]
+    },
+    {
+      "id": "M-C2100-R4-05-guard-catches-a-reintroduced-tautology",
+      "file": "tests/test_import_thread.py",
+      "old": "        assert dlg._ok.isEnabled(), \"导入按钮没恢复可用（忙碌态没复位）\"\n",
+      "new": "        assert not dlg._ok.isEnabled() or True, \"导入按钮没恢复可用（忙碌态没复位）\"\n",
+      "tests": [
+        "tests/test_assertion_strength_v2100.py::test_no_tautological_asserts_in_the_test_suite",
+        "tests/test_assertion_strength_v2100.py::test_the_four_assertions_cleaned_this_round_are_really_gone"
+      ],
+      "why": "把本轮清掉的那句恒真断言**原样塞回去**（只改测试文件，产品源码不动）：断言强度守卫必须当场红——通用判据（扫 tests/**）与点名复核（那四条）两条都要红。没有这条变异，守卫自己就没有「能真失败」的证据，它自己就成了新的假覆盖。",
+      "expect_fail": [
+        "tests/test_assertion_strength_v2100.py::test_no_tautological_asserts_in_the_test_suite",
+        "tests/test_assertion_strength_v2100.py::test_the_four_assertions_cleaned_this_round_are_really_gone"
+      ]
+    },
+    {
+      "id": "M-C2100-P21-01-error-lines-whole-output",
+      "file": "_dev/_mutate_lib.py",
+      "old": "    return [ln for ln in summary_lines(out)\n            if ln.startswith(\"ERROR \") and \"::\" in ln]\n",
+      "new": "    return [ln for ln in (out or \"\").splitlines()\n            if ln.startswith(\"ERROR \") and \"::\" in ln]\n",
+      "tests": [
+        "tests/test_mutate_harness_v244.py::test_errored_nodeids_ignores_a_captured_log_echo"
+      ],
+      "why": "把 ERROR 行抽取退回「扫整份输出」（找茬 P2-1 之前的实现）：pytest 会把**失败用例的 Captured log** 原样打印，那行也以 ERROR 开头、也可能含 :: → 另一条用例日志里提到的 pinned 名字会被当成「pinned error 了」→ **假 CAUGHT**（pinned 明明全过）。",
+      "expect_fail": [
+        "tests/test_mutate_harness_v244.py::test_errored_nodeids_ignores_a_captured_log_echo"
+      ]
+    },
+    {
+      "id": "M-C2100-P31-01-behavior-save-accepts-on-success",
+      "file": "pet_dialogs.py",
+      "old": "            if not quiet:\n                _toast(self.pet, \"行为「%s」已保存\" % _saved_name)\n        return True\n",
+      "new": "            if not quiet:\n                _toast(self.pet, \"行为「%s」已保存\" % _saved_name)\n        self.accept()   # MUTANT: 成功路径顺手关窗\n        return True\n",
+      "tests": [
+        "tests/test_dialogs_behavior_v290.py::test_submit_model_is_split_by_type_and_every_save_is_pinned"
+      ],
+      "why": "找茬与兼容两审独立造出的反例：BehaviorDialog 的成功路径加 accept() —— 原来那条用例走**空表单**（_save 早退）所以照样绿；本轮改成先填一条**有效草稿**（_fill_new_behavior）后，这条必须红。",
+      "expect_fail": [
+        "tests/test_dialogs_behavior_v290.py::test_submit_model_is_split_by_type_and_every_save_is_pinned"
+      ]
+    }
+  ],
+  "results": {
+    "title": "变异验证 spec：mutations_agent_c_v2100.json",
+    "checked_at": "2026-10-16 07:42:20",
+    "total": 9,
+    "caught": 9,
+    "not_caught": 0,
+    "blocked": 0,
+    "items": [
+      {
+        "id": "M-C2100-R4-01-busy-not-reset",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 1.73s",
+        "failed": [
+          "tests/test_import_thread.py::test_stop_silent_no_error_dialog"
+        ],
+        "errors": [],
+        "errors_teardown": []
+      },
+      {
+        "id": "M-C2100-R4-02-path-lock-no-abspath",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 0.98s",
+        "failed": [
+          "tests/test_io_v231.py::test_path_lock_merges_case_variants"
+        ],
+        "errors": [],
+        "errors_teardown": []
+      },
+      {
+        "id": "M-C2100-R4-03-fp-named-separator",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 1.20s",
+        "failed": [
+          "tests/test_plugin_host_v251.py::test_prompt指纹带文件名_文件名就是预设名"
+        ],
+        "errors": [],
+        "errors_teardown": []
+      },
+      {
+        "id": "M-C2100-R4-04-touched-flags-no-remap",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 1.22s",
+        "failed": [
+          "tests/test_dialogs_more_v24.py::test_role_edit_move_form_bounds_and_pending_follow"
+        ],
+        "errors": [],
+        "errors_teardown": []
+      },
+      {
+        "id": "M-C2100-R5-01-judge-back-to-failed-only",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "2 failed in 0.63s",
+        "failed": [
+          "tests/test_mutate_harness_v244.py::test_judge_counts_a_setup_error_of_the_pinned_test_as_caught",
+          "tests/test_mutate_harness_v244.py::test_judge_requires_every_pinned_test_to_be_not_passed"
+        ],
+        "errors": [],
+        "errors_teardown": []
+      },
+      {
+        "id": "M-C2100-R5-02-errored-nodeids-empty",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 2.82s",
+        "failed": [
+          "tests/test_mutate_harness_v244.py::test_errored_nodeids_reads_a_real_setup_error"
+        ],
+        "errors": [],
+        "errors_teardown": []
+      },
+      {
+        "id": "M-C2100-R4-05-guard-catches-a-reintroduced-tautology",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "2 failed, 1 warning in 1.27s",
+        "failed": [
+          "tests/test_assertion_strength_v2100.py::test_no_tautological_asserts_in_the_test_suite",
+          "tests/test_assertion_strength_v2100.py::test_the_four_assertions_cleaned_this_round_are_really_gone"
+        ],
+        "errors": [],
+        "errors_teardown": []
+      },
+      {
+        "id": "M-C2100-P21-01-error-lines-whole-output",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 2.77s",
+        "failed": [
+          "tests/test_mutate_harness_v244.py::test_errored_nodeids_ignores_a_captured_log_echo"
+        ],
+        "errors": [],
+        "errors_teardown": []
+      },
+      {
+        "id": "M-C2100-P31-01-behavior-save-accepts-on-success",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 1.28s",
+        "failed": [
+          "tests/test_dialogs_behavior_v290.py::test_submit_model_is_split_by_type_and_every_save_is_pinned"
+        ],
+        "errors": [],
+        "errors_teardown": []
+      }
+    ],
+    "spec": "mutations_agent_c_v2100.json",
+    "tests": [
+      "tests/test_assertion_strength_v2100.py::test_no_tautological_asserts_in_the_test_suite",
+      "tests/test_assertion_strength_v2100.py::test_the_four_assertions_cleaned_this_round_are_really_gone",
+      "tests/test_dialogs_behavior_v290.py::test_submit_model_is_split_by_type_and_every_save_is_pinned",
+      "tests/test_dialogs_more_v24.py::test_role_edit_move_form_bounds_and_pending_follow",
+      "tests/test_import_thread.py::test_stop_silent_no_error_dialog",
+      "tests/test_io_v231.py::test_path_lock_merges_case_variants",
+      "tests/test_mutate_harness_v244.py::test_errored_nodeids_ignores_a_captured_log_echo",
+      "tests/test_mutate_harness_v244.py::test_errored_nodeids_reads_a_real_setup_error",
+      "tests/test_mutate_harness_v244.py::test_judge_counts_a_setup_error_of_the_pinned_test_as_caught",
+      "tests/test_mutate_harness_v244.py::test_judge_requires_every_pinned_test_to_be_not_passed",
+      "tests/test_plugin_host_v251.py::test_prompt指纹带文件名_文件名就是预设名"
+    ],
+    "note": "变异只在 %TEMP% 影子副本里做，真实仓库只读（只写 _dev/.mutation.lock）",
+    "repo_fingerprint": {
+      "桌宠.py": "313e4e769a9f",
+      "pet_export.py": "c01e1593efd2",
+      "pet_lines.py": "5332f60b5f26",
+      "pet_alarm.py": "1149e94deee3",
+      "pet_behaviors.py": "732273f95fb4",
+      "_check_release.py": "02be277ea992",
+      "pet_balance.py": "66948e5514a4",
+      "pet_plugin.py": "2f7853298fc3",
+      "pet_plugin_host.py": "82fb7b1384c8",
+      "pet_dialogs.py": "0dcba5cf2532",
+      "pet_menu.py": "d2f565537b3f",
+      "pet_plugin_index.py": "e5e9845785e8",
+      "pet_ai.py": "a5989e7fe646",
+      "pet_config.py": "7a4ad883d4e8",
+      "pet_io.py": "6b1e0413fb7f",
+      "pet_services.py": "ecebb6ab5891",
+      "pet_widgets.py": "f64844e82ba8",
+      "pet_resources.py": "e28f38917052",
+      "pet_tools.py": "46e9030d073f",
+      "pet_voice.py": "9fe0a570ca81",
+      "pet_audio.py": "a6feadf4d653",
+      "pet_chat.py": "de979c429c2c",
+      "pet_log.py": "de14ecf338ab",
+      "pet_actions.py": "83eb11403fec",
+      "pet_book.py": "098676ac52d4",
+      "_check_static.py": "6286f9f493bd",
+      "tests/test_dialog_buttons_v270.py": "4f95acca7fc6",
+      "tests/test_import_thread.py": "1c6fc2ec5d05"
+    },
+    "pinned_ast": {
+      "tests/test_import_thread.py::test_stop_silent_no_error_dialog": "ba24fe952930",
+      "tests/test_io_v231.py::test_path_lock_merges_case_variants": "e89fc5ada3de",
+      "tests/test_plugin_host_v251.py::test_prompt指纹带文件名_文件名就是预设名": "3cc34a6ed1ff",
+      "tests/test_dialogs_more_v24.py::test_role_edit_move_form_bounds_and_pending_follow": "4653fd63edc6",
+      "tests/test_mutate_harness_v244.py::test_judge_counts_a_setup_error_of_the_pinned_test_as_caught": "206beeb6fd73",
+      "tests/test_mutate_harness_v244.py::test_judge_requires_every_pinned_test_to_be_not_passed": "705fa27681ad",
+      "tests/test_mutate_harness_v244.py::test_errored_nodeids_reads_a_real_setup_error": "0e66406dc394",
+      "tests/test_assertion_strength_v2100.py::test_no_tautological_asserts_in_the_test_suite": "0d14c507d777",
+      "tests/test_assertion_strength_v2100.py::test_the_four_assertions_cleaned_this_round_are_really_gone": "32e3316d2405",
+      "tests/test_mutate_harness_v244.py::test_errored_nodeids_ignores_a_captured_log_echo": "c9d4a2f6f4dd",
+      "tests/test_dialogs_behavior_v290.py::test_submit_model_is_split_by_type_and_every_save_is_pinned": "ec4ebab1ca3f"
+    }
+  }
+}

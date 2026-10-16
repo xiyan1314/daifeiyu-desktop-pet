@@ -877,7 +877,13 @@ def test_role_edit_move_form_bounds_and_pending_follow(tmp_path, monkeypatch, ui
         assert dlg._pending_images.get(1) == str(new_img), "换图待处理没跟着形态换序"
         assert 0 not in dlg._pending_images, "换图待处理还留在旧下标上"
         assert dlg._pending_states.get((1, "angry")) == str(new_img), "状态图待处理没跟着换序"
-        assert 0 in dlg._touched_flags and 1 not in dlg._touched_flags or 1 in dlg._touched_flags
+        # R4（v2.10.0 第 8 轮 · 代理 C）：原来是
+        #     assert 0 in dlg._touched_flags and 1 not in dlg._touched_flags or 1 in dlg._touched_flags
+        # —— Python 里 and 比 or 结合紧，它实际是 "(0 在里面 and 1 不在) or 1 在里面"，
+        # 而"1 不在"与"1 在里面"互为否定 → 等价于"0 在里面 or 1 在里面"：读起来像钉死了换序
+        # 语义，其实两条路都放行（把 _move_form 里那段重映射删掉，它照样绿）。
+        # 现在按实现真正承诺的语义钉死：触碰标记要跟着形态换序（0 → 1）。
+        assert dlg._touched_flags == {1}, "触碰标记没跟着形态换序（换序后按旧下标提交会写错形态）"
     finally:
         dlg._cleanup()
 

@@ -1000,7 +1000,11 @@ def test_wording_table_is_applied_to_new_and_add_buttons(pet):
     dlg4 = pet_dialogs.RoleImportDialog(pet)
     try:
         got4 = {b.text(): b.toolTip() for b in dlg4.findChildren(QPushButton)}
-        assert got4.get("＋ 添加形态") == pet_dialogs.BTN_ADD_TIP, got4.get("＋ 添加形态")
+        # v2.11.0（B5）：**这个向导里根本没有「保存」按钮**（它的落点是「导入」），
+        # 通用那句 BTN_ADD_TIP 会指着不存在的按钮说事 —— 改成向导自己那句。
+        # 断言没减：仍然要求"必须先说清还要再点一下才落库"，只是把按钮名换成这个窗口里真有的。
+        assert got4.get("＋ 添加形态") == pet_dialogs.BTN_ADD_TIP_IMPORT, got4.get("＋ 添加形态")
+        assert "导入" in got4.get("＋ 添加形态") and "保存" not in got4.get("＋ 添加形态")
     finally:
         dlg4.reject()
     dlg5 = pet_dialogs.RoleEditDialog(None, None, "")
@@ -1294,7 +1298,13 @@ def test_behavior_step_receipts(pet, ui):
 
 
 def test_move_line_at_boundary_tells_the_user(pet, ui):
-    """台词「上移/下移」到顶/到底：以前静默 return（与"点了没反应"长得一样）→ 给一句提示。"""
+    """台词「上移/下移」到顶/到底：以前静默 return（与"点了没反应"长得一样）→ 给一句提示。
+
+    v2.11.0（V7 · 加强式改写）：出口从**宠物气泡**改成**窗口内状态行**（与 BehaviorDialog
+    的同语义回执统一，原则 4「同一语义同一种表现」）。断言因此从"气泡里有话"变成
+    "状态行里有话 **且** 气泡为空"——不是把断言放宽，而是把两种表现收紧成一种。
+    变异：把 LinesDialog._note 改回 _toast(self._pet, text) → 本用例红。
+    """
     lib = pet.lines_lib
     made = []
     for i in range(3):
@@ -1307,13 +1317,19 @@ def test_move_line_at_boundary_tells_the_user(pet, ui):
         assert dlg._list.count() >= 3, "用例前提：列表里得有台词"
         dlg._list.setCurrentRow(0)
         ui["toast"].clear()
+        dlg._notes.setText("")
         dlg._move_line(-1)
-        assert ui["toast"] and "最上面" in ui["toast"][-1], "到顶没有任何反馈：%r" % (ui["toast"],)
+        assert "最上面" in dlg._notes.text(), "到顶没有任何反馈：%r" % (dlg._notes.text(),)
+        assert ui["toast"] == [], (
+            "到边界又弹了宠物气泡（同一语义只该有一种表现：窗口内状态行）：%r" % (ui["toast"],))
 
         dlg._list.setCurrentRow(dlg._list.count() - 1)
         ui["toast"].clear()
+        dlg._notes.setText("")
         dlg._move_line(1)
-        assert ui["toast"] and "最下面" in ui["toast"][-1], "到底没有任何反馈：%r" % (ui["toast"],)
+        assert "最下面" in dlg._notes.text(), "到底没有任何反馈：%r" % (dlg._notes.text(),)
+        assert ui["toast"] == [], (
+            "到底又弹了宠物气泡（同一语义只该有一种表现）：%r" % (ui["toast"],))
     finally:
         dlg.hide()
         for lid in made:
@@ -1321,7 +1337,11 @@ def test_move_line_at_boundary_tells_the_user(pet, ui):
 
 
 def test_lines_move_member_at_boundary_uses_the_same_wording(pet, ui):
-    """P3-6：对白「上移/下移」到边界用与台词排序**同一套措辞**（同一批对话框同一动作）。"""
+    """P3-6：对白「上移/下移」到边界用与台词排序**同一套措辞**（同一批对话框同一动作）。
+
+    v2.11.0（V7 · 加强式改写）：措辞不变，**出口**也统一成窗口内状态行（两条都钉：
+    状态行里有那句话 + 气泡为空）。变异：_note 改回 _toast → 本用例红。
+    """
     lib = pet.lines_lib
     ids = []
     for i in range(2):
@@ -1343,8 +1363,10 @@ def test_lines_move_member_at_boundary_uses_the_same_wording(pet, ui):
         assert dlg._members.count() == 2, "用例前提：对白里得有两条成员"
         dlg._members.setCurrentRow(0)
         ui["toast"].clear()
+        dlg._notes.setText("")
         dlg._move_member(-1)          # 第 0 条再往上 = 到顶（不换序、给一句提示）
-        assert ui["toast"] and "最上面" in ui["toast"][-1], ui["toast"]
+        assert "最上面" in dlg._notes.text(), dlg._notes.text()
+        assert ui["toast"] == [], "到边界又弹了宠物气泡（同一语义只该有一种表现）：%r" % (ui["toast"],)
     finally:
         dlg.hide()
         lib.delete_dialogue(d["id"])

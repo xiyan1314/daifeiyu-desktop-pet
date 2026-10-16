@@ -13,13 +13,17 @@
   mutation_lock_problems() 变异验证进行中 → 结果不可信，拒绝判定（v2.4.3）
   mutation_evidence_notes() 变异结果 JSON 的源码指纹过期 → 提示"该证据需复跑"（v2.4.3）；
                             另外点名**缺关键键**的证据（v2.6.0：老证据里没有后来补进清单的模块，
-                            只比"记录里存在的键"的话，改那些模块一条提示都不会有）
+                            只比"记录里存在的键"的话，改那些模块一条提示都不会有）；
+                            再点名两类 pinned 用例体摘要的问题（v2.11.0 第 9 轮 · 代理 C · V1）：
+                            **摘要过期**（pinned 用例体被改过 —— nodeid 体检与文件指纹都看不出来）、
+                            **还没有这段摘要**的老证据（定版整批复跑后自动带上）
   mutation_verdict_notes() 变异结果 JSON 里有没通过的判定（SPEC-BAD/WRONG TEST…）→ 提示（v2.4.4）
   asset_manifest_notes() 素材清单判据没生效（无 git / 素材未入库）→ 提示（v2.4.3）
 
 用法：python _check_release.py [zip路径]；退出码 0=通过，1=有问题（逐条打印）
 """
 import ast
+import copy
 import hashlib
 import io
 import json
@@ -52,6 +56,9 @@ SYNC_FILES = ["桌宠.py", "main.py", "pet_actions.py", "pet_ai.py", "pet_alarm.
               "pet_services.py",   # v2.5.0（A1）：子系统构造注册表（桌宠.py import 它，漏了必 ImportError）
               "pet_tools.py", "pet_voice.py", "pet_wander.py",
               "pet_weather.py", "pet_widgets.py", "version_info.txt", "_verify_green.py",
+              # v2.11.0 第 9 轮（代理 A）：动效令牌表——桌宠.py 与 pet_widgets.py 都 import 它，
+              # 漏了这一行绿色版/发布包必 ImportError（check_imported_modules_shipped 反向校验）。
+              "pet_motion.py",
               "README.md", "README.en.md", "LICENSE", VBS_NAME]
 
 # 用户运行时数据（绿色版目录与发布包里都不该有）
@@ -739,7 +746,22 @@ def mutation_lock_problems(root=None, now=None):
 MUTATION_FINGERPRINT_FILES = ("桌宠.py", "pet_export.py", "pet_lines.py", "pet_alarm.py",
                               "pet_behaviors.py", "_check_release.py", "pet_balance.py",
                               "pet_plugin.py", "pet_plugin_host.py", "pet_dialogs.py",
-                              "pet_menu.py", "pet_plugin_index.py", "pet_ai.py", "pet_config.py")
+                              "pet_menu.py", "pet_plugin_index.py", "pet_ai.py", "pet_config.py",
+                              # v2.10.0 第 8 轮（代理 C · R6）：补 12 个"有锚点、却零提示"的文件
+                              # （pet_io.py 一处就 9 条）。逐条理由见 _dev/fingerprint_coverage_v2100.md
+                              "pet_io.py", "pet_services.py", "pet_widgets.py", "pet_resources.py",
+                              "pet_tools.py", "pet_voice.py", "pet_audio.py", "pet_chat.py",
+                              "pet_log.py", "pet_actions.py", "pet_book.py", "_check_static.py",
+                              # v2.11.0 第 9 轮（父代理授权 · 代理 C 落地）：**动效令牌表**也进清单 ——
+                              # 后续所有动效的时长/缓动/幅度都挂在它上面（改它 ≈ 改所有动效），
+                              # 而 A 的 spec 有 3 条锚点在它上面 → 此前是**零提示盲区**。
+                              "pet_motion.py",
+                              # v2.10.0 第 8 轮（代理 C · 质量审必修 A）：**承载锚点的两个测试文件**也进清单。
+                              # 实测缺口：把 test_import_thread.py 那条用例体清空（nodeid 不动）→
+                              # check_mutation_nodeids 仍 rc=0（名字还在），而同一条变异 CAUGHT→NOT CAUGHT，
+                              # **指纹一声不吭**。只加这两个文件（它们上面有 3+1 条锚点），
+                              # **不是整个 tests/**（整目录会把每次测试改动都变成过期噪音）。
+                              "tests/test_dialog_buttons_v270.py", "tests/test_import_thread.py")
 
 
 def file_fingerprint(path):
@@ -792,6 +814,103 @@ def missing_fingerprint_keys(recorded, current):
     return sorted(rel for rel in (current or {}) if rel not in recorded)
 
 
+# ---- v2.11.0 第 9 轮（代理 C · 任务 V1）：pinned 用例体的 AST 摘要 ----
+# 为什么发布门也要读它：文件指纹只覆盖 MUTATION_FINGERPRINT_FILES 那 28 个键，而
+# **承载锚点的测试文件有 39 个** —— 把某个 pinned 用例的**用例体清空、nodeid 一个字不动**时：
+# nodeid 体检照样 rc=0（def 还在）、文件指纹一声不吭（文件不在清单里）、那条变异 CAUGHT→NOT CAUGHT。
+# 只有"用例体摘要"能出声。算法与 _dev/_mutate_lib.pin_digest **必须逐位一致**（两处口径由
+# tests/test_release_check.py::test_pinned_ast_digest_matches_the_mutation_lib 双向钉住）。
+
+
+def _drop_docstring(node):
+    """摘掉 node.body 开头的 docstring（说明文字变了不算用例变了）。"""
+    body = node.body
+    if (body and isinstance(body[0], ast.Expr) and isinstance(body[0].value, ast.Constant)
+            and isinstance(body[0].value.value, str)):
+        node.body = body[1:] or [ast.Pass()]
+    return node
+
+
+def _digest_nodes(nodes):
+    h = hashlib.sha256()
+    for n in nodes:
+        h.update(ast.dump(n, annotate_fields=True, include_attributes=False).encode("utf-8"))
+        h.update(b"\x00")
+    return h.hexdigest()[:12]
+
+
+def _pinned_digest_of(root, rel, func=None):
+    """pinned nodeid 的用例体 AST 摘要（sha256 前 12 位）；文件/用例不存在 → None。
+
+    与 _dev/_mutate_lib.pin_digest 同一算法：该 def 的 AST（**含形参与装饰器**、**不含 docstring**）；
+    只给文件的旧形态摘整份模块（模块级与各函数的 docstring 同样不算）。
+    """
+    path = os.path.join(os.path.abspath(root), rel.replace("/", os.sep))
+    try:
+        with io.open(path, encoding="utf-8") as fh:
+            tree = ast.parse(fh.read())
+    except Exception:
+        return None
+    if func is None:
+        _drop_docstring(tree)
+        for n in ast.walk(tree):
+            if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+                _drop_docstring(n)
+        return _digest_nodes([tree])
+    hits = [n for n in ast.walk(tree)
+            if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef)) and n.name == func]
+    if not hits:
+        return None
+    hits.sort(key=lambda n: (n.lineno, n.col_offset))
+    return _digest_nodes([_drop_docstring(copy.deepcopy(n)) for n in hits])
+
+
+def _split_pinned(nodeid):
+    """nodeid → (文件, 用例名 or None)；发布门**不猜**裸用例名（那种形态交给 nodeid 体检）。"""
+    raw = str(nodeid or "").strip()
+    if not raw:
+        return None
+    if "::" in raw:
+        rel, func = raw.split("::", 1)
+        return rel, func.split("::")[-1].split("[", 1)[0]
+    if raw.endswith(".py"):
+        return raw, None
+    return None
+
+
+def pinned_ast_now(root, nodeids):
+    """{nodeid: 当前摘要} —— 解析不出来的不写键（与 _dev/_mutate_lib.pinned_ast_map 同口径）。"""
+    out = {}
+    base = os.path.abspath(root or ROOT)
+    for raw in nodeids:
+        raw = str(raw)
+        if raw in out:
+            continue
+        hit = _split_pinned(raw)
+        if not hit:
+            continue
+        d = _pinned_digest_of(base, hit[0], hit[1])
+        if d:
+            out[raw] = d
+    return out
+
+
+def stale_pinned(recorded, current):
+    """记录里的 pinned 摘要 vs 当前树 → 不一致项（"nodeid: 旧→新"）。recorded 空/非 dict → [].
+
+    与 stale_fingerprints 同口径：**只比两边都有的键**——用例被删/改名时当前树算不出摘要，
+    那种情况由 nodeid 体检（_dev/check_mutation_nodeids.py，rc=1）点名，这里不重复报。
+    """
+    if not isinstance(recorded, dict) or not recorded:
+        return []
+    out = []
+    for nodeid in sorted(recorded):
+        got, want = recorded.get(nodeid), (current or {}).get(nodeid)
+        if got and want and got != want:
+            out.append("%s: %s→%s" % (nodeid, got, want))
+    return out
+
+
 def _iter_dev_results(root=None):
     """_dev/*.json → [(文件名, 解析后的数据)]；读不动/解析失败的直接跳过。
 
@@ -834,6 +953,7 @@ def mutation_evidence_notes(root=None, current=None):
     cur = current if current is not None else tree_fingerprint(base)
     notes = []
     gaps = []                                   # [(证据文件名, 缺的键)]，见 missing_fingerprint_keys
+    no_pin = []                                 # 还没有 pinned 用例体摘要的证据（v2.11.0 · V1）
     for name, data in _iter_dev_results(base):
         rec = data.get("repo_fingerprint") if isinstance(data, dict) else None
         if not isinstance(rec, dict) and isinstance(data, dict):
@@ -846,6 +966,29 @@ def mutation_evidence_notes(root=None, current=None):
         miss = missing_fingerprint_keys(rec, cur)
         if miss:
             gaps.append((name, miss))
+        # v2.11.0 第 9 轮（代理 C · V1）：pinned 用例体摘要 —— 两类出声
+        #   ① 摘要过期：那张用例的用例体被改过（nodeid 体检与文件指纹都看不出来）
+        #   ② 还没有这段摘要：老证据（定版整批复跑会把它们带上）
+        # 范围口径 = "指纹通道里的证据文件"（有 repo_fingerprint 记录的那一批）；见下面的注释。
+        pin = data.get("pinned_ast") if isinstance(data, dict) else None
+        if not isinstance(pin, dict) and isinstance(data, dict):
+            res = data.get("results")
+            pin = res.get("pinned_ast") if isinstance(res, dict) else None
+        if isinstance(pin, dict) and pin:
+            stale_pin = stale_pinned(pin, pinned_ast_now(base, list(pin)))
+            if stale_pin:
+                shown = "；".join(stale_pin[:5])
+                if len(stale_pin) > 5:
+                    shown += "…（共 %d 条）" % len(stale_pin)
+                notes.append("变异证据 %s 的 **pinned 用例体摘要已过期**（那张用例的用例体被改过 —— "
+                             "nodeid 体检 rc=0、文件指纹也看不出来，这条变异可能已经静默失效；"
+                             "重跑对应 spec 再判）：%s" % (name, shown))
+        elif isinstance(rec, dict) and rec:
+            # 只收"指纹通道里"的（有 repo_fingerprint 记录的）：那才是应当带 pinned_ast 的那批。
+            # 不把 results_batch_v270.json（批次日志）、mutations_proc_reset_v26.json /
+            # results_*_settle_v26.json（判据是 _verify_v13 的 FAIL 名，没有 pytest nodeid）
+            # 算进来 —— 对它们 pinned_ast 不适用，点名只会变成噪音。
+            no_pin.append(name)
     if gaps:
         # v2.6.0（代理 C）：只比对"记录里存在的键"会让后来补进清单的模块在**老证据**里永远
         # 隐身（改它们没有任何提示）。这里**汇总成一句**提示——一份证据一行会把门禁刷成 15 行
@@ -858,6 +1001,15 @@ def mutation_evidence_notes(root=None, current=None):
                      "这几个文件上是瞎的）：%s%s；缺的键：%s。取舍：**只提示、不挡发布**；要消掉"
                      "这条就重跑对应 spec 让指纹补齐，或在报告里点名「这份证据不覆盖这几个模块」。"
                      % (len(gaps), shown, more, " / ".join(keys)))
+    if no_pin:
+        shown = "、".join(no_pin[:5])
+        more = "…（共 %d 份）" % len(no_pin) if len(no_pin) > 5 else ""
+        notes.append("有 %d 份变异证据**还没有 pinned 用例体摘要**（pinned_ast）（那些 JSON 落盘时"
+                     "还没有这段 —— 改某个 pinned 用例的**用例体**而 nodeid 不动时，它们在测试文件"
+                     "这一层上是瞎的；文件指纹只覆盖 2 个测试文件，nodeid 体检只看名字在不在）：%s%s。"
+                     "要消掉这条：定版整批复跑（铁律 5）会一次补齐，或在报告里点名"
+                     "「这批证据不覆盖 pinned 用例体」。取舍：**只提示、不挡发布**。"
+                     % (len(no_pin), shown, more))
     return notes
 
 

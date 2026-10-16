@@ -1640,7 +1640,15 @@ def test_prompt指纹带文件名_文件名就是预设名(tmp_path):
     same = "同样的话".encode("utf-8")
     assert pet_plugin_host._fp_named("甲.txt", same) != \
         pet_plugin_host._fp_named("乙.txt", same), "文件名没进指纹（改名会被当成同一件东西）"
-    assert pet_plugin_host._fp_named("甲.txt", same) == pet_plugin_host._fp_named("甲.txt", same)
+    # R4（v2.10.0 第 8 轮 · 代理 C）加强：原来是
+    #     assert _fp_named("甲.txt", same) == _fp_named("甲.txt", same)
+    # —— 自比较里两侧都是真函数调用，只证明"同进程内可重复"；公式换成 base64、或漏掉那个
+    # 分隔符，这条照样绿。指纹是落账格式（跨版本要能对上旧账），公式一改，旧插件落的内容全都
+    # 会被当成"不是本插件落的" → 该覆盖的不覆盖、该撤销的不撤销。所以这里独立算一遍公式：
+    assert pet_plugin_host._fp_named("甲.txt", same) == \
+        hashlib.sha256("甲.txt".encode("utf-8") + b"\x00" + same).hexdigest(), \
+        "带名字指纹的公式变了（sha256(名字 utf-8 + 0x00 分隔符 + 内容)）——旧账会对不上"
+    assert len(pet_plugin_host._fp_named("甲.txt", same)) == 64, "指纹不是 sha256 hex（落账格式变了）"
     d = tmp_path / "payload"
     d.mkdir()
     (d / "甲.txt").write_bytes("同样的话".encode("utf-8"))

@@ -346,18 +346,28 @@ def test_mutation_evidence_notes_flags_a_stale_result_json(tmp_path):
     dev = tmp_path / "_dev"
     dev.mkdir()
     (tmp_path / "桌宠.py").write_text("x", encoding="utf-8")
+    # v2.11.0（代理 C · V1）：夹具补一份**正确**的 pinned_ast —— 否则会多出
+    # "还没有 pinned 用例体摘要"那条提示（本用例考的是指纹过期，不是那条）
+    (tmp_path / "tests").mkdir()
+    (tmp_path / "tests" / "test_demo.py").write_text(
+        "def test_pinned():\n    assert True\n", encoding="utf-8")
+    pin = chk.pinned_ast_now(str(tmp_path), ["tests/test_demo.py::test_pinned"])
+    assert pin, "夹具前提：pinned 摘要算得出来"
     cur = chk.tree_fingerprint(str(tmp_path))
     assert cur.get("桌宠.py"), "夹具前提：当前树指纹算得出来"
-    (dev / "mutations_ok.json").write_text(json.dumps({"repo_fingerprint": cur}),
-                                           encoding="utf-8")
+    (dev / "mutations_ok.json").write_text(
+        json.dumps({"repo_fingerprint": cur, "pinned_ast": pin}), encoding="utf-8")
     assert chk.mutation_evidence_notes(str(tmp_path)) == [], "指纹一致时不许报警"
     (dev / "mutations_stale.json").write_text(
-        json.dumps({"repo_fingerprint": {"桌宠.py": "deadbeef0000"}}), encoding="utf-8")
+        json.dumps({"repo_fingerprint": {"桌宠.py": "deadbeef0000"}, "pinned_ast": pin}),
+        encoding="utf-8")
     notes = chk.mutation_evidence_notes(str(tmp_path))
     assert len(notes) == 1 and "mutations_stale.json" in notes[0] and "过期" in notes[0], notes
     # spec 内嵌形态（mutate_check.py 回写的 results.repo_fingerprint）也要认
     (dev / "mutations_ok.json").write_text(
-        json.dumps({"mutations": [], "results": {"repo_fingerprint": {"桌宠.py": "deadbeef0000"}}}),
+        json.dumps({"mutations": [],
+                    "results": {"repo_fingerprint": {"桌宠.py": "deadbeef0000"},
+                                "pinned_ast": pin}}),
         encoding="utf-8")
     notes2 = chk.mutation_evidence_notes(str(tmp_path))
     assert len(notes2) == 2, notes2
@@ -395,18 +405,119 @@ def test_mutation_evidence_notes_flags_evidence_missing_keys(tmp_path):
     dev.mkdir()
     (tmp_path / "桌宠.py").write_text("x", encoding="utf-8")
     (tmp_path / "pet_plugin.py").write_text("y", encoding="utf-8")
+    # v2.11.0（V1）：同样补一份正确的 pinned_ast（本用例考的是"缺键"，不是"缺 pinned 段"）
+    (tmp_path / "tests").mkdir()
+    (tmp_path / "tests" / "test_demo.py").write_text(
+        "def test_pinned():\n    assert True\n", encoding="utf-8")
+    pin = chk.pinned_ast_now(str(tmp_path), ["tests/test_demo.py::test_pinned"])
+    assert pin, "夹具前提：pinned 摘要算得出来"
     cur = chk.tree_fingerprint(str(tmp_path))
     assert set(cur) == {"桌宠.py", "pet_plugin.py"}, "夹具前提：当前树里有这两个文件"
     (dev / "mutations_partial.json").write_text(
-        json.dumps({"repo_fingerprint": {"桌宠.py": cur["桌宠.py"]}}), encoding="utf-8")
+        json.dumps({"repo_fingerprint": {"桌宠.py": cur["桌宠.py"]}, "pinned_ast": pin}),
+        encoding="utf-8")
     notes = chk.mutation_evidence_notes(str(tmp_path))
     assert len(notes) == 1, notes
     assert "mutations_partial.json" in notes[0], notes
     assert "pet_plugin.py" in notes[0] and "缺" in notes[0], notes
     # 控制组：补齐两个键 → 归零（别把提示变成常驻噪音）
     (dev / "mutations_partial.json").write_text(
-        json.dumps({"repo_fingerprint": cur}), encoding="utf-8")
+        json.dumps({"repo_fingerprint": cur, "pinned_ast": pin}), encoding="utf-8")
     assert chk.mutation_evidence_notes(str(tmp_path)) == []
+
+
+# ---------------- v2.11.0 第 9 轮（代理 C · 任务 V1）：pinned 用例体的 AST 摘要 ----------------
+#
+# 洞：文件指纹只覆盖 28 个键，而**承载锚点的测试文件有 39 个** —— 把某个 pinned 用例的
+# **用例体清空、nodeid 一个字不动**时：nodeid 体检照样 rc=0（def 还在）、文件指纹一声不吭
+# （文件不在清单里）、那条变异 CAUGHT→NOT CAUGHT。只有"用例体摘要"能出声。
+
+def test_stale_pinned_reports_only_mismatches():
+    """纯函数：pinned 摘要只报**不一致**的项（缺一边就不报）。"""
+    cur = {"tests/test_a.py::test_x": "aaaa11112222", "tests/test_a.py::test_y": "bbbb33334444"}
+    assert chk.stale_pinned({}, cur) == []
+    assert chk.stale_pinned(None, cur) == []
+    assert chk.stale_pinned(cur, cur) == []
+    assert chk.stale_pinned({"tests/test_a.py::test_x": "000000000000"}, cur) == \
+        ["tests/test_a.py::test_x: 000000000000→aaaa11112222"]
+    assert chk.stale_pinned({"tests/test_a.py::test_gone": "x"}, cur) == [], \
+        "当前树算不出摘要的项（用例被删/改名）由 nodeid 体检点名，这里不重复报"
+
+
+def test_pinned_ast_digest_matches_the_mutation_lib(tmp_path):
+    """**铁律 4（两处口径互为反向）**：发布门的摘要实现与 _dev/_mutate_lib.pin_digest 必须逐位一致。
+
+    两处都有实现是没办法的事（发布门不能 import _dev —— _dev/ 不进发布包），所以必须有这条钉子：
+    任何一边改了算法（哪怕只是忘了去 docstring、或改了同名 def 的排序）→ 这条红。
+    """
+    import importlib.util
+    dev = os.path.join(chk.ROOT, "_dev")
+    spec = importlib.util.spec_from_file_location(
+        "mutate_lib_pinned_gate_v2110", os.path.join(dev, "_mutate_lib.py"))
+    lib = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = lib
+    spec.loader.exec_module(lib)
+
+    (tmp_path / "tests").mkdir()
+    src = ('# -*- coding: utf-8 -*-\n"""模块说明也不该算进摘要。"""\n\n\n'
+           '@pytest.mark.parametrize("n", [1, 2])\ndef test_one(n):\n    """用例说明。"""\n'
+           '    assert n\n\n\n'
+           'def test_two():\n    assert 2 == 2\n')
+    (tmp_path / "tests" / "test_demo.py").write_text(src, encoding="utf-8")
+    nodes = ["tests/test_demo.py::test_one", "tests/test_demo.py::test_one[1]",
+             "tests/test_demo.py::test_two", "tests/test_demo.py"]
+    gate = chk.pinned_ast_now(str(tmp_path), nodes)
+    libmap = lib.pinned_ast_map(str(tmp_path), nodes)
+    assert libmap, "夹具前提：变异库那份算得出来"
+    assert set(gate) == set(nodes), gate
+    assert gate == libmap, "两处摘要实现漂移：发布门 %r vs 变异库 %r" % (gate, libmap)
+
+
+def test_mutation_evidence_notes_flags_a_stale_pinned_digest(tmp_path):
+    """pinned 用例体被改过 → 发布门必须点名（文件指纹与 nodeid 体检都看不出来的那一层）。
+
+    能真失败：去掉 mutation_evidence_notes 里 pinned_ast 那次判定 → 第二条断言红。
+    """
+    dev = tmp_path / "_dev"
+    dev.mkdir()
+    (tmp_path / "桌宠.py").write_text("x", encoding="utf-8")
+    (tmp_path / "tests").mkdir()
+    demo = tmp_path / "tests" / "test_demo.py"
+    demo.write_text("def test_pinned():\n    assert True\n", encoding="utf-8")
+    cur = chk.tree_fingerprint(str(tmp_path))
+    pin = chk.pinned_ast_now(str(tmp_path), ["tests/test_demo.py::test_pinned"])
+    assert pin, "夹具前提：摘要算得出来"
+    (dev / "mutations_x.json").write_text(
+        json.dumps({"repo_fingerprint": cur, "pinned_ast": pin}), encoding="utf-8")
+    assert chk.mutation_evidence_notes(str(tmp_path)) == [], "摘要一致时不许报警"
+    # 用例体被改（nodeid 不动）→ 摘要变 → 必须出声
+    demo.write_text("def test_pinned():\n    pass\n", encoding="utf-8")
+    notes = chk.mutation_evidence_notes(str(tmp_path))
+    assert len(notes) == 1, notes
+    assert "mutations_x.json" in notes[0] and "pinned 用例体摘要已过期" in notes[0], notes
+    assert "tests/test_demo.py::test_pinned" in notes[0], notes
+
+
+def test_mutation_evidence_notes_flags_evidence_without_pinned_ast(tmp_path):
+    """还没有 pinned 摘要的老证据要点名（只提示）；但**不把不是证据的 JSON 算进来**。
+
+    范围口径 = "指纹通道里的证据文件"（有 repo_fingerprint 记录的那一批）——results_batch_v270.json
+    （批次日志）、mutations_proc_reset_v26.json（判据是 _verify_v13 的 FAIL 名，没有 pytest nodeid）
+    这类不该被点名，否则提示会变成噪音（与 _dev/check_pinned_ast.py 的谓词逐字一致）。
+    """
+    dev = tmp_path / "_dev"
+    dev.mkdir()
+    (tmp_path / "桌宠.py").write_text("x", encoding="utf-8")
+    cur = chk.tree_fingerprint(str(tmp_path))
+    (dev / "mutations_old.json").write_text(json.dumps({"repo_fingerprint": cur}), encoding="utf-8")
+    notes = chk.mutation_evidence_notes(str(tmp_path))
+    assert len(notes) == 1, notes
+    assert "还没有 pinned 用例体摘要" in notes[0] and "mutations_old.json" in notes[0], notes
+    # 没有指纹段的文件不算这一批（批次日志 / v13 判据 / 摘要 json）
+    (dev / "results_batch.json").write_text(json.dumps({"items": [{"target": "x"}]}),
+                                            encoding="utf-8")
+    assert len(chk.mutation_evidence_notes(str(tmp_path))) == 1, \
+        "没有指纹段的文件不该被算进「缺 pinned 摘要」这一批"
 
 
 def test_fingerprint_file_list_matches_the_mutation_lib():

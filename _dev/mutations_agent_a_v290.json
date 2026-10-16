@@ -182,15 +182,15 @@
     {
       "id": "A3-M1-boundary-silent",
       "file": "pet_dialogs.py",
-      "old": "            self._note(\"已经是最上面了\" if int(delta) < 0 else \"已经是最下面了\")\n",
-      "new": "            pass   # (mutation) 到顶/到底静默\n",
+      "old": "        j = max(0, min(self._steps.count() - 1, row + int(delta)))\n        if j == row:\n            self._note(\"已经是最上面了\" if int(delta) < 0 else \"已经是最下面了\")\n",
+      "new": "        j = max(0, min(self._steps.count() - 1, row + int(delta)))\n        if j == row:\n            pass   # (mutation) 到顶/到底静默\n",
       "tests": [
         "tests/test_dialogs_behavior_v290.py::test_step_move_at_boundary_says_so"
       ],
       "expect_fail": [
         "tests/test_dialogs_behavior_v290.py::test_step_move_at_boundary_says_so"
       ],
-      "why": "A3：到顶/到底**静默**（去掉那句内联回执）——点了没有任何变化，用户分不清「到边界了」与「按钮坏了」。"
+      "why": "A3：到顶/到底**静默**（去掉那句内联回执）——点了没有任何变化，用户分不清「到边界了」与「按钮坏了」。 （v2.11.0 第 9 轮 · 代理 C 重锚：V7 把台词库/行为设置的边界回执从**宠物气泡**换成**窗口内状态行**，旧锚点命中 0；语义**不反转**——它守的缺陷还在，只是出口换了。现锚点按 A 的对照表落地，逐条 count=1。）⚠ 该句 _note 在文件里出现 3 处（LinesDialog 的 _move_line/_move_member 由 A 的 M-A2110-23 覆盖），所以这里连上一行 j = max(...) 一起钉、保证唯一。"
     },
     {
       "id": "A3-M2-selection-does-not-follow",
@@ -382,149 +382,179 @@
   ],
   "results": {
     "title": "变异验证 spec：mutations_agent_a_v290.json",
-    "checked_at": "2026-10-16 02:10:15",
+    "checked_at": "2026-10-16 08:15:49",
     "total": 28,
-    "caught": 27,
-    "not_caught": 1,
+    "caught": 28,
+    "not_caught": 0,
     "blocked": 0,
     "items": [
       {
         "id": "M-A290-01-clear-long-term-no-confirm",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 1.24s",
+        "tail": "1 failed in 1.25s",
         "failed": [
-          "test_ai_settings_clear_long_term_keeps_history"
-        ]
+          "tests/test_dialogs_v24.py::test_ai_settings_clear_long_term_keeps_history"
+        ],
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "M-A290-02-clear-long-term-ignores-cancel",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.80s",
+        "tail": "1 failed in 0.82s",
         "failed": [
-          "test_ai_settings_clear_long_term_keeps_history"
-        ]
+          "tests/test_dialogs_v24.py::test_ai_settings_clear_long_term_keeps_history"
+        ],
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "M-A290-03-clear-long-term-no-receipt",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.86s",
+        "tail": "1 failed in 0.87s",
         "failed": [
-          "test_ai_settings_clear_long_term_keeps_history"
-        ]
+          "tests/test_dialogs_v24.py::test_ai_settings_clear_long_term_keeps_history"
+        ],
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "M-A290-04-frame-action-name-back-to-static",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.71s",
+        "tail": "1 failed in 0.68s",
         "failed": [
-          "test_static_input_dialogs_are_gone"
-        ]
+          "tests/test_dialogs_feedback_v280.py::test_static_input_dialogs_are_gone"
+        ],
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "M-A290-05-frame-action-call-site-bypasses-entry",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.65s",
+        "tail": "1 failed in 0.66s",
         "failed": [
-          "test_static_input_dialogs_are_gone"
-        ]
+          "tests/test_dialogs_feedback_v280.py::test_static_input_dialogs_are_gone"
+        ],
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "A1-M1-candidates-empty",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "2 failed in 1.27s",
+        "tail": "2 failed in 1.06s",
         "failed": [
-          "test_action_param_is_an_editable_combo_with_candidates",
-          "test_import_images_makes_an_action_on_the_current_role"
-        ]
+          "tests/test_dialogs_behavior_v290.py::test_action_param_is_an_editable_combo_with_candidates",
+          "tests/test_dialogs_behavior_v290.py::test_import_images_makes_an_action_on_the_current_role"
+        ],
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "A1-M2-fallback-to-first-item",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed, 1 passed in 1.43s",
+        "tail": "1 failed, 1 passed in 0.95s",
         "failed": [
-          "test_unknown_action_name_survives_load_and_save"
-        ]
+          "tests/test_dialogs_behavior_v290.py::test_unknown_action_name_survives_load_and_save"
+        ],
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "A2-M1-sink-pretends-success",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 1.25s",
+        "tail": "1 failed in 1.05s",
         "failed": [
-          "test_import_images_makes_an_action_on_the_current_role"
-        ]
+          "tests/test_dialogs_behavior_v290.py::test_import_images_makes_an_action_on_the_current_role"
+        ],
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "A2-M2-cancel-counts-as-confirm",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.99s",
+        "tail": "1 failed in 0.97s",
         "failed": [
-          "test_import_images_cancel_leaves_nothing_behind"
-        ]
+          "tests/test_dialogs_behavior_v290.py::test_import_images_cancel_leaves_nothing_behind"
+        ],
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "A5-M1-no-unsaved-confirm",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed, 1 passed in 0.90s",
+        "tail": "1 failed, 1 passed in 0.98s",
         "failed": [
-          "test_cancel_with_unsaved_edits_asks_and_keeps_the_window"
-        ]
+          "tests/test_dialogs_behavior_v290.py::test_cancel_with_unsaved_edits_asks_and_keeps_the_window"
+        ],
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "A5-M2-ask-even-when-clean",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed, 1 passed in 0.83s",
+        "tail": "1 failed, 1 passed in 0.96s",
         "failed": [
-          "test_cancel_without_edits_does_not_ask"
-        ]
+          "tests/test_dialogs_behavior_v290.py::test_cancel_without_edits_does_not_ask"
+        ],
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "A6-M1-confirm-comes-back",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "2 failed in 0.72s",
+        "tail": "2 failed in 0.70s",
         "failed": [
-          "test_delete_custom_action_can_be_undone_by_cancelling",
-          "test_role_edit_delete_action_needs_no_confirm_and_is_undoable"
-        ]
+          "tests/test_dialogs_behavior_v290.py::test_delete_custom_action_can_be_undone_by_cancelling",
+          "tests/test_dialogs_feedback_v280.py::test_role_edit_delete_action_needs_no_confirm_and_is_undoable"
+        ],
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "A4-M1-receipt-back-to-bubble",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "2 failed in 0.96s",
+        "tail": "2 failed in 1.15s",
         "failed": [
-          "test_step_receipts_use_the_inline_status_line_not_the_bubble",
-          "test_behavior_step_receipts"
-        ]
+          "tests/test_dialogs_behavior_v290.py::test_step_receipts_use_the_inline_status_line_not_the_bubble",
+          "tests/test_dialogs_feedback_v280.py::test_behavior_step_receipts"
+        ],
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "A3-M1-boundary-silent",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.80s",
+        "tail": "1 failed in 0.92s",
         "failed": [
-          "test_step_move_at_boundary_says_so"
-        ]
+          "tests/test_dialogs_behavior_v290.py::test_step_move_at_boundary_says_so"
+        ],
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "A3-M2-selection-does-not-follow",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.81s",
+        "tail": "1 failed in 0.94s",
         "failed": [
-          "test_step_move_up_and_down_reorders_and_follows_selection"
-        ]
+          "tests/test_dialogs_behavior_v290.py::test_step_move_up_and_down_reorders_and_follows_selection"
+        ],
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "A2-M3-bypass-shared-impl",
@@ -532,115 +562,144 @@
         "rc": 1,
         "tail": "1 failed in 0.68s",
         "failed": [
-          "test_role_edit_frame_action_is_a_thin_wrapper"
-        ]
+          "tests/test_dialogs_behavior_v290.py::test_role_edit_frame_action_is_a_thin_wrapper"
+        ],
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "A7-M1-no-extension-precheck",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed, 1 passed in 0.82s",
+        "tail": "1 failed, 1 passed in 0.93s",
         "failed": [
-          "test_import_non_json_gives_a_human_reason"
-        ]
+          "tests/test_dialogs_behavior_v290.py::test_import_non_json_gives_a_human_reason"
+        ],
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "A7-M2-raw-english-error",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.81s",
+        "tail": "1 failed in 0.91s",
         "failed": [
-          "test_import_json_that_fails_in_the_library_also_gets_a_human_reason"
-        ]
+          "tests/test_dialogs_behavior_v290.py::test_import_json_that_fails_in_the_library_also_gets_a_human_reason"
+        ],
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "A9A11-M1-resident-label-not-updated",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "2 failed in 0.85s",
+        "tail": "2 failed in 0.98s",
         "failed": [
-          "test_new_state_is_a_resident_label_not_a_one_shot_bubble",
-          "test_key_information_is_visible_not_only_in_a_tooltip"
-        ]
+          "tests/test_dialogs_behavior_v290.py::test_new_state_is_a_resident_label_not_a_one_shot_bubble",
+          "tests/test_dialogs_behavior_v290.py::test_key_information_is_visible_not_only_in_a_tooltip"
+        ],
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "A11-M2-label-degraded-to-one-shot",
-        "verdict": "WRONG TEST",
+        "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "2 errors in 1.32s",
-        "failed": []
+        "tail": "2 errors in 1.41s",
+        "failed": [],
+        "errors": [
+          "tests/test_dialogs_behavior_v290.py::test_new_state_is_a_resident_label_not_a_one_shot_bubble",
+          "tests/test_dialogs_behavior_v290.py::test_key_information_is_visible_not_only_in_a_tooltip"
+        ],
+        "errors_teardown": []
       },
       {
         "id": "A11-M3-open-idle-not-wired",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.85s",
+        "tail": "1 failed in 0.91s",
         "failed": [
-          "test_idle_settings_has_a_real_entry_from_the_behavior_dialog"
-        ]
+          "tests/test_dialogs_behavior_v290.py::test_idle_settings_has_a_real_entry_from_the_behavior_dialog"
+        ],
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "A8-M1-voice-save-closes-window",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.82s",
+        "tail": "1 failed in 0.96s",
         "failed": [
-          "test_voice_save_keeps_the_window_and_second_button_is_cancel"
-        ]
+          "tests/test_dialogs_behavior_v290.py::test_voice_save_keeps_the_window_and_second_button_is_cancel"
+        ],
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "A8-M2-idle-save-keeps-window",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.80s",
+        "tail": "1 failed in 0.93s",
         "failed": [
-          "test_idle_save_still_closes_and_second_button_is_cancel"
-        ]
+          "tests/test_dialogs_behavior_v290.py::test_idle_save_still_closes_and_second_button_is_cancel"
+        ],
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "B4-M1-ui-cleanup-back-to-dead-branch",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.80s",
+        "tail": "1 failed in 0.92s",
         "failed": [
-          "test_delete_behavior_clears_idle_references"
-        ]
+          "tests/test_dialogs_behavior_v290.py::test_delete_behavior_clears_idle_references"
+        ],
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "B5-M1-ui-combo-hardcoded-off",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.87s",
+        "tail": "1 failed in 0.91s",
         "failed": [
-          "test_idle_combo_shows_the_real_config_state"
-        ]
+          "tests/test_dialogs_behavior_v290.py::test_idle_combo_shows_the_real_config_state"
+        ],
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "B5-M2-ui-silent-drop",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.81s",
+        "tail": "1 failed in 0.96s",
         "failed": [
-          "test_idle_combo_pick_never_silently_drops_entries"
-        ]
+          "tests/test_dialogs_behavior_v290.py::test_idle_combo_pick_never_silently_drops_entries"
+        ],
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "B6-M1-ui-play-old-on-save-failure",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.81s",
+        "tail": "1 failed in 0.91s",
         "failed": [
-          "test_test_play_does_not_play_when_save_fails"
-        ]
+          "tests/test_dialogs_behavior_v290.py::test_test_play_does_not_play_when_save_fails"
+        ],
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "B6-M2-ui-says-saved-twice",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.82s",
+        "tail": "1 failed in 1.11s",
         "failed": [
-          "test_test_play_plays_and_does_not_say_saved_twice"
-        ]
+          "tests/test_dialogs_behavior_v290.py::test_test_play_plays_and_does_not_say_saved_twice"
+        ],
+        "errors": [],
+        "errors_teardown": []
       }
     ],
     "spec": "mutations_agent_a_v290.json",
@@ -677,20 +736,66 @@
     ],
     "note": "变异只在 %TEMP% 影子副本里做，真实仓库只读（只写 _dev/.mutation.lock）",
     "repo_fingerprint": {
-      "桌宠.py": "6b20873532c6",
+      "桌宠.py": "2351a1ad9737",
       "pet_export.py": "c01e1593efd2",
       "pet_lines.py": "5332f60b5f26",
       "pet_alarm.py": "1149e94deee3",
-      "pet_behaviors.py": "99f7dff343e4",
-      "_check_release.py": "5b25dd0d243d",
+      "pet_behaviors.py": "732273f95fb4",
+      "_check_release.py": "7377b3fad58e",
       "pet_balance.py": "66948e5514a4",
       "pet_plugin.py": "2f7853298fc3",
       "pet_plugin_host.py": "82fb7b1384c8",
-      "pet_dialogs.py": "4bc0e8c868bb",
-      "pet_menu.py": "920daac1b835",
+      "pet_dialogs.py": "d80d04497146",
+      "pet_menu.py": "d2f565537b3f",
       "pet_plugin_index.py": "e5e9845785e8",
       "pet_ai.py": "a5989e7fe646",
-      "pet_config.py": "7a4ad883d4e8"
+      "pet_config.py": "7a4ad883d4e8",
+      "pet_io.py": "6b1e0413fb7f",
+      "pet_services.py": "ecebb6ab5891",
+      "pet_widgets.py": "dc7f5dc4a7f2",
+      "pet_resources.py": "e28f38917052",
+      "pet_tools.py": "46e9030d073f",
+      "pet_voice.py": "9fe0a570ca81",
+      "pet_audio.py": "a6feadf4d653",
+      "pet_chat.py": "de979c429c2c",
+      "pet_log.py": "de14ecf338ab",
+      "pet_actions.py": "83eb11403fec",
+      "pet_book.py": "098676ac52d4",
+      "_check_static.py": "6286f9f493bd",
+      "pet_motion.py": "28d79c516f46",
+      "tests/test_dialog_buttons_v270.py": "4f95acca7fc6",
+      "tests/test_import_thread.py": "1c6fc2ec5d05"
+    },
+    "pinned_ast": {
+      "tests/test_dialogs_v24.py::test_ai_settings_clear_long_term_keeps_history": "742b328771e4",
+      "tests/test_dialogs_feedback_v280.py::test_static_input_dialogs_are_gone": "fad1b4e82464",
+      "tests/test_dialogs_behavior_v290.py::test_action_param_is_an_editable_combo_with_candidates": "c60df41c8071",
+      "tests/test_dialogs_behavior_v290.py::test_import_images_makes_an_action_on_the_current_role": "cad3968022ae",
+      "tests/test_dialogs_behavior_v290.py::test_typed_action_name_that_is_not_a_candidate_is_kept": "e74a7328b98e",
+      "tests/test_dialogs_behavior_v290.py::test_unknown_action_name_survives_load_and_save": "5b540c181121",
+      "tests/test_dialogs_behavior_v290.py::test_import_images_cancel_leaves_nothing_behind": "088f3189328e",
+      "tests/test_dialogs_behavior_v290.py::test_cancel_with_unsaved_edits_asks_and_keeps_the_window": "2780bdd6e76a",
+      "tests/test_dialogs_behavior_v290.py::test_cancel_without_edits_does_not_ask": "172c5698ed03",
+      "tests/test_dialogs_behavior_v290.py::test_delete_custom_action_can_be_undone_by_cancelling": "9d0dd362e562",
+      "tests/test_dialogs_feedback_v280.py::test_role_edit_delete_action_needs_no_confirm_and_is_undoable": "311fe80fef2d",
+      "tests/test_dialogs_behavior_v290.py::test_step_receipts_use_the_inline_status_line_not_the_bubble": "cfcf320068ca",
+      "tests/test_dialogs_feedback_v280.py::test_behavior_step_receipts": "df2906bac7c4",
+      "tests/test_dialogs_behavior_v290.py::test_step_move_at_boundary_says_so": "e57f8efe83a9",
+      "tests/test_dialogs_behavior_v290.py::test_step_move_up_and_down_reorders_and_follows_selection": "8d8f8ef31a20",
+      "tests/test_dialogs_behavior_v290.py::test_role_edit_frame_action_is_a_thin_wrapper": "4d1f2c5e3167",
+      "tests/test_dialogs_behavior_v290.py::test_import_non_json_gives_a_human_reason": "736f780f55c7",
+      "tests/test_dialogs_behavior_v290.py::test_raw_import_errors_are_translated_to_human_reasons": "0e26f9dff776",
+      "tests/test_dialogs_behavior_v290.py::test_import_json_that_fails_in_the_library_also_gets_a_human_reason": "2d6c8c3d9b90",
+      "tests/test_dialogs_behavior_v290.py::test_new_state_is_a_resident_label_not_a_one_shot_bubble": "3d0781d0cc7d",
+      "tests/test_dialogs_behavior_v290.py::test_key_information_is_visible_not_only_in_a_tooltip": "c26391f21271",
+      "tests/test_dialogs_behavior_v290.py::test_idle_settings_has_a_real_entry_from_the_behavior_dialog": "52990bc05615",
+      "tests/test_dialogs_behavior_v290.py::test_voice_save_keeps_the_window_and_second_button_is_cancel": "00b6a9eec214",
+      "tests/test_dialogs_behavior_v290.py::test_idle_save_still_closes_and_second_button_is_cancel": "29b206479c05",
+      "tests/test_dialogs_behavior_v290.py::test_delete_behavior_clears_idle_references": "0311d5ca6189",
+      "tests/test_dialogs_behavior_v290.py::test_idle_combo_shows_the_real_config_state": "ae5d3f93f660",
+      "tests/test_dialogs_behavior_v290.py::test_idle_combo_pick_never_silently_drops_entries": "7090d026531d",
+      "tests/test_dialogs_behavior_v290.py::test_test_play_does_not_play_when_save_fails": "89ed3c2d282d",
+      "tests/test_dialogs_behavior_v290.py::test_test_play_plays_and_does_not_say_saved_twice": "fce00ca090ad"
     }
   }
 }

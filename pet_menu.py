@@ -146,6 +146,22 @@ class MenuBuilder:
         ct_act.setCheckable(True)
         ct_act.setChecked(pet.cfg.get("click_through", False))
         ct_act.toggled.connect(pet._set_click_through)
+        # v2.11.0 第 9 轮（A2/A3 · 代理 B 接线）：两个无障碍开关。托盘菜单里也有一份
+        # （由桌宠负责，桌面类的活），但「设置…」是用户找设置的第一落点，两边文案与语义
+        # **逐字一致**（原则 4：同语义同表现）。
+        # · 勾选状态一律读**生效值**（auto 时跟随系统设置），不是读配置里的字符串——
+        #   否则 auto 且系统开着时，菜单会显示成未勾选（界面在说谎）；
+        # · 菜单每次 open 重建，所以天然读的就是"此刻的值"，不需要额外的同步信号；
+        # · 立即生效（不重启）由 _set_reduce_motion / _set_high_contrast 内部负责，
+        #   它们自己会弹一条回执气泡——这里不再重复回执。
+        rm_act = set_menu.addAction("🌊 减少动效")
+        rm_act.setCheckable(True)
+        rm_act.setChecked(pet._reduce_motion())
+        rm_act.toggled.connect(pet._set_reduce_motion)
+        hc_act = set_menu.addAction("🔲 高对比度")
+        hc_act.setCheckable(True)
+        hc_act.setChecked(pet._high_contrast())
+        hc_act.toggled.connect(pet._set_high_contrast)
         # P3-5+：帧数上限用户可调（导入与加载共用）
         fm_act = set_menu.addAction("🎞️ 帧数上限…")
         # P1-手感：物理参数设置（重力/反弹/摩擦/顶边/力度）

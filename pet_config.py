@@ -277,6 +277,14 @@ def normalize_cfg(cfg, defaults, persona_ids):
     except (TypeError, ValueError):
         cfg["transform_seconds"] = _bcfg["transform_seconds"]
     cfg["sound_group"] = "custom" if cfg.get("sound_group") == "custom" else "default"
+    # v2.11.0 第 9 轮收尾：无障碍两键（reduce_motion / high_contrast）——枚举字符串，
+    # 合法值是 "auto"/"on"/"off"，其余一律回 "auto"（跟随系统；不是擅自替用户开或关）。
+    # 为什么必须在这里归一化：DEFAULT_CONFIG 里它们是 str，而 tests/test_config_robustness.py
+    # 对每个键灌坏值后要求"归一化后类型必须仍然可用"——此前这两键漏在归一化之外，
+    # 手改 config.json 塞 null/[]/123 会一路带进 桌宠._reduce_motion()（枚举比较恒假）。
+    for _k in ("reduce_motion", "high_contrast"):
+        _v = str(cfg.get(_k, "auto") or "").strip().lower()
+        cfg[_k] = _v if _v in ("auto", "on", "off") else "auto"
     try:
         bs = cfg.get("bubble_style")
         if not isinstance(bs, dict):

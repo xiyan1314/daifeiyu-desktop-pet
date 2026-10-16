@@ -1,0 +1,327 @@
+{
+  "title": "v2.10.0 第 8 轮 · 代理 A（对话框与行为）变异验证：U2 解释性文案 + R1 两处入口同口径 + R2 分档落档 + R3 重名不静默（9 条）",
+  "note": "锚点由 gen_spec.py 从现树**原样切出**（不手抄；换行一律 LF），生成时逐条自检命中恰好 1 次。expect_fail 由 mutate_check.py 在 %TEMP% 影子副本里实测填写。 **入库（v2.10.0 第 8 轮 · 代理 C）**：由 %TEMP%\\a_v2100\\mutations_agent_a_v2100.json **逐字节收编**（13152 B · sha256 前 12 位 813e302867df · 纯 LF），**未改一个字符**；并由代理 C 用**官方工具**（python -B _dev/mutate_check.py）原样复核——A 当时因官方工具一处半成品（6 元组/5 元组解包，已修）改用自备影子驱动器，本份是官方口径的复核结果。**⚠ 口径限定（质量审）**：\"逐字节相同\"只成立于**收编那一刻**——官方 `_write_results` 以文本模式回写会把 LF 翻成 CRLF（实测 325 个），`mutate_check._write` / `_mutate_lib.write_results` 现已加 `newline=\"\"` 保住 LF，本文件也已归一化回**纯 LF**；`mutations` 段从头到尾**未改一个字符**。",
+  "mutations": [
+    {
+      "id": "M-A2100-01-U2-message-back-to-bare",
+      "file": "pet_dialogs.py",
+      "old": "        _msg = (\"帧动作至少 2 张图：1 张图只是一个静态姿势，这里做不了静态姿势动作；\"\n                \"要做一个动作，请一次选 2 张以上（最多 %d 张），它们会按选择顺序做成逐帧动画。\"\n                % int(pet_resources.FRAME_MAX))",
+      "new": "        _msg = \"帧动作至少 2 张图\"",
+      "tests": [
+        "tests/test_dialogs_behavior_v290.py::test_one_image_explains_why_two_are_needed_and_what_to_do",
+        "tests/test_dialogs_feedback_v270.py::test_frame_action_cancel_is_not_reported_as_too_few"
+      ],
+      "why": "U2 退回「只说下限」的裸文案（为什么不行 / 该怎么办一起没）。控制组：v270 那条只断言含「至少 2 张图」，它必须仍绿——红的只能是新的解释性断言。",
+      "expect_fail": [
+        "tests/test_dialogs_behavior_v290.py::test_one_image_explains_why_two_are_needed_and_what_to_do"
+      ]
+    },
+    {
+      "id": "M-A2100-02-R1-behavior-entry-hides-cancel-semantics",
+      "file": "pet_dialogs.py",
+      "old": "        return (\"（图片会做成 %s 的帧动作，立即写进角色——在这个窗口点「取消」或关掉窗口\"\n                \"都不会撤销它（与「资源管理 → 角色 → 编辑…」里的「＋帧动作…」相反：\"\n                \"那边点「取消」就放弃）；要收回请点下面的「撤销这次导入」。\"\n                \"它不会加进行为库）\") % sink.describe()",
+      "new": "        return (\"（图片会做成 %s 的帧动作，立即写进角色——这个入口没有「取消」能撤销它，\"\n                \"加完可以用「撤销这次导入」收回；它不会加进行为库）\") % sink.describe()",
+      "tests": [
+        "tests/test_dialogs_behavior_v290.py::test_both_frame_action_entries_say_whether_cancel_undoes_it",
+        "tests/test_dialogs_behavior_v290.py::test_import_images_says_it_takes_effect_now"
+      ],
+      "why": "R1（行为设置那侧）：退回旧文案——只说「立即」、不说「这个窗口的取消不会撤销它」。控制组：质量审 6 那条只断言含「立即/撤销」，必须仍绿。",
+      "expect_fail": [
+        "tests/test_dialogs_behavior_v290.py::test_both_frame_action_entries_say_whether_cancel_undoes_it"
+      ]
+    },
+    {
+      "id": "M-A2100-03-R1-role-edit-note-removed",
+      "file": "pet_dialogs.py",
+      "old": "        self._act_note = QLabel(\n            \"「＋帧动作…」是暂存：选 2 张以上图片，按选择顺序做成逐帧动画\"\n            \"（1 张只是静态姿势，做不了动作）；先放进这个窗口，点「保存」才落到角色上，\"\n            \"点「取消」或关掉窗口会连同刚加的一起放弃。\")\n        self._act_note.setWordWrap(True)\n        right.addWidget(self._act_note)",
+      "new": "",
+      "tests": [
+        "tests/test_dialogs_behavior_v290.py::test_both_frame_action_entries_say_whether_cancel_undoes_it",
+        "tests/test_dialogs_behavior_v290.py::test_role_edit_frame_action_is_a_thin_wrapper",
+        "tests/test_dialogs_feedback_v280.py::test_wording_table_is_applied_to_new_and_add_buttons"
+      ],
+      "why": "R1（角色编辑那侧）：删掉入口旁的常驻说明——「这个窗口里取消会不会撤销它」就没处看了（tooltip 不算：不可发现、触屏没有 hover）。",
+      "expect_fail": [
+        "tests/test_dialogs_behavior_v290.py::test_both_frame_action_entries_say_whether_cancel_undoes_it"
+      ]
+    },
+    {
+      "id": "M-A2100-04-R3-no-duplicate-check-in-save",
+      "file": "pet_dialogs.py",
+      "old": "        _mode, _name, _dup_id = self._resolve_name_clash(\n            self._name.text().strip(), allow_overwrite=not self._editing_id)",
+      "new": "        _mode, _name, _dup_id = \"add\", self._name.text().strip(), None",
+      "tests": [
+        "tests/test_dialogs_behavior_v290.py::test_duplicate_behavior_name_asks_instead_of_silently_adding",
+        "tests/test_dialogs_behavior_v290.py::test_duplicate_name_keep_adds_a_second_entry_only_when_chosen",
+        "tests/test_dialogs_behavior_v290.py::test_duplicate_name_overwrite_reuses_the_same_id",
+        "tests/test_dialogs_behavior_v290.py::test_duplicate_name_rename_saves_the_new_name",
+        "tests/test_dialogs_behavior_v290.py::test_renaming_an_existing_behavior_onto_another_name_also_asks",
+        "tests/test_dialogs_behavior_v290.py::test_unique_name_never_asks_about_duplicates",
+        "tests/test_dialogs_behavior_v290.py::test_name_clash_box_offers_three_choices_plus_cancel",
+        "tests/test_behavior_v290.py::test_find_by_name_is_the_single_judgement_for_duplicate_names",
+        "tests/test_behavior_v290.py::test_add_itself_still_allows_duplicates_so_the_ui_owns_the_question"
+      ],
+      "why": "R3 本体：保存时不查重名（两次 add 同名都进库、用户零感知）。控制组：不重名那条必须仍绿（不许给熟路加一步）。",
+      "expect_fail": [
+        "tests/test_dialogs_behavior_v290.py::test_duplicate_behavior_name_asks_instead_of_silently_adding",
+        "tests/test_dialogs_behavior_v290.py::test_duplicate_name_keep_adds_a_second_entry_only_when_chosen",
+        "tests/test_dialogs_behavior_v290.py::test_duplicate_name_overwrite_reuses_the_same_id",
+        "tests/test_dialogs_behavior_v290.py::test_duplicate_name_rename_saves_the_new_name",
+        "tests/test_dialogs_behavior_v290.py::test_renaming_an_existing_behavior_onto_another_name_also_asks"
+      ]
+    },
+    {
+      "id": "M-A2100-05-R3-find-by-name-never-hits",
+      "file": "pet_behaviors.py",
+      "old": "            if str(b.get(\"name\") or \"\").strip() == key:\n                return copy.deepcopy(b)",
+      "new": "            if False:\n                return copy.deepcopy(b)",
+      "tests": [
+        "tests/test_dialogs_behavior_v290.py::test_duplicate_behavior_name_asks_instead_of_silently_adding",
+        "tests/test_dialogs_behavior_v290.py::test_duplicate_name_keep_adds_a_second_entry_only_when_chosen",
+        "tests/test_dialogs_behavior_v290.py::test_duplicate_name_overwrite_reuses_the_same_id",
+        "tests/test_dialogs_behavior_v290.py::test_duplicate_name_rename_saves_the_new_name",
+        "tests/test_dialogs_behavior_v290.py::test_renaming_an_existing_behavior_onto_another_name_also_asks",
+        "tests/test_dialogs_behavior_v290.py::test_unique_name_never_asks_about_duplicates",
+        "tests/test_dialogs_behavior_v290.py::test_name_clash_box_offers_three_choices_plus_cancel",
+        "tests/test_behavior_v290.py::test_find_by_name_is_the_single_judgement_for_duplicate_names",
+        "tests/test_behavior_v290.py::test_add_itself_still_allows_duplicates_so_the_ui_owns_the_question"
+      ],
+      "why": "R3 的判据（唯一来源）空转：find_by_name 永远答「没撞」→ 对话框再也不会问。",
+      "expect_fail": [
+        "tests/test_behavior_v290.py::test_find_by_name_is_the_single_judgement_for_duplicate_names",
+        "tests/test_dialogs_behavior_v290.py::test_duplicate_behavior_name_asks_instead_of_silently_adding",
+        "tests/test_dialogs_behavior_v290.py::test_duplicate_name_keep_adds_a_second_entry_only_when_chosen",
+        "tests/test_dialogs_behavior_v290.py::test_duplicate_name_overwrite_reuses_the_same_id",
+        "tests/test_dialogs_behavior_v290.py::test_duplicate_name_rename_saves_the_new_name",
+        "tests/test_dialogs_behavior_v290.py::test_renaming_an_existing_behavior_onto_another_name_also_asks"
+      ]
+    },
+    {
+      "id": "M-A2100-06-R3-overwrite-does-not-take-over-the-id",
+      "file": "pet_dialogs.py",
+      "old": "            _ok, _err = self.svc.update(_dup_id, _name, _steps)\n            if _ok:\n                self._editing_id = _dup_id\n                _overwrote = True",
+      "new": "            _ok, _err = self.svc.update(_dup_id, _name, _steps)\n            if _ok:\n                _overwrote = True",
+      "tests": [
+        "tests/test_dialogs_behavior_v290.py::test_duplicate_behavior_name_asks_instead_of_silently_adding",
+        "tests/test_dialogs_behavior_v290.py::test_duplicate_name_keep_adds_a_second_entry_only_when_chosen",
+        "tests/test_dialogs_behavior_v290.py::test_duplicate_name_overwrite_reuses_the_same_id",
+        "tests/test_dialogs_behavior_v290.py::test_duplicate_name_rename_saves_the_new_name",
+        "tests/test_dialogs_behavior_v290.py::test_renaming_an_existing_behavior_onto_another_name_also_asks",
+        "tests/test_dialogs_behavior_v290.py::test_unique_name_never_asks_about_duplicates",
+        "tests/test_dialogs_behavior_v290.py::test_name_clash_box_offers_three_choices_plus_cancel",
+        "tests/test_behavior_v290.py::test_find_by_name_is_the_single_judgement_for_duplicate_names",
+        "tests/test_behavior_v290.py::test_add_itself_still_allows_duplicates_so_the_ui_owns_the_question"
+      ],
+      "why": "R3「覆盖」不把 _editing_id 接过去 → 覆盖完再点一次「保存」又新建一条同名的（回到病态）。",
+      "expect_fail": [
+        "tests/test_dialogs_behavior_v290.py::test_duplicate_name_overwrite_reuses_the_same_id"
+      ]
+    },
+    {
+      "id": "M-A2100-07-R3-rename-path-offers-overwrite",
+      "file": "pet_dialogs.py",
+      "old": "        _mode, _name, _dup_id = self._resolve_name_clash(\n            self._name.text().strip(), allow_overwrite=not self._editing_id)",
+      "new": "        _mode, _name, _dup_id = self._resolve_name_clash(\n            self._name.text().strip(), allow_overwrite=True)",
+      "tests": [
+        "tests/test_dialogs_behavior_v290.py::test_duplicate_behavior_name_asks_instead_of_silently_adding",
+        "tests/test_dialogs_behavior_v290.py::test_duplicate_name_keep_adds_a_second_entry_only_when_chosen",
+        "tests/test_dialogs_behavior_v290.py::test_duplicate_name_overwrite_reuses_the_same_id",
+        "tests/test_dialogs_behavior_v290.py::test_duplicate_name_rename_saves_the_new_name",
+        "tests/test_dialogs_behavior_v290.py::test_renaming_an_existing_behavior_onto_another_name_also_asks",
+        "tests/test_dialogs_behavior_v290.py::test_unique_name_never_asks_about_duplicates",
+        "tests/test_dialogs_behavior_v290.py::test_name_clash_box_offers_three_choices_plus_cancel",
+        "tests/test_behavior_v290.py::test_find_by_name_is_the_single_judgement_for_duplicate_names",
+        "tests/test_behavior_v290.py::test_add_itself_still_allows_duplicates_so_the_ui_owns_the_question"
+      ],
+      "why": "R3「改自己名字」那条路也摆出「覆盖」——覆盖会把别人的条目换成这份内容（数据丢失，不是用户要的）。",
+      "expect_fail": [
+        "tests/test_dialogs_behavior_v290.py::test_renaming_an_existing_behavior_onto_another_name_also_asks"
+      ]
+    },
+    {
+      "id": "M-A2100-08-R3-clash-box-loses-the-overwrite-option",
+      "file": "pet_dialogs.py",
+      "old": "    b_ov = (box.addButton(\"覆盖它（用现在这份内容）\", QMessageBox.ButtonRole.DestructiveRole)\n            if allow_overwrite else None)",
+      "new": "    b_ov = None",
+      "tests": [
+        "tests/test_dialogs_behavior_v290.py::test_name_clash_box_offers_three_choices_plus_cancel"
+      ],
+      "why": "R3 的重名框少了「覆盖」这个选项（三选一变成两选一，用户没有「用这份内容替换旧的」这条路）。",
+      "expect_fail": [
+        "tests/test_dialogs_behavior_v290.py::test_name_clash_box_offers_three_choices_plus_cancel"
+      ]
+    },
+    {
+      "id": "M-A2100-09-R2-idle-save-stops-closing",
+      "file": "pet_dialogs.py",
+      "old": "        res = _call(self._pet, \"apply_idle_settings\", data)\n        if res is None or res is False:\n            _warn(self, \"保存\", \"保存失败（配置不可用）\")\n            return\n        self.accept()",
+      "new": "        res = _call(self._pet, \"apply_idle_settings\", data)\n        if res is None or res is False:\n            _warn(self, \"保存\", \"保存失败（配置不可用）\")\n            return\n",
+      "tests": [
+        "tests/test_dialogs_behavior_v290.py::test_submit_model_is_split_by_type_and_every_save_is_pinned"
+      ],
+      "why": "R2 落档：把 IdleDialog（表单型）的「保存」改成不关窗——分档被翻转，必须同步改 B3 裁决（这条用例就是那个必须）。",
+      "expect_fail": [
+        "tests/test_dialogs_behavior_v290.py::test_submit_model_is_split_by_type_and_every_save_is_pinned"
+      ]
+    }
+  ],
+  "results": {
+    "title": "变异验证 spec：mutations_agent_a_v2100.json",
+    "checked_at": "2026-10-16 07:25:19",
+    "total": 9,
+    "caught": 9,
+    "not_caught": 0,
+    "blocked": 0,
+    "items": [
+      {
+        "id": "M-A2100-01-U2-message-back-to-bare",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed, 1 passed in 1.93s",
+        "failed": [
+          "test_one_image_explains_why_two_are_needed_and_what_to_do"
+        ],
+        "errors": []
+      },
+      {
+        "id": "M-A2100-02-R1-behavior-entry-hides-cancel-semantics",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed, 1 passed in 1.11s",
+        "failed": [
+          "test_both_frame_action_entries_say_whether_cancel_undoes_it"
+        ],
+        "errors": []
+      },
+      {
+        "id": "M-A2100-03-R1-role-edit-note-removed",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed, 2 passed in 1.80s",
+        "failed": [
+          "test_both_frame_action_entries_say_whether_cancel_undoes_it"
+        ],
+        "errors": []
+      },
+      {
+        "id": "M-A2100-04-R3-no-duplicate-check-in-save",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "5 failed, 4 passed in 1.89s",
+        "failed": [
+          "test_duplicate_behavior_name_asks_instead_of_silently_adding",
+          "test_duplicate_name_keep_adds_a_second_entry_only_when_chosen",
+          "test_duplicate_name_overwrite_reuses_the_same_id",
+          "test_duplicate_name_rename_saves_the_new_name",
+          "test_renaming_an_existing_behavior_onto_another_name_also_asks"
+        ],
+        "errors": []
+      },
+      {
+        "id": "M-A2100-05-R3-find-by-name-never-hits",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "6 failed, 3 passed in 2.29s",
+        "failed": [
+          "test_duplicate_behavior_name_asks_instead_of_silently_adding",
+          "test_duplicate_name_keep_adds_a_second_entry_only_when_chosen",
+          "test_duplicate_name_overwrite_reuses_the_same_id",
+          "test_duplicate_name_rename_saves_the_new_name",
+          "test_renaming_an_existing_behavior_onto_another_name_also_asks",
+          "test_find_by_name_is_the_single_judgement_for_duplicate_names"
+        ],
+        "errors": []
+      },
+      {
+        "id": "M-A2100-06-R3-overwrite-does-not-take-over-the-id",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed, 8 passed in 3.21s",
+        "failed": [
+          "test_duplicate_name_overwrite_reuses_the_same_id"
+        ],
+        "errors": []
+      },
+      {
+        "id": "M-A2100-07-R3-rename-path-offers-overwrite",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed, 8 passed in 1.88s",
+        "failed": [
+          "test_renaming_an_existing_behavior_onto_another_name_also_asks"
+        ],
+        "errors": []
+      },
+      {
+        "id": "M-A2100-08-R3-clash-box-loses-the-overwrite-option",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 1.47s",
+        "failed": [
+          "test_name_clash_box_offers_three_choices_plus_cancel"
+        ],
+        "errors": []
+      },
+      {
+        "id": "M-A2100-09-R2-idle-save-stops-closing",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 1.75s",
+        "failed": [
+          "test_submit_model_is_split_by_type_and_every_save_is_pinned"
+        ],
+        "errors": []
+      }
+    ],
+    "spec": "mutations_agent_a_v2100.json",
+    "tests": [
+      "tests/test_behavior_v290.py::test_add_itself_still_allows_duplicates_so_the_ui_owns_the_question",
+      "tests/test_behavior_v290.py::test_find_by_name_is_the_single_judgement_for_duplicate_names",
+      "tests/test_dialogs_behavior_v290.py::test_both_frame_action_entries_say_whether_cancel_undoes_it",
+      "tests/test_dialogs_behavior_v290.py::test_duplicate_behavior_name_asks_instead_of_silently_adding",
+      "tests/test_dialogs_behavior_v290.py::test_duplicate_name_keep_adds_a_second_entry_only_when_chosen",
+      "tests/test_dialogs_behavior_v290.py::test_duplicate_name_overwrite_reuses_the_same_id",
+      "tests/test_dialogs_behavior_v290.py::test_duplicate_name_rename_saves_the_new_name",
+      "tests/test_dialogs_behavior_v290.py::test_import_images_says_it_takes_effect_now",
+      "tests/test_dialogs_behavior_v290.py::test_name_clash_box_offers_three_choices_plus_cancel",
+      "tests/test_dialogs_behavior_v290.py::test_one_image_explains_why_two_are_needed_and_what_to_do",
+      "tests/test_dialogs_behavior_v290.py::test_renaming_an_existing_behavior_onto_another_name_also_asks",
+      "tests/test_dialogs_behavior_v290.py::test_role_edit_frame_action_is_a_thin_wrapper",
+      "tests/test_dialogs_behavior_v290.py::test_submit_model_is_split_by_type_and_every_save_is_pinned",
+      "tests/test_dialogs_behavior_v290.py::test_unique_name_never_asks_about_duplicates",
+      "tests/test_dialogs_feedback_v270.py::test_frame_action_cancel_is_not_reported_as_too_few",
+      "tests/test_dialogs_feedback_v280.py::test_wording_table_is_applied_to_new_and_add_buttons"
+    ],
+    "note": "变异只在 %TEMP% 影子副本里做，真实仓库只读（只写 _dev/.mutation.lock）",
+    "repo_fingerprint": {
+      "桌宠.py": "1ebbedad0f2c",
+      "pet_export.py": "c01e1593efd2",
+      "pet_lines.py": "5332f60b5f26",
+      "pet_alarm.py": "1149e94deee3",
+      "pet_behaviors.py": "732273f95fb4",
+      "_check_release.py": "ed892a64f797",
+      "pet_balance.py": "66948e5514a4",
+      "pet_plugin.py": "2f7853298fc3",
+      "pet_plugin_host.py": "82fb7b1384c8",
+      "pet_dialogs.py": "1d46810817ab",
+      "pet_menu.py": "920daac1b835",
+      "pet_plugin_index.py": "e5e9845785e8",
+      "pet_ai.py": "a5989e7fe646",
+      "pet_config.py": "7a4ad883d4e8",
+      "pet_io.py": "6b1e0413fb7f",
+      "pet_services.py": "ecebb6ab5891",
+      "pet_widgets.py": "429688679fb6",
+      "pet_resources.py": "e28f38917052",
+      "pet_tools.py": "46e9030d073f",
+      "pet_voice.py": "9fe0a570ca81",
+      "pet_audio.py": "a6feadf4d653",
+      "pet_chat.py": "02a223b8849a",
+      "pet_log.py": "de14ecf338ab",
+      "pet_actions.py": "83eb11403fec",
+      "pet_book.py": "098676ac52d4",
+      "_check_static.py": "6286f9f493bd",
+      "tests/test_dialog_buttons_v270.py": "4f95acca7fc6",
+      "tests/test_import_thread.py": "1c6fc2ec5d05"
+    }
+  }
+}

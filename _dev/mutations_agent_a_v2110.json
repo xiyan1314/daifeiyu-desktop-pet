@@ -1,0 +1,615 @@
+{
+  "title": "v2.11.0 第 9 轮 · 代理 A · 动效地基 + 视觉三件套 + 五条速胜 + AI 在途反馈（24 条）",
+  "note": "每条变异都把「这条修复守的那段实现」拿掉，钉住的用例必须红。锚点一律 LF（本仓两处文件都是纯 LF）；nodeid 由 tests/test_motion_v2110.py 的 AST 取出（不手抄）。全部在 %TEMP% 影子副本里跑（铁律 6），真仓只读。",
+  "mutations": [
+    {
+      "id": "M-A2110-01-press-scale-returns",
+      "file": "桌宠.py",
+      "old": "        self._pressed = bool(pressed)\n        self._sync_press_outline()\n",
+      "new": "        self._pressed = bool(pressed)\n        if pressed:\n            self.squash_x = 0.92\n            self.squash_y = 1.06\n        else:\n            self.squash_x = 1.0\n            self.squash_y = 1.0\n        self._apply_transform()\n        self._sync_press_outline()\n",
+      "tests": [
+        "tests/test_motion_v2110.py::test_press_outline_appears_and_geometry_is_untouched",
+        "tests/test_motion_v2110.py::test_press_does_not_fight_an_inflight_breathing_animation"
+      ],
+      "why": "把按压缩放（0.92/1.06）加回来：与角色自己的呼吸/摇摆相位叠加——A4 明令按下只补描边、不改几何。"
+    },
+    {
+      "id": "M-A2110-02-hover-scales",
+      "file": "桌宠.py",
+      "old": "        self._hover = True\n        self._set_cursor_hint(True)\n        self._sync_hover_glow()\n",
+      "new": "        self._hover = True\n        self._set_cursor_hint(True)\n        self.squash_x = 1.06\n        self.squash_y = 1.06\n        self._apply_transform()\n        self._sync_hover_glow()\n",
+      "tests": [
+        "tests/test_motion_v2110.py::test_hover_glow_does_not_change_geometry"
+      ],
+      "why": "悬停改成缩放（上一轮复盘出的「看着像抖动」）：悬停只能用光晕，几何不许动。"
+    },
+    {
+      "id": "M-A2110-03-ripple-leaks-item",
+      "file": "桌宠.py",
+      "old": "        try:\n            self.scene.removeItem(item)\n        except RuntimeError:\n            pass  # 场景已销毁（退出中）：幂等\n",
+      "new": "        pass  # MUT: 不摘项（残留绘制项）\n",
+      "tests": [
+        "tests/test_motion_v2110.py::test_ripple_returns_scene_to_baseline",
+        "tests/test_motion_v2110.py::test_petting_spawns_one_string_of_hearts_that_retire"
+      ],
+      "why": "涟漪/心形收尾不把绘制项摘出场景：对象数回不到基线（「看起来消失了」但项还在）。"
+    },
+    {
+      "id": "M-A2110-04-ripple-ignores-reduce-motion",
+      "file": "桌宠.py",
+      "old": "        if not pet_motion.animation_enabled(self._reduce_motion()):\n            return None\n",
+      "new": "        if not pet_motion.animation_enabled(False):\n            return None\n",
+      "tests": [
+        "tests/test_motion_v2110.py::test_every_animation_point_is_covered_by_the_switch"
+      ],
+      "why": "涟漪无视「减少动效」：开关打开后一次性动效必须**根本不产生**。"
+    },
+    {
+      "id": "M-A2110-05-edge-instant-move",
+      "file": "桌宠.py",
+      "old": "        self._slide_to(x, y)  # A5：目标 (x, y) 与旧版同一个算法，位移改走缓动\n",
+      "new": "        self.move(x, y)  # MUT: 回到瞬移\n",
+      "tests": [
+        "tests/test_motion_v2110.py::test_edge_slide_eases_to_the_old_target"
+      ],
+      "why": "贴边回到瞬移：A5 要求位移走 300ms 缓动（目标算法不变）。"
+    },
+    {
+      "id": "M-A2110-06-edge-duration-hardcoded",
+      "file": "桌宠.py",
+      "old": "        ms = pet_motion.duration_ms(\"EDGE\", self._reduce_motion())\n",
+      "new": "        ms = 900  # MUT: 不走令牌表\n",
+      "tests": [
+        "tests/test_motion_v2110.py::test_edge_slide_eases_to_the_old_target"
+      ],
+      "why": "贴边时长绕过令牌表：动效时长必须单一来源（pet_motion.DUR）。"
+    },
+    {
+      "id": "M-A2110-07-reduce-motion-not-instant",
+      "file": "pet_motion.py",
+      "old": "，不是\"短一点\"。\"\"\"\n    if reduce_motion:\n        return 0\n",
+      "new": "，不是\"短一点\"。\"\"\"\n    if reduce_motion:\n        return 1  # MUT: 不再是\"瞬时\"\n",
+      "tests": [
+        "tests/test_motion_v2110.py::test_default_follows_system_and_never_downgrades",
+        "tests/test_motion_v2110.py::test_edge_slide_instant_when_motion_reduced"
+      ],
+      "why": "「减少动效」不再归零：开关打开后必须是瞬时（0ms），不是「短一点」。"
+    },
+    {
+      "id": "M-A2110-08-auto-downgrades-user",
+      "file": "pet_motion.py",
+      "old": "    return bool(system_value)\n",
+      "new": "    return True if system_value is None else bool(system_value)  # MUT: 读不到就替用户关掉\n",
+      "tests": [
+        "tests/test_motion_v2110.py::test_default_follows_system_and_never_downgrades"
+      ],
+      "why": "系统设置读不到时擅自降级成「关掉动效」：默认值必须是「读不到就保持开启」。"
+    },
+    {
+      "id": "M-A2110-09-drag-threshold-gone",
+      "file": "桌宠.py",
+      "old": "            if not self._dragging and dist <= pet_motion.DRAG[\"THRESHOLD_PX\"]:\n                return\n",
+      "new": "            if not self._dragging and dist <= 0:\n                return\n",
+      "tests": [
+        "tests/test_motion_v2110.py::test_drag_threshold_blocks_micro_moves"
+      ],
+      "why": "拖拽阈值失效（1px 抖动就进入拖拽态）：B1 要求小于阈值不进入拖拽态。"
+    },
+    {
+      "id": "M-A2110-10-drag-cursor-gone",
+      "file": "桌宠.py",
+      "old": "                self.setCursor(Qt.CursorShape.ClosedHandCursor)  # B1：抓着\n",
+      "new": "                pass  # MUT: 进入拖拽态却不换光标\n",
+      "tests": [
+        "tests/test_motion_v2110.py::test_drag_cursor_states"
+      ],
+      "why": "拖拽中不给「抓着」光标：B1 的光标反馈。"
+    },
+    {
+      "id": "M-A2110-11-double-click-second-release",
+      "file": "桌宠.py",
+      "old": "        self._suppress_release = True\n        self._hold_timer.stop()  # 双击不是\"长按摸头\"\n",
+      "new": "        self._suppress_release = False\n        self._hold_timer.stop()  # MUT: 不吞第二次 release\n",
+      "tests": [
+        "tests/test_motion_v2110.py::test_double_click_uses_the_event_and_swallows_the_second_release"
+      ],
+      "why": "双击不吞 Qt 随后那次 release：双击会被记成「戳两下」。"
+    },
+    {
+      "id": "M-A2110-12-bubble-always-fades-in",
+      "file": "pet_widgets.py",
+      "old": "        fresh = not self.isVisible()\n",
+      "new": "        fresh = True  # MUT: 永远走淡入（连点也把新字淡没）\n",
+      "tests": [
+        "tests/test_motion_v2110.py::test_new_bubble_text_never_fades_in_over_old_one"
+      ],
+      "why": "去掉「只有从看不见到看得见才淡入」这条判据：淡出/半透明途中来了新文本，新字又从 0 淡起——那一两百毫秒用户读不清字（用动效覆盖掉用户刚看的东西）。"
+    },
+    {
+      "id": "M-A2110-13-bubble-hold-zeroed",
+      "file": "pet_widgets.py",
+      "old": "        self._timer.start(pet_motion.duration_ms(\"BUBBLE_HOLD\"))\n",
+      "new": "        self._timer.start(pet_motion.duration_ms(\"BUBBLE_HOLD\", self._motion_reduced))  # MUT\n",
+      "tests": [
+        "tests/test_motion_v2110.py::test_bubble_fade_is_instant_when_motion_reduced"
+      ],
+      "why": "把「展示时长」也随开关归零：气泡闪一下就没 = 把信息弄没了（那不是降级）。"
+    },
+    {
+      "id": "M-A2110-14-bubble-does-not-follow",
+      "file": "桌宠.py",
+      "old": "        self._position_bubble()  # B3：气泡跟随角色（拖拽时不再落在原地）\n",
+      "new": "        pass  # MUT: 气泡不跟随\n",
+      "tests": [
+        "tests/test_motion_v2110.py::test_bubble_follows_the_character_without_restarting_the_timer"
+      ],
+      "why": "拖动窗口不再重排气泡：B3 要求气泡跟着角色走、不落在原地。"
+    },
+    {
+      "id": "M-A2110-15-petting-no-hearts",
+      "file": "桌宠.py",
+      "old": "        # B4：摸头**一次一串**心形（上浮 + 淡出 + 自己消失；关掉「减少动效」则不产生）\n        self._spawn_hearts()\n",
+      "new": "        # MUT: 摸头不串心形\n",
+      "tests": [
+        "tests/test_motion_v2110.py::test_petting_spawns_one_string_of_hearts_that_retire"
+      ],
+      "why": "摸头不再串心形：B4 的接线断了。"
+    },
+    {
+      "id": "M-A2110-16-ai-inflight-invisible",
+      "file": "桌宠.py",
+      "old": "        self._place_thinking()\n        self._thinking_item.show()\n",
+      "new": "        self._place_thinking()\n        self._thinking_item.hide()  # MUT: 在途不可见\n",
+      "tests": [
+        "tests/test_motion_v2110.py::test_ai_inflight_is_visible_and_survives_reduce_motion"
+      ],
+      "why": "AI 在途指示不显示：1~20 秒里用户又看到「什么都没发生」（B8 的真缺口）。"
+    },
+    {
+      "id": "M-A2110-17-contrast-palette-fails",
+      "file": "pet_motion.py",
+      "old": "PALETTE_LIGHT = {\"bg\": \"#ffffff\", \"fg\": \"#12233f\", \"border\": \"#12233f\", \"muted\": \"#3d4a63\"}\n",
+      "new": "PALETTE_LIGHT = {\"bg\": \"#ffffff\", \"fg\": \"#eef1f6\", \"border\": \"#eef1f6\", \"muted\": \"#3d4a63\"}\n",
+      "tests": [
+        "tests/test_motion_v2110.py::test_contrast_is_computed_not_eyeballed"
+      ],
+      "why": "浅色高对比度调色板改成「浅字白底」（约 1.1:1）：≥4.5:1 是算出来的判据，不靠眼看。"
+    },
+    {
+      "id": "M-A2110-18-escape-does-nothing",
+      "file": "桌宠.py",
+      "old": "        if key == Qt.Key.Key_Escape:\n            self.close()  # closeEvent：收进托盘，不是退出程序\n",
+      "new": "        if key == Qt.Key.Key_Escape:\n            pass  # MUT: Esc 不关窗\n",
+      "tests": [
+        "tests/test_motion_v2110.py::test_keyboard_escape_and_enter_route_to_window_actions"
+      ],
+      "why": "Esc 不再把窗口收起来：A3 的键盘可达（窗口级、不抢全局）。"
+    },
+    {
+      "id": "M-A2110-19-reduce-toggle-not-persisted",
+      "file": "桌宠.py",
+      "old": "        self.cfg[\"reduce_motion\"] = \"on\" if on else \"off\"\n",
+      "new": "        self.cfg[\"reduce_motion\"] = \"auto\"  # MUT: 不记用户的选择\n",
+      "tests": [
+        "tests/test_motion_v2110.py::test_reduce_motion_toggle_persists_and_clears_inflight",
+        "tests/test_motion_v2110.py::test_tray_menu_carries_primary_action_and_toggles"
+      ],
+      "why": "菜单勾选不落盘（永远停在 auto）：用户的无障碍选择必须被记住。"
+    },
+    {
+      "id": "M-A2110-20-high-contrast-no-restore",
+      "file": "桌宠.py",
+      "old": "        elif restore_style:\n            base = self.cfg.get(\"bubble_style\")\n            if isinstance(base, dict):\n                BUBBLE_STYLE.update(dict(base))\n",
+      "new": "        elif False:\n            base = self.cfg.get(\"bubble_style\")\n            if isinstance(base, dict):\n                BUBBLE_STYLE.update(dict(base))\n",
+      "tests": [
+        "tests/test_motion_v2110.py::test_high_contrast_switch_applies_and_restores"
+      ],
+      "why": "关掉高对比度后不把用户那份样式放回去：开关「关不掉」。"
+    },
+    {
+      "id": "M-A2110-21-emote-hidden-under-reduce",
+      "file": "桌宠.py",
+      "old": "            self._emote_anim = None\n            QTimer.singleShot(pet_motion.duration_ms(\"EMOTE_FLOAT\"), self,\n                              lambda g=gen: self._hide_emote(g))\n",
+      "new": "            self._emote_anim = None\n            self._hide_emote(gen)  # MUT: 表情也不显示了\n",
+      "tests": [
+        "tests/test_motion_v2110.py::test_every_animation_point_is_covered_by_the_switch"
+      ],
+      "why": "减少动效顺手把表情本身也关了：表情是**信息**（动画才是装饰）。"
+    },
+    {
+      "id": "M-A2110-22-proc-action-ignores-reduce",
+      "file": "桌宠.py",
+      "old": "        if self._reduce_motion():\n            # A2：合成动作（呼吸/摇摆/点头）也是**代码驱动**的动效 → 「减少动效」时一次都不播，\n            # 直接走收尾（与 0ms 时长同效；基准值 int(period*cycles) 来自**角色数据**，\n            # 不归令牌表——见 pet_motion.effective_duration 的分工说明）。\n            # ⚠ 这一支刻意写成**提前返回**、而不是把下面那行改成 effective_duration(...)：\n            # 下面那行是 _dev/mutate_proc_reset_v26.py 的 M-P04 锚点，改它会让一条既有变异静默失效。\n            _done()\n            return\n",
+      "new": "        pass  # MUT: 减少动效不再覆盖合成动作\n",
+      "tests": [
+        "tests/test_motion_v2110.py::test_proc_actions_are_covered_by_the_switch"
+      ],
+      "why": "合成动作（呼吸/摇摆）无视「减少动效」：它是代码驱动的动效，必须能被关掉（时长基准来自角色数据，走 effective_duration）。"
+    },
+    {
+      "id": "M-A2110-23-lines-note-back-to-toast",
+      "file": "pet_dialogs.py",
+      "old": "        try:\n            self._notes.setText(str(text or \"\"))\n        except Exception as e:\n            pet_log.log_error(\"lines notes failed: %r\" % (e,))\n",
+      "new": "        _toast(self._pet, text)  # MUT: 改回宠物气泡\n",
+      "tests": [
+        "tests/test_dialogs_feedback_v280.py::test_move_line_at_boundary_tells_the_user",
+        "tests/test_dialogs_feedback_v280.py::test_lines_move_member_at_boundary_uses_the_same_wording"
+      ],
+      "why": "V7：把 LinesDialog._note 改回宠物气泡出口——同一语义又变成两种表现，两条用例（状态行里有话 + 气泡为空）必须红。"
+    },
+    {
+      "id": "M-A2110-24-bubble-fadeout-not-instant",
+      "file": "pet_widgets.py",
+      "old": "        ms = pet_motion.duration_ms(\"BUBBLE_FADE\", self._motion_reduced)\n",
+      "new": "        ms = pet_motion.duration_ms(\"BUBBLE_FADE\", False)  # MUT: 淡出也走动画\n",
+      "tests": [
+        "tests/test_motion_v2110.py::test_bubble_fade_is_instant_when_motion_reduced"
+      ],
+      "why": "减少动效只管住淡入、淡出仍走 180ms 动画：一次性的收尾也必须瞬时（两个方向都要能被关掉）。"
+    }
+  ],
+  "results": {
+    "title": "变异验证 spec：mutations_agent_a_v2110.json",
+    "checked_at": "2026-10-16 08:12:38",
+    "total": 24,
+    "caught": 24,
+    "not_caught": 0,
+    "blocked": 0,
+    "items": [
+      {
+        "id": "M-A2110-01-press-scale-returns",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "2 failed in 1.63s",
+        "failed": [
+          "tests/test_motion_v2110.py::test_press_outline_appears_and_geometry_is_untouched",
+          "tests/test_motion_v2110.py::test_press_does_not_fight_an_inflight_breathing_animation"
+        ],
+        "errors": [],
+        "errors_teardown": []
+      },
+      {
+        "id": "M-A2110-02-hover-scales",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 0.78s",
+        "failed": [
+          "tests/test_motion_v2110.py::test_hover_glow_does_not_change_geometry"
+        ],
+        "errors": [],
+        "errors_teardown": []
+      },
+      {
+        "id": "M-A2110-03-ripple-leaks-item",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "2 failed in 1.56s",
+        "failed": [
+          "tests/test_motion_v2110.py::test_ripple_returns_scene_to_baseline",
+          "tests/test_motion_v2110.py::test_petting_spawns_one_string_of_hearts_that_retire"
+        ],
+        "errors": [],
+        "errors_teardown": []
+      },
+      {
+        "id": "M-A2110-04-ripple-ignores-reduce-motion",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 1.32s",
+        "failed": [
+          "tests/test_motion_v2110.py::test_every_animation_point_is_covered_by_the_switch"
+        ],
+        "errors": [],
+        "errors_teardown": []
+      },
+      {
+        "id": "M-A2110-05-edge-instant-move",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 0.84s",
+        "failed": [
+          "tests/test_motion_v2110.py::test_edge_slide_eases_to_the_old_target"
+        ],
+        "errors": [],
+        "errors_teardown": []
+      },
+      {
+        "id": "M-A2110-06-edge-duration-hardcoded",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 0.96s",
+        "failed": [
+          "tests/test_motion_v2110.py::test_edge_slide_eases_to_the_old_target"
+        ],
+        "errors": [],
+        "errors_teardown": []
+      },
+      {
+        "id": "M-A2110-07-reduce-motion-not-instant",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "2 failed in 0.97s",
+        "failed": [
+          "tests/test_motion_v2110.py::test_default_follows_system_and_never_downgrades",
+          "tests/test_motion_v2110.py::test_edge_slide_instant_when_motion_reduced"
+        ],
+        "errors": [],
+        "errors_teardown": []
+      },
+      {
+        "id": "M-A2110-08-auto-downgrades-user",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 0.81s",
+        "failed": [
+          "tests/test_motion_v2110.py::test_default_follows_system_and_never_downgrades"
+        ],
+        "errors": [],
+        "errors_teardown": []
+      },
+      {
+        "id": "M-A2110-09-drag-threshold-gone",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 1.04s",
+        "failed": [
+          "tests/test_motion_v2110.py::test_drag_threshold_blocks_micro_moves"
+        ],
+        "errors": [],
+        "errors_teardown": []
+      },
+      {
+        "id": "M-A2110-10-drag-cursor-gone",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 0.96s",
+        "failed": [
+          "tests/test_motion_v2110.py::test_drag_cursor_states"
+        ],
+        "errors": [],
+        "errors_teardown": []
+      },
+      {
+        "id": "M-A2110-11-double-click-second-release",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 0.95s",
+        "failed": [
+          "tests/test_motion_v2110.py::test_double_click_uses_the_event_and_swallows_the_second_release"
+        ],
+        "errors": [],
+        "errors_teardown": []
+      },
+      {
+        "id": "M-A2110-12-bubble-always-fades-in",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 0.93s",
+        "failed": [
+          "tests/test_motion_v2110.py::test_new_bubble_text_never_fades_in_over_old_one"
+        ],
+        "errors": [],
+        "errors_teardown": []
+      },
+      {
+        "id": "M-A2110-13-bubble-hold-zeroed",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 0.94s",
+        "failed": [
+          "tests/test_motion_v2110.py::test_bubble_fade_is_instant_when_motion_reduced"
+        ],
+        "errors": [],
+        "errors_teardown": []
+      },
+      {
+        "id": "M-A2110-14-bubble-does-not-follow",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 0.96s",
+        "failed": [
+          "tests/test_motion_v2110.py::test_bubble_follows_the_character_without_restarting_the_timer"
+        ],
+        "errors": [],
+        "errors_teardown": []
+      },
+      {
+        "id": "M-A2110-15-petting-no-hearts",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 0.79s",
+        "failed": [
+          "tests/test_motion_v2110.py::test_petting_spawns_one_string_of_hearts_that_retire"
+        ],
+        "errors": [],
+        "errors_teardown": []
+      },
+      {
+        "id": "M-A2110-16-ai-inflight-invisible",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 0.78s",
+        "failed": [
+          "tests/test_motion_v2110.py::test_ai_inflight_is_visible_and_survives_reduce_motion"
+        ],
+        "errors": [],
+        "errors_teardown": []
+      },
+      {
+        "id": "M-A2110-17-contrast-palette-fails",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 0.74s",
+        "failed": [
+          "tests/test_motion_v2110.py::test_contrast_is_computed_not_eyeballed"
+        ],
+        "errors": [],
+        "errors_teardown": []
+      },
+      {
+        "id": "M-A2110-18-escape-does-nothing",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 0.79s",
+        "failed": [
+          "tests/test_motion_v2110.py::test_keyboard_escape_and_enter_route_to_window_actions"
+        ],
+        "errors": [],
+        "errors_teardown": []
+      },
+      {
+        "id": "M-A2110-19-reduce-toggle-not-persisted",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "2 failed in 0.83s",
+        "failed": [
+          "tests/test_motion_v2110.py::test_reduce_motion_toggle_persists_and_clears_inflight",
+          "tests/test_motion_v2110.py::test_tray_menu_carries_primary_action_and_toggles"
+        ],
+        "errors": [],
+        "errors_teardown": []
+      },
+      {
+        "id": "M-A2110-20-high-contrast-no-restore",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 0.78s",
+        "failed": [
+          "tests/test_motion_v2110.py::test_high_contrast_switch_applies_and_restores"
+        ],
+        "errors": [],
+        "errors_teardown": []
+      },
+      {
+        "id": "M-A2110-21-emote-hidden-under-reduce",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 0.89s",
+        "failed": [
+          "tests/test_motion_v2110.py::test_every_animation_point_is_covered_by_the_switch"
+        ],
+        "errors": [],
+        "errors_teardown": []
+      },
+      {
+        "id": "M-A2110-22-proc-action-ignores-reduce",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 0.77s",
+        "failed": [
+          "tests/test_motion_v2110.py::test_proc_actions_are_covered_by_the_switch"
+        ],
+        "errors": [],
+        "errors_teardown": []
+      },
+      {
+        "id": "M-A2110-23-lines-note-back-to-toast",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "2 failed in 1.09s",
+        "failed": [
+          "tests/test_dialogs_feedback_v280.py::test_move_line_at_boundary_tells_the_user",
+          "tests/test_dialogs_feedback_v280.py::test_lines_move_member_at_boundary_uses_the_same_wording"
+        ],
+        "errors": [],
+        "errors_teardown": []
+      },
+      {
+        "id": "M-A2110-24-bubble-fadeout-not-instant",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 0.81s",
+        "failed": [
+          "tests/test_motion_v2110.py::test_bubble_fade_is_instant_when_motion_reduced"
+        ],
+        "errors": [],
+        "errors_teardown": []
+      }
+    ],
+    "spec": "mutations_agent_a_v2110.json",
+    "tests": [
+      "tests/test_dialogs_feedback_v280.py::test_lines_move_member_at_boundary_uses_the_same_wording",
+      "tests/test_dialogs_feedback_v280.py::test_move_line_at_boundary_tells_the_user",
+      "tests/test_motion_v2110.py::test_ai_inflight_is_visible_and_survives_reduce_motion",
+      "tests/test_motion_v2110.py::test_bubble_fade_is_instant_when_motion_reduced",
+      "tests/test_motion_v2110.py::test_bubble_follows_the_character_without_restarting_the_timer",
+      "tests/test_motion_v2110.py::test_contrast_is_computed_not_eyeballed",
+      "tests/test_motion_v2110.py::test_default_follows_system_and_never_downgrades",
+      "tests/test_motion_v2110.py::test_double_click_uses_the_event_and_swallows_the_second_release",
+      "tests/test_motion_v2110.py::test_drag_cursor_states",
+      "tests/test_motion_v2110.py::test_drag_threshold_blocks_micro_moves",
+      "tests/test_motion_v2110.py::test_edge_slide_eases_to_the_old_target",
+      "tests/test_motion_v2110.py::test_edge_slide_instant_when_motion_reduced",
+      "tests/test_motion_v2110.py::test_every_animation_point_is_covered_by_the_switch",
+      "tests/test_motion_v2110.py::test_high_contrast_switch_applies_and_restores",
+      "tests/test_motion_v2110.py::test_hover_glow_does_not_change_geometry",
+      "tests/test_motion_v2110.py::test_keyboard_escape_and_enter_route_to_window_actions",
+      "tests/test_motion_v2110.py::test_new_bubble_text_never_fades_in_over_old_one",
+      "tests/test_motion_v2110.py::test_petting_spawns_one_string_of_hearts_that_retire",
+      "tests/test_motion_v2110.py::test_press_does_not_fight_an_inflight_breathing_animation",
+      "tests/test_motion_v2110.py::test_press_outline_appears_and_geometry_is_untouched",
+      "tests/test_motion_v2110.py::test_proc_actions_are_covered_by_the_switch",
+      "tests/test_motion_v2110.py::test_reduce_motion_toggle_persists_and_clears_inflight",
+      "tests/test_motion_v2110.py::test_ripple_returns_scene_to_baseline",
+      "tests/test_motion_v2110.py::test_tray_menu_carries_primary_action_and_toggles"
+    ],
+    "note": "变异只在 %TEMP% 影子副本里做，真实仓库只读（只写 _dev/.mutation.lock）",
+    "repo_fingerprint": {
+      "桌宠.py": "2351a1ad9737",
+      "pet_export.py": "c01e1593efd2",
+      "pet_lines.py": "5332f60b5f26",
+      "pet_alarm.py": "1149e94deee3",
+      "pet_behaviors.py": "732273f95fb4",
+      "_check_release.py": "7377b3fad58e",
+      "pet_balance.py": "66948e5514a4",
+      "pet_plugin.py": "2f7853298fc3",
+      "pet_plugin_host.py": "82fb7b1384c8",
+      "pet_dialogs.py": "d80d04497146",
+      "pet_menu.py": "d2f565537b3f",
+      "pet_plugin_index.py": "e5e9845785e8",
+      "pet_ai.py": "a5989e7fe646",
+      "pet_config.py": "7a4ad883d4e8",
+      "pet_io.py": "6b1e0413fb7f",
+      "pet_services.py": "ecebb6ab5891",
+      "pet_widgets.py": "dc7f5dc4a7f2",
+      "pet_resources.py": "e28f38917052",
+      "pet_tools.py": "46e9030d073f",
+      "pet_voice.py": "9fe0a570ca81",
+      "pet_audio.py": "a6feadf4d653",
+      "pet_chat.py": "de979c429c2c",
+      "pet_log.py": "de14ecf338ab",
+      "pet_actions.py": "83eb11403fec",
+      "pet_book.py": "098676ac52d4",
+      "_check_static.py": "6286f9f493bd",
+      "pet_motion.py": "28d79c516f46",
+      "tests/test_dialog_buttons_v270.py": "4f95acca7fc6",
+      "tests/test_import_thread.py": "1c6fc2ec5d05"
+    },
+    "pinned_ast": {
+      "tests/test_motion_v2110.py::test_press_outline_appears_and_geometry_is_untouched": "ba975d488bb5",
+      "tests/test_motion_v2110.py::test_press_does_not_fight_an_inflight_breathing_animation": "1f179d3c3f11",
+      "tests/test_motion_v2110.py::test_hover_glow_does_not_change_geometry": "fbb28e4c0931",
+      "tests/test_motion_v2110.py::test_ripple_returns_scene_to_baseline": "2e7b8926b5b6",
+      "tests/test_motion_v2110.py::test_petting_spawns_one_string_of_hearts_that_retire": "9dc14c2c90dc",
+      "tests/test_motion_v2110.py::test_every_animation_point_is_covered_by_the_switch": "6dd04188734b",
+      "tests/test_motion_v2110.py::test_edge_slide_eases_to_the_old_target": "6a6a7f45cfaf",
+      "tests/test_motion_v2110.py::test_default_follows_system_and_never_downgrades": "9dbc820fc7da",
+      "tests/test_motion_v2110.py::test_edge_slide_instant_when_motion_reduced": "f6285fce7cc6",
+      "tests/test_motion_v2110.py::test_drag_threshold_blocks_micro_moves": "fb4e4ff2a689",
+      "tests/test_motion_v2110.py::test_drag_cursor_states": "634dace556d8",
+      "tests/test_motion_v2110.py::test_double_click_uses_the_event_and_swallows_the_second_release": "23e7ca36e51d",
+      "tests/test_motion_v2110.py::test_new_bubble_text_never_fades_in_over_old_one": "c2b39fb77501",
+      "tests/test_motion_v2110.py::test_bubble_fade_is_instant_when_motion_reduced": "e095294b63e6",
+      "tests/test_motion_v2110.py::test_bubble_follows_the_character_without_restarting_the_timer": "f076bcffec65",
+      "tests/test_motion_v2110.py::test_ai_inflight_is_visible_and_survives_reduce_motion": "623e09da23de",
+      "tests/test_motion_v2110.py::test_contrast_is_computed_not_eyeballed": "687b2a6d53d0",
+      "tests/test_motion_v2110.py::test_keyboard_escape_and_enter_route_to_window_actions": "12014d7729db",
+      "tests/test_motion_v2110.py::test_reduce_motion_toggle_persists_and_clears_inflight": "66b6e5aa7bde",
+      "tests/test_motion_v2110.py::test_tray_menu_carries_primary_action_and_toggles": "d7b8b86a03ee",
+      "tests/test_motion_v2110.py::test_high_contrast_switch_applies_and_restores": "0b0a0bb5cd34",
+      "tests/test_motion_v2110.py::test_proc_actions_are_covered_by_the_switch": "d34454d28846",
+      "tests/test_dialogs_feedback_v280.py::test_move_line_at_boundary_tells_the_user": "f4fc6fad4124",
+      "tests/test_dialogs_feedback_v280.py::test_lines_move_member_at_boundary_uses_the_same_wording": "4dd41ae435bc"
+    }
+  }
+}

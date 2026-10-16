@@ -5,6 +5,8 @@
 既有"合法输入必须通过"，也有"故意违规必须被检出"，并用**正例对照**排除空转断言
 （例如"拒绝没改数据"必须配上"同一条路径带确认真的会改数据"）。
 """
+import ast
+import collections
 import json
 import os
 import sys
@@ -280,6 +282,42 @@ def test_a6_persona_file_overrides_builtin(tmp_path, monkeypatch):
 
 # ---------------- B：静态体检新增两项 ----------------
 
+# ---------------- v2.11.0 第 9 轮（代理 C · P1 裁决"做法乙"）：不可解析槽**名单** ----------------
+#
+# **背景**：这里原来还有一条"可解析槽比例 ≤ 0.90"的**反向上界**。2026-10-16 实测
+# **158/175 = 0.9029** → 假红；有人按注释指引把上界抬到 0.93（已撤回）。**定性**：
+# 比例 = 可解析 / 全部候选，而"可解析"取决于**树里出现了哪些写法** —— 显式接线
+# （self._on_x / 模块级函数 / 内联 lambda）天然可解析，Qt 内建 / 动态槽天然不可解析；
+# **代码往显式风格走，比例就合法地涨**。这条上界想守的是「**不许开始猜不可判定的槽**」，
+# 而"比例"量不出这件事（本轮：分子 151→158，分母 168→175，**两者都在涨**，只是分子涨得快）。
+#
+# **现在改成两条贴题的断言**：
+#   ① 每个**能解析**的槽逐条判 arity（check_signal_arity 本身；本用例上面那条"真仓零问题"）；
+#   ② 每个**判不了**的槽必须在下面名单里**登记理由**；名单按 `文件 :: 表达式` 做**精确多重集**
+#      比对 —— **多一条、少一条都红**：
+#        · 新出现一个判不了的槽 = 一处新盲区 → 登记（或去把解析器补上）；
+#        · 解析器退化（原本能解析的变判不了）→ 名单爆出新条目 → 红；
+#        · 修好/删掉一个槽 → 必须把名单里那条删掉（"只许减不许增"）。
+#   ③ 解析器**自身健康**另由 `test_b7b_解析器自检_该解析的必须解析_判不了的必须跳过` 守
+#      （合成样本，不依赖真仓风格）—— 那是"比例"原本顺带想覆盖的那件事。
+# 复跑（当前读数与逐条明细）：`python -B _dev/probe_slot_resolution_v2110.py --head`
+#   实测：175 处候选 / 158 可解析 / **17 处判不了**（全部在下面这份名单里，11 个不同的表达式）。
+_UNRESOLVABLE_SLOTS = (
+    # (文件 :: 槽表达式, 条数, 为什么判不了)
+    ("pet_balance.py :: anim.deleteLater", 1, "Qt 内建方法：签名不在本仓（猜了必然误报）"),
+    ("pet_dialogs.py :: _cb", 2, "元组解包循环变量（for _lbl, _cb in (...)）：作用域分析对元组解包整份丢弃"),
+    ("pet_dialogs.py :: cb", 3, "元组解包循环变量（for label, cb in (...)）：同上"),
+    ("pet_dialogs.py :: dlg.accept", 2, "Qt 内建方法（QDialog.accept）：签名不在本仓"),
+    ("pet_dialogs.py :: self._worker.deleteLater", 1, "Qt 内建方法（QObject.deleteLater）"),
+    ("pet_dialogs.py :: self.accept", 2, "Qt 内建方法（QDialog.accept）"),
+    ("pet_dialogs.py :: w.deleteLater", 1, "Qt 内建方法（QObject.deleteLater）"),
+    ("pet_mood.py :: bubbles.append", 1, "内建容器方法（list.append）：签名不在本仓，且不适用『多余参数被丢弃』规则"),
+    ("pet_mood.py :: emotes.append", 1, "内建容器方法（list.append）：同上"),
+    ("pet_mood.py :: states.append", 1, "内建容器方法（list.append）：同上"),
+    ("桌宠.py :: anim.deleteLater", 2, "Qt 内建方法（QObject.deleteLater）"),
+)
+
+
 def test_b7_static_signal_arity_check():
     """B7：Signal 声明↔槽参数检查——违规必须报出来，合法/判不了的不能误报。"""
     import _check_static as C
@@ -326,13 +364,14 @@ class W(QObject):
     real = C.sources()
     real_p, real_n = C.check_signal_arity(real)
     assert real_p == [] and real_n == [], (real_p, real_n)
-    # 覆盖面统计：把 _slot_arity 换成记账版（**用 *a/**k**，解析器以后加参数不会让这里失联）
+    # 覆盖面统计：把 _slot_arity 换成记账版（**多余实参原样转发**，解析器以后加参数不会让这里失联）。
+    # v2.11.0（P1）：记账内容从"结果"扩成 (结果, 文件, 行号, 槽表达式) —— 名单比对要用身份。
     seen = []
     orig = C._slot_arity
 
-    def _spy(*a, **k):
-        res = orig(*a, **k)
-        seen.append(res)
+    def _spy(slot, fname, funcs, methods, scopes=None, lineno=0, *rest, **kw):
+        res = orig(slot, fname, funcs, methods, scopes, lineno, *rest, **kw)
+        seen.append((res, fname, lineno, slot))
         return res
 
     C._slot_arity = _spy
@@ -344,30 +383,52 @@ class W(QObject):
     # v2.4.1（找茬 M6）：**改成比例**。写死 116 == 当时实测值、余量 0，任何良性重构都会假红。
     # v2.4.2：M 检查补了 guard 包装与局部变量两类解析 → 可解析数 116 → 117（分母不变，
     # 比例 0.800 → 0.807），阈值同步 0.75 → 0.76，仍然留约 5 个百分点余量。
+    # ⚠ v2.11.0 第 9 轮（代理 C · P1 裁决"做法乙"）：**下界保留、上界删除**，另加"判不了的槽"名单。
+    #   删上界的理由：2026-10-16 实测 158/175 = 0.9029 越过原 0.90 → 假红；而"涨"的成因是
+    #   **树里的写法变了**（显式接线天然可解析），不是解析器开始猜。详见 _UNRESOLVABLE_SLOTS
+    #   上面那段说明与 _dev/README.md。
+    #   留着下界的理由：它只在"可解析比例**骤降**"时响 —— 那正是"检查可能失明"的粗警报；
+    #   具体是哪儿失明，由下面的名单逐条点名（两条一起看，比单看一个比例能定位）。
     # 重测：python -c "import _check_static as C; s=[]; o=C._slot_arity; C._slot_arity=lambda *a,**k:(s.append(o(*a,**k)) or s[-1]); C.check_signal_arity(C.sources()); print(sum(1 for r in s if r is not None), len(s))"
-    _n_slots = sum(1 for r in seen if r is not None)
+    _n_slots = sum(1 for r, _f, _l, _s in seen if r is not None)
     # 分母本身也要有下限：sources() 万一扫成 0 个文件，"0 >= 0" 会让整条断言空转
     assert len(seen) >= 100, "扫描面太窄（%d 处 .connect）：sources() 可能没扫到文件" % len(seen)
     assert _n_slots >= 0.76 * len(seen), \
-        "可解析槽比例骤降（%d/%d = %.3f）：检查可能已经失明（重测方法见上面注释）" \
+        "可解析槽比例骤降（%d/%d = %.3f）：检查可能已经失明（先看名单里是不是爆了条目）" \
         % (_n_slots, len(seen), _n_slots / float(len(seen)))
-    # 反向 tripwire：比例**大涨**（＝解析器开始猜了，例如把内建方法也硬解出签名）同样要人复核，
-    # 别让"多解析了几处"悄悄变成误报源。改了扫描面/判据就按实测更新这里的上界并说明原因。
-    assert _n_slots / float(len(seen)) <= 0.90, \
-        "可解析比例异常偏高（%d/%d = %.3f）：是否开始猜测不可判定的槽？" \
-        % (_n_slots, len(seen), _n_slots / float(len(seen)))
+    # ② 判不了的槽必须**逐条登记**（精确多重集：多一条、少一条都红）—— 这是"不许猜"这条承诺的
+    # 可执行形态：盲区留在视野里、每处都有理由，而不是让一个比例数字替它说话。
+    _cur_unres = collections.Counter(
+        "%s :: %s" % (fname, ast.unparse(slot))
+        for res, fname, _lineno, slot in seen if res is None)
+    _allowed = collections.Counter()
+    for _key, _n, _why in _UNRESOLVABLE_SLOTS:
+        assert str(_why).strip(), "名单里每条都要写清为什么判不了：%r" % (_key,)
+        _allowed[_key] += _n
+    _added = _cur_unres - _allowed
+    _gone = _allowed - _cur_unres
+    assert not _added, (
+        "出现了**没有登记**的不可解析槽（%d 处）：\n  %s\n"
+        "判不了的槽是 M 检查的盲区，必须显式登记：能补解析器就补；补不了就在 "
+        "_UNRESOLVABLE_SLOTS 里加一条并写清理由（这份名单只许减不许增）。"
+        % (sum(_added.values()), "\n  ".join(sorted(_added))))
+    assert not _gone, (
+        "名单里的槽已经不在树上了（%d 处）：\n  %s\n"
+        "修好/删掉之后请把名单里那条一并删掉 —— 名单要**精确描述当前树的盲区**。"
+        % (sum(_gone.values()), "\n  ".join(sorted(_gone))))
     # v2.4.2（第三轮找茬收口）：下面三条**真仓计数**从硬断言降级为打印——它们是"扩展还在
     # 被用到"的探照灯，不是护栏本身。良性重构（例如删掉 pet_anim.py:152 那个嵌套 def、
     # 或新增一处 Qt 内建槽）会让计数变，硬断言就假红。真正的护栏是：
-    #   ① 上面的比例区间（分母 >= 100、可解析比例落在 [0.76, 0.90]）；
-    #   ② B9/B10/B12 的**合成用例** + B11 的定向变异自检（喂进去的违规必须被检出，
-    #      不受真仓重构影响）。
+    #   ① 扫描面下限（分母 >= 100）+ 可解析比例**下界** 0.76（失明粗警报）；
+    #   ② 不可解析槽**名单**（精确多重集；新盲区/解析器退化/名单过期都红）；
+    #   ③ B7b 的**解析器自检**（合成样本：该解析的必须解析、判不了的必须跳过）+ B9/B10/B12
+    #      的合成用例 + B11 的定向变异自检（喂进去的违规必须被检出，不受真仓重构影响）。
     _funcs, _methods = C._def_index(real)
     _guard = [orig(slot, fname, _funcs, _methods, scopes, lineno)
               for fname, lineno, _sig, slot, scopes in C.iter_slots(real)
               if C._is_guard_wrapper(slot)]
     _guard_ok = sum(1 for r in _guard if r is not None)
-    _local_ok = sum(1 for r in seen if r is not None and "local" in r[3])
+    _local_ok = sum(1 for r, _f, _l, _s in seen if r is not None and "local" in r[3])
     print("[B7 实测] 真仓槽解析：guard 包装 %d 处（解析出 %d）、局部变量/嵌套 def %d 处"
           % (len(_guard), _guard_ok, _local_ok))
     if len(_guard) < 5:
@@ -379,6 +440,84 @@ class W(QObject):
     if _local_ok < 1:
         print("  [注意] 真仓没有一处走局部变量解析：这条扩展在真仓可能已无事可做"
               "（判据本身由 B10/B11 守）")
+
+
+
+# ---------------- v2.11.0 第 9 轮（代理 C · P1）：解析器**自身健康**的自检 ----------------
+
+_RESOLVER_SELFCHECK = [("resolver_selfcheck.py", '''
+from PySide6.QtCore import Signal, QObject
+
+
+def _module_cb(a, b):
+    pass
+
+
+class W(QObject):
+    pair = Signal(str, str)
+
+    def _two(self, a, b):
+        pass
+
+    def wire(self):
+        self.pair.connect(self._two)                            # 必须解析：self.<方法>
+        self.pair.connect(_module_cb)                           # 必须解析：模块级函数
+        self.pair.connect(lambda a, b: None)                    # 必须解析：内联 lambda
+        self.pair.connect(pet_log.guard_slot("x", self._two))   # 必须解析：guard 包装
+        local = self._two
+        self.pair.connect(local)                                # 必须解析：唯一局部绑定
+        self.pair.connect(self.deleteLater)                     # 必须跳过：Qt 内建
+        self.pair.connect(getattr(self, "_two"))                # 必须跳过：动态取属性
+        self.pair.connect(self._map["k"])                       # 必须跳过：下标取值
+        self.pair.connect(self._build())                        # 必须跳过：调用结果
+''')]
+
+# 键 = ast.unparse(槽表达式)（unparse 对字符串用单引号）
+_MUST_RESOLVE = {"self._two", "_module_cb", "lambda a, b: None",
+                 "pet_log.guard_slot('x', self._two)", "local"}
+_MUST_SKIP = {"self.deleteLater", "getattr(self, '_two')", "self._map['k']",
+              "self._build()"}
+
+
+def test_b7b_解析器自检_该解析的必须解析_判不了的必须跳过():
+    """"比例"口径被换成**名单**之后，解析器自身健康必须另有一条**不依赖真仓风格**的判据。
+
+    为什么需要它：名单只看真仓的盲区集合 —— 万一 iter_slots / _resolve 整体退化，
+    名单会爆条目（也会红），但**没有一条断言直接说"这几种形态本来就该解析"**；反过来，
+    "开始猜不可判定的槽"也必须有一条**贴题**的断言（旧上界想守的就是这件事，只是用比例量错了）。
+
+    这条用合成样本逐条钉：
+      · 5 种**必须解析**的形态（self.<方法> / 模块级函数 / 内联 lambda / guard 包装 / 唯一局部绑定）
+        —— 少解析一个 = "解析器退化了"；
+      · 4 种**必须跳过**的形态（Qt 内建 / getattr / 下标 / 调用结果）
+        —— 多解析一个 = "开始猜了"（猜了必然误报，见 _check_static.py 的口径注释）。
+
+    能真失败：把 _resolve 改成"内建方法也硬解出签名" → 第二条断言红（M-C2110-P1-02 就是这个变异）；
+    把局部变量那条解析路径删掉（B10 的扩展）→ 第一条断言红。
+    """
+    import _check_static as C
+    seen = {}
+    orig = C._slot_arity
+
+    def _spy(slot, fname, funcs, methods, scopes=None, lineno=0):
+        res = orig(slot, fname, funcs, methods, scopes, lineno)
+        seen[ast.unparse(slot)] = res
+        return res
+
+    C._slot_arity = _spy
+    try:
+        problems, notes = C.check_signal_arity(_RESOLVER_SELFCHECK)
+    finally:
+        C._slot_arity = orig
+    assert problems == [] and notes == [], (problems, notes)
+    got_resolved = {k for k, v in seen.items() if v is not None}
+    assert got_resolved == _MUST_RESOLVE, (
+        "解析器自检不符：\n  该解析却没解析：%s\n  不该解析却解析了：%s"
+        % (sorted(_MUST_RESOLVE - got_resolved), sorted(got_resolved - _MUST_RESOLVE)))
+    assert seen["lambda a, b: None"][:2] == (2, 2), seen["lambda a, b: None"]
+    assert seen["self._two"][:2] == (2, 2), seen["self._two"]
+    assert seen["pet_log.guard_slot('x', self._two)"][:2] == (2, 2), \
+        seen["pet_log.guard_slot('x', self._two)"]
 
 
 def test_b9_guard_wrapped_slot_is_parsed():

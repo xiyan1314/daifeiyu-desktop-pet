@@ -14,8 +14,8 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from _mutate_lib import (last_line, repo_fingerprint, run_baseline, run_pytest,  # noqa: E402
-                       shadow, test_error_lines, write_results)
+from _mutate_lib import (last_line, pinned_ast_map, repo_fingerprint,  # noqa: E402
+                       run_baseline, run_pytest, shadow, test_error_lines, write_results)
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SRC = "桌宠.py"            # 影子副本里的相对路径（变异只写影子，真实仓库只读）
@@ -87,7 +87,9 @@ def main():
             write_results(RESULT_JSON, TITLE, results,
                           {"tests": TESTS, "script": "_dev/mutate_startup_defer.py",
                            "note": "变异只在 %TEMP% 影子副本里做，真实仓库只读；基线红 -> 本轮无判定",
-                           "repo_fingerprint": repo_fingerprint(ROOT)})
+                           "repo_fingerprint": repo_fingerprint(ROOT),
+                           # V1：钉的是**整份测试文件**的 AST（这个驱动只跑一个文件）
+                           "pinned_ast": pinned_ast_map(ROOT, [TESTS])})
             return 1
         print("基线：新用例全过（影子副本 %s）%s" % (tree, note))
         for name, rel, old, new in picked:
@@ -124,7 +126,9 @@ def main():
     write_results(RESULT_JSON, TITLE, results,
                   {"tests": TESTS, "script": "_dev/mutate_startup_defer.py",
                    "note": "变异只在 %TEMP% 影子副本里做，真实仓库只读（只写 _dev/.mutation.lock）",
-                   "repo_fingerprint": repo_fingerprint(ROOT)})
+                   "repo_fingerprint": repo_fingerprint(ROOT),
+                   # V1：钉的是**整份测试文件**的 AST（这个驱动只跑一个文件）
+                   "pinned_ast": pinned_ast_map(ROOT, [TESTS])})
     return 1 if escaped else 0
 
 

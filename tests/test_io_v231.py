@@ -1278,13 +1278,28 @@ def test_decode_json_audio_http_branch_checks_magic(monkeypatch):
 # ---- pet_io 细节：分锁 / factory 兜底 / tmp 清扫 ----
 
 def test_path_lock_merges_case_variants(tmp_path):
-    """L1：Windows/macOS 大小写不敏感——x.json 与 X.JSON 必须是同一把锁。"""
+    """L1：Windows/macOS 大小写不敏感——x.json 与 X.JSON 必须是同一把锁。
+
+    R4（v2.10.0 第 8 轮 · 代理 C）加强：原来非 Windows 那一支写的是
+        assert pet_io.path_lock(p) is pet_io.path_lock(p)   # 同路径恒同锁
+    —— 只证明"同一进程内可重复"：把注册表删掉、改成每次 new 一把锁，它也照样绿（而且它
+    在 Windows 上**根本不执行**）。现在平台无关的三条钉在 if 之前，两边都跑（都要能真失败）：
+    """
     p = str(tmp_path / "X.json")
+    lock = pet_io.path_lock(p)
+    assert pet_io.path_lock(os.path.join(str(tmp_path), ".", "X.json")) is lock, \
+        "同一文件的不同写法（带 ./）拿到了两把锁——abspath 归一没生效"
+    assert pet_io.path_lock(str(tmp_path / "other.json")) is not lock, \
+        "不同路径共用了一把锁（互不相干的写者会互相阻塞）"
+    assert lock.acquire(blocking=False), "刚取到的锁竟然不是空闲的"
+    try:
+        assert lock.acquire(blocking=False), "不是可重入锁（同线程再进一次会自死锁）"
+        lock.release()
+    finally:
+        lock.release()
     if os.name == "nt":
         assert pet_io.path_lock(p) is pet_io.path_lock(p.upper())
         assert pet_io.path_lock(p) is pet_io.path_lock(p.lower())
-    else:
-        assert pet_io.path_lock(p) is pet_io.path_lock(p)     # 同路径恒同锁
 
 
 def test_factory_exception_never_escapes(tmp_path):
@@ -1328,11 +1343,17 @@ def test_close_event_accepts_during_real_quit():
     class _Stub:
         closeEvent = main.PetWindow.closeEvent
         _system_is_quitting = main.PetWindow._system_is_quitting
+        # v2.11.0（A 的 B1）：closeEvent 在"收进托盘"分支上多调了一次
+        # _reset_pointer_state()（按压态/拖拽态/光标一起复位）。替身按**真实协议**转发它——
+        # 不这么做，这条用例测的就不是 closeEvent，而是"替身缺一个属性"。
+        _reset_pointer_state = main.PetWindow._reset_pointer_state
 
         def __init__(self):
             self._closing = False
             self.hidden = 0
             self.quit_calls = 0
+            self.squash_calls = []
+            self.cursor_resets = 0
 
         def hide(self):
             self.hidden += 1
@@ -1343,9 +1364,19 @@ def test_close_event_accepts_during_real_quit():
         def _quit(self):
             self.quit_calls += 1
 
+        # _reset_pointer_state 会调它们（记录式替身：本条测的是 closeEvent 的分支，
+        # 不是按压态复位本身——那由 tests/test_motion_v2110.py 用真窗口单独钉）
+        def _press_squash(self, on):
+            self.squash_calls.append(bool(on))
+
+        def unsetCursor(self):
+            self.cursor_resets += 1
+
     s = _Stub()
     ev = _Ev()
     s.closeEvent(ev)                      # 普通关窗 → 收进托盘
+    assert s.squash_calls == [False] and s.cursor_resets == 1, \
+        "关窗时必须把在途按压态与光标收干净（B1）：%r / %r" % (s.squash_calls, s.cursor_resets)
     assert ev.actions == ["ignore"] and s.hidden == 1 and s.quit_calls == 0
 
     s2 = _Stub()

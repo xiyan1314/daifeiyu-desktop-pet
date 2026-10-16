@@ -25,9 +25,12 @@ DEFAULT_BASE_URL = "https://api.deepseek.com"
 DEFAULT_MODEL = "deepseek-chat"
 
 # 错误提示前缀（语音跳过表按前缀匹配，错误提示不朗读；与 explain_api_error 同源维护）
+# v2.11.0（B6）：新增两条兜底话术的前缀（"服务商回复看不懂" / "出了个意外"）——
+# 凡是由本模块 emit 给用户看的错误，**一律**要在这里有前缀，否则语音系统会把它当台词念出来。
 API_ERROR_PREFIXES = ("密钥无效", "额度不足", "地区限制", "权限不足", "接口地址或模型名不存在",
                       "请求参数不被接受", "请求太频繁", "服务商服务器", "服务异常",
-                      "连不上接口地址", "响应超时", "它想太久了", "网络不好")
+                      "连不上接口地址", "响应超时", "它想太久了", "网络不好",
+                      "服务商回复看不懂", "出了个意外")
 
 
 def is_local_base(base_url):
@@ -101,13 +104,18 @@ def explain_api_error(status, body=""):
 
     覆盖目标：密钥无效 / 额度不足 / 地区限制 / 服务不可用 / 模型或地址不存在 /
     限流——全部界面直接提示，绝不静默。响应体做关键词嗅探细化（服务商文案各异）。
+
+    v2.11.0（B6 · 原则 5「错误 = 问题 + 可操作建议」）：每一条都必须回答
+    「发生了什么 + 你现在能做什么」。凡是只报状态码、或者把下一步写成反问句
+    （"模型名与接口不兼容？"）的，都在这里补齐**具体到哪个窗口的**下一步；
+    新增的每句话都要在 API_ERROR_PREFIXES 里有前缀（语音跳过表按前缀匹配）。
     """
     b = (body or "").lower()
     # 先按状态码归类：403 必须早于 body 嗅探（网关 403 页面常含 unauthorized 字样，
     # 不能误报成「密钥无效」）；body 嗅探只作服务商文案各异的细化兜底
     if status == 403:
         if "region" in b or "country" in b or "geographic" in b or "unsupported" in b:
-            return "地区限制：当前网络所在地区不被该服务支持"
+            return "地区限制：当前网络所在地区不被该服务支持（换一家服务商试试，「AI设置…」里有国内可选）"
         if "quota" in b or "billing" in b or "balance" in b:
             return "额度不足或账户欠费，去平台充值或换个 Key"
         return "权限不足（403）：检查 Key 的权限与账户状态"
@@ -118,9 +126,9 @@ def explain_api_error(status, body=""):
             or "余额不足" in b or ("quota" in b and "exceeded" in b):
         return "额度不足或账户欠费，去平台充值或换个 Key"
     if status == 404 or ("model" in b and "not found" in b) or "not_found" in b:
-        return "接口地址或模型名不存在（404），检查 base_url 和模型名"
+        return "接口地址或模型名不存在（404）：去「AI设置…」核对接口地址与模型名（本地服务要先启动）"
     if status in (400, 422):
-        return "请求参数不被接受（400/422）：模型名与接口不兼容？"
+        return "请求参数不被接受（400/422）：多半是模型名或地址跟这家服务对不上——去「AI设置…」点「测试连接」看它怎么说"
     if status == 429 or "rate limit" in b or "too many" in b or "rate_limit" in b:
         return "请求太频繁被限流啦，歇几秒再试"
     if status >= 500:
@@ -158,7 +166,7 @@ def test_api_connection(base_url, model, key, timeout=10):
         return False, "连不上接口地址：检查网络/代理/地址（本地 Ollama 要先启动）"
     except Exception:
         # 有意忽略：未知异常只给通用中文（原始英文对小白不友好，调用方有日志兜底）
-        return False, "连接失败，请检查接口地址与网络设置"
+        return False, "连接失败：检查接口地址与网络设置（拿不准就在「AI设置…」里选一个服务商预设再试）"
 
 
 # ---------------- P1-6：对话记忆持久化（全量落盘，上下文只取最近 N 轮） ----------------
@@ -561,7 +569,11 @@ class ChatService:
         except Exception as e:
             if self._log is not None:
                 self._log("tool run failed: %r" % (e,))
-            return {"ok": False, "error": "工具执行失败"}
+            # v2.11.0（B6）：这句是**给模型看的**工具结果（summarize 只回 summary，不进气泡），
+            # 所以"下一步"要写成模型能照做的动作：说清是哪个工具、别再重试同一个、改用自然语言。
+            return {"ok": False,
+                    "error": "工具执行失败（%s）：这次没做成，别重试同一个，先用自然语言说明"
+                             % (name,)}
 
     def _worker(self, msg, key):
         # P1-10：接口/模型/人设/长度全部配置驱动（OpenAI 兼容，支持本地 Ollama）
@@ -633,11 +645,22 @@ class ChatService:
                         body = ""  # 有意忽略：响应体读取失败不影响状态码归类
                     self.signals.reply.emit(explain_api_error(resp.status_code, body))
                     return
-                data = resp.json()
-                message = data["choices"][0]["message"] or {}
-                # v2.3.0（找茬 M2）：非 list 会被当可迭代对象——"abc" 会迭代出 3 个空名调用、
-                # 追加 3 条 tool_call_id:"" 的非法消息，还把坏结构原样回灌。这里只认 list[dict]。
-                _calls_raw = message.get("tool_calls")
+                # v2.11.0（B6）：**把"服务商回复看不懂"单独归类**。缺 choices / choices 是空表 /
+                # message 不是对象 / 响应体不是 JSON —— 这几种旧版都会落到最外层兜底说成
+                # "网络不好，听不清啦……"，用户跑去折腾自己的网络，而真正的下一步是核对
+                # 接口地址与模型名。归类成一句能照做的事，是原则 5「问题 + 可操作建议」。
+                try:
+                    data = resp.json()
+                    message = data["choices"][0]["message"] or {}
+                    # v2.3.0（找茬 M2）：非 list 会被当可迭代对象——"abc" 会迭代出 3 个空名调用、
+                    # 追加 3 条 tool_call_id:"" 的非法消息，还把坏结构原样回灌。这里只认 list[dict]。
+                    _calls_raw = message.get("tool_calls")
+                except (KeyError, IndexError, TypeError, ValueError, AttributeError) as e:
+                    self._log("ai_worker bad response: %r" % (e,))
+                    self.signals.reply.emit(
+                        "服务商回复看不懂（%s）：这条回复不是标准格式——去「AI设置…」核对接口地址"
+                        "（要 OpenAI 兼容端点）与模型名，或点「测试连接」看看" % (type(e).__name__,))
+                    return
                 calls = [c for c in _calls_raw if isinstance(c, dict)] \
                     if isinstance(_calls_raw, list) else []
                 if not calls:
@@ -725,12 +748,18 @@ class ChatService:
             self.signals.reply.emit(text)
         except requests.exceptions.Timeout:
             self._log("ai_worker timeout")
-            self.signals.reply.emit("它想太久了……服务商可能过载，稍后再试")
+            self.signals.reply.emit("它想太久了……服务商可能过载，稍后再试；连着两次都这样，"
+                                    "就去「AI设置…」换个模型或换一家服务商")
         except requests.exceptions.ConnectionError:
             self._log("ai_worker connection error")
             self.signals.reply.emit("连不上接口地址：检查网络/代理/地址（本地 Ollama 要先启动）")
         except Exception as e:
+            # v2.11.0（B6）：兜底不再说"网络不好"——它把**我们自己的意外**（磁盘写失败、
+            # 注入契约不符等）也说成网络问题，用户查网络永远查不出结果。现在如实点名
+            # 异常类型，并给一条**在这个窗口里就能做**的下一步。
             self._log("ai_worker: %r" % (e,))
-            self.signals.reply.emit("网络不好，听不清啦……")
+            self.signals.reply.emit(
+                "出了个意外（%s）：先再发一次试试；还不行就去「AI设置…」点「测试连接」，"
+                "详情见数据目录的 error.log" % (type(e).__name__,))
         finally:
             self.signals.ai_done.emit()

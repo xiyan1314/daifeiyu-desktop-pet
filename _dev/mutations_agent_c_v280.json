@@ -1202,10 +1202,10 @@
     },
     {
       "id": "M-C-A38",
-      "why": "台词「上移/下移」到顶/到底必须给一句反馈（静默 return 与「点了没反应」长得一样）",
+      "why": "台词「上移/下移」到顶/到底必须给一句反馈（静默 return 与「点了没反应」长得一样） （v2.11.0 第 9 轮 · 代理 C 重锚：V7 把台词库/行为设置的边界回执从**宠物气泡**换成**窗口内状态行**，旧锚点命中 0；语义**不反转**——它守的缺陷还在，只是出口换了。现锚点按 A 的对照表落地，逐条 count=1。）（注：A 的对照表把 new 写成「只给 return 加个注释」—— 那在语义上是**空转**（_note 那行还在跑，用例不会红），所以按它的**意图**落成「删掉 _note、return 加注释」。）",
       "file": "pet_dialogs.py",
-      "old": "            # v2.8.0 第 6 轮：到顶/到底以前是静默 return —— 点了没反应与\"已经到边界\"在\n            # 用户那边长得一模一样，这里按\"轻提示用气泡\"的口径说一句。\n            _toast(self._pet, \"已经是最上面了\" if int(delta) < 0 else \"已经是最下面了\")\n            return\n",
-      "new": "            return  # MUT-A38: 到顶/到底又变成静默 return\n",
+      "old": "            self._note(\"已经是最上面了\" if int(delta) < 0 else \"已经是最下面了\")\n            return\n        ids[row], ids[j] = ids[j], ids[row]\n        ok, err = self._lib.reorder(ids)\n",
+      "new": "            return  # MUT-A38: 到顶/到底又变成静默 return\n        ids[row], ids[j] = ids[j], ids[row]\n        ok, err = self._lib.reorder(ids)\n",
       "tests": [
         "tests/test_dialogs_feedback_v280.py::test_move_line_at_boundary_tells_the_user"
       ],
@@ -1215,10 +1215,10 @@
     },
     {
       "id": "M-C-A39",
-      "why": "P3-6：对白成员排序到边界必须与台词排序用**同一套措辞**（同一个出口）",
+      "why": "P3-6：对白成员排序到边界必须与台词排序用**同一套措辞**（同一个出口） （v2.11.0 第 9 轮 · 代理 C 重锚：V7 把台词库/行为设置的边界回执从**宠物气泡**换成**窗口内状态行**，旧锚点命中 0；语义**不反转**——它守的缺陷还在，只是出口换了。现锚点按 A 的对照表落地，逐条 count=1。）",
       "file": "pet_dialogs.py",
-      "old": "            # 与台词「上移/下移」同一套措辞（P3-6：同一动作同一批对话框同一套话）\n            _toast(self._pet, \"已经是最上面了\" if int(delta) < 0 else \"已经是最下面了\")\n            return\n",
-      "new": "            _warn(self, \"排序\", \"已经是最上面了\")  # MUT-A39: 同一动作换了一套措辞/通道\n",
+      "old": "            self._note(\"已经是最上面了\" if int(delta) < 0 else \"已经是最下面了\")\n            return\n        ids[row], ids[j] = ids[j], ids[row]\n        ok, _err = self._lib.save_dialogue(self._editing_dlg, line_ids=ids)\n",
+      "new": "            _warn(self, \"排序\", \"已经是最上面了\")  # MUT-A39: 同一动作换了一套措辞/通道\n            return\n        ids[row], ids[j] = ids[j], ids[row]\n        ok, _err = self._lib.save_dialogue(self._editing_dlg, line_ids=ids)\n",
       "tests": [
         "tests/test_dialogs_feedback_v280.py::test_lines_move_member_at_boundary_uses_the_same_wording"
       ],
@@ -1242,7 +1242,7 @@
   ],
   "results": {
     "title": "变异验证 spec：mutations_agent_c_v280.json",
-    "checked_at": "2026-10-15 21:25:43",
+    "checked_at": "2026-10-16 08:23:18",
     "total": 97,
     "caught": 97,
     "not_caught": 0,
@@ -1252,511 +1252,623 @@
         "id": "M-C-H01",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.89s",
+        "tail": "1 failed in 0.53s",
         "failed": [
-          "test_明文http一律拒_只收https"
-        ]
+          "tests/test_plugin_market_v252.py::test_明文http一律拒_只收https"
+        ],
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "M-C-H02",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.54s",
+        "tail": "1 failed in 0.53s",
         "failed": [
-          "test_明文http一律拒_只收https"
-        ]
+          "tests/test_plugin_market_v252.py::test_明文http一律拒_只收https"
+        ],
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "M-C-H03",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.84s",
+        "tail": "1 failed in 0.61s",
         "failed": [
-          "test_明文http一律拒_只收https"
-        ]
+          "tests/test_plugin_market_v252.py::test_明文http一律拒_只收https"
+        ],
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "M-C-H04",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.67s",
+        "tail": "1 failed in 0.53s",
         "failed": [
-          "test_明文http一律拒_只收https"
-        ]
+          "tests/test_plugin_market_v252.py::test_明文http一律拒_只收https"
+        ],
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "M-C-H05",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.77s",
+        "tail": "1 failed in 0.54s",
         "failed": [
-          "test_远端索引不许指向本地路径_随包索引不受限"
-        ]
+          "tests/test_plugin_market_v252.py::test_远端索引不许指向本地路径_随包索引不受限"
+        ],
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "M-C-H06",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.64s",
+        "tail": "1 failed in 0.54s",
         "failed": [
-          "test_相对地址拒路径穿越与空段"
-        ]
+          "tests/test_plugin_market_v252.py::test_相对地址拒路径穿越与空段"
+        ],
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "M-C-H07",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.73s",
+        "tail": "1 failed in 0.54s",
         "failed": [
-          "test_file_url折成本机路径"
-        ]
+          "tests/test_plugin_market_v252.py::test_file_url折成本机路径"
+        ],
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "M-C-H08",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.65s",
+        "tail": "1 failed in 0.54s",
         "failed": [
-          "test_远端ContentLength自报超限_一个字节都不读"
-        ]
+          "tests/test_plugin_market_v252.py::test_远端ContentLength自报超限_一个字节都不读"
+        ],
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "M-C-H09",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.72s",
+        "tail": "1 failed in 0.55s",
         "failed": [
-          "test_本地取数边读边判_到上限就停手"
-        ]
+          "tests/test_plugin_market_v252.py::test_本地取数边读边判_到上限就停手"
+        ],
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "M-C-H10",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.71s",
+        "tail": "1 failed in 0.53s",
         "failed": [
-          "test_注入取数也有容量上限_超了不落盘"
-        ]
+          "tests/test_plugin_market_v252.py::test_注入取数也有容量上限_超了不落盘"
+        ],
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "M-C-H11",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.71s",
+        "tail": "1 failed in 0.55s",
         "failed": [
-          "test_下载后走校验器与安装器_真装进宿主库"
-        ]
+          "tests/test_plugin_market_v252.py::test_下载后走校验器与安装器_真装进宿主库"
+        ],
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "M-C-B01",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.69s",
+        "tail": "1 failed in 0.46s",
         "failed": [
-          "test_set_remote_base_成功才提交_写失败内存不变"
-        ]
+          "tests/test_plugin_phase3_v280.py::test_set_remote_base_成功才提交_写失败内存不变"
+        ],
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "M-C-B02",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.59s",
+        "tail": "1 failed in 0.46s",
         "failed": [
-          "test_set_remote_base_空串清除远端并丢掉它的缓存"
-        ]
+          "tests/test_plugin_phase3_v280.py::test_set_remote_base_空串清除远端并丢掉它的缓存"
+        ],
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "M-C-B03",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.61s",
+        "tail": "1 failed in 0.44s",
         "failed": [
-          "test_set_remote_base_非https与本地路径一律拒_且不落盘"
-        ]
+          "tests/test_plugin_phase3_v280.py::test_set_remote_base_非https与本地路径一律拒_且不落盘"
+        ],
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "M-C-B04",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.62s",
+        "tail": "1 failed in 0.45s",
         "failed": [
-          "test_set_remote_base_没接线时如实报错不假装存下"
-        ]
+          "tests/test_plugin_phase3_v280.py::test_set_remote_base_没接线时如实报错不假装存下"
+        ],
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "M-C-B05",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.65s",
+        "tail": "1 failed in 0.46s",
         "failed": [
-          "test_set_remote_base_非https与本地路径一律拒_且不落盘"
-        ]
+          "tests/test_plugin_phase3_v280.py::test_set_remote_base_非https与本地路径一律拒_且不落盘"
+        ],
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "M-C-B06",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.60s",
+        "tail": "1 failed in 0.45s",
         "failed": [
-          "test_set_remote_base_非https与本地路径一律拒_且不落盘"
-        ]
+          "tests/test_plugin_phase3_v280.py::test_set_remote_base_非https与本地路径一律拒_且不落盘"
+        ],
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "M-C-B07",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.67s",
+        "tail": "1 failed in 0.45s",
         "failed": [
-          "test_set_remote_base_非https与本地路径一律拒_且不落盘"
-        ]
+          "tests/test_plugin_phase3_v280.py::test_set_remote_base_非https与本地路径一律拒_且不落盘"
+        ],
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "M-C-B08",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.65s",
+        "tail": "1 failed in 0.47s",
         "failed": [
-          "test_配置键名两处一致_单一来源"
-        ]
+          "tests/test_plugin_phase3_v280.py::test_配置键名两处一致_单一来源"
+        ],
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "M-C-B09",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.59s",
+        "tail": "1 failed in 0.46s",
         "failed": [
-          "test_配置键名两处一致_单一来源"
-        ]
+          "tests/test_plugin_phase3_v280.py::test_配置键名两处一致_单一来源"
+        ],
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "M-C-B10",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.75s",
+        "tail": "1 failed in 0.47s",
         "failed": [
-          "test_refresh_取回校验落地并返回条目数"
-        ]
+          "tests/test_plugin_phase3_v280.py::test_refresh_取回校验落地并返回条目数"
+        ],
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "M-C-B11",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.66s",
+        "tail": "1 failed in 0.51s",
         "failed": [
-          "test_refresh_取回校验落地并返回条目数"
-        ]
+          "tests/test_plugin_phase3_v280.py::test_refresh_取回校验落地并返回条目数"
+        ],
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "M-C-B12",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.64s",
+        "tail": "1 failed in 0.48s",
         "failed": [
-          "test_refresh_force语义_命中缓存不联网_force强制重取"
-        ]
+          "tests/test_plugin_phase3_v280.py::test_refresh_force语义_命中缓存不联网_force强制重取"
+        ],
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "M-C-B13",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.54s",
+        "tail": "1 failed in 0.51s",
         "failed": [
-          "test_refresh_没有远端地址时如实拒绝"
-        ]
+          "tests/test_plugin_phase3_v280.py::test_refresh_没有远端地址时如实拒绝"
+        ],
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "M-C-B14",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.61s",
+        "tail": "1 failed in 0.49s",
         "failed": [
-          "test_refresh_失败不留假象_旧缓存与随包索引都不动"
-        ]
+          "tests/test_plugin_phase3_v280.py::test_refresh_失败不留假象_旧缓存与随包索引都不动"
+        ],
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "M-C-B15",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.64s",
+        "tail": "1 failed in 0.51s",
         "failed": [
-          "test_load_index_生产口径绝不联网_没缓存退回随包索引"
-        ]
+          "tests/test_plugin_phase3_v280.py::test_load_index_生产口径绝不联网_没缓存退回随包索引"
+        ],
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "M-C-B16",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.59s",
+        "tail": "1 failed in 0.48s",
         "failed": [
-          "test_load_index_生产口径缓存命中就能用远端清单"
-        ]
+          "tests/test_plugin_phase3_v280.py::test_load_index_生产口径缓存命中就能用远端清单"
+        ],
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "M-C-B17",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.65s",
+        "tail": "1 failed in 0.48s",
         "failed": [
-          "test_来源信息_随包与远端两种口径"
-        ]
+          "tests/test_plugin_phase3_v280.py::test_来源信息_随包与远端两种口径"
+        ],
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "M-C-B18",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.59s",
+        "tail": "1 failed in 0.50s",
         "failed": [
-          "test_来源信息_随包与远端两种口径"
-        ]
+          "tests/test_plugin_phase3_v280.py::test_来源信息_随包与远端两种口径"
+        ],
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "M-C-B19",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.62s",
+        "tail": "1 failed in 0.49s",
         "failed": [
-          "test_远端索引体积上限_前置传下去且事后仍判"
-        ]
+          "tests/test_plugin_phase3_v280.py::test_远端索引体积上限_前置传下去且事后仍判"
+        ],
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "M-C-B20",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.60s",
+        "tail": "1 failed in 0.51s",
         "failed": [
-          "test_远端索引体积上限_前置传下去且事后仍判"
-        ]
+          "tests/test_plugin_phase3_v280.py::test_远端索引体积上限_前置传下去且事后仍判"
+        ],
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "M-C-B21",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.63s",
+        "tail": "1 failed in 0.49s",
         "failed": [
-          "test_远端包sha256与bytes不符一律拒收且不留残余"
-        ]
+          "tests/test_plugin_phase3_v280.py::test_远端包sha256与bytes不符一律拒收且不留残余"
+        ],
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "M-C-B22",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.61s",
+        "tail": "1 failed in 0.50s",
         "failed": [
-          "test_远端包sha256与bytes不符一律拒收且不留残余"
-        ]
+          "tests/test_plugin_phase3_v280.py::test_远端包sha256与bytes不符一律拒收且不留残余"
+        ],
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "M-C-B23",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.57s",
+        "tail": "1 failed in 0.49s",
         "failed": [
-          "test_非https的远端地址_刷新前就拒且不取数"
-        ]
+          "tests/test_plugin_phase3_v280.py::test_非https的远端地址_刷新前就拒且不取数"
+        ],
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "M-C-B24",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.61s",
+        "tail": "1 failed in 0.48s",
         "failed": [
-          "test_索引格式不认识_整份拒且不落地"
-        ]
+          "tests/test_plugin_phase3_v280.py::test_索引格式不认识_整份拒且不落地"
+        ],
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "M-C-B25",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.55s",
+        "tail": "1 failed in 0.49s",
         "failed": [
-          "test_set_remote_base_成功才提交_写失败内存不变"
-        ]
+          "tests/test_plugin_phase3_v280.py::test_set_remote_base_成功才提交_写失败内存不变"
+        ],
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "M-C-B27",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.65s",
+        "tail": "1 failed in 0.48s",
         "failed": [
-          "test_refresh_取回校验落地并返回条目数"
-        ]
+          "tests/test_plugin_phase3_v280.py::test_refresh_取回校验落地并返回条目数"
+        ],
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "M-C-B29",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.56s",
+        "tail": "1 failed in 0.50s",
         "failed": [
-          "test_配置键名两处一致_单一来源"
-        ]
+          "tests/test_plugin_phase3_v280.py::test_配置键名两处一致_单一来源"
+        ],
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "M-C-B30",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 1.27s",
+        "tail": "1 failed in 0.88s",
         "failed": [
-          "test_set_api_key_写失败_内存不变且不说记住了"
-        ]
+          "tests/test_ai_write_first_v280.py::test_set_api_key_写失败_内存不变且不说记住了"
+        ],
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "M-C-B31",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 1.06s",
+        "tail": "1 failed in 0.84s",
         "failed": [
-          "test_set_api_key_成功路径与改前逐位等价"
-        ]
+          "tests/test_ai_write_first_v280.py::test_set_api_key_成功路径与改前逐位等价"
+        ],
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "M-C-B32",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 1.01s",
+        "tail": "1 failed in 0.83s",
         "failed": [
-          "test_set_ai_enabled_写失败_内存不变且不假装生效"
-        ]
+          "tests/test_ai_write_first_v280.py::test_set_ai_enabled_写失败_内存不变且不假装生效"
+        ],
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "M-C-B33",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.93s",
+        "tail": "1 failed in 0.83s",
         "failed": [
-          "test_set_ai_enabled_无Key回退落盘失败_内存保持已提交值"
-        ]
+          "tests/test_ai_write_first_v280.py::test_set_ai_enabled_无Key回退落盘失败_内存保持已提交值"
+        ],
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "M-C-B34",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.95s",
+        "tail": "1 failed in 0.84s",
         "failed": [
-          "test_set_chat_rounds_写失败_内存不变且不报成功"
-        ]
+          "tests/test_ai_write_first_v280.py::test_set_chat_rounds_写失败_内存不变且不报成功"
+        ],
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "M-C-B35",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 1.03s",
+        "tail": "1 failed in 0.86s",
         "failed": [
-          "test_set_chat_rounds_成功路径落盘且内存同步"
-        ]
+          "tests/test_ai_write_first_v280.py::test_set_chat_rounds_成功路径落盘且内存同步"
+        ],
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "M-C-B36",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.99s",
+        "tail": "1 failed in 0.84s",
         "failed": [
-          "test_set_api_key_写失败_内存不变且不说记住了"
-        ]
+          "tests/test_ai_write_first_v280.py::test_set_api_key_写失败_内存不变且不说记住了"
+        ],
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "M-C-B37",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 1.12s",
+        "tail": "1 failed in 0.85s",
         "failed": [
-          "test_set_ai_enabled_写失败_内存不变且不假装生效"
-        ]
+          "tests/test_ai_write_first_v280.py::test_set_ai_enabled_写失败_内存不变且不假装生效"
+        ],
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "M-C-B38",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.96s",
+        "tail": "1 failed in 0.89s",
         "failed": [
-          "test_set_chat_rounds_写失败_内存不变且不报成功"
-        ]
+          "tests/test_ai_write_first_v280.py::test_set_chat_rounds_写失败_内存不变且不报成功"
+        ],
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "M-C-B39",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.92s",
+        "tail": "1 failed in 0.86s",
         "failed": [
-          "test_set_ai_enabled_无Key回退落盘失败_内存保持已提交值"
-        ]
+          "tests/test_ai_write_first_v280.py::test_set_ai_enabled_无Key回退落盘失败_内存保持已提交值"
+        ],
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "M-C-B40",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.68s",
+        "tail": "1 failed in 0.48s",
         "failed": [
-          "test_配置键默认值不进diff落盘_逐字节回归"
-        ]
+          "tests/test_plugin_phase3_v280.py::test_配置键默认值不进diff落盘_逐字节回归"
+        ],
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "M-C-B41",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.66s",
+        "tail": "1 failed in 0.48s",
         "failed": [
-          "test_配置键真的存得住_读得回来"
-        ]
+          "tests/test_plugin_phase3_v280.py::test_配置键真的存得住_读得回来"
+        ],
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "M-C-B42",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.68s",
+        "tail": "1 failed in 0.48s",
         "failed": [
-          "test_配置键真的存得住_读得回来"
-        ]
+          "tests/test_plugin_phase3_v280.py::test_配置键真的存得住_读得回来"
+        ],
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "M-C-B43",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.75s",
+        "tail": "1 failed in 0.67s",
         "failed": [
-          "test_真加载器_老config读入写出不冒出这个键"
-        ]
+          "tests/test_plugin_phase3_v280.py::test_真加载器_老config读入写出不冒出这个键"
+        ],
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "M-C-A01",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.73s",
+        "tail": "1 failed in 0.66s",
         "failed": [
-          "test_source_shows_remote_from_config_without_network"
-        ]
+          "tests/test_dialogs_feedback_v280.py::test_source_shows_remote_from_config_without_network"
+        ],
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "M-C-A02",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.72s",
+        "tail": "1 failed in 0.65s",
         "failed": [
-          "test_source_shows_remote_from_config_without_network"
-        ]
+          "tests/test_dialogs_feedback_v280.py::test_source_shows_remote_from_config_without_network"
+        ],
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "M-C-A03",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.79s",
+        "tail": "1 failed in 0.67s",
         "failed": [
-          "test_empty_save_is_rejected_and_points_at_reset"
-        ]
+          "tests/test_dialogs_feedback_v280.py::test_empty_save_is_rejected_and_points_at_reset"
+        ],
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "M-C-A04",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "7 failed in 0.94s",
+        "tail": "7 failed in 0.85s",
         "failed": [
-          "test_bad_source_url_is_rejected_on_the_spot_with_a_reason[http://h.invalid/packs/index.json-https]",
-          "test_bad_source_url_is_rejected_on_the_spot_with_a_reason[file:///C:/packs/index.json-\\u672c\\u5730\\u8def\\u5f84]",
-          "test_bad_source_url_is_rejected_on_the_spot_with_a_reason[C:\\\\packs\\\\index.json-\\u672c\\u5730\\u8def\\u5f84]",
-          "test_bad_source_url_is_rejected_on_the_spot_with_a_reason[/home/me/packs/index.json-\\u672c\\u5730\\u8def\\u5f84]",
-          "test_bad_source_url_is_rejected_on_the_spot_with_a_reason[ftp://h.invalid/index.json-https]",
-          "test_bad_source_url_is_rejected_on_the_spot_with_a_reason[https://-\\u4e3b\\u673a\\u540d]",
-          "test_bad_source_url_is_rejected_on_the_spot_with_a_reason[https://h.invalid/xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx-\\u592a\\u957f]"
-        ]
+          "tests/test_dialogs_feedback_v280.py::test_bad_source_url_is_rejected_on_the_spot_with_a_reason[http://h.invalid/packs/index.json-https]",
+          "tests/test_dialogs_feedback_v280.py::test_bad_source_url_is_rejected_on_the_spot_with_a_reason[file:///C:/packs/index.json-\\u672c\\u5730\\u8def\\u5f84]",
+          "tests/test_dialogs_feedback_v280.py::test_bad_source_url_is_rejected_on_the_spot_with_a_reason[C:\\\\packs\\\\index.json-\\u672c\\u5730\\u8def\\u5f84]",
+          "tests/test_dialogs_feedback_v280.py::test_bad_source_url_is_rejected_on_the_spot_with_a_reason[/home/me/packs/index.json-\\u672c\\u5730\\u8def\\u5f84]",
+          "tests/test_dialogs_feedback_v280.py::test_bad_source_url_is_rejected_on_the_spot_with_a_reason[ftp://h.invalid/index.json-https]",
+          "tests/test_dialogs_feedback_v280.py::test_bad_source_url_is_rejected_on_the_spot_with_a_reason[https://-\\u4e3b\\u673a\\u540d]",
+          "tests/test_dialogs_feedback_v280.py::test_bad_source_url_is_rejected_on_the_spot_with_a_reason[https://h.invalid/xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx-\\u592a\\u957f]"
+        ],
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "M-C-A05",
@@ -1764,17 +1876,21 @@
         "rc": 1,
         "tail": "1 failed in 0.68s",
         "failed": [
-          "test_backend_write_failure_keeps_window_and_reports_the_reason"
-        ]
+          "tests/test_dialogs_feedback_v280.py::test_backend_write_failure_keeps_window_and_reports_the_reason"
+        ],
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "M-C-A06",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.73s",
+        "tail": "1 failed in 0.64s",
         "failed": [
-          "test_backend_without_set_remote_base_degrades_with_a_human_message"
-        ]
+          "tests/test_dialogs_feedback_v280.py::test_backend_without_set_remote_base_degrades_with_a_human_message"
+        ],
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "M-C-A07",
@@ -1782,358 +1898,439 @@
         "rc": 1,
         "tail": "1 failed in 0.67s",
         "failed": [
-          "test_saving_a_good_url_uses_the_backend_and_tells_the_next_step"
-        ]
+          "tests/test_dialogs_feedback_v280.py::test_saving_a_good_url_uses_the_backend_and_tells_the_next_step"
+        ],
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "M-C-A08",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.72s",
+        "tail": "1 failed in 0.63s",
         "failed": [
-          "test_dialog_wires_cfg_read_and_write_into_the_backend"
-        ]
+          "tests/test_dialogs_feedback_v280.py::test_dialog_wires_cfg_read_and_write_into_the_backend"
+        ],
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "M-C-A09",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.73s",
+        "tail": "1 failed in 0.63s",
         "failed": [
-          "test_refresh_missing_result_is_treated_as_failure"
-        ]
+          "tests/test_dialogs_feedback_v280.py::test_refresh_missing_result_is_treated_as_failure"
+        ],
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "M-C-A10",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "4 failed in 0.85s",
+        "tail": "4 failed in 0.78s",
         "failed": [
-          "test_refresh_failure_shows_the_reason_and_keeps_a_way_back[\\u7f51\\u7edc\\u8bf7\\u6c42\\u5931\\u8d25\\uff1a\\u540d\\u79f0\\u89e3\\u6790\\u4e0d\\u4e86\\uff08\\u8fde\\u4e0d\\u4e0a\\u8fdc\\u7aef\\u7d22\\u5f15\\uff09]",
-          "test_refresh_failure_shows_the_reason_and_keeps_a_way_back[HTTP",
-          "test_refresh_failure_shows_the_reason_and_keeps_a_way_back[\\u4e0b\\u8f7d\\u540e\\u6838\\u5bf9",
-          "test_refresh_failure_shows_the_reason_and_keeps_a_way_back[\\u8fdc\\u7aef\\u7d22\\u5f15\\u8fc7\\u5927\\uff088388608"
-        ]
+          "tests/test_dialogs_feedback_v280.py::test_refresh_failure_shows_the_reason_and_keeps_a_way_back[\\u7f51\\u7edc\\u8bf7\\u6c42\\u5931\\u8d25\\uff1a\\u540d\\u79f0\\u89e3\\u6790\\u4e0d\\u4e86\\uff08\\u8fde\\u4e0d\\u4e0a\\u8fdc\\u7aef\\u7d22\\u5f15\\uff09]",
+          "tests/test_dialogs_feedback_v280.py::test_refresh_failure_shows_the_reason_and_keeps_a_way_back[HTTP 404\\uff1a\\u627e\\u4e0d\\u5230\\u8fd9\\u4e2a\\u5730\\u5740]",
+          "tests/test_dialogs_feedback_v280.py::test_refresh_failure_shows_the_reason_and_keeps_a_way_back[\\u4e0b\\u8f7d\\u540e\\u6838\\u5bf9 sha256 \\u4e0d\\u7b26\\uff08\\u7d22\\u5f15\\u91cc\\u5199\\u7684\\u662f xxx\\uff0c\\u5b9e\\u9645\\u62ff\\u5230 yyy\\uff09\\uff0c\\u5df2\\u62d2\\u7edd]",
+          "tests/test_dialogs_feedback_v280.py::test_refresh_failure_shows_the_reason_and_keeps_a_way_back[\\u8fdc\\u7aef\\u7d22\\u5f15\\u8fc7\\u5927\\uff088388608 \\u5b57\\u8282\\uff0c\\u4e0a\\u9650 4194304\\uff09]"
+        ],
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "M-C-A11",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "4 failed in 0.82s",
+        "tail": "4 failed in 0.73s",
         "failed": [
-          "test_refresh_failure_shows_the_reason_and_keeps_a_way_back[\\u7f51\\u7edc\\u8bf7\\u6c42\\u5931\\u8d25\\uff1a\\u540d\\u79f0\\u89e3\\u6790\\u4e0d\\u4e86\\uff08\\u8fde\\u4e0d\\u4e0a\\u8fdc\\u7aef\\u7d22\\u5f15\\uff09]",
-          "test_refresh_failure_shows_the_reason_and_keeps_a_way_back[HTTP",
-          "test_refresh_failure_shows_the_reason_and_keeps_a_way_back[\\u4e0b\\u8f7d\\u540e\\u6838\\u5bf9",
-          "test_refresh_failure_shows_the_reason_and_keeps_a_way_back[\\u8fdc\\u7aef\\u7d22\\u5f15\\u8fc7\\u5927\\uff088388608"
-        ]
+          "tests/test_dialogs_feedback_v280.py::test_refresh_failure_shows_the_reason_and_keeps_a_way_back[\\u7f51\\u7edc\\u8bf7\\u6c42\\u5931\\u8d25\\uff1a\\u540d\\u79f0\\u89e3\\u6790\\u4e0d\\u4e86\\uff08\\u8fde\\u4e0d\\u4e0a\\u8fdc\\u7aef\\u7d22\\u5f15\\uff09]",
+          "tests/test_dialogs_feedback_v280.py::test_refresh_failure_shows_the_reason_and_keeps_a_way_back[HTTP 404\\uff1a\\u627e\\u4e0d\\u5230\\u8fd9\\u4e2a\\u5730\\u5740]",
+          "tests/test_dialogs_feedback_v280.py::test_refresh_failure_shows_the_reason_and_keeps_a_way_back[\\u4e0b\\u8f7d\\u540e\\u6838\\u5bf9 sha256 \\u4e0d\\u7b26\\uff08\\u7d22\\u5f15\\u91cc\\u5199\\u7684\\u662f xxx\\uff0c\\u5b9e\\u9645\\u62ff\\u5230 yyy\\uff09\\uff0c\\u5df2\\u62d2\\u7edd]",
+          "tests/test_dialogs_feedback_v280.py::test_refresh_failure_shows_the_reason_and_keeps_a_way_back[\\u8fdc\\u7aef\\u7d22\\u5f15\\u8fc7\\u5927\\uff088388608 \\u5b57\\u8282\\uff0c\\u4e0a\\u9650 4194304\\uff09]"
+        ],
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "M-C-A12",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.72s",
+        "tail": "1 failed in 0.63s",
         "failed": [
-          "test_refresh_success_reports_count_and_repaints_the_list"
-        ]
+          "tests/test_dialogs_feedback_v280.py::test_refresh_success_reports_count_and_repaints_the_list"
+        ],
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "M-C-A13",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.82s",
+        "tail": "1 failed in 0.68s",
         "failed": [
-          "test_refresh_runs_off_the_main_thread_and_lands_on_it"
-        ]
+          "tests/test_dialogs_feedback_v280.py::test_refresh_runs_off_the_main_thread_and_lands_on_it"
+        ],
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "M-C-A14",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 10.96s",
+        "tail": "1 failed in 20.62s",
         "failed": [
-          "test_manual_refresh_forces_and_auto_refresh_prefers_cache"
-        ]
+          "tests/test_dialogs_feedback_v280.py::test_manual_refresh_forces_and_auto_refresh_prefers_cache"
+        ],
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "M-C-A15",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "2 failed in 0.97s",
+        "tail": "2 failed in 0.95s",
         "failed": [
-          "test_toast_returns_false_and_logs_when_bubble_is_refused",
-          "test_toast_falls_back_to_the_dialog_status_line"
-        ]
+          "tests/test_dialogs_feedback_v280.py::test_toast_returns_false_and_logs_when_bubble_is_refused",
+          "tests/test_dialogs_feedback_v280.py::test_toast_falls_back_to_the_dialog_status_line"
+        ],
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "M-C-A16",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 1.04s",
+        "tail": "1 failed in 0.89s",
         "failed": [
-          "test_toast_falls_back_to_the_dialog_status_line"
-        ]
+          "tests/test_dialogs_feedback_v280.py::test_toast_falls_back_to_the_dialog_status_line"
+        ],
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "M-C-A17",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 1.38s",
+        "tail": "1 failed in 0.88s",
         "failed": [
-          "test_toast_returns_false_and_logs_when_bubble_is_refused"
-        ]
+          "tests/test_dialogs_feedback_v280.py::test_toast_returns_false_and_logs_when_bubble_is_refused"
+        ],
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "M-C-A18",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "2 failed in 1.08s",
+        "tail": "2 failed in 0.93s",
         "failed": [
-          "test_show_bubble_reports_false_while_closing",
-          "test_toast_returns_false_and_logs_when_bubble_is_refused"
-        ]
+          "tests/test_dialogs_feedback_v280.py::test_show_bubble_reports_false_while_closing",
+          "tests/test_dialogs_feedback_v280.py::test_toast_returns_false_and_logs_when_bubble_is_refused"
+        ],
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "M-C-A19",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 1.26s",
+        "tail": "1 failed in 1.09s",
         "failed": [
-          "test_compose_dialog_has_cancel_and_reject_adds_nothing"
-        ]
+          "tests/test_dialogs_feedback_v280.py::test_compose_dialog_has_cancel_and_reject_adds_nothing"
+        ],
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "M-C-A20",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 1.05s",
+        "tail": "1 failed in 0.90s",
         "failed": [
-          "test_ask_helpers_go_through_modal"
-        ]
+          "tests/test_dialogs_feedback_v280.py::test_ask_helpers_go_through_modal"
+        ],
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "M-C-A21",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.99s",
+        "tail": "1 failed in 0.87s",
         "failed": [
-          "test_ask_helpers_go_through_modal"
-        ]
+          "tests/test_dialogs_feedback_v280.py::test_ask_helpers_go_through_modal"
+        ],
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "M-C-A22",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.82s",
+        "tail": "1 failed in 0.62s",
         "failed": [
-          "test_static_input_dialogs_are_gone_except_the_frame_action_one"
-        ]
+          "tests/test_dialogs_feedback_v280.py::test_static_input_dialogs_are_gone"
+        ],
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "M-C-A23",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.99s",
+        "tail": "1 failed in 0.90s",
         "failed": [
-          "test_wording_table_is_applied_to_new_and_add_buttons"
-        ]
+          "tests/test_dialogs_feedback_v280.py::test_wording_table_is_applied_to_new_and_add_buttons"
+        ],
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "M-C-A24",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 1.14s",
+        "tail": "1 failed in 0.87s",
         "failed": [
-          "test_import_wizard_add_form_gives_a_receipt_and_construction_stays_quiet"
-        ]
+          "tests/test_dialogs_feedback_v280.py::test_import_wizard_add_form_gives_a_receipt_and_construction_stays_quiet"
+        ],
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "M-C-A25",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.95s",
+        "tail": "1 failed in 0.83s",
         "failed": [
-          "test_import_wizard_add_form_gives_a_receipt_and_construction_stays_quiet"
-        ]
+          "tests/test_dialogs_feedback_v280.py::test_import_wizard_add_form_gives_a_receipt_and_construction_stays_quiet"
+        ],
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "M-C-A26",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 1.06s",
+        "tail": "1 failed in 0.87s",
         "failed": [
-          "test_voice_event_import_receipt_and_clear_confirm"
-        ]
+          "tests/test_dialogs_feedback_v280.py::test_voice_event_import_receipt_and_clear_confirm"
+        ],
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "M-C-A27",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 1.01s",
+        "tail": "1 failed in 0.95s",
         "failed": [
-          "test_voice_event_import_receipt_and_clear_confirm"
-        ]
+          "tests/test_dialogs_feedback_v280.py::test_voice_event_import_receipt_and_clear_confirm"
+        ],
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "M-C-A28",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 1.07s",
+        "tail": "1 failed in 0.92s",
         "failed": [
-          "test_voice_event_import_receipt_and_clear_confirm"
-        ]
+          "tests/test_dialogs_feedback_v280.py::test_voice_event_import_receipt_and_clear_confirm"
+        ],
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "M-C-A29",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 1.14s",
+        "tail": "1 failed in 0.92s",
         "failed": [
-          "test_dialogue_remove_member_reports_what_was_removed"
-        ]
+          "tests/test_dialogs_feedback_v280.py::test_dialogue_remove_member_reports_what_was_removed"
+        ],
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "M-C-A30",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.68s",
+        "tail": "2 failed in 0.69s",
         "failed": [
-          "test_role_edit_delete_action_needs_confirm_and_reports"
-        ]
+          "tests/test_dialogs_feedback_v280.py::test_role_edit_delete_action_needs_no_confirm_and_is_undoable",
+          "tests/test_dialogs_behavior_v290.py::test_delete_custom_action_can_be_undone_by_cancelling"
+        ],
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "M-C-A31",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 1.03s",
+        "tail": "1 failed in 0.94s",
         "failed": [
-          "test_role_edit_delete_action_toasts_with_a_pet"
-        ]
+          "tests/test_dialogs_feedback_v280.py::test_role_edit_delete_action_toasts_with_a_pet"
+        ],
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "M-C-A32",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.70s",
+        "tail": "1 failed in 0.64s",
         "failed": [
-          "test_reset_to_bundled_takes_effect_and_reports"
-        ]
+          "tests/test_dialogs_feedback_v280.py::test_reset_to_bundled_takes_effect_and_reports"
+        ],
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "M-C-B44",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.68s",
+        "tail": "1 failed in 0.60s",
         "failed": [
-          "test_对话框构建失败_有可见提示与日志"
-        ]
+          "tests/test_balance_feedback_v280.py::test_对话框构建失败_有可见提示与日志"
+        ],
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "M-C-B45",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.79s",
+        "tail": "1 failed in 0.54s",
         "failed": [
-          "test_金额不大于零_给提示且绝不记账"
-        ]
+          "tests/test_balance_feedback_v280.py::test_金额不大于零_给提示且绝不记账"
+        ],
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "M-C-B46",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.64s",
+        "tail": "1 failed in 0.49s",
         "failed": [
-          "test_换站点后旧站点的缓存不许冒充新站点"
-        ]
+          "tests/test_plugin_phase3_v280.py::test_换站点后旧站点的缓存不许冒充新站点"
+        ],
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "M-C-B47",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.58s",
+        "tail": "1 failed in 0.48s",
         "failed": [
-          "test_直接填index_json地址也收_不重复拼路径"
-        ]
+          "tests/test_plugin_phase3_v280.py::test_直接填index_json地址也收_不重复拼路径"
+        ],
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "M-C-B48",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.55s",
+        "tail": "1 failed in 0.47s",
         "failed": [
-          "test_load_index_随包也读不出来时把两条原因都说清"
-        ]
+          "tests/test_plugin_phase3_v280.py::test_load_index_随包也读不出来时把两条原因都说清"
+        ],
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "M-C-A33",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 1.15s",
+        "tail": "1 failed in 1.04s",
         "failed": [
-          "test_new_proc_action_is_selected_and_scrolled_into_view"
-        ]
+          "tests/test_dialogs_feedback_v280.py::test_new_proc_action_is_selected_and_scrolled_into_view"
+        ],
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "M-C-A34",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 1.07s",
+        "tail": "1 failed in 0.92s",
         "failed": [
-          "test_alarm_new_gives_a_receipt"
-        ]
+          "tests/test_dialogs_feedback_v280.py::test_alarm_new_gives_a_receipt"
+        ],
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "M-C-A35",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 1.00s",
+        "tail": "1 failed in 0.90s",
         "failed": [
-          "test_alarm_delete_reports_exactly_once"
-        ]
+          "tests/test_dialogs_feedback_v280.py::test_alarm_delete_reports_exactly_once"
+        ],
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "M-C-A36",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 1.00s",
+        "tail": "2 failed in 1.19s",
         "failed": [
-          "test_behavior_step_receipts"
-        ]
+          "tests/test_dialogs_feedback_v280.py::test_behavior_step_receipts",
+          "tests/test_dialogs_behavior_v290.py::test_step_receipts_use_the_inline_status_line_not_the_bubble"
+        ],
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "M-C-A37",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 1.02s",
+        "tail": "2 failed in 1.15s",
         "failed": [
-          "test_behavior_step_receipts"
-        ]
+          "tests/test_dialogs_feedback_v280.py::test_behavior_step_receipts",
+          "tests/test_dialogs_behavior_v290.py::test_step_receipts_use_the_inline_status_line_not_the_bubble"
+        ],
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "M-C-A38",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 1.20s",
+        "tail": "1 failed in 0.97s",
         "failed": [
-          "test_move_line_at_boundary_tells_the_user"
-        ]
+          "tests/test_dialogs_feedback_v280.py::test_move_line_at_boundary_tells_the_user"
+        ],
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "M-C-A39",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 1.01s",
+        "tail": "1 failed in 0.94s",
         "failed": [
-          "test_lines_move_member_at_boundary_uses_the_same_wording"
-        ]
+          "tests/test_dialogs_feedback_v280.py::test_lines_move_member_at_boundary_uses_the_same_wording"
+        ],
+        "errors": [],
+        "errors_teardown": []
       },
       {
         "id": "M-C-A40",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 1.28s",
+        "tail": "1 failed in 1.13s",
         "failed": [
-          "test_new_line_scrolls_into_view"
-        ]
+          "tests/test_dialogs_feedback_v280.py::test_new_line_scrolls_into_view"
+        ],
+        "errors": [],
+        "errors_teardown": []
       }
     ],
     "spec": "mutations_agent_c_v280.json",
@@ -2146,6 +2343,8 @@
       "tests/test_ai_write_first_v280.py::test_set_chat_rounds_成功路径落盘且内存同步",
       "tests/test_balance_feedback_v280.py::test_对话框构建失败_有可见提示与日志",
       "tests/test_balance_feedback_v280.py::test_金额不大于零_给提示且绝不记账",
+      "tests/test_dialogs_behavior_v290.py::test_delete_custom_action_can_be_undone_by_cancelling",
+      "tests/test_dialogs_behavior_v290.py::test_step_receipts_use_the_inline_status_line_not_the_bubble",
       "tests/test_dialogs_feedback_v280.py::test_alarm_delete_reports_exactly_once",
       "tests/test_dialogs_feedback_v280.py::test_alarm_new_gives_a_receipt",
       "tests/test_dialogs_feedback_v280.py::test_ask_helpers_go_through_modal",
@@ -2168,12 +2367,12 @@
       "tests/test_dialogs_feedback_v280.py::test_refresh_runs_off_the_main_thread_and_lands_on_it",
       "tests/test_dialogs_feedback_v280.py::test_refresh_success_reports_count_and_repaints_the_list",
       "tests/test_dialogs_feedback_v280.py::test_reset_to_bundled_takes_effect_and_reports",
-      "tests/test_dialogs_feedback_v280.py::test_role_edit_delete_action_needs_confirm_and_reports",
+      "tests/test_dialogs_feedback_v280.py::test_role_edit_delete_action_needs_no_confirm_and_is_undoable",
       "tests/test_dialogs_feedback_v280.py::test_role_edit_delete_action_toasts_with_a_pet",
       "tests/test_dialogs_feedback_v280.py::test_saving_a_good_url_uses_the_backend_and_tells_the_next_step",
       "tests/test_dialogs_feedback_v280.py::test_show_bubble_reports_false_while_closing",
       "tests/test_dialogs_feedback_v280.py::test_source_shows_remote_from_config_without_network",
-      "tests/test_dialogs_feedback_v280.py::test_static_input_dialogs_are_gone_except_the_frame_action_one",
+      "tests/test_dialogs_feedback_v280.py::test_static_input_dialogs_are_gone",
       "tests/test_dialogs_feedback_v280.py::test_toast_falls_back_to_the_dialog_status_line",
       "tests/test_dialogs_feedback_v280.py::test_toast_returns_false_and_logs_when_bubble_is_refused",
       "tests/test_dialogs_feedback_v280.py::test_voice_event_import_receipt_and_clear_confirm",
@@ -2211,18 +2410,109 @@
     ],
     "note": "变异只在 %TEMP% 影子副本里做，真实仓库只读（只写 _dev/.mutation.lock）",
     "repo_fingerprint": {
-      "桌宠.py": "17b471aa09e6",
+      "桌宠.py": "2351a1ad9737",
       "pet_export.py": "c01e1593efd2",
       "pet_lines.py": "5332f60b5f26",
       "pet_alarm.py": "1149e94deee3",
-      "pet_behaviors.py": "8f57255144f6",
-      "_check_release.py": "e0abfe805849",
+      "pet_behaviors.py": "732273f95fb4",
+      "_check_release.py": "7377b3fad58e",
       "pet_balance.py": "66948e5514a4",
       "pet_plugin.py": "2f7853298fc3",
       "pet_plugin_host.py": "82fb7b1384c8",
-      "pet_dialogs.py": "2fb2f37a8853",
-      "pet_menu.py": "920daac1b835",
-      "pet_plugin_index.py": "e5e9845785e8"
+      "pet_dialogs.py": "d80d04497146",
+      "pet_menu.py": "d2f565537b3f",
+      "pet_plugin_index.py": "e5e9845785e8",
+      "pet_ai.py": "a5989e7fe646",
+      "pet_config.py": "7a4ad883d4e8",
+      "pet_io.py": "6b1e0413fb7f",
+      "pet_services.py": "ecebb6ab5891",
+      "pet_widgets.py": "dc7f5dc4a7f2",
+      "pet_resources.py": "e28f38917052",
+      "pet_tools.py": "46e9030d073f",
+      "pet_voice.py": "9fe0a570ca81",
+      "pet_audio.py": "a6feadf4d653",
+      "pet_chat.py": "de979c429c2c",
+      "pet_log.py": "de14ecf338ab",
+      "pet_actions.py": "83eb11403fec",
+      "pet_book.py": "098676ac52d4",
+      "_check_static.py": "6286f9f493bd",
+      "pet_motion.py": "28d79c516f46",
+      "tests/test_dialog_buttons_v270.py": "4f95acca7fc6",
+      "tests/test_import_thread.py": "1c6fc2ec5d05"
+    },
+    "pinned_ast": {
+      "tests/test_plugin_market_v252.py::test_明文http一律拒_只收https": "9c6a27f63f2a",
+      "tests/test_plugin_market_v252.py::test_远端索引不许指向本地路径_随包索引不受限": "9f9b7700654b",
+      "tests/test_plugin_market_v252.py::test_相对地址拒路径穿越与空段": "acb7724d0d19",
+      "tests/test_plugin_market_v252.py::test_file_url折成本机路径": "fb1f6edd4146",
+      "tests/test_plugin_market_v252.py::test_远端ContentLength自报超限_一个字节都不读": "70bd3466d076",
+      "tests/test_plugin_market_v252.py::test_本地取数边读边判_到上限就停手": "80c2fc9ac773",
+      "tests/test_plugin_market_v252.py::test_注入取数也有容量上限_超了不落盘": "7c3897a48c7b",
+      "tests/test_plugin_market_v252.py::test_下载后走校验器与安装器_真装进宿主库": "dabe6f91d123",
+      "tests/test_plugin_phase3_v280.py::test_set_remote_base_成功才提交_写失败内存不变": "845a921a7621",
+      "tests/test_plugin_phase3_v280.py::test_set_remote_base_空串清除远端并丢掉它的缓存": "04c5072ffb26",
+      "tests/test_plugin_phase3_v280.py::test_set_remote_base_非https与本地路径一律拒_且不落盘": "0b73204dd478",
+      "tests/test_plugin_phase3_v280.py::test_set_remote_base_没接线时如实报错不假装存下": "04108b60057f",
+      "tests/test_plugin_phase3_v280.py::test_配置键名两处一致_单一来源": "a04ab1648298",
+      "tests/test_plugin_phase3_v280.py::test_refresh_取回校验落地并返回条目数": "e70f5881790c",
+      "tests/test_plugin_phase3_v280.py::test_refresh_force语义_命中缓存不联网_force强制重取": "6baef55774fd",
+      "tests/test_plugin_phase3_v280.py::test_refresh_没有远端地址时如实拒绝": "1276dd02c35f",
+      "tests/test_plugin_phase3_v280.py::test_refresh_失败不留假象_旧缓存与随包索引都不动": "9567b9b3d428",
+      "tests/test_plugin_phase3_v280.py::test_load_index_生产口径绝不联网_没缓存退回随包索引": "23a43d0b529a",
+      "tests/test_plugin_phase3_v280.py::test_load_index_生产口径缓存命中就能用远端清单": "0c05197d2ed6",
+      "tests/test_plugin_phase3_v280.py::test_来源信息_随包与远端两种口径": "68089d6a55f0",
+      "tests/test_plugin_phase3_v280.py::test_远端索引体积上限_前置传下去且事后仍判": "04a957c9cc2e",
+      "tests/test_plugin_phase3_v280.py::test_远端包sha256与bytes不符一律拒收且不留残余": "1e9a976192b5",
+      "tests/test_plugin_phase3_v280.py::test_非https的远端地址_刷新前就拒且不取数": "6bd09316814a",
+      "tests/test_plugin_phase3_v280.py::test_索引格式不认识_整份拒且不落地": "4011093cdb4b",
+      "tests/test_ai_write_first_v280.py::test_set_api_key_写失败_内存不变且不说记住了": "bc5a05e8df82",
+      "tests/test_ai_write_first_v280.py::test_set_api_key_成功路径与改前逐位等价": "540d0b9ab762",
+      "tests/test_ai_write_first_v280.py::test_set_ai_enabled_写失败_内存不变且不假装生效": "ddf6d379a4ba",
+      "tests/test_ai_write_first_v280.py::test_set_ai_enabled_无Key回退落盘失败_内存保持已提交值": "004fd968ac86",
+      "tests/test_ai_write_first_v280.py::test_set_chat_rounds_写失败_内存不变且不报成功": "b87467c8ac9c",
+      "tests/test_ai_write_first_v280.py::test_set_chat_rounds_成功路径落盘且内存同步": "7557604b92d8",
+      "tests/test_plugin_phase3_v280.py::test_配置键默认值不进diff落盘_逐字节回归": "4145358745c8",
+      "tests/test_plugin_phase3_v280.py::test_配置键真的存得住_读得回来": "23efd3747b32",
+      "tests/test_plugin_phase3_v280.py::test_真加载器_老config读入写出不冒出这个键": "207566a0fa2f",
+      "tests/test_dialogs_feedback_v280.py::test_source_shows_remote_from_config_without_network": "8548182c7bac",
+      "tests/test_dialogs_feedback_v280.py::test_empty_save_is_rejected_and_points_at_reset": "bf64255c4a6b",
+      "tests/test_dialogs_feedback_v280.py::test_bad_source_url_is_rejected_on_the_spot_with_a_reason": "aa74d9b7bc65",
+      "tests/test_dialogs_feedback_v280.py::test_backend_write_failure_keeps_window_and_reports_the_reason": "761ae0c91223",
+      "tests/test_dialogs_feedback_v280.py::test_backend_without_set_remote_base_degrades_with_a_human_message": "2db792c1c466",
+      "tests/test_dialogs_feedback_v280.py::test_saving_a_good_url_uses_the_backend_and_tells_the_next_step": "33937a8197d0",
+      "tests/test_dialogs_feedback_v280.py::test_dialog_wires_cfg_read_and_write_into_the_backend": "0ad72a81def8",
+      "tests/test_dialogs_feedback_v280.py::test_refresh_missing_result_is_treated_as_failure": "54afa0eef1db",
+      "tests/test_dialogs_feedback_v280.py::test_refresh_failure_shows_the_reason_and_keeps_a_way_back": "672453ab0ad3",
+      "tests/test_dialogs_feedback_v280.py::test_refresh_success_reports_count_and_repaints_the_list": "7c34e7b0ca75",
+      "tests/test_dialogs_feedback_v280.py::test_refresh_runs_off_the_main_thread_and_lands_on_it": "4d402dcfc540",
+      "tests/test_dialogs_feedback_v280.py::test_manual_refresh_forces_and_auto_refresh_prefers_cache": "58e167a57776",
+      "tests/test_dialogs_feedback_v280.py::test_toast_returns_false_and_logs_when_bubble_is_refused": "61cbe6885f71",
+      "tests/test_dialogs_feedback_v280.py::test_toast_falls_back_to_the_dialog_status_line": "ffc7ad267d0f",
+      "tests/test_dialogs_feedback_v280.py::test_show_bubble_reports_false_while_closing": "77a9932732c1",
+      "tests/test_dialogs_feedback_v280.py::test_compose_dialog_has_cancel_and_reject_adds_nothing": "55717ee9c629",
+      "tests/test_dialogs_feedback_v280.py::test_ask_helpers_go_through_modal": "990f570e74e1",
+      "tests/test_dialogs_feedback_v280.py::test_static_input_dialogs_are_gone": "fad1b4e82464",
+      "tests/test_dialogs_feedback_v280.py::test_wording_table_is_applied_to_new_and_add_buttons": "aebd8af23760",
+      "tests/test_dialogs_feedback_v280.py::test_import_wizard_add_form_gives_a_receipt_and_construction_stays_quiet": "8fc9a287daa7",
+      "tests/test_dialogs_feedback_v280.py::test_voice_event_import_receipt_and_clear_confirm": "8ed45c86dd81",
+      "tests/test_dialogs_feedback_v280.py::test_dialogue_remove_member_reports_what_was_removed": "edc0ff5c47a1",
+      "tests/test_dialogs_feedback_v280.py::test_role_edit_delete_action_needs_no_confirm_and_is_undoable": "311fe80fef2d",
+      "tests/test_dialogs_behavior_v290.py::test_delete_custom_action_can_be_undone_by_cancelling": "9d0dd362e562",
+      "tests/test_dialogs_feedback_v280.py::test_role_edit_delete_action_toasts_with_a_pet": "f3b38ecd8c8a",
+      "tests/test_dialogs_feedback_v280.py::test_reset_to_bundled_takes_effect_and_reports": "d1d5c5ffe97a",
+      "tests/test_balance_feedback_v280.py::test_对话框构建失败_有可见提示与日志": "a749311d2de7",
+      "tests/test_balance_feedback_v280.py::test_金额不大于零_给提示且绝不记账": "e29c87543834",
+      "tests/test_plugin_phase3_v280.py::test_换站点后旧站点的缓存不许冒充新站点": "855e852aa095",
+      "tests/test_plugin_phase3_v280.py::test_直接填index_json地址也收_不重复拼路径": "a4a3f14ddd54",
+      "tests/test_plugin_phase3_v280.py::test_load_index_随包也读不出来时把两条原因都说清": "b9e0ad22afdc",
+      "tests/test_dialogs_feedback_v280.py::test_new_proc_action_is_selected_and_scrolled_into_view": "93db22f38999",
+      "tests/test_dialogs_feedback_v280.py::test_alarm_new_gives_a_receipt": "46486fd6e0b1",
+      "tests/test_dialogs_feedback_v280.py::test_alarm_delete_reports_exactly_once": "5cc53c5ef77f",
+      "tests/test_dialogs_feedback_v280.py::test_behavior_step_receipts": "df2906bac7c4",
+      "tests/test_dialogs_behavior_v290.py::test_step_receipts_use_the_inline_status_line_not_the_bubble": "cfcf320068ca",
+      "tests/test_dialogs_feedback_v280.py::test_move_line_at_boundary_tells_the_user": "f4fc6fad4124",
+      "tests/test_dialogs_feedback_v280.py::test_lines_move_member_at_boundary_uses_the_same_wording": "4dd41ae435bc",
+      "tests/test_dialogs_feedback_v280.py::test_new_line_scrolls_into_view": "497953e52b6c"
     }
   }
 }

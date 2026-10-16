@@ -6,6 +6,9 @@
 Bubble.paintEvent 直接读本模块同名全局（同一 dict 对象）。
 """
 from PySide6.QtCore import QPoint, QPointF, QRectF, Qt, QTimer, Signal
+# v2.11.0 第 9 轮（B2）：气泡淡入淡出用 QVariantAnimation 驱动窗口不透明度，
+# 时长/缓动一律取自 pet_motion（令牌表，含 HCI 依据）。
+from PySide6.QtCore import QEasingCurve, QVariantAnimation
 from PySide6.QtGui import (
     QColor, QFont, QFontMetrics, QPainter, QPainterPath, QPen, QPixmap, QPolygonF,
 )
@@ -13,9 +16,63 @@ from PySide6.QtWidgets import QWidget
 
 from pet_screen import screen_geometry_at
 import pet_log
+import pet_motion  # v2.11.0 第 9 轮（A1）：动效令牌表（纯常量 + 纯函数）
 
 # 气泡样式（配置驱动；桌宠.apply_bubble_style 更新，Bubble.paintEvent 读取）
 BUBBLE_STYLE = {"bg": "#ffffff", "fg": "#203170", "border": "#203170", "font_size": 10, "radius": 16}
+# v2.11.0 收尾：BUBBLE_STYLE 是**就地 update 的模块全局**，所以它同时也是"被跨用例共享的
+# 可变状态"——某个用例改完不还原，后面"回到用户那份样式"这类断言就会红，而单跑那条又是绿的。
+# 这份 canon 是它的**独立副本**（不是别名：别名会跟着一起被改），给夹具一个稳定起点。
+BUBBLE_STYLE_CANON = dict(BUBBLE_STYLE)
+
+# ---------------- v2.11.0 第 9 轮（A3）：高对比度 ----------------
+# **关闭时挂件/托盘保持原配色（一个字节都不变）**；开启时走 pet_motion 的调色板——
+# 每一对的对比度由 tests 用 pet_motion.contrast_ratio() 算出来钉住 ≥ 4.5:1，不靠眼看。
+_HC = {"on": False, "dark": False}
+_THINK_CACHE = {}
+
+
+def set_high_contrast(on, dark=False):
+    """高对比度开关（由 桌宠._apply_contrast 调用）。"""
+    _HC["on"] = bool(on)
+    _HC["dark"] = bool(dark)
+    _THINK_CACHE.clear()  # 指示图配色跟着变：旧缓存作废
+
+
+def _pal():
+    """当前挂件配色：高对比度开启时用 pet_motion 的调色板，否则用本模块的历史配色。"""
+    if _HC["on"]:
+        return pet_motion.palette(_HC["dark"])
+    return {"bg": "#ffffff", "fg": "#203170", "border": "#203170", "muted": "#5a6b8c"}
+
+
+def thinking_pixmap(size=None):
+    """B8：AI 在途指示（"它在想"）——小圆角气泡 + 三个点。
+
+    **这是信息不是装饰**：关掉「减少动效」时它照常显示，只是不再脉动（脉动去掉、
+    状态保留）。配色跟着高对比度走（同一份调色板）。
+    """
+    size = int(size or pet_motion.THINKING["SIZE_PX"])
+    key = (size, _HC["on"], _HC["dark"])
+    if key in _THINK_CACHE:
+        return _THINK_CACHE[key]
+    pal = _pal()
+    pm = QPixmap(size, size)
+    pm.fill(Qt.GlobalColor.transparent)
+    p = QPainter(pm)
+    p.setRenderHint(QPainter.RenderHint.Antialiasing)
+    s = size / 44.0
+    p.setPen(QPen(QColor(pal["border"]), max(1.0, 2.0 * s)))
+    p.setBrush(QColor(pal["bg"]))
+    p.drawRoundedRect(QRectF(1.5 * s, 1.5 * s, size - 3 * s, size - 3 * s), 9 * s, 9 * s)
+    p.setPen(Qt.PenStyle.NoPen)
+    p.setBrush(QColor(pal["fg"]))
+    r = max(1.4, 2.6 * s)
+    for i in range(3):
+        p.drawEllipse(QPointF((13.5 + i * 8.5) * s, size / 2.0), r, r)
+    p.end()
+    _THINK_CACHE[key] = pm
+    return pm
 
 # ---------------- 字体回退链 ----------------
 # v2.4.3（第三轮找茬 P2-2）：此前本模块 8 处直接写死 QFont("Microsoft YaHei", …)，没有
@@ -123,10 +180,11 @@ class FoodTray(QWidget):
         return -1
 
     def paintEvent(self, event):
+        pal = _pal()  # A3：高对比度开启时换调色板；关闭时与历史配色逐字节相同
         p = QPainter(self)
         p.setRenderHint(QPainter.RenderHint.Antialiasing)
-        p.setPen(QPen(QColor("#203170"), 2))
-        p.setBrush(QColor("#ffffff"))
+        p.setPen(QPen(QColor(pal["border"]), 2))
+        p.setBrush(QColor(pal["bg"]))
         p.drawRoundedRect(QRectF(1.5, 1.5, self.width() - 3, self.height() - 3), 12, 12)
         for i, food in enumerate(self.FOODS):
             r = self._rects()[i]
@@ -151,7 +209,8 @@ class FoodTray(QWidget):
         if (e.buttons() & Qt.MouseButton.LeftButton
                 and self._press_food >= 0 and self._press_pos is not None):
             gp = e.globalPosition().toPoint()
-            if (gp - self._press_pos).manhattanLength() > 6:
+            # B1 同一条阈值口径（令牌表单一来源）：小于阈值算"点击投喂"，不算拖到嘴边
+            if (gp - self._press_pos).manhattanLength() > pet_motion.DRAG["FOOD_THRESHOLD_PX"]:
                 food = self.FOODS[self._press_food]
                 self._press_food = -1
                 self._press_pos = None
@@ -228,15 +287,16 @@ class Badge(QWidget):
         self.update()
 
     def paintEvent(self, event):
+        pal = _pal()  # A3：高对比度开启时换调色板；关闭时与历史配色逐字节相同
         p = QPainter(self)
         p.setRenderHint(QPainter.RenderHint.Antialiasing)
-        p.setPen(QPen(QColor("#203170"), 2))
-        p.setBrush(QColor("#ffffff"))
+        p.setPen(QPen(QColor(pal["border"]), 2))
+        p.setBrush(QColor(pal["bg"]))
         p.drawRoundedRect(QRectF(1.5, 1.5, self.width() - 3, self.height() - 3), 10, 10)
-        p.setPen(QColor("#203170"))
+        p.setPen(QColor(pal["fg"]))
         p.setFont(ui_font(9, QFont.Weight.Bold))
         p.drawText(QRectF(6, 2, self.width() - 12, 22), Qt.AlignmentFlag.AlignCenter, self._line1)
-        p.setPen(QColor("#5a6b8c"))
+        p.setPen(QColor(pal["muted"]))
         p.setFont(ui_font(8))
         p.drawText(QRectF(6, 24, self.width() - 12, 19), Qt.AlignmentFlag.AlignCenter, self._line2)
 
@@ -259,7 +319,13 @@ class Bubble(QWidget):
         self._text = ""
         self._timer = QTimer(self)
         self._timer.setSingleShot(True)
-        self._timer.timeout.connect(pet_log.guard_slot("bubble.hide", self.hide))
+        # v2.11.0（B2）：到点改成**淡出**（关掉「减少动效」= 直接 hide）
+        self._timer.timeout.connect(pet_log.guard_slot("bubble.hide", self._fade_out))
+        # v2.11.0 第 9 轮（B2/B3）：淡入淡出 + 跟随
+        self._fade_anim = None
+        self._motion_reduced = False
+        self._anchor = None   # 最近一次锚点（全局坐标）：跟随重定位用
+        self._opacity = 1.0   # 淡入淡出的**平台无关读数**（见 _apply_opacity）
 
     def show_text(self, text, anchor_global):
         # P1-4：先定位屏（间隙取最近屏）；无屏直接放弃，不做半截状态变更
@@ -276,17 +342,140 @@ class Bubble(QWidget):
         w = max(88, min(236, r.width() + 60))
         h = max(52, r.height() + 46)
         self.resize(w, h)
+        xy = self._anchor_xy(anchor_global, w, h)
+        if xy is None:
+            return
+        self.move(xy[0], xy[1])
+        self._anchor = QPoint(anchor_global)
+        # ⚠ 必须在 show() **之前**取"是不是刚出现"：show() 之后 isVisible() 恒为真，
+        # 那就等于"永远不淡入"（第一版真这么错过，被这条用例抓出来）。
+        fresh = not self.isVisible()
+        self.show()
+        self.raise_()
+        self.update()
+        # B2：淡入（关掉「减少动效」→ 瞬时到位，连动画对象都不建）。
+        # **只有"从看不见到看得见"才淡入**：气泡已经在显示时来了新文本（连点/连续回执），
+        # 直接把新文本按满不透明度画出来——半透明的一两百毫秒里用户读不清字，
+        # 那属于"用动效覆盖掉用户刚看的东西"（上一轮复盘过的那类坏改动）。
+        if fresh and pet_motion.duration_ms("BUBBLE_FADE", self._motion_reduced) > 0:
+            self._apply_opacity(0.0)
+            self._fade_to(1.0)
+        else:
+            # 已经在显示（连点/连续回执的新文本）或关掉了动效 → **瞬时满不透明**：
+            # 新文本绝不允许在半透明里停留（那两百毫秒用户读不清字）。
+            self._fade_to(1.0, snap=True)
+        # 展示时长令牌（原处硬编码 5000 已搬家：pet_motion.DUR["BUBBLE_HOLD"]）。
+        # ⚠ 展示时长是"这条信息该看多久"，**不随「减少动效」归零**
+        # （归零 = 气泡闪一下就没，等于没显示——那是对信息的破坏，不是降级）
+        self._timer.start(pet_motion.duration_ms("BUBBLE_HOLD"))
+
+    # ---- v2.11.0 第 9 轮（B2/B3）：定位、淡入淡出、跟随 ----
+    def _anchor_xy(self, anchor_global, w, h):
+        """锚点（全局）→ 窗口左上角。**show_text 与 follow_to 共用这一份**。
+
+        两处各写一遍就会漂移成"跟随之后气泡跳一下"（B3 的验收就是"跟着走、不跳"）。
+        所在屏读不到（无可用屏幕）→ None，调用方放弃（不做半截状态变更）。
+        """
+        scr = screen_geometry_at(anchor_global)[1]
+        if scr is None:
+            return None
         x = anchor_global.x() - w // 2
         y = anchor_global.y() - h - 10
         if y < scr.top():
             y = anchor_global.y() + 10
         x = max(scr.left() + 4, min(x, scr.right() - w - 4))
         y = max(scr.top() + 4, min(y, scr.bottom() - h - 4))
-        self.move(x, y)
-        self.show()
-        self.raise_()
-        self.update()
-        self._timer.start(5000)
+        return x, y
+
+    def set_motion_reduced(self, reduced):
+        """「减少动效」开关（A2）：关掉后淡入淡出**瞬时**（不建动画对象）。"""
+        self._motion_reduced = bool(reduced)
+
+    def _stop_fade(self):
+        """停掉在途淡入淡出（幂等）。"""
+        anim = self._fade_anim
+        self._fade_anim = None
+        if anim is None:
+            return
+        try:
+            anim.stop()
+            anim.deleteLater()
+        except RuntimeError:
+            pass  # 已被销毁：幂等
+
+    def _apply_opacity(self, v):
+        """淡入淡出的落地点：记状态 + 设窗口不透明度。
+
+        **为什么要多存一个 _opacity**：offscreen 平台不支持窗口不透明度
+        （实测打印 "This plugin does not support setting window opacity"），
+        `windowOpacity()` 在测试里读不出变化——验收需要一条**平台无关**的读数，
+        所以驱动值同时记进 _opacity（它与真正设进窗口的是同一个数）。
+        """
+        self._opacity = float(v)
+        self.setWindowOpacity(self._opacity)
+
+    def _fade_to(self, target, on_done=None, snap=False):
+        """窗口不透明度淡到 target：时长/缓动走令牌表；关掉动效 → 瞬时设值。
+
+        snap=True：**直接落到终态**（用于"新文本来了"——见 show_text 的那条注释）。
+        """
+        self._stop_fade()
+        if snap or abs(float(self._opacity) - float(target)) < 1e-6:
+            # 已经在终态（例如"淡出途中来了新文本"）：**直接落到终态，不产生空动画**。
+            # 这一支就是 B2.3 要的结果——新文本必须立刻可读，不许从 0.5 再淡 180ms。
+            self._apply_opacity(target)
+            if on_done is not None:
+                on_done()
+            return
+        ms = pet_motion.duration_ms("BUBBLE_FADE", self._motion_reduced)
+        if ms <= 0:
+            self._apply_opacity(target)
+            if on_done is not None:
+                on_done()
+            return
+        anim = QVariantAnimation(self)
+        anim.setDuration(ms)
+        anim.setStartValue(float(self._opacity))
+        anim.setEndValue(float(target))
+        anim.setEasingCurve(getattr(QEasingCurve.Type, pet_motion.easing_name("ENTER"),
+                                    QEasingCurve.Type.Linear))
+        anim.valueChanged.connect(self._apply_opacity)
+        anim.finished.connect(lambda a=anim: self._retire_fade(a))
+        self._fade_anim = anim
+        anim.start()
+        if on_done is not None:
+            anim.finished.connect(lambda _a=None: on_done())
+
+    def _retire_fade(self, anim):
+        if self._fade_anim is anim:
+            self._fade_anim = None
+        try:
+            anim.deleteLater()
+        except RuntimeError:
+            pass
+
+    def _fade_out(self):
+        """自动隐藏时间到：淡出后 hide（关掉「减少动效」→ 直接 hide）。"""
+        def _done():
+            self.hide()
+            self._apply_opacity(1.0)  # 下次 show_text 从满不透明度起步（淡入会自己置 0）
+
+        self._fade_to(0.0, on_done=_done)
+
+    def follow_to(self, anchor_global):
+        """B3：气泡跟随角色——按**同一份锚点算法**重定位，不重启自动隐藏计时。
+
+        计时不重启是有意的：拖一下角色就把"这条气泡还能看多久"重置，等于用户
+        永远读不完；跟随只该改位置。
+        """
+        if not self.isVisible():
+            return
+        xy = self._anchor_xy(anchor_global, self.width(), self.height())
+        if xy is None:
+            return
+        self._anchor = QPoint(anchor_global)
+        if (xy[0], xy[1]) != (self.x(), self.y()):
+            self.move(xy[0], xy[1])
 
     def paintEvent(self, event):
         p = QPainter(self)

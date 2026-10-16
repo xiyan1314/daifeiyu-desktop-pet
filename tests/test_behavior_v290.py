@@ -439,3 +439,43 @@ def test_test_play_target_reason_is_human_readable():
         for bad in ("codec", "Traceback", "Expecting value", "Error", "None"):
             assert bad not in why, "原因里透出了原始异常字样 %r：%r" % (bad, why)
         assert any("\u4e00" <= ch <= "\u9fff" for ch in why), "原因不是中文人话：%r" % (why,)
+# ---------------- R3（v2.10.0）：重名判据的唯一来源 ----------------
+
+def test_find_by_name_is_the_single_judgement_for_duplicate_names(tmp_path):
+    """R3：`find_by_name` 是重名判据的**唯一来源**（UI 侧只按它的结论问用户）。
+
+    变异：让它恒返回 None（判据空转）→ 本条红，且对话框那几条重名用例一起红。
+    """
+    svc = pb.BehaviorService(str(tmp_path))
+    a, err = svc.add("same", [{"act": "say", "text": "一"}])
+    assert a is not None, err
+    got = svc.find_by_name("same")
+    assert got is not None and got["id"] == a["id"], "同名查不到：%r" % (got,)
+    got["name"] = "被调用方改了"
+    assert svc.get(a["id"])["name"] == "same", "交出去的不是深拷贝（库内数据被调用方改掉）"
+    assert svc.find_by_name("  same  ") is not None, "名字两侧空白没归一"
+    assert svc.find_by_name("nope") is None, "不存在的名字也命中了"
+    assert svc.find_by_name("") is None and svc.find_by_name(None) is None, "空名字命中了"
+    assert svc.find_by_name("same", exclude_id=a["id"]) is None, "改自己名字时把自己算成撞名"
+    b, err2 = svc.add("other", [{"act": "say", "text": "二"}])
+    assert b is not None, err2
+    assert svc.find_by_name("same", exclude_id=b["id"])["id"] == a["id"], "排除项把别人也排掉了"
+    c, err3 = svc.add("same", [{"act": "say", "text": "三"}])
+    assert c is not None, err3
+    assert svc.find_by_name("same")["id"] == min(a["id"], c["id"]), (
+        "同名多条时返回值不稳定（按 id 排序才可复核）")
+
+
+def test_add_itself_still_allows_duplicates_so_the_ui_owns_the_question(tmp_path):
+    """控制组：判据**不在** `add` 里 —— 服务层保持"只答撞没撞"、不自己弹框/拒写。
+
+    为什么钉这条：判据（find_by_name）与问法（对话框）分家是本轮的修法。若有人图省事
+    在 `add` 里直接拒写，插件导入 / 角色包导入这些**没有用户在场**的调用点会一起坏掉。
+    """
+    svc = pb.BehaviorService(str(tmp_path))
+    a, err = svc.add("same", [{"act": "say", "text": "一"}])
+    assert a is not None, err
+    b, err2 = svc.add("same", [{"act": "say", "text": "二"}])
+    assert b is not None, "服务层的 add 被改成拒绝重名了（插件/导入路径会一起坏）"
+    assert b["id"] != a["id"]
+    assert len([x for x in svc.list() if x["name"] == "same"]) == 2

@@ -430,7 +430,15 @@ def test_四个并行改造文件不再有豁免区(scan):
     # "导入失败回收残留文件"的静默 except 搬进了 `_StagedActionSink.rollback`（A2 抽公共实现），
     # 同时改成 `pet_log.log_throttled` 留痕（**不新造静默 except**）；其余 3 条新落点也一并留痕，
     # 所以净减 1。razor 本身没放宽：无主的静默 except 仍由 test_every_silent_except_has_an_owner 挡。
-    assert per == {"pet_dialogs.py": 49, "pet_plugin.py": 5,
+    # v2.11.0 第 9 轮：pet_dialogs.py 49 → 50（**净 +1 = 新键 `_route_voice_event`**，代理 B 的 B8
+    # 语音反馈：工作线程逐个监听者包 try，已销毁的对话框跳过——理由码 `cleanup`，已登记）。
+    # 同轮代理 A 把三条"语音反馈接线"的静默 except 改成 `pet_log.log_throttled` 留痕
+    # （`_hook_voice_ui` 的 TypeError 与注册循环、`VoiceDialog.__init__` 的 connect）——
+    # ⚠ **这三处不出现在白名单的差集里**：它们从来没有被登记过，所以既没有"键被移除"、
+    # 也没有"净减"；本条数字的变化**只由 B 那一个新键造成**（49 + 1 = 50）。
+    # 收尾实测（代理 C，v2.11.0）：白名单 old 49 键 → new 50 键，**移除 0 / 新增 1**；
+    # 这正是本轮"要么留痕、要么登记理由"的口径，**不是**为了变绿而放宽守卫。
+    assert per == {"pet_dialogs.py": 50, "pet_plugin.py": 5,
                    "pet_plugin_host.py": 19, "pet_plugin_index.py": 11}, per
 
 

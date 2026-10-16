@@ -28,20 +28,33 @@ import psutil
 
 from PySide6.QtCore import (
     Qt, QTimer, QPoint, QVariantAnimation, QObject, Signal,
+    # v2.11.0 第 9 轮（A1）：缓动令牌在 pet_motion.EASE 里（纯字符串），这里只做
+    # "名字 → QEasingCurve.Type" 的唯一映射点（见 _ease）。
+    QEasingCurve,
+    # v2.11.0 第 9 轮（A4）：三件套的几何全用浮点矩形/点（QRect 是整数，会把光晕抖成 1px）。
+    QRectF, QPointF,
+    # v2.11.0 第 9 轮（B8）：AI 在途指示的写入点（pet_chat.ask）理论上可能来自非主线程，
+    # 用它做"绝不在工作线程里碰 Qt 控件"的守卫。
+    QThread,
 )
 from PySide6.QtGui import (
     QPixmap, QImage, QTransform, QColor, QPainter, QCursor, QIcon,
+    # v2.11.0 第 9 轮（A4）：三件套的绘制资源（光晕渐变 / 描边路径 / 涟漪画笔）。
+    QPainterPath, QRadialGradient, QBrush, QPen,
 )
 from PySide6.QtWidgets import (
     QApplication, QWidget, QMenu, QGraphicsView, QGraphicsScene,
     QGraphicsPixmapItem, QInputDialog, QMessageBox, QFrame,
     QSystemTrayIcon, QDialog, QFileDialog,
+    # v2.11.0 第 9 轮（A4）：光晕/涟漪是椭圆绘制项，描边是圆角矩形路径项。
+    QGraphicsEllipseItem, QGraphicsPathItem,
     # v2.4.1：本模块内零引用，但**必须保留**——_verify_v13.py:1529 与 _verify_green.py:87 用
     # main.QWidgetAction 断「菜单里有大小滑块」（再导出，与 242 行那批同一性质；删掉即 AttributeError）。
     QWidgetAction,  # noqa: F401
 )
 
 import pet_log
+import pet_motion  # v2.11.0 第 9 轮（A1）：动效令牌表（纯常量 + 纯函数，单一来源）
 import pet_physics
 import pet_voice
 import pet_anim
@@ -69,7 +82,7 @@ from pet_plugin_host import PluginHost as _PluginHost  # v2.5.1：PetHub 插件�
 
 
 APP_NAME = "大肥鱼桌宠"
-VERSION = "2.9.0"
+VERSION = "2.11.0"
 PAD = 1.25  # 窗口相对角色的透明边距（为压扁/回弹预留空间）
 IDLE_FRAME_MS = 140      # 待机帧间隔
 IDLE_FORM_HOLD_SECS = 8  # v2.1.3：只有形态、没有动作可播时的展示期上限（到期回用户形态）
@@ -228,6 +241,13 @@ DEFAULT_CONFIG = {
     "idle_actions": pet_behaviors.DEFAULT_BEHAVIOR_CFG["idle_actions"],
     "idle_play_mode": pet_behaviors.DEFAULT_BEHAVIOR_CFG["idle_play_mode"],
     "idle_resume_on_interrupt": pet_behaviors.DEFAULT_BEHAVIOR_CFG["idle_resume_on_interrupt"],
+    # v2.11.0 第 9 轮（A2）：无障碍「减少动效」——"auto" = 跟随系统（读得到就用、读不到
+    # 保持动效开启，**不擅自替用户降级**）；"on"/"off" = 用户在菜单里显式选过。
+    # 生效值一律经 pet_motion.reduce_motion_enabled()，产品代码不许自己判字符串。
+    "reduce_motion": "auto",
+    # v2.11.0 第 9 轮（A3）：高对比度——"auto" = 跟随系统深色主题（读不到按关闭）。
+    # 对比度下限 4.5:1 由 pet_motion.contrast_ratio() 算出来验（PALETTE_LIGHT/PALETTE_DARK）。
+    "high_contrast": "auto",
 }
 
 # P1-3：config.json schema 版本（1=旧版全量存储；2=diff 只存改动项）
@@ -243,7 +263,8 @@ _SOFT_FIX_KEYS = {"always_on_top", "ai_enabled", "follow_mouse", "wander", "soun
                   "ai_rag_enabled", "ai_tools_enabled", "ai_tools_confirm",  # v2.3.0
                   "idle_behavior", "idle_behavior_seconds", "transform_seconds",
                   "idle_trigger_delay", "idle_delay_after_full", "idle_form", "idle_actions",
-                  "idle_play_mode", "idle_resume_on_interrupt"}
+                  "idle_play_mode", "idle_resume_on_interrupt",
+                  "reduce_motion", "high_contrast"}  # v2.11.0（A2/A3）：枚举字符串，坏值软归一化
 
 
 def _fix_entry(k, a, b):
@@ -1088,6 +1109,37 @@ class PetWindow(QWidget):
         self._flight_timer.setInterval(16)
         self._flight_timer.timeout.connect(self._gslot('_flight_tick', self._flight_tick))
 
+        # ---- v2.11.0 第 9 轮（A1/A2/A3/A4/A5）：动效地基 + 视觉三件套 ----
+        # 令牌表的**唯一来源**是 pet_motion（时长/缓动/幅度/阈值都在那儿，含 HCI 依据）；
+        # 这里只放"当前状态"。三件套一律**只画在场景里**（绘制层），绝不碰
+        # scale / squash / 窗口尺寸 / item 变换——悬停缩放与按压缩放都会和角色自己的
+        # 呼吸/摇摆相位叠加，看起来像抖动（上一轮复盘出的教训）。
+        self._hover = False           # 悬停中（光晕）
+        self._pressed = False         # 按压中（描边）
+        self._glow_item = None        # 悬停光晕绘制项（懒建，复用）
+        self._glow_anim = None
+        self._outline_item = None     # 按下描边绘制项（懒建，复用）
+        self._ripples = []            # [(item, anim)] 在途涟漪 —— 收尾后必须回到空表
+        self._hearts = []             # [(item, anim)] 在途心形（B4，同上）
+        self._slide_anim = None       # A5 在途的贴边缓动
+        self._dragging = False        # B1：本次按压是否已越过拖拽阈值
+        self._suppress_release = False  # B7：双击之后紧跟的那个 release 要吞掉（防"戳两下"）
+        # A2/A3 的系统侧默认值：**读不到就是 None**（不擅自替用户降级 / 不猜主题）
+        self._sys_reduce_motion = pet_motion.system_reduce_motion()
+        self._sys_dark = pet_motion.system_dark_theme()
+        # B8：AI 在途的可见指示（属性 _ai_inflight 的写入点会自动驱动它）
+        self._thinking_item = None
+        self._thinking_anim = None
+        self._sync_thinking()
+        # A3：Esc/Enter/Space 要能被本窗口收到。注意窗口仍带 WindowDoesNotAcceptFocus
+        # （见 __init__ 的 flags 与 _apply_flags）——**从不抢用户当前应用的焦点**，
+        # 也不注册任何全局快捷键，所以绝不会"抢全局 Esc"。
+        self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
+        self._apply_contrast()        # A3：高对比度（配置/系统主题）落地
+        self._reduce_motion_act = None   # 托盘菜单里的两个勾选项（建菜单时回填）
+        self._high_contrast_act = None
+        self.bubble.set_motion_reduced(self._reduce_motion())  # A2：气泡淡入淡出跟随开关
+
         scale = self.cfg.get("scale", 1.0)
         if not os.path.exists(CONFIG_PATH):
             try:
@@ -1215,6 +1267,22 @@ class PetWindow(QWidget):
         tray_menu = QMenu()
         show_act = tray_menu.addAction("🐟 显示桌宠")
         show_act.triggered.connect(self._show_pet)
+        # v2.11.0 第 9 轮（A3 键盘可达）：主交互 + 两个无障碍开关也放一份在**托盘菜单**里。
+        # 托盘菜单是 Windows 上"不抢焦点就能用键盘走到"的入口（Win+B → 方向键 → 回车）——
+        # 桌宠窗口本身带 WindowDoesNotAcceptFocus（绝不抢用户当前应用的焦点），
+        # 所以"键盘也够得着它"这件事只能由托盘菜单承担（窗口自身的键位见 keyPressEvent）。
+        poke_act = tray_menu.addAction("👉 戳一下")
+        poke_act.triggered.connect(lambda checked=False: self._primary_action())
+        rm_act = tray_menu.addAction("🌊 减少动效")
+        rm_act.setCheckable(True)
+        rm_act.setChecked(self._reduce_motion())
+        rm_act.toggled.connect(self._set_reduce_motion)
+        self._reduce_motion_act = rm_act
+        hc_act = tray_menu.addAction("🔲 高对比度")
+        hc_act.setCheckable(True)
+        hc_act.setChecked(self._high_contrast())
+        hc_act.toggled.connect(self._set_high_contrast)
+        self._high_contrast_act = hc_act
         tray_menu.addSeparator()
         quit_act = tray_menu.addAction("⏹ 退出")
         quit_act.triggered.connect(self._quit)
@@ -1526,6 +1594,14 @@ class PetWindow(QWidget):
 
         self.anim_mode = "state"
         self._state_timer.stop()
+        if self._reduce_motion():
+            # A2：合成动作（呼吸/摇摆/点头）也是**代码驱动**的动效 → 「减少动效」时一次都不播，
+            # 直接走收尾（与 0ms 时长同效；基准值 int(period*cycles) 来自**角色数据**，
+            # 不归令牌表——见 pet_motion.effective_duration 的分工说明）。
+            # ⚠ 这一支刻意写成**提前返回**、而不是把下面那行改成 effective_duration(...)：
+            # 下面那行是 _dev/mutate_proc_reset_v26.py 的 M-P04 锚点，改它会让一条既有变异静默失效。
+            _done()
+            return
         self._run_anim(int(period * cycles), _onv, on_finished=_done)
 
     # ---------- v2.0.2：行为系统与断点#12 ----------
@@ -3550,6 +3626,8 @@ class PetWindow(QWidget):
         self._fx_petpet_on = True
         self._place_fx("petpet")
         self.fx.play(self._fx_petpet, interval_ms=80, loops=-1)
+        # B4：摸头**一次一串**心形（上浮 + 淡出 + 自己消失；关掉「减少动效」则不产生）
+        self._spawn_hearts()
         self._pet_max.start(15000)  # 看门狗：release 丢失时 15s 自停（M2 修复）
         # v2.1.2（M-2）：库可用时不回落内置常量（删掉的台词不复活）；空池就这次不喊
         _pet_lines_pool = self.lines_pools.get("petting") or []
@@ -3621,8 +3699,16 @@ class PetWindow(QWidget):
         self.emote_item.setPos(x, y)
         self.emote_item.show()
         self._last_emote_kind = kind  # 角色热切换时据此重排表情
+        if self._reduce_motion():
+            # A2：减少动效 = **瞬时出现**（不淡出、不上浮），保持同样的展示时长后消失。
+            # 展示时长取"这条表情该看多久"（不随开关归零——归零是闪一下，等于没显示）。
+            self._emote_anim = None
+            QTimer.singleShot(pet_motion.duration_ms("EMOTE_FLOAT"), self,
+                              lambda g=gen: self._hide_emote(g))
+            return
         anim = QVariantAnimation(self)
-        anim.setDuration(1500)
+        # 时长令牌（原处硬编码 1500 已搬家：pet_motion.DUR["EMOTE_FLOAT"]）
+        anim.setDuration(pet_motion.duration_ms("EMOTE_FLOAT"))
         anim.setStartValue(0.0)
         anim.setEndValue(1.0)
 
@@ -3694,6 +3780,8 @@ class PetWindow(QWidget):
             self._place_fx("petpet")  # 特效层各自跟随缩放（L1 修复）
         if self._fx_money_on:
             self._place_fx("money")
+        if self._thinking_item is not None and self._thinking_item.isVisible():
+            self._place_thinking()  # B8：缩放进去了，头顶指示跟着重排
         self._ensure_on_screen()
 
     def _ensure_on_screen(self):
@@ -3764,14 +3852,33 @@ class PetWindow(QWidget):
             return False  # P1-5：退出后不再弹气泡（在途信号守卫）
         if not text:
             return False
-        pad_top = self._pad_top()
-        gp = QPoint(self.x() + self.width() // 2, self.y() + pad_top)
-        if self.badge.isVisible():
-            gp = QPoint(self.badge.x() + self.badge.width() // 2, self.badge.y())
+        gp = self._bubble_anchor()
         self.bubble.show_text(text, gp)
         # 气泡窗口在"没有可用屏幕"时会自己放弃（Bubble.show_text 的早退），所以这里按
         # 可见性如实回报——调用方（_toast）要的就是"用户到底看没看到"这个事实。
         return bool(self.bubble.isVisible())
+
+    def _bubble_anchor(self):
+        """气泡锚点（全局坐标）：角色头顶中点；挂了余额挂件时改挂挂件上方。
+
+        B3：`show_bubble` 与"跟随"（_position_bubble）**共用这一份**算法——两处各写一遍
+        就会漂移成"跟随之后气泡跳一下"。
+        """
+        pad_top = self._pad_top()
+        gp = QPoint(self.x() + self.width() // 2, self.y() + pad_top)
+        if self.badge.isVisible():
+            gp = QPoint(self.badge.x() + self.badge.width() // 2, self.badge.y())
+        return gp
+
+    def _position_bubble(self):
+        """B3：气泡跟随角色——拖拽/散步/贴边滑动时都不落在原地。
+
+        只在气泡**可见**时重算锚点；重定位**不重启**自动隐藏计时（否则拖一下就把
+        "这条气泡还能看多久"重置了）。
+        """
+        if not self.bubble.isVisible():
+            return
+        self.bubble.follow_to(self._bubble_anchor())
 
     def _cycle_line(self):
         """戳一戳随机台词：v2.1 起来自台词库（用户可增删改），空池兜中性句子。
@@ -3785,6 +3892,7 @@ class PetWindow(QWidget):
         super().moveEvent(event)
         self._position_badge()
         self._position_food_tray()
+        self._position_bubble()  # B3：气泡跟随角色（拖拽时不再落在原地）
 
     def resizeEvent(self, event):
         super().resizeEvent(event)
@@ -3812,6 +3920,9 @@ class PetWindow(QWidget):
 
     def closeEvent(self, event):
         """v2.3.1：关闭窗口 = **收进托盘**（不是退出程序）；真退出/关机时放行。
+
+        v2.11.0（B1）：关闭时把在途的按压/拖拽状态与光标收干净——Esc 是"拖到一半"
+        的常见打断方式，留着 ClosedHandCursor 会让下次悬停看起来像还按着。
 
         兼容审查（M2）指出：初版这里直接走 _quit，会把用户"Alt+F4 收起来、托盘再叫回"
         的习惯改成"直接杀进程"（而托盘里原本还有个"显示桌宠"，几乎成死入口）。
@@ -3841,6 +3952,8 @@ class PetWindow(QWidget):
             event.ignore()   # 不真的销毁窗口：只隐藏，托盘菜单"显示桌宠"随时叫回来
         except Exception:
             pass  # 有意忽略：事件对象异常也不能挡住隐藏
+        # B1：关闭/Esc 也是一次"打断"——按压态、拖拽态、光标在这里一起复位（幂等）
+        self._reset_pointer_state()
         try:
             self.hide()
             if not globals().get("_HIDE_TIP_SHOWN"):
@@ -4224,7 +4337,11 @@ class PetWindow(QWidget):
                 self._reset_squash()
                 self._play_idle()  # H1：无吃帧角色（自定义角色）喂食后落到吃饱形态贴图
 
-            self._run_anim(900, onval, on_finished=_squash_done)
+            # 时长令牌（原处硬编码 900 已搬家：pet_motion.DUR["EAT_SQUASH"]）。
+            # 「减少动效」→ 0ms：Qt 对 0 时长动画**同步**发 finished（实测：不发 valueChanged），
+            # 所以咀嚼形变一次都不出现、而 _squash_done 的收尾照常跑（busy 不会卡住）。
+            self._run_anim(pet_motion.duration_ms("EAT_SQUASH", self._reduce_motion()),
+                           onval, on_finished=_squash_done)
         self._show_emote("note")
         self._say_line(line)  # v2.1：日常台词出口（气泡；开了「日常台词也用配音」则朗读）
 
@@ -4255,19 +4372,24 @@ class PetWindow(QWidget):
         return screen_geometry_at(pt)[1]
 
     def _press_squash(self, pressed):
-        if pressed and self.busy:
-            return  # 吃帧/跳跃进行中：不叠加压扁变换，避免视觉错位
-        # release 侧不门控：busy 期间松手也复位 anchor/squash，防止 _anchor_bottom 滞留 True
-        self._anchor_bottom = pressed
-        if pressed:
-            self.squash_x = 0.92
-            self.squash_y = 1.06
-        else:
-            self.squash_x = 1.0
-            self.squash_y = 1.0
-        self._apply_transform()
+        """按下反馈：**只补描边，不改几何**（v2.11.0 A4）。
+
+        改前这里是 squash_x=0.92 / squash_y=1.06（把角色压扁）+ _anchor_bottom——
+        那个几何变化会和角色自己的呼吸/摇摆相位叠加，看起来像抖动（上一轮复盘出的教训）。
+        现在按压只切一个"描边"开关：**scale / squash / 窗口尺寸 / item 变换一个都不写**
+        （连"复位成 1.0"都不写——在播的呼吸/摇摆会被这一下打断成一帧闪动）。
+        描边的几何因子取 pet_motion.SCALE["PRESS"]（恒 1.0），由 _sync_press_outline 消费。
+        函数名保留：调用点与既有证据锚点都指向它，语义收窄成"按下反馈"。
+        """
+        self._pressed = bool(pressed)
+        self._sync_press_outline()
 
     def _snap_to_edge(self):
+        """贴边：算好目标位置后**滑过去**（A5：目标计算与旧版逐字相同，只有"怎么去"变了）。
+
+        旧版最后一行是 `self.move(x, y)`（瞬移）。现在交给 _slide_to：
+        默认走 pet_motion.DUR["EDGE"]（300ms，大位移档）缓动；关掉「减少动效」= 瞬时。
+        """
         if self._flying:
             return  # P1-手感：飞行中不触发吸附，落地静止后再允许
         # P1-4：以「所在屏」（间隙取最近屏）吸附，混合 DPI 下用逻辑坐标天然对齐
@@ -4285,7 +4407,468 @@ class PetWindow(QWidget):
             y = scr.top()
         elif cy > scr.top() + 3 * scr.height() / 4:
             y = scr.bottom() - self.height()
-        self.move(x, y)
+        self._slide_to(x, y)  # A5：目标 (x, y) 与旧版同一个算法，位移改走缓动
+
+    # ---------- v2.11.0 第 9 轮：动效地基（A1/A2/A3）+ 视觉三件套（A4/A5） ----------
+    def _reduce_motion(self):
+        """「减少动效」的**生效值**（A2）：配置优先；配置是 auto 时用启动时读到的系统设置。
+
+        系统设置读不到 → `_sys_reduce_motion is None` → **保持动效开启**（不擅自替用户降级）。
+        """
+        return pet_motion.reduce_motion_enabled(self.cfg.get("reduce_motion", "auto"),
+                                                self._sys_reduce_motion)
+
+    def _high_contrast(self):
+        """高对比度的**生效值**（A3）：配置优先；auto 时跟随启动时读到的系统深色主题。"""
+        return pet_motion.high_contrast_enabled(self.cfg.get("high_contrast", "auto"),
+                                                self._sys_dark)
+
+    def _ease(self, name):
+        """缓动令牌名 → QEasingCurve.Type（全仓唯一映射点；名字的真源是 pet_motion.EASE）。"""
+        return getattr(QEasingCurve.Type, pet_motion.easing_name(name),
+                       QEasingCurve.Type.Linear)
+
+    def _character_rect(self):
+        """角色当前**可见**包围盒（场景坐标）。三件套只**读**它，绝不改它。"""
+        r = self.item.sceneBoundingRect()
+        if r.isNull() or r.width() <= 0 or r.height() <= 0:
+            return QRectF(0, 0, self.width(), self.height())  # 兜底：贴图未就位时用窗口矩形
+        return r
+
+    def _retire_anim(self, attr, anim):
+        """动画自然结束：清掉引用并 deleteLater（幂等；被顶替时由顶替方负责回收）。"""
+        if getattr(self, attr, None) is anim:
+            setattr(self, attr, None)
+        try:
+            anim.deleteLater()
+        except RuntimeError:
+            pass  # 动画已被销毁（退出清理/被顶替）：幂等
+
+    def _retire_overlay(self, item, anim, bucket):
+        """一次性动效收尾：**从场景里摘掉** + 清引用 + 回收动画。
+
+        "结束之后对象数回到基线"这条验收就落在这里——摘项、出表、deleteLater 三件事
+        一件都不能少（少一件就是残留控件，用例会红）。
+        """
+        try:
+            self.scene.removeItem(item)
+        except RuntimeError:
+            pass  # 场景已销毁（退出中）：幂等
+        setattr(self, bucket, [p for p in getattr(self, bucket) if p[1] is not anim])
+        try:
+            anim.deleteLater()
+        except RuntimeError:
+            pass
+
+    def _clear_motion_overlays(self):
+        """「减少动效」刚打开时：把在途的一次性动效立刻收干净（不留半截残影）。"""
+        for bucket in ("_ripples", "_hearts"):
+            for item, anim in list(getattr(self, bucket)):
+                try:
+                    anim.stop()
+                except RuntimeError:
+                    pass  # 已被销毁：下面的 _retire_overlay 仍要把项摘掉
+                self._retire_overlay(item, anim, bucket)
+        if self._glow_anim is not None:
+            try:
+                self._glow_anim.stop()
+                self._glow_anim.deleteLater()
+            except RuntimeError:
+                pass
+            self._glow_anim = None
+
+    # ---- A4 ①：悬停 = 只做光晕（不缩放） ----
+    def enterEvent(self, e):
+        """悬停进入：亮起光晕。**几何量一律不动**（不缩放、不改窗口尺寸、不动 item 变换）。"""
+        super().enterEvent(e)
+        self._hover = True
+        self._set_cursor_hint(True)
+        self._sync_hover_glow()
+
+    def leaveEvent(self, e):
+        """悬停离开：光晕收掉。按压状态**不在这里清**（松手路径负责，免得拖到窗外丢事件）。"""
+        super().leaveEvent(e)
+        self._hover = False
+        self._set_cursor_hint(False)
+        self._sync_hover_glow()
+
+    def _place_glow(self):
+        """把光晕摆成"包住角色"的椭圆（光晕在角色**之下**，不遮脸）。"""
+        if self._glow_item is None:
+            return
+        pad = float(pet_motion.GLOW["RADIUS_PX"])
+        r = self._character_rect().adjusted(-pad, -pad, pad, pad)
+        self._glow_item.setRect(r)
+        base = QColor(pet_motion.GLOW["COLOR"])
+        edge = QColor(base)
+        edge.setAlpha(int(pet_motion.GLOW["ALPHA"]))
+        mid = QColor(base)
+        mid.setAlpha(max(0, int(pet_motion.GLOW["ALPHA"]) // 3))
+        clear = QColor(base)
+        clear.setAlpha(0)
+        grad = QRadialGradient(r.center(), max(1.0, max(r.width(), r.height()) / 2.0))
+        grad.setColorAt(0.0, clear)   # 中心透明：光晕是"外圈"，不是给角色蒙一层
+        grad.setColorAt(0.82, mid)
+        grad.setColorAt(1.0, edge)
+        self._glow_item.setBrush(QBrush(grad))
+
+    def _sync_hover_glow(self):
+        """悬停光晕：**只改绘制层的不透明度**。
+
+        SCALE["HOVER"] 恒 1.0 = 这里的几何因子就是"不缩放"；关掉「减少动效」时
+        **瞬时**亮起/熄灭（时长为 0 → 直接设终值，不留动画对象）。
+        """
+        target = 1.0 if self._hover else 0.0
+        if self._glow_item is None:
+            self._glow_item = QGraphicsEllipseItem()
+            self._glow_item.setZValue(-1)  # 角色之下
+            self._glow_item.setPen(Qt.PenStyle.NoPen)
+            self._glow_item.setOpacity(0.0)
+            self.scene.addItem(self._glow_item)
+        self._place_glow()
+        if self._glow_anim is not None:
+            try:
+                self._glow_anim.stop()
+                self._glow_anim.deleteLater()
+            except RuntimeError:
+                pass
+            self._glow_anim = None
+        ms = pet_motion.duration_ms("FEEDBACK", self._reduce_motion())
+        if ms <= 0:
+            self._glow_item.setOpacity(target)
+            return
+        anim = QVariantAnimation(self)
+        anim.setDuration(ms)
+        anim.setStartValue(float(self._glow_item.opacity()))
+        anim.setEndValue(target)
+        anim.setEasingCurve(self._ease("ENTER"))
+        anim.valueChanged.connect(self._glow_item.setOpacity)
+        anim.finished.connect(lambda a=anim: self._retire_anim("_glow_anim", a))
+        self._glow_anim = anim
+        anim.start()
+
+    # ---- A4 ②：按下 = 只补描边（不缩放） ----
+    def _sync_press_outline(self):
+        """按下描边：几何因子取 SCALE["PRESS"]（恒 1.0，即**不缩放**），只画一圈框。
+
+        描边是**状态**不是动效：关掉「减少动效」时它照旧出现（瞬时 = 没有过渡帧，
+        而不是没有反馈）——所以这里不需要时长令牌。
+        """
+        if self._outline_item is None:
+            self._outline_item = QGraphicsPathItem()
+            self._outline_item.setZValue(3)  # 角色与特效之上：它是"被按到了"的提示
+            col = QColor(pet_motion.OUTLINE["COLOR"])
+            col.setAlpha(int(pet_motion.OUTLINE["ALPHA"]))
+            self._outline_item.setPen(QPen(col, float(pet_motion.OUTLINE["WIDTH_PX"])))
+            self._outline_item.setBrush(Qt.BrushStyle.NoBrush)
+        if not self._pressed:
+            self._outline_item.hide()
+            return
+        f = pet_motion.visual_scale("PRESS")
+        m = float(pet_motion.OUTLINE["MARGIN_PX"])
+        r = self._character_rect()
+        w, h = r.width() * f + 2 * m, r.height() * f + 2 * m
+        path = QPainterPath()
+        path.addRoundedRect(QRectF(r.center().x() - w / 2.0, r.center().y() - h / 2.0, w, h),
+                            10.0, 10.0)
+        self._outline_item.setPath(path)
+        if self._outline_item.scene() is None:
+            self.scene.addItem(self._outline_item)
+        self._outline_item.show()
+
+    # ---- A4 ③：点击 = 涟漪（一次性、自己消失、可被「减少动效」关掉） ----
+    def _spawn_ripple(self, scene_pos):
+        """从点击点扩散的涟漪。
+
+        · 关掉「减少动效」→ **根本不产生**（不是"短一点"）；
+        · 绘制项不接收鼠标（view 已 WA_TransparentForMouseEvents）→ "不阻塞交互"是结构性的；
+        · 收尾走 _retire_overlay：摘项 + 出表 + 回收动画 → "对象数回基线"。
+        """
+        if not pet_motion.animation_enabled(self._reduce_motion()):
+            return None
+        item = QGraphicsEllipseItem()
+        item.setZValue(4)
+        col = QColor(pet_motion.RIPPLE["COLOR"])
+        col.setAlpha(int(pet_motion.RIPPLE["ALPHA"]))
+        item.setPen(QPen(col, float(pet_motion.RIPPLE["WIDTH_PX"])))
+        item.setBrush(Qt.BrushStyle.NoBrush)
+        r0 = float(pet_motion.RIPPLE["MIN_RADIUS_PX"])
+        cx, cy = scene_pos.x(), scene_pos.y()
+        item.setRect(QRectF(cx - r0, cy - r0, 2 * r0, 2 * r0))
+        self.scene.addItem(item)
+        max_r = float(pet_motion.RIPPLE["MAX_RADIUS_PX"])
+        anim = QVariantAnimation(self)
+        anim.setDuration(pet_motion.duration_ms("RIPPLE", False))
+        anim.setStartValue(0.0)
+        anim.setEndValue(1.0)
+        anim.setEasingCurve(self._ease("EXIT"))
+
+        def _onval(v, it=item, x0=cx, y0=cy):
+            r = r0 + (max_r - r0) * float(v)
+            it.setRect(QRectF(x0 - r, y0 - r, 2 * r, 2 * r))
+            it.setOpacity(max(0.0, 1.0 - float(v)))
+
+        anim.valueChanged.connect(_onval)
+        anim.finished.connect(lambda a=anim, it=item: self._retire_overlay(it, a, "_ripples"))
+        self._ripples.append((item, anim))
+        anim.start()
+        return item
+
+    # ---- B4：摸头心形（一次一串、会自己消失） ----
+    def _spawn_hearts(self):
+        """一串心形：上浮 + 淡出 + 自己消失（收尾判据与涟漪同一条）。
+
+        关掉「减少动效」→ 不产生。心形与头顶表情共用 pet_widgets._emote_mark 的画笔。
+        """
+        if not pet_motion.animation_enabled(self._reduce_motion()):
+            return 0
+        base = self._character_rect()
+        count = max(1, int(pet_motion.HEART["COUNT"]))
+        pix = self._emote_pixmap("heart", int(pet_motion.HEART["SIZE_PX"]))
+        rise = float(pet_motion.HEART["RISE_PX"])
+        spread = float(pet_motion.HEART["SPREAD_PX"])
+        ms = pet_motion.duration_ms("HEART", False)
+        made = 0
+        for i in range(count):
+            item = QGraphicsPixmapItem(pix)
+            item.setZValue(4)
+            x0 = base.center().x() + (i - (count - 1) / 2.0) * spread - pix.width() / 2.0
+            y0 = base.top() + base.height() * 0.22
+            item.setPos(x0, y0)
+            self.scene.addItem(item)
+            anim = QVariantAnimation(self)
+            anim.setDuration(ms)
+            anim.setStartValue(0.0)
+            anim.setEndValue(1.0)
+            anim.setEasingCurve(self._ease("STANDARD"))
+
+            def _onval(v, it=item, ax=x0, ay=y0):
+                it.setPos(ax, ay - rise * float(v))
+                it.setOpacity(max(0.0, 1.0 - float(v) ** 2))
+
+            anim.valueChanged.connect(_onval)
+            anim.finished.connect(lambda a=anim, it=item: self._retire_overlay(it, a, "_hearts"))
+            self._hearts.append((item, anim))
+            anim.start()
+            made += 1
+        return made
+
+    # ---- A5：贴边缓动（目标位置计算不变，位移走令牌表） ----
+    def _slide_to(self, x, y):
+        """把窗口滑到 (x, y)。**目标位置由调用方（_snap_to_edge）算好**，这里只负责"怎么去"。
+
+        · 关掉「减少动效」→ 瞬时 move()；
+        · 目标就是当前位置 → 什么都不做（不产生空动画）；
+        · 新的一次滑动顶掉在途的那次（单动画槽，与 _run_anim 同口径）。
+        """
+        tx, ty = int(x), int(y)
+        self._stop_slide()
+        if (tx, ty) == (self.x(), self.y()):
+            return
+        ms = pet_motion.duration_ms("EDGE", self._reduce_motion())
+        if ms <= 0:
+            self.move(tx, ty)
+            return
+        sx, sy = self.x(), self.y()
+        anim = QVariantAnimation(self)
+        anim.setDuration(ms)
+        anim.setStartValue(0.0)
+        anim.setEndValue(1.0)
+        anim.setEasingCurve(self._ease("IN_OUT"))
+
+        def _onval(v, ax=sx, ay=sy, bx=tx, by=ty):
+            self.move(int(round(ax + (bx - ax) * float(v))),
+                      int(round(ay + (by - ay) * float(v))))
+
+        anim.valueChanged.connect(_onval)
+        anim.finished.connect(lambda a=anim: self._retire_slide(a))
+        self._slide_anim = anim
+        anim.start()
+
+    def _stop_slide(self):
+        """停掉在途的贴边滑动（幂等；幂等性由"引用先摘再停"保证）。"""
+        anim = self._slide_anim
+        self._slide_anim = None
+        if anim is None:
+            return
+        try:
+            anim.stop()
+            anim.deleteLater()
+        except RuntimeError:
+            pass  # 已被销毁：幂等
+
+    def _retire_slide(self, anim):
+        """贴边滑动自然结束。"""
+        if self._slide_anim is anim:
+            self._slide_anim = None
+        try:
+            anim.deleteLater()
+        except RuntimeError:
+            pass
+
+    # ---- A3：键盘可达（只在本窗口持有键盘焦点时生效；不抢全局键） ----
+    def keyPressEvent(self, e):
+        """Esc = 收进托盘（与 closeEvent 同一语义）· Enter/Space = 主交互 · 其余走默认。
+
+        **不许抢全局 Esc**：这里只是窗口级的 keyPressEvent——本窗口带
+        WindowDoesNotAcceptFocus（不抢用户当前应用的焦点），全仓也没有任何
+        QShortcut / ApplicationShortcut（由用例在 AST/文本层钉住）。
+        """
+        key = e.key()
+        if key == Qt.Key.Key_Escape:
+            self.close()  # closeEvent：收进托盘，不是退出程序
+            e.accept()
+            return
+        if key in (Qt.Key.Key_Return, Qt.Key.Key_Enter, Qt.Key.Key_Space):
+            self._primary_action()
+            e.accept()
+            return
+        super().keyPressEvent(e)
+
+    def _primary_action(self):
+        """键盘路径下的"主交互"：与左键单击**等价的用户可见效果**（戳一下 + 反应）。"""
+        self._wake()
+        self._touch_activity()
+        self.mood.poke()
+        self.voice.play_event("poke")
+        self._spawn_hearts()
+        if self.cfg.get("sound", True):
+            play_sound("pop")
+
+    # ---- A2/A3：两个开关的落地点 ----
+    def _set_reduce_motion(self, on):
+        """菜单开关：显式选择覆盖 auto（写死 on/off），立即生效。"""
+        self.cfg["reduce_motion"] = "on" if on else "off"
+        save_config(self.cfg)
+        self._clear_motion_overlays()  # 刚打开：把在途的一次性动效收干净
+        self.bubble.set_motion_reduced(self._reduce_motion())
+        self._sync_thinking()  # B8：在途指示只停脉动，**绝不消失**（它是信息）
+        self.show_bubble("动效已关掉，只留瞬时反馈~" if on else "动效已恢复~")
+
+    def _set_high_contrast(self, on):
+        """菜单开关：显式选择覆盖 auto（写死 on/off），立即生效。"""
+        self.cfg["high_contrast"] = "on" if on else "off"
+        save_config(self.cfg)
+        self._apply_contrast(restore_style=not on)
+        self.show_bubble("高对比度已开启（正文 ≥ 4.5:1）~" if on else "高对比度已关闭~")
+
+    def _apply_contrast(self, restore_style=False):
+        """A3：高对比度落地——气泡三色 + 挂件/托盘配色。
+
+        **关闭时一个字节都不改**（用户自定义样式与现状原样保留）；开启时换成
+        pet_motion 的调色板，每一对的对比度由用例算出来钉住 ≥ 4.5:1（不靠眼看）。
+
+        restore_style=True：**刚刚把高对比度关掉**——这时要把用户自己那份样式放回去，
+        否则调色板的三色会留在内存引擎里，用户看到的是"开关关不掉"。
+        """
+        hc = self._high_contrast()
+        dark = bool(self._sys_dark)
+        pet_widgets.set_high_contrast(hc, dark)
+        if hc:
+            BUBBLE_STYLE.update(pet_motion.bubble_colors(BUBBLE_STYLE, True, dark))
+        elif restore_style:
+            base = self.cfg.get("bubble_style")
+            if isinstance(base, dict):
+                BUBBLE_STYLE.update(dict(base))
+        self.bubble.update()
+
+    # ---- B8：AI 在途的**可见**状态（"它在想"必须看得见） ----
+    @property
+    def _ai_inflight(self):
+        """AI 请求在途。真源仍是 pet_chat 的读写点（:481 置 True / ai_done 置 False）——
+        这里把那个布尔做成**带显示的属性**：任何一处写入都会同步头上的"思考中"指示。"""
+        return bool(getattr(self, "_ai_inflight_state", False))
+
+    @_ai_inflight.setter
+    def _ai_inflight(self, on):
+        self._ai_inflight_state = bool(on)
+        self._sync_thinking()
+
+    def _place_thinking(self):
+        """把"思考中"指示摆在角色头顶（贴住角色包围盒，随缩放/换形态重排）。"""
+        if self._thinking_item is None:
+            return
+        b = self._character_rect()
+        pix = self._thinking_item.pixmap()
+        w = float(pix.width() or pet_motion.THINKING["SIZE_PX"])
+        h = float(pix.height() or pet_motion.THINKING["SIZE_PX"])
+        self._thinking_item.setPos(b.center().x() - w / 2.0,
+                                   max(0.0, b.top() - h - float(pet_motion.THINKING["GAP_PX"])))
+
+    def _start_thinking_pulse(self):
+        """脉动。**在途指示是信息不是装饰**：关掉「减少动效」只停脉动，指示照常显示。"""
+        if self._thinking_anim is not None or self._thinking_item is None:
+            return
+        anim = QVariantAnimation(self)
+        anim.setDuration(pet_motion.duration_ms("THINKING_PULSE"))
+        anim.setStartValue(float(pet_motion.THINKING["MIN_OPACITY"]))
+        anim.setEndValue(1.0)
+        anim.setEasingCurve(self._ease("IN_OUT"))
+        anim.setLoopCount(-1)
+        anim.valueChanged.connect(self._thinking_item.setOpacity)
+        self._thinking_anim = anim
+        anim.start()
+
+    def _stop_thinking_pulse(self):
+        """停掉脉动（幂等）。"""
+        anim = self._thinking_anim
+        self._thinking_anim = None
+        if anim is None:
+            return
+        try:
+            anim.stop()
+            anim.deleteLater()
+        except RuntimeError:
+            pass  # 已被销毁：幂等
+
+    def _sync_thinking(self):
+        """B8：把"AI 在途"落到画面上（信息，不随「减少动效」消失）。"""
+        if not hasattr(self, "scene"):
+            return  # 构造期：属性先于场景建立，这里只记状态（__init__ 稍后会再同步一次）
+        app = QApplication.instance()
+        if app is not None and QThread.currentThread() is not app.thread():
+            # 非主线程写入（防御）：只记状态，**绝不在工作线程里碰 Qt 控件**；
+            # 主线程侧的 ai_done（信号，队列连接）会把指示收掉。
+            return
+        on = self._ai_inflight
+        if self._thinking_item is None:
+            if not on:
+                return
+            self._thinking_item = QGraphicsPixmapItem(pet_widgets.thinking_pixmap())
+            self._thinking_item.setZValue(2)  # 与头顶表情同层：盖在角色上
+            self.scene.addItem(self._thinking_item)
+        if not on:
+            self._thinking_item.hide()
+            self._stop_thinking_pulse()
+            return
+        self._place_thinking()
+        self._thinking_item.show()
+        if self._reduce_motion():
+            self._thinking_item.setOpacity(1.0)  # 静态可见（瞬时切换，不是"没有"）
+            self._stop_thinking_pulse()
+        else:
+            self._start_thinking_pulse()
+
+    # ---- B1：拖拽光标（悬停=可拖 / 拖拽中=抓着） ----
+    def _reset_pointer_state(self):
+        """B1：把在途的按压/拖拽状态与光标一起收干净（幂等、不抛）。
+
+        三条"打断路径"共用：Esc/关闭（closeEvent）· 真退出（_quit）· 拖到窗外松手。
+        拖到一半被 Esc 打断是常见形态，留着 ClosedHandCursor 会让下次悬停看起来像还按着。
+        """
+        try:
+            self._dragging = False
+            self._press_squash(False)
+            self.unsetCursor()
+        except RuntimeError:
+            pass  # 有意忽略：窗口已在析构中的极端路径
+
+    def _set_cursor_hint(self, over):
+        """B1：悬停给"可拖"光标；进入拖拽态后换成"抓着"（阈值判定见 mouseMoveEvent）。"""
+        if over and not self._dragging:
+            self.setCursor(Qt.CursorShape.OpenHandCursor)
+        else:
+            self.unsetCursor()
 
     # ---------- 鼠标事件 ----------
     def mousePressEvent(self, e):
@@ -4302,12 +4885,18 @@ class PetWindow(QWidget):
             self._drag_offset = e.globalPosition().toPoint() - self.frameGeometry().topLeft()
             self._moved = False
             self._press_dist = 0  # 本次按压累计移动距离（摸头 32px 阈值判定）
+            self._dragging = False        # B1：越过阈值才算拖拽（防误触）
+            self._suppress_release = False  # B7：新一轮按压清掉上一次双击的吞 release 标记
+            self._stop_slide()            # A5：新操作顶掉在途贴边滑动（免得"追着走"）
             self._was_walking = self.walk_timer.isActive()
             self.walk_timer.stop()
             self._press_squash(True)
             if self.cfg.get("sound", True):
                 play_sound("boing")
-            self._hold_timer.start(1500)  # 长按 1.5 秒 → 摸摸头
+            # 长按阈值走令牌表（原处硬编码 1500 已搬家：pet_motion.DUR["PET_HOLD"]）。
+            # ⚠ 它是**交互阈值**不是动效，所以**不随「减少动效」归零**——归零等于"按下即摸头"，
+            # 那是行为改变，不是降级（A2 只关动效，不改交互语义）。
+            self._hold_timer.start(pet_motion.duration_ms("PET_HOLD"))
         elif e.button() == Qt.MouseButton.RightButton:
             self._touch_activity()  # v2.1.8（L1）：右键（开菜单）=交互，避免对话框背后进入待机
             self._hold_timer.stop()
@@ -4326,10 +4915,16 @@ class PetWindow(QWidget):
             gp = e.globalPosition().toPoint()
             dist = (gp - self._press_global).manhattanLength()
             self._press_dist = max(self._press_dist, dist)
-            if dist > 4:
+            # B1 拖拽阈值：小于阈值**不进入拖拽态**——既不移动窗口，也不算"挪过"
+            # （松手仍按"戳一下"处理）。手抖 1~2px 不该把宠物拖走。阈值取自令牌表。
+            if not self._dragging and dist <= pet_motion.DRAG["THRESHOLD_PX"]:
+                return
+            if not self._dragging:
+                self._dragging = True
                 self._moved = True
-            if dist > 32:
-                # 明确是拖动（>32px）才取消长按，避免 4px 手抖误判（M-3 修复）
+                self.setCursor(Qt.CursorShape.ClosedHandCursor)  # B1：抓着
+            if dist > pet_motion.DRAG["PET_CANCEL_PX"]:
+                # 明确是拖动（>32px，令牌 PET_CANCEL_PX）才取消长按，避免手抖误判（M-3 修复）
                 self._hold_timer.stop()
                 if self._petting:
                     self._end_petting()
@@ -4343,6 +4938,13 @@ class PetWindow(QWidget):
         if e.button() == Qt.MouseButton.LeftButton:
             if self._flying and self._press_global is None:
                 return  # P1-手感：飞行中点到宠物（press 被忽略）——release 一并忽略，防状态陈旧
+            if self._suppress_release:
+                # B7：Qt 的双击顺序是 press→release→dblclick→release；第二次 release 已被
+                # mouseDoubleClickEvent 的动作消费掉，这里吞掉它（否则"双击 = 戳两下"）。
+                self._suppress_release = False
+                self._press_squash(False)
+                self._set_cursor_hint(self._hover)
+                return
             self._drag_offset = None
             self._press_global = None
             self._hold_timer.stop()
@@ -4351,6 +4953,9 @@ class PetWindow(QWidget):
             if self._petting:
                 self._end_petting()
             self._press_squash(False)
+            self._dragging = False
+            # B1：松手后按**当前是否还在角色上**恢复光标（拖到窗外松手 → 别留开手）
+            self._set_cursor_hint(self._hover)
             if self.cfg.get("sound", True):
                 play_sound("pop")
             self.wander.on_drag_end()
@@ -4359,6 +4964,8 @@ class PetWindow(QWidget):
             if not self._moved:
                 self.mood.poke()
                 self.voice.play_event("poke")  # v2.0：被戳语音片段
+                # A4 ③：点击涟漪——从**点击点**扩散、一次性、自己消失（不阻塞交互）
+                self._spawn_ripple(QPointF(e.position()))
             else:
                 # P1-手感：仅开启物理时估速甩抛；默认关闭走原贴边逻辑（逐字节等价）
                 if self._physics_on():
@@ -4366,6 +4973,26 @@ class PetWindow(QWidget):
                     if self._maybe_throw():
                         return
                 self._snap_to_edge()
+
+    def mouseDoubleClickEvent(self, e):
+        """B7：双击走**事件**，不加任何延迟（用户明确否决过"单击先等一等"）。
+
+        Qt 的顺序是 press→release→dblclick→release：第一次 release 已经按"戳一下"
+        处理过，这里补的是**双击专属**的反应（脸红 + 一串心形 + 涟漪），并把紧随
+        其后的那次 release 标记为吞掉（_suppress_release），免得被记成第二次戳。
+        """
+        if e.button() != Qt.MouseButton.LeftButton:
+            super().mouseDoubleClickEvent(e)
+            return
+        self._suppress_release = True
+        self._hold_timer.stop()  # 双击不是"长按摸头"
+        self._wake()
+        self._touch_activity()
+        self._spawn_ripple(QPointF(e.position()))
+        self._spawn_hearts()
+        self.mood.blush()
+        self._say_line(self._pick_line(("happy", "sajiao")))
+        e.accept()
 
     # ---------- P1-手感：甩抛物理（默认关闭） ----------
     def _physics_on(self):
@@ -4953,7 +5580,9 @@ class PetWindow(QWidget):
                 else:
                     self.cfg["bubble_style"] = _prev_style
                 return False, "气泡样式没能保存：%s" % (err,)
-            BUBBLE_STYLE.update(st)
+            # A3：高对比度开启时把三色换成调色板（关闭时 bubble_colors 原样返回）
+            BUBBLE_STYLE.update(pet_motion.bubble_colors(st, self._high_contrast(),
+                                                         bool(self._sys_dark)))
             self.bubble.update()
         except Exception as e:
             _log_error("apply_bubble_style failed: %r" % (e,))
@@ -5276,6 +5905,7 @@ class PetWindow(QWidget):
         if self._closing:
             return  # 幂等：已经在退出流程里，重入会把清理跑第二遍
         self._closing = True  # P1-5：先立退出标志，在途网络请求信号/气泡被守卫拦下
+        self._reset_pointer_state()  # B1：退出也是"拖到一半"的打断路径之一
         # v2.1：停配音（清空队列 + 停播放），避免退出时后台线程还在合成
         try:
             self.voice.stop()
@@ -5325,13 +5955,29 @@ class PetWindow(QWidget):
             if self._save_scale_timer is not None and self._save_scale_timer.isActive():
                 save_config(self.cfg)
             for a in (getattr(self, "_tween_anim", None), getattr(self, "_emote_anim", None),
-                      getattr(self, "_balance_anim", None)):
+                      getattr(self, "_balance_anim", None), getattr(self, "_glow_anim", None),
+                      getattr(self, "_slide_anim", None),
+                      getattr(self, "_thinking_anim", None)):  # v2.11.0：光晕/贴边/AI 在途脉动
                 if a is not None:
                     try:
                         a.stop()
                         a.deleteLater()
                     except RuntimeError:
                         pass  # 有意忽略：动画可能已被销毁（退出清理尽力而为）
+            # v2.11.0 第 9 轮（A4/B4）：在途的一次性动效（涟漪/心形）也要收干净——
+            # 摘项 + 清引用，退出后不留下任何仍在场景里的绘制项或还在跑的动画。
+            for _item, _anim in list(self._ripples) + list(self._hearts):
+                try:
+                    _anim.stop()
+                    _anim.deleteLater()
+                except RuntimeError:
+                    pass  # 有意忽略：动画可能已被销毁
+                try:
+                    self.scene.removeItem(_item)
+                except RuntimeError:
+                    pass  # 有意忽略：场景可能已销毁
+            self._ripples = []
+            self._hearts = []
             try:
                 if self._preview_player is not None:
                     self._preview_player.stop()

@@ -1417,3 +1417,337 @@ def test_alarm_new_after_select_does_not_ask(pet, ui):
         for x in pet.alarms.list():
             if x.get("label") == "v290_alarm_sel":
                 pet.alarms.delete(x["id"])
+# ==================== U2（v2.10.0）：只选 1 张时的**解释性**文案 ====================
+
+def test_one_image_explains_why_two_are_needed_and_what_to_do(pet, ui, monkeypatch, tmp_path):
+    """U2：选 1 张 → 提示要说清「**为什么**不行」与「**该怎么办**」，不只是一句下限。
+
+    改前只有「帧动作至少 2 张图」——只说了下限。**只改文案，下限一个字没动**
+    （U1 = "一张图做静态姿势"用户已明确撤回，见 task_v2100_round.md §一）。
+    变异：文案改回裸的那一句 → 第 2/3/4 条断言红（第 1 条仍绿）。
+    """
+    old_rid = str(pet.cfg.get("role") or "")
+    rid = _install_role(pet, tmp_path, "v290角色U2")
+    d = pet_dialogs.BehaviorDialog(pet, pet.behaviors)
+    d.show()
+    try:
+        one = tmp_path / "one.png"
+        _png(one, 40, 40, 0xFFAA0000)
+        monkeypatch.setattr(pet_dialogs.QFileDialog, "getOpenFileNames",
+                            staticmethod(lambda *a, **k: ([str(one)], "")))
+        d._import_frame_action()
+        assert ui["warn"], "选 1 张时一句话都没有"
+        msg = ui["warn"][-1][1]
+        assert "至少 2 张图" in msg, "把下限那句话弄丢了：%r" % (msg,)
+        assert "静态姿势" in msg, "没解释 1 张为什么不行：%r" % (msg,)
+        assert "逐帧动画" in msg, "没说清 2 张以上会做成什么：%r" % (msg,)
+        assert "请一次选 2 张以上" in msg, "没告诉用户该怎么办：%r" % (msg,)
+        # 只改文案不许顺手动下限：一个动作都不该落进角色
+        forms = (pet.role_lib.get(rid) or {}).get("forms") or []
+        assert not (forms[0].get("animations") or {}), "1 张图竟然落进去了（下限被改了）"
+    finally:
+        d.hide()
+        pet.apply_role(old_rid)
+
+
+# ==================== R1 / G3（v2.10.0）：两处入口都说清「取消会不会撤销」 ====================
+
+def test_both_frame_action_entries_say_whether_cancel_undoes_it(pet, ui, tmp_path):
+    """R1/G3（裁决②）：同一件事的两个入口语义相反，必须**动手前**在窗口里看得见。
+
+    · 行为设置「＋导入图片做动作…」：立即写进角色 → 点「取消」/关窗**不会**撤销它；
+    · 角色编辑「＋帧动作…」：暂存态 → 点「保存」才落到角色上，点「取消」/关窗会放弃。
+    变异：① 行 为设置那侧删掉"取消…不会撤销"半句 → 红；
+          ② 删掉角色编辑的常驻说明（或只塞进 tooltip）→ 红。
+    """
+    old_rid = str(pet.cfg.get("role") or "")
+    rid = _install_role(pet, tmp_path, "v290角色R1")
+    d = pet_dialogs.BehaviorDialog(pet, pet.behaviors)
+    d.show()
+    try:
+        txt = d._act_target.text()
+        assert "立即" in txt, "没说这一步立即生效：%r" % (txt,)
+        assert "取消" in txt and "不会撤销" in txt, (
+            "没说清「这个窗口点取消不会撤销它」：%r" % (txt,))
+        assert "撤销这次导入" in txt, "没给收回的办法：%r" % (txt,)
+    finally:
+        d.hide()
+        pet.apply_role(old_rid)
+    # 另一边：角色编辑的常驻说明（tooltip 不可发现、触屏没有 hover，不算"看得见"）
+    e = pet_dialogs.RoleEditDialog(pet, pet.role_lib, rid)
+    try:
+        note = e._act_note
+        assert not note.isHidden(), "角色编辑里那条说明被藏起来了"
+        t2 = note.text()
+        assert "暂存" in t2, "没说这是暂存态：%r" % (t2,)
+        assert "保存" in t2 and "取消" in t2, "没说清保存/取消各自会发生什么：%r" % (t2,)
+        assert "放弃" in t2, "没说清点「取消」会放弃：%r" % (t2,)
+        assert "2 张" in t2, "没顺手说清为什么要 2 张（U2 的入口侧落点）：%r" % (t2,)
+        assert "不会" not in t2, "两边写成了同一个意思（这边取消 = 放弃）：%r" % (t2,)
+    finally:
+        e._cleanup()
+
+
+# ==================== R3（v2.10.0）：行为重名 —— 不许静默 ====================
+
+def _stub_clash(monkeypatch, choice, calls=None):
+    """把重名三选一换成死值（只记录调用，**不镜像**被测实现的逻辑）。"""
+    def _f(parent, name, other, allow_overwrite=True):
+        if calls is not None:
+            calls.append({"name": name, "id": (other or {}).get("id"),
+                          "allow_overwrite": allow_overwrite})
+        return choice
+    monkeypatch.setattr(pet_dialogs, "_ask_name_clash", _f)
+    return _f
+
+
+def _fill_new_behavior(dlg, name, text="重名用例"):
+    """在对话框里填好一条**新建**草稿（三步都走真按钮/真控件）。"""
+    dlg._new()
+    dlg._act_combo.setCurrentIndex(dlg._act_combo.findData("say"))
+    dlg._param.setText(text)
+    dlg._add_step()
+    dlg._name.setText(name)
+
+
+def _name_clash_box_buttons(pet, monkeypatch, allow_overwrite=True):
+    """真建一次重名框、把按钮文案拿出来（不 exec；用 modal 替身驱动）。"""
+    seen = {}
+
+    def _drive(box):
+        seen["buttons"] = [b.text() for b in box.buttons()]
+        return int(QDialog.DialogCode.Rejected)     # 谁都不点 = 取消
+
+    monkeypatch.setattr(pet_dialogs, "modal", _drive)
+    got = pet_dialogs._ask_name_clash(pet, "same",
+                                      {"id": "abcd1234", "steps": [{"act": "say"}]},
+                                      allow_overwrite=allow_overwrite)
+    return got, seen.get("buttons", [])
+
+
+def test_name_clash_box_offers_three_choices_plus_cancel(pet, monkeypatch):
+    """R3 的结构面：这个框真的给「覆盖 / 两条都留 / 换个名字」＋「取消」。
+
+    变异：删掉 DestructiveRole 那个按钮（或改成只给一个选项）→ 本用例红。
+    """
+    got, labels = _name_clash_box_buttons(pet, monkeypatch)
+    assert got == "", "没点任何按钮时应该按「取消」处理：%r" % (got,)
+    for want in ("覆盖", "两条都留", "换个名字", "取消"):
+        assert any(want in t for t in labels), "重名框少了「%s」这个选项：%r" % (want, labels)
+    # 改自己名字那条路**不提供"覆盖"**：那会把别人的条目换成这份内容
+    got2, labels2 = _name_clash_box_buttons(pet, monkeypatch, allow_overwrite=False)
+    assert got2 == "", got2
+    assert not any("覆盖" in t for t in labels2), (
+        "改自己名字那条路也摆出了「覆盖」（会把别人的条目换掉）：%r" % (labels2,))
+
+
+def test_duplicate_behavior_name_asks_instead_of_silently_adding(dlg, pet, ui, monkeypatch):
+    """R3：「两次 add 同名都进库」不许再发生 —— 第二次保存**先问**，且问清撞的是哪一条。
+
+    变异：把 _save 里的 _resolve_name_clash(...) 换成 ("add", name, None)（判据空转）
+    → 第一条断言红（框根本没弹）。
+    """
+    a, err = pet.behaviors.add("v290_dup_ask", [{"act": "say", "text": "旧"}])
+    assert a is not None, err
+    calls = []
+    _stub_clash(monkeypatch, "cancel", calls)
+    try:
+        _fill_new_behavior(dlg, "v290_dup_ask")
+        assert dlg._save() is False, "用户在重名框点了取消，却报「保存成功」"
+        assert calls, "重名却什么都没问（静默又加了一条同名的）"
+        assert calls[-1]["name"] == "v290_dup_ask", calls
+        assert calls[-1]["id"] == a["id"], "没把「撞上的是哪一条」交给用户：%r" % (calls,)
+        same = [b for b in pet.behaviors.list() if b["name"] == "v290_dup_ask"]
+        assert len(same) == 1, "用户还没选，库里就多了一条同名的：%r" % (same,)
+        assert "已取消" in dlg._notes.text(), "取消之后状态行没有交代：%r" % (dlg._notes.text(),)
+    finally:
+        pet.behaviors.delete(a["id"])
+
+
+def test_duplicate_name_keep_adds_a_second_entry_only_when_chosen(dlg, pet, ui, monkeypatch):
+    """R3「两条都留」：**用户明确选了**才并存（并存本身合法，静默并存才违规）。"""
+    a, err = pet.behaviors.add("v290_dup_keep", [{"act": "say", "text": "旧"}])
+    assert a is not None, err
+    calls = []
+    made = []
+    _stub_clash(monkeypatch, "keep", calls)
+    try:
+        _fill_new_behavior(dlg, "v290_dup_keep", "新")
+        assert dlg._save() is True, "选了「两条都留」却没保存成功"
+        assert calls, "没问就并了一条同名的"
+        same = [b for b in pet.behaviors.list() if b["name"] == "v290_dup_keep"]
+        made = [b["id"] for b in same]
+        assert len(same) == 2, "选了「两条都留」却还是只有一条：%r" % (same,)
+    finally:
+        for _bid in (made or [a["id"]]):
+            pet.behaviors.delete(_bid)
+
+
+def test_duplicate_name_overwrite_reuses_the_same_id(dlg, pet, ui, monkeypatch):
+    """R3「覆盖它」：改的是**已有那条**（id 不变、条数不变），不是又加一条。
+
+    变异：覆盖分支里不把 _editing_id 接过去 → 第三条断言红（再点一次保存会又加一条）。
+    """
+    a, err = pet.behaviors.add("v290_dup_ovr", [{"act": "say", "text": "旧"}])
+    assert a is not None, err
+    calls = []
+    _stub_clash(monkeypatch, "overwrite", calls)
+    try:
+        _fill_new_behavior(dlg, "v290_dup_ovr", "新内容")
+        assert dlg._save() is True, "选了「覆盖它」却没保存成功"
+        same = [b for b in pet.behaviors.list() if b["name"] == "v290_dup_ovr"]
+        assert len(same) == 1 and same[0]["id"] == a["id"], (
+            "覆盖没有复用同一条（id 变了 / 条数变了）：%r" % (same,))
+        got = pet.behaviors.get(a["id"])
+        assert got["steps"][0].get("text") == "新内容", "覆盖之后内容还是旧的：%r" % (got,)
+        assert dlg._editing_id == a["id"], "覆盖完没有转入编辑那一条：%r" % (dlg._editing_id,)
+        # 再点一次「保存」不许又加一条（判据要认得出"这是我自己"）
+        assert dlg._save() is True, "覆盖之后再保存失败"
+        same2 = [b for b in pet.behaviors.list() if b["name"] == "v290_dup_ovr"]
+        assert len(same2) == 1, "覆盖之后再点保存又加了一条：%r" % (same2,)
+    finally:
+        pet.behaviors.delete(a["id"])
+
+
+def test_duplicate_name_rename_saves_the_new_name(dlg, pet, ui, monkeypatch):
+    """R3「换个名字」：改的名字真的落库，原来那条一动不动。"""
+    a, err = pet.behaviors.add("v290_dup_ren", [{"act": "say", "text": "旧"}])
+    assert a is not None, err
+    calls = []
+    made = []
+    _stub_clash(monkeypatch, "rename", calls)
+    monkeypatch.setattr(pet_dialogs, "_ask_text", lambda *a2, **k: ("v290_dup_ren_new", True))
+    try:
+        _fill_new_behavior(dlg, "v290_dup_ren", "新")
+        assert dlg._save() is True, "改完名字却没保存成功"
+        made = [b["id"] for b in pet.behaviors.list() if b["name"] == "v290_dup_ren_new"]
+        assert len(made) == 1, "换的名字没落库：%r" % (made,)
+        old = pet.behaviors.get(a["id"])
+        assert old["name"] == "v290_dup_ren" and old["steps"][0].get("text") == "旧", (
+            "换名字把原来那条也改了：%r" % (old,))
+    finally:
+        for _bid in made:
+            pet.behaviors.delete(_bid)
+        pet.behaviors.delete(a["id"])
+
+
+def test_renaming_an_existing_behavior_onto_another_name_also_asks(dlg, pet, ui, monkeypatch):
+    """R3 的另一半：**改自己名字**撞上别人时同样要问，而且那条路不提供「覆盖」。"""
+    a, _e1 = pet.behaviors.add("v290_ren_a", [{"act": "say", "text": "A"}])
+    b, _e2 = pet.behaviors.add("v290_ren_b", [{"act": "say", "text": "B"}])
+    assert a is not None and b is not None
+    calls = []
+    _stub_clash(monkeypatch, "cancel", calls)
+    try:
+        dlg._refresh()
+        assert dlg._select_behavior(a["id"]), "用例前提：要选中 A"
+        dlg._name.setText("v290_ren_b")          # 改成 B 的名字
+        assert dlg._save() is False, "取消之后不该报保存成功"
+        assert calls, "改名撞上别人却什么都没问"
+        assert calls[-1]["allow_overwrite"] is False, (
+            "改自己名字那条路把「覆盖别人」也摆出来了：%r" % (calls,))
+        assert len([x for x in pet.behaviors.list() if x["name"] == "v290_ren_b"]) == 1, (
+            "取消之后 B 被改动了")
+    finally:
+        pet.behaviors.delete(a["id"])
+        pet.behaviors.delete(b["id"])
+
+
+def test_unique_name_never_asks_about_duplicates(dlg, pet, ui, monkeypatch):
+    """控制组（原则 1：不给熟路加一步）：名字不重时**一次都不问**。"""
+    calls = []
+    made = []
+    _stub_clash(monkeypatch, "cancel", calls)
+    try:
+        _fill_new_behavior(dlg, "v290_dup_unique", "独一份")
+        assert dlg._save() is True, "不重名却保存失败"
+        assert calls == [], "名字不重也弹了重名框（凭空多一步）：%r" % (calls,)
+        made = [x["id"] for x in pet.behaviors.list() if x["name"] == "v290_dup_unique"]
+        assert len(made) == 1, "不重名的那条没落库：%r" % (made,)
+    finally:
+        for _bid in made:
+            pet.behaviors.delete(_bid)
+# ==================== R2（v2.10.0）：提交模型按类型分档，逐条钉住 ====================
+
+_SAVE_KEEPS_WINDOW = ("BehaviorDialog", "AlarmDialog", "VoiceDialog")
+_SAVE_CLOSES_WINDOW = ("IdleDialog", "RoleEditDialog", "AISettingsDialog",
+                       "BubbleStyleDialog", "PhysicsDialog")
+
+
+def _save_closes_window(d):
+    """调一次窗口级「保存」入口：finished 发出来了没有（用户可见事实，不看实现）。"""
+    d.show()
+    fin = []
+    d.finished.connect(lambda r: fin.append(int(r)))
+    d._save()
+    QApplication.processEvents()
+    return bool(fin)
+
+
+def test_submit_model_is_split_by_type_and_every_save_is_pinned(pet, ui, tmp_path):
+    """R2（#12 统一提交模型）：**"不统一"是有意接受的**，所以每一档都要被用例钉住。
+
+    实测（offscreen 真对话框；判据 = 调保存入口后 finished 发没发）：
+      · 面板型（R1 不关窗）：BehaviorDialog / AlarmDialog / VoiceDialog —— 窗内有就地提交
+        或"必须在本窗口继续用"的入口（试播/试听/测试），关窗等于把工作台当一次性表单。
+      · 表单型（R2 关窗）：IdleDialog / AISettingsDialog / BubbleStyleDialog / PhysicsDialog
+        —— 整窗一次填完就走，关窗就是"完成"信号（IdleDialog 是 B3 的"退路"：只改标签、
+        零额外点击）。**RoleEditDialog 是面板型、被特批维持关窗**：它第二枚按钮已经叫
+        「取消」，改成不关窗会让"走人"读起来像"放弃刚保存的东西"（B3 §二 第 6 行）。
+    裁决与理由写在 _dev/b3_submit_model_v290.md（"明确接受不统一"那一支）。
+    **翻转任何一条都必须同时改这条用例和那份裁决** —— 这条用例就是那个"必须"。
+    ⚠ 这条用例曾被找茬与兼容**两审各自独立**造出同一个反例：BehaviorDialog 原来走**空表单**
+      （_save 在落库前就失败早退），于是"成功路径末尾加 accept()"照样绿 —— 它当时只钉住了
+      "保存失败也不关窗"。现在先 _fill_new_behavior 填一条**有效草稿**，成功路径也被钉住。
+    变异：删掉 IdleDialog._save 末尾的 self.accept() → 本用例红（M-A2100-09）；
+          BehaviorDialog._save 成功路径加 self.accept() → 本用例红（M-C2100-P31-01）。
+    """
+    old_rid = str(pet.cfg.get("role") or "")
+    _probe_name = "v290_r2_probe"
+
+    def _prep_behavior(d):
+        """BehaviorDialog 必须**带着一条有效草稿**进保存入口。
+
+        v2.10.0 找茬 + 兼容**两审各自独立**实测到的反例：原来这里用的是**空表单** →
+        `_save` 在落库前就失败早退（失败路径本来就不发 finished），
+        于是"在成功路径末尾加一句 accept()"这条改动**照样绿**：这条用例当时只钉住了
+        "保存失败也不关窗"。`_fill_new_behavior` 是仓里现成的真控件填法。
+        """
+        _fill_new_behavior(d, _probe_name, "R2 探针")
+
+    rid = _install_role(pet, tmp_path, "v290角色R2")
+    _alarms_before = {a["id"] for a in pet.alarms.list()}
+    try:
+        for _b in pet.behaviors.list():   # 清掉上一轮失败留下的同名探针，免得弹重名框
+            if _b["name"] == _probe_name:
+                pet.behaviors.delete(_b["id"])
+        cases = [
+            ("BehaviorDialog", pet_dialogs.BehaviorDialog(pet, pet.behaviors), False, _prep_behavior),
+            ("AlarmDialog", pet_dialogs.AlarmDialog(pet, pet.alarms), False, None),
+            ("VoiceDialog", pet_dialogs.VoiceDialog(pet), False, None),
+            ("IdleDialog", pet_dialogs.IdleDialog(pet), True, None),
+            ("RoleEditDialog", pet_dialogs.RoleEditDialog(pet, pet.role_lib, rid), True, None),
+            ("AISettingsDialog", pet_dialogs.AISettingsDialog(pet), True, None),
+            ("BubbleStyleDialog", pet_dialogs.BubbleStyleDialog(pet), True, None),
+            ("PhysicsDialog", pet_dialogs.PhysicsDialog(pet), True, None),
+        ]
+        got_tbl = {}
+        for name, d, _want, _prep in cases:
+            try:
+                if _prep is not None:
+                    _prep(d)
+                got_tbl[name] = _save_closes_window(d)
+            finally:
+                d.hide()
+        assert [n for n, _d, _w, _p in cases if not got_tbl[n]] == list(_SAVE_KEEPS_WINDOW), (
+            "「保存不关窗」这一档变了：%r（改它就要同步改 B3 裁决）" % (got_tbl,))
+        assert [n for n, _d, _w, _p in cases if got_tbl[n]] == list(_SAVE_CLOSES_WINDOW), (
+            "「保存关窗」这一档变了：%r（改它就要同步改 B3 裁决）" % (got_tbl,))
+    finally:
+        pet.apply_role(old_rid)
+        for _b in pet.behaviors.list():
+            if _b["name"] == _probe_name:
+                pet.behaviors.delete(_b["id"])
+        for _a in pet.alarms.list():
+            if _a["id"] not in _alarms_before:
+                pet.alarms.delete(_a["id"])

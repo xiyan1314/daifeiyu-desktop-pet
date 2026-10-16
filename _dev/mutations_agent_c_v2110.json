@@ -1,0 +1,293 @@
+{
+  "note": "v2.11.0 第 9 轮 · 代理 C：V1（pinned 用例体 AST 摘要）/ V2（teardown 相位不计检出）/ V3（带文件路径比对）三条新判据的『能真失败』证据。全部在 %TEMP% 影子副本里跑（铁律 6），真仓只读。 另加 v2.11.0 第 9 轮 P1 登记的两条（M-C2110-P1-*）：判据从『可解析比例上界』换成『不可解析槽名单 + 解析器自检』（说明见 tests/test_guardrails_v24.py 与 _dev/README.md）。",
+  "mutations": [
+    {
+      "id": "M-C2110-V1-01-digest-blind-to-the-test-body",
+      "file": "_dev/_mutate_lib.py",
+      "old": "    hits = [n for n in ast.walk(tree)\n            if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef)) and n.name == func]\n    if not hits:\n        return None\n    hits.sort(key=lambda n: (n.lineno, n.col_offset))\n    return _digest_nodes([_strip_docstring(n) for n in hits])\n",
+      "new": "    hits = [n for n in ast.walk(tree)\n            if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef)) and n.name == func]\n    if not hits:\n        return None\n    return \"000000000000\"   # MUTANT: 摘要与用例体无关（清空用例体也看不出来）\n",
+      "tests": [
+        "tests/test_pinned_ast_v2110.py::test_clearing_the_pinned_body_is_detected",
+        "tests/test_pinned_ast_v2110.py::test_changing_an_assertion_is_detected",
+        "tests/test_pinned_ast_v2110.py::test_dropping_the_decorator_is_detected"
+      ],
+      "expect_fail": [
+        "tests/test_pinned_ast_v2110.py::test_clearing_the_pinned_body_is_detected",
+        "tests/test_pinned_ast_v2110.py::test_changing_an_assertion_is_detected",
+        "tests/test_pinned_ast_v2110.py::test_dropping_the_decorator_is_detected"
+      ],
+      "why": "V1 的核心承诺：**用例体改了，摘要就变**。把它改成常量（与用例体无关）→ 三条『该报的必须报』用例全红。"
+    },
+    {
+      "id": "M-C2110-V1-02-resolve-pin-refuses-nodeids",
+      "file": "_dev/_mutate_lib.py",
+      "old": "    rel, func = raw.split(\"::\", 1)\n    names = test_def_names(root, rel)\n    if names is None:\n        return None\n    want = func.split(\"::\")[-1].split(\"[\", 1)[0]\n    return (rel, want) if want in names else None\n",
+      "new": "    rel, func = raw.split(\"::\", 1)\n    return None   # MUTANT: 带 \"::\" 的 nodeid 一律解析不出来（摘要全空）\n",
+      "tests": [
+        "tests/test_pinned_ast_v2110.py::test_every_mutation_in_the_corpus_has_a_pinned_body_digest",
+        "tests/test_pinned_ast_v2110.py::test_parameterized_and_class_nodeids_resolve_to_the_same_body",
+        "tests/test_pinned_ast_v2110.py::test_evidence_extra_records_the_pinned_digests"
+      ],
+      "expect_fail": [
+        "tests/test_pinned_ast_v2110.py::test_every_mutation_in_the_corpus_has_a_pinned_body_digest",
+        "tests/test_pinned_ast_v2110.py::test_parameterized_and_class_nodeids_resolve_to_the_same_body",
+        "tests/test_pinned_ast_v2110.py::test_evidence_extra_records_the_pinned_digests"
+      ],
+      "why": "覆盖面塌掉的那条路：解析不出来 ⇒ 摘要为空 ⇒ V1 对全库 489 条变异一条都保护不了（『语料覆盖』用例会点名是哪些变异）。"
+    },
+    {
+      "id": "M-C2110-V1-03-stale-pinned-never-speaks",
+      "file": "_dev/_mutate_lib.py",
+      "old": "    if not isinstance(recorded, dict) or not recorded:\n        return []\n    out = []\n    for nodeid in sorted(recorded):\n        got, want = recorded.get(nodeid), (current or {}).get(nodeid)\n        if got and want and got != want:\n            out.append(\"%s: %s→%s\" % (nodeid, got, want))\n    return out\n",
+      "new": "    if not isinstance(recorded, dict) or not recorded:\n        return []\n    return []   # MUTANT: 永不判过期\n",
+      "tests": [
+        "tests/test_pinned_ast_v2110.py::test_clearing_the_pinned_body_is_detected",
+        "tests/test_pinned_ast_v2110.py::test_stale_pinned_is_pure_and_ignores_missing_keys"
+      ],
+      "expect_fail": [
+        "tests/test_pinned_ast_v2110.py::test_clearing_the_pinned_body_is_detected",
+        "tests/test_pinned_ast_v2110.py::test_stale_pinned_is_pure_and_ignores_missing_keys"
+      ],
+      "why": "『比对器永远说没事』= 整条通道静默（这比工具坏更隐蔽：它照样跑完、照样 rc=0）。"
+    },
+    {
+      "id": "M-C2110-V2-01-teardown-errors-count-again",
+      "file": "_dev/mutate_check.py",
+      "old": "    kept, _dropped = split_teardown_errors(errors, phases)   # ERROR 行里只留非 teardown 的\n    not_passed = failed + kept\n",
+      "new": "    not_passed = failed + list(errors or [])   # MUTANT: teardown 也照收（V2 之前的旧口径）\n",
+      "tests": [
+        "tests/test_mutate_harness_v244.py::test_judge_ignores_a_teardown_error_of_the_pinned_test",
+        "tests/test_mutate_harness_v244.py::test_error_phases_reads_a_real_parameterized_error_and_a_teardown_error"
+      ],
+      "expect_fail": [
+        "tests/test_mutate_harness_v244.py::test_judge_ignores_a_teardown_error_of_the_pinned_test",
+        "tests/test_mutate_harness_v244.py::test_error_phases_reads_a_real_parameterized_error_and_a_teardown_error"
+      ],
+      "why": "V2 的收紧必须有牙齿：退回『ERROR 行一律算检出』→ 『清理炸了也算 CAUGHT』当场被抓住（含真跑 pytest 的那条）。"
+    },
+    {
+      "id": "M-C2110-V3-01-basename-comparison-returns",
+      "file": "_dev/mutate_check.py",
+      "old": "        if want_file and got_file and not _same_file(want_file, got_file):\n            continue\n",
+      "new": "        if False:   # MUTANT: 不比文件（退回基名口径，跨文件顶替回来了）\n            continue\n",
+      "tests": [
+        "tests/test_mutate_harness_v244.py::test_judge_rejects_a_same_named_failure_in_another_file",
+        "tests/test_mutate_harness_v244.py::test_judge_still_rejects_two_different_dirs_with_the_same_name"
+      ],
+      "expect_fail": [
+        "tests/test_mutate_harness_v244.py::test_judge_rejects_a_same_named_failure_in_another_file",
+        "tests/test_mutate_harness_v244.py::test_judge_still_rejects_two_different_dirs_with_the_same_name"
+      ],
+      "why": "V3 的反例本身（独立验收造出来的那个）：另一个文件里的同名用例红了也算命中 → 两条跨文件用例必须红。"
+    },
+    {
+      "id": "M-C2110-V1-04-evidence-forgets-the-digests",
+      "file": "_dev/mutate_check.py",
+      "old": "            \"repo_fingerprint\": repo_fingerprint(root),\n            # V1：用例体被清空而 nodeid 不动时，只有这段摘要能出声\n            # （逐条理由见 _dev/check_pinned_ast.py 的 docstring）\n            \"pinned_ast\": spec_pinned_ast(spec, root)}\n",
+      "new": "            \"repo_fingerprint\": repo_fingerprint(root)}   # MUTANT: 不记 pinned 摘要\n",
+      "tests": [
+        "tests/test_pinned_ast_v2110.py::test_evidence_extra_records_the_pinned_digests"
+      ],
+      "expect_fail": [
+        "tests/test_pinned_ast_v2110.py::test_evidence_extra_records_the_pinned_digests"
+      ],
+      "why": "『摘要算得再对，没写进证据就是空转』这一步：拿掉 recording → wiring 用例红（其余用例仍绿，说明它钉的正是这一步）。"
+    },
+    {
+      "id": "M-C2110-P1-01-slot-becomes-unjudgeable",
+      "file": "pet_balance.py",
+      "old": "        anim.finished.connect(lambda: setattr(pet, \"_shown_balance\", float(total)))\n",
+      "new": "        anim.finished.connect(anim.finished)  # MUT：槽变成判不了的形式（信号连信号）\n",
+      "tests": [
+        "tests/test_guardrails_v24.py::test_b7_static_signal_arity_check"
+      ],
+      "expect_fail": [
+        "tests/test_guardrails_v24.py::test_b7_static_signal_arity_check"
+      ],
+      "why": "P1（做法乙）第二条：把一处**能解析**的槽换成**判不了**的形式（接收者还是属性链、候选照旧，只是槽本身变成 anim.finished）→ 名单冒出没有登记的新条目 → test_b7 的『多一条就红』必须当场红。这条钉的是『新盲区必须显式登记』。"
+    },
+    {
+      "id": "M-C2110-P1-02-resolver-guesses-builtins",
+      "file": "_check_static.py",
+      "old": "        ar = _pool_arity([c[1] for c in _pool_for(methods, expr.attr, fname)])\n        return None if ar is None else (ar[0], ar[1], expr.attr, ())\n",
+      "new": "        ar = _pool_arity([c[1] for c in _pool_for(methods, expr.attr, fname)])\n        if ar is None and expr.attr in (\"deleteLater\", \"accept\", \"append\"):\n            return (0, None, expr.attr, (\"guessed\",))   # MUT：猜内建方法的签名\n        return None if ar is None else (ar[0], ar[1], expr.attr, ())\n",
+      "tests": [
+        "tests/test_guardrails_v24.py::test_b7b_解析器自检_该解析的必须解析_判不了的必须跳过",
+        "tests/test_guardrails_v24.py::test_b7_static_signal_arity_check"
+      ],
+      "expect_fail": [
+        "tests/test_guardrails_v24.py::test_b7b_解析器自检_该解析的必须解析_判不了的必须跳过",
+        "tests/test_guardrails_v24.py::test_b7_static_signal_arity_check"
+      ],
+      "why": "P1（做法乙）第一条：解析器**开始猜**内建方法的签名（旧『比例上界』想守的就是这件事）→ ① 解析器自检里 4 种『必须跳过』的形态被解析 → 红；② 真仓名单里 deleteLater/accept/append 那些条目消失（名单过期）→ 红。比例量不出这件事，名单 + 自检量得出。"
+    }
+  ],
+  "results": {
+    "title": "变异验证 spec：mutations_agent_c_v2110.json",
+    "checked_at": "2026-10-16 07:57:13",
+    "total": 8,
+    "caught": 8,
+    "not_caught": 0,
+    "blocked": 0,
+    "items": [
+      {
+        "id": "M-C2110-V1-01-digest-blind-to-the-test-body",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "3 failed in 0.54s",
+        "failed": [
+          "tests/test_pinned_ast_v2110.py::test_clearing_the_pinned_body_is_detected",
+          "tests/test_pinned_ast_v2110.py::test_changing_an_assertion_is_detected",
+          "tests/test_pinned_ast_v2110.py::test_dropping_the_decorator_is_detected"
+        ],
+        "errors": [],
+        "errors_teardown": []
+      },
+      {
+        "id": "M-C2110-V1-02-resolve-pin-refuses-nodeids",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "3 failed in 0.49s",
+        "failed": [
+          "tests/test_pinned_ast_v2110.py::test_every_mutation_in_the_corpus_has_a_pinned_body_digest",
+          "tests/test_pinned_ast_v2110.py::test_parameterized_and_class_nodeids_resolve_to_the_same_body",
+          "tests/test_pinned_ast_v2110.py::test_evidence_extra_records_the_pinned_digests"
+        ],
+        "errors": [],
+        "errors_teardown": []
+      },
+      {
+        "id": "M-C2110-V1-03-stale-pinned-never-speaks",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "2 failed in 0.47s",
+        "failed": [
+          "tests/test_pinned_ast_v2110.py::test_clearing_the_pinned_body_is_detected",
+          "tests/test_pinned_ast_v2110.py::test_stale_pinned_is_pure_and_ignores_missing_keys"
+        ],
+        "errors": [],
+        "errors_teardown": []
+      },
+      {
+        "id": "M-C2110-V2-01-teardown-errors-count-again",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "2 failed in 2.10s",
+        "failed": [
+          "tests/test_mutate_harness_v244.py::test_judge_ignores_a_teardown_error_of_the_pinned_test",
+          "tests/test_mutate_harness_v244.py::test_error_phases_reads_a_real_parameterized_error_and_a_teardown_error"
+        ],
+        "errors": [],
+        "errors_teardown": []
+      },
+      {
+        "id": "M-C2110-V3-01-basename-comparison-returns",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "2 failed in 0.48s",
+        "failed": [
+          "tests/test_mutate_harness_v244.py::test_judge_rejects_a_same_named_failure_in_another_file",
+          "tests/test_mutate_harness_v244.py::test_judge_still_rejects_two_different_dirs_with_the_same_name"
+        ],
+        "errors": [],
+        "errors_teardown": []
+      },
+      {
+        "id": "M-C2110-V1-04-evidence-forgets-the-digests",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 0.46s",
+        "failed": [
+          "tests/test_pinned_ast_v2110.py::test_evidence_extra_records_the_pinned_digests"
+        ],
+        "errors": [],
+        "errors_teardown": []
+      },
+      {
+        "id": "M-C2110-P1-01-slot-becomes-unjudgeable",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "1 failed in 3.90s",
+        "failed": [
+          "tests/test_guardrails_v24.py::test_b7_static_signal_arity_check"
+        ],
+        "errors": [],
+        "errors_teardown": []
+      },
+      {
+        "id": "M-C2110-P1-02-resolver-guesses-builtins",
+        "verdict": "CAUGHT",
+        "rc": 1,
+        "tail": "2 failed in 4.06s",
+        "failed": [
+          "tests/test_guardrails_v24.py::test_b7b_解析器自检_该解析的必须解析_判不了的必须跳过",
+          "tests/test_guardrails_v24.py::test_b7_static_signal_arity_check"
+        ],
+        "errors": [],
+        "errors_teardown": []
+      }
+    ],
+    "spec": "mutations_agent_c_v2110.json",
+    "tests": [
+      "tests/test_guardrails_v24.py::test_b7_static_signal_arity_check",
+      "tests/test_guardrails_v24.py::test_b7b_解析器自检_该解析的必须解析_判不了的必须跳过",
+      "tests/test_mutate_harness_v244.py::test_error_phases_reads_a_real_parameterized_error_and_a_teardown_error",
+      "tests/test_mutate_harness_v244.py::test_judge_ignores_a_teardown_error_of_the_pinned_test",
+      "tests/test_mutate_harness_v244.py::test_judge_rejects_a_same_named_failure_in_another_file",
+      "tests/test_mutate_harness_v244.py::test_judge_still_rejects_two_different_dirs_with_the_same_name",
+      "tests/test_pinned_ast_v2110.py::test_changing_an_assertion_is_detected",
+      "tests/test_pinned_ast_v2110.py::test_clearing_the_pinned_body_is_detected",
+      "tests/test_pinned_ast_v2110.py::test_dropping_the_decorator_is_detected",
+      "tests/test_pinned_ast_v2110.py::test_every_mutation_in_the_corpus_has_a_pinned_body_digest",
+      "tests/test_pinned_ast_v2110.py::test_evidence_extra_records_the_pinned_digests",
+      "tests/test_pinned_ast_v2110.py::test_parameterized_and_class_nodeids_resolve_to_the_same_body",
+      "tests/test_pinned_ast_v2110.py::test_stale_pinned_is_pure_and_ignores_missing_keys"
+    ],
+    "note": "变异只在 %TEMP% 影子副本里做，真实仓库只读（只写 _dev/.mutation.lock）",
+    "repo_fingerprint": {
+      "桌宠.py": "2351a1ad9737",
+      "pet_export.py": "c01e1593efd2",
+      "pet_lines.py": "5332f60b5f26",
+      "pet_alarm.py": "1149e94deee3",
+      "pet_behaviors.py": "732273f95fb4",
+      "_check_release.py": "f979a0c98657",
+      "pet_balance.py": "66948e5514a4",
+      "pet_plugin.py": "2f7853298fc3",
+      "pet_plugin_host.py": "82fb7b1384c8",
+      "pet_dialogs.py": "d80d04497146",
+      "pet_menu.py": "d2f565537b3f",
+      "pet_plugin_index.py": "e5e9845785e8",
+      "pet_ai.py": "a5989e7fe646",
+      "pet_config.py": "7a4ad883d4e8",
+      "pet_io.py": "6b1e0413fb7f",
+      "pet_services.py": "ecebb6ab5891",
+      "pet_widgets.py": "dc7f5dc4a7f2",
+      "pet_resources.py": "e28f38917052",
+      "pet_tools.py": "46e9030d073f",
+      "pet_voice.py": "9fe0a570ca81",
+      "pet_audio.py": "a6feadf4d653",
+      "pet_chat.py": "de979c429c2c",
+      "pet_log.py": "de14ecf338ab",
+      "pet_actions.py": "83eb11403fec",
+      "pet_book.py": "098676ac52d4",
+      "_check_static.py": "6286f9f493bd",
+      "tests/test_dialog_buttons_v270.py": "4f95acca7fc6",
+      "tests/test_import_thread.py": "1c6fc2ec5d05"
+    },
+    "pinned_ast": {
+      "tests/test_pinned_ast_v2110.py::test_clearing_the_pinned_body_is_detected": "6b6c46d7b84c",
+      "tests/test_pinned_ast_v2110.py::test_changing_an_assertion_is_detected": "1f9425c1d871",
+      "tests/test_pinned_ast_v2110.py::test_dropping_the_decorator_is_detected": "21136c14d4c8",
+      "tests/test_pinned_ast_v2110.py::test_every_mutation_in_the_corpus_has_a_pinned_body_digest": "dd94a9f39ffb",
+      "tests/test_pinned_ast_v2110.py::test_parameterized_and_class_nodeids_resolve_to_the_same_body": "fd2d3c281759",
+      "tests/test_pinned_ast_v2110.py::test_evidence_extra_records_the_pinned_digests": "9b341185cccd",
+      "tests/test_pinned_ast_v2110.py::test_stale_pinned_is_pure_and_ignores_missing_keys": "afa1b74e2421",
+      "tests/test_mutate_harness_v244.py::test_judge_ignores_a_teardown_error_of_the_pinned_test": "5b76688d939c",
+      "tests/test_mutate_harness_v244.py::test_error_phases_reads_a_real_parameterized_error_and_a_teardown_error": "966063e2fdeb",
+      "tests/test_mutate_harness_v244.py::test_judge_rejects_a_same_named_failure_in_another_file": "2149cee78974",
+      "tests/test_mutate_harness_v244.py::test_judge_still_rejects_two_different_dirs_with_the_same_name": "e050398e13fc",
+      "tests/test_guardrails_v24.py::test_b7_static_signal_arity_check": "6eb117882bfd",
+      "tests/test_guardrails_v24.py::test_b7b_解析器自检_该解析的必须解析_判不了的必须跳过": "5dfee0c7e5ca"
+    }
+  }
+}

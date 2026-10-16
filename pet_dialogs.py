@@ -92,6 +92,7 @@ import sys
 import tempfile
 import threading
 import time
+import weakref
 
 import pet_log
 
@@ -273,6 +274,10 @@ TOAST_FALLBACK_LOG_GAP = 60.0
 # 两个词各管一类动作，不再混用（审计 P3-6：此前「新建」/「添加」混用且不说明要先保存）。
 BTN_NEW_TIP = "清空表单进入新建态（先不落盘）；填好后点「保存」才会写进库里。"
 BTN_ADD_TIP = "加进下面的列表（先不落盘）；点「保存」才会写进库里。"
+# v2.11.0（B5）：上面那句通用措辞说「点『保存』才会写进库里」，可**导入向导里没有「保存」**
+# （它的落点是「导入」）——tooltip 指着一个不存在的按钮，比没有 tooltip 更坏。决定成败的
+# 信息是"加完还要点哪个按钮才真的落库"，所以这里按窗口给**它自己那句**。
+BTN_ADD_TIP_IMPORT = "加进下面的形态列表（先不落盘）；点「导入」才会处理素材并写成角色。"
 
 
 def _btn_tip(btn, label):
@@ -397,6 +402,35 @@ def _ask_item(parent, title, label, items, current=0):
     dlg.setStyleSheet(DIALOG_QSS)
     ok = modal(dlg) == QDialog.DialogCode.Accepted
     return (dlg.textValue() if ok else ""), ok
+
+
+def _ask_name_clash(parent, name, other, allow_overwrite=True):
+    """R3（v2.10.0）：行为重名时的**显式选择** —— 覆盖 / 两条都留 / 换个名字 / 取消。
+
+    返回 "overwrite" / "keep" / "rename" / ""（取消 / 关掉框）。**不许静默**：这个框存在
+    的意义就是"两次 add 同名时，用户至少知道发生了什么、而且是他选的"。
+    `other` = 撞上的那条行为：把"撞的是哪一条"写进正文（只说"重名了"，用户还得自己去
+    列表里找是哪条）。`allow_overwrite=False` 用于"改自己名字"那条路：那里的"覆盖"会把
+    **别人的**条目换成这份内容 = 数据丢失，不是用户想要的，所以那一支干脆不提供。
+    """
+    _steps = (other or {}).get("steps") if isinstance(other, dict) else None
+    box = _box(parent, QMessageBox.Icon.Question, "行为重名",
+               "已经有一条叫「%s」的行为了（id %s，%d 个步骤）。\n这一步要怎么办？"
+               % (name, str((other or {}).get("id") or "?"), len(_steps or [])))
+    b_ov = (box.addButton("覆盖它（用现在这份内容）", QMessageBox.ButtonRole.DestructiveRole)
+            if allow_overwrite else None)
+    b_keep = box.addButton("两条都留（同名并存）", QMessageBox.ButtonRole.AcceptRole)
+    b_ren = box.addButton("换个名字", QMessageBox.ButtonRole.ActionRole)
+    box.addButton("取消（先不写）", QMessageBox.ButtonRole.RejectRole)
+    modal(box)
+    clicked = box.clickedButton()
+    if b_ov is not None and clicked is b_ov:
+        return "overwrite"
+    if clicked is b_keep:
+        return "keep"
+    if clicked is b_ren:
+        return "rename"
+    return ""
 
 
 # ---------------- v2.7.0 第 5 轮：反馈口径的公共出口 ----------------
@@ -1326,7 +1360,9 @@ class RoleImportDialog(_FitDialog):
         self._add_form_btn = QPushButton("＋ 添加形态")
         # N14：按钮走 _on_add_form（加了才给回执），构造期的默认形态仍直接调 _add_form
         self._add_form_btn.clicked.connect(self._on_add_form)
-        _btn_tip(self._add_form_btn, "＋ 添加形态")   # P3-6
+        # v2.11.0（B5）：本窗口没有「保存」按钮，通用措辞会指错按钮（P3-6 的对照表是按
+        # 「新建/添加」两个词发的，没区分落点动作）——这里用它自己的落点「导入」。
+        self._add_form_btn.setToolTip(BTN_ADD_TIP_IMPORT)
         forms_head.addStretch(1)
         forms_head.addWidget(self._add_form_btn)
         root.addLayout(forms_head)
@@ -2093,8 +2129,14 @@ def add_frame_action(pet=None, parent=None, sink=None):
         # 与其它文件框取消路径同口径。
         return False, ""
     if len(files) < 2:
-        _warn(parent, "帧动作", "帧动作至少 2 张图")
-        return False, "帧动作至少 2 张图"
+        # v2.10.0（U2）：此前只说下限（"至少 2 张图"）——**为什么不行**与**该怎么办**
+        # 都没有；用户读到的是"你选错了"。换成解释性文案：1 张 = 静态姿势（这里做不了），
+        # 2 张以上 = 按选择顺序的逐帧动画。⚠ 只改文案，**下限一个字没动**（U1 用户已撤回）。
+        _msg = ("帧动作至少 2 张图：1 张图只是一个静态姿势，这里做不了静态姿势动作；"
+                "要做一个动作，请一次选 2 张以上（最多 %d 张），它们会按选择顺序做成逐帧动画。"
+                % int(pet_resources.FRAME_MAX))
+        _warn(parent, "帧动作", _msg)
+        return False, _msg
     max_frames = int(pet_resources.FRAME_MAX)
     if len(files) > max_frames:
         _msg = "最多 %d 帧（可在设置里调整）" % max_frames
@@ -2324,6 +2366,17 @@ class RoleEditDialog(_FitDialog):
         act_btns.addWidget(b_del)
         act_head.addLayout(act_btns)
         right.addLayout(act_head)
+        # v2.10.0（R1/G3）：行为设置里的「＋导入图片做动作…」**立即写盘**（加完就能播，
+        # 用「撤销这次导入」收回），而这里的「＋帧动作…」是**暂存态**（点「保存」才落到
+        # 角色上）。两条路做同一件事、语义相反，用户事前无从得知 —— 裁决选②：保留各自
+        # 的语义，但把差异写到**用户看得见的地方**（常驻说明，不靠 tooltip/悬停）。
+        # U2 的落点也在这里：顺手把"为什么至少要 2 张"说在入口旁边。
+        self._act_note = QLabel(
+            "「＋帧动作…」是暂存：选 2 张以上图片，按选择顺序做成逐帧动画"
+            "（1 张只是静态姿势，做不了动作）；先放进这个窗口，点「保存」才落到角色上，"
+            "点「取消」或关掉窗口会连同刚加的一起放弃。")
+        self._act_note.setWordWrap(True)
+        right.addWidget(self._act_note)
 
         body.addLayout(right, 1)
         root.addLayout(body)
@@ -3132,8 +3185,14 @@ class BehaviorDialog(_DiscardGuard, _FitDialog):
         ok, why = sink.ready()
         if not ok:
             return "（现在加不了图片动作：%s）" % ((why or "当前没有可编辑的角色").splitlines()[0])
-        return ("（图片会做成 %s 的帧动作，**立即写进角色**——这个入口没有「取消」能撤销它，"
-                "加完可以用「撤销这次导入」收回；它不会加进行为库）") % sink.describe()
+        # v2.10.0（R1/G3·裁决②）：这个入口与「角色编辑 →＋帧动作…」做的是同一件事、
+        # 语义相反（这里立即写盘，那边暂存到点「保存」）。所以这句话必须直接回答用户
+        # 动手前的那个问题——"在这个窗口里点「取消」会不会撤销它"：**不会**。只写"立即"
+        # 还不够：用户会把"窗口的取消"当成通用的撤销键。
+        return ("（图片会做成 %s 的帧动作，立即写进角色——在这个窗口点「取消」或关掉窗口"
+                "都不会撤销它（与「资源管理 → 角色 → 编辑…」里的「＋帧动作…」相反："
+                "那边点「取消」就放弃）；要收回请点下面的「撤销这次导入」。"
+                "它不会加进行为库）") % sink.describe()
 
     def _action_choices(self):
         """A1：动作候选的**唯一来源** = pet_behaviors.action_choices(pet)（B1 接口）。
@@ -3602,6 +3661,39 @@ class BehaviorDialog(_DiscardGuard, _FitDialog):
                 out.append(_st)
         return out
 
+    def _resolve_name_clash(self, name, allow_overwrite):
+        """R3：重名判据 + 问用户（判据的**唯一来源** = pet_behaviors.find_by_name）。
+
+        返回 (mode, name, dup_id)，mode ∈ {"add", "overwrite", "cancel"}：
+          · add       → 照常新建（没重名，或用户选了「两条都留」/改了名）
+          · overwrite → 覆盖撞上的那条（id 不变，这个窗口转入编辑它）
+          · cancel    → 用户取消，调用方**什么都不写**
+
+        服务对象没有 `find_by_name`（老替身 / 外部注入）时按"没有判据"退化、不阻断保存 ——
+        这里**绝不自己再算一份判据**：两份判据漂移正是本轮 G3（两处入口语义相反）的病根。
+        """
+        _find = getattr(self.svc, "find_by_name", None)
+        if not callable(_find):
+            return "add", name, None
+        while True:
+            dup = _find(name, exclude_id=self._editing_id)
+            if dup is None:
+                return "add", name, None
+            choice = _ask_name_clash(self, name, dup, allow_overwrite=allow_overwrite)
+            if choice == "keep":
+                return "add", name, None
+            if choice == "overwrite":
+                return "overwrite", name, dup.get("id")
+            if choice != "rename":
+                return "cancel", name, None
+            new_name, ok = _ask_text(self, "行为改名",
+                                     "已经有一条叫「%s」的行为了，换一个名字：" % name,
+                                     default=name)
+            new_name = (new_name or "").strip()
+            if not ok or not new_name:
+                return "cancel", name, None
+            name = new_name
+
     def _save(self, quiet=False):
         """保存表单。返回**是否真的写进库里**（「试播」按它决定播不播，见 B6）。
 
@@ -3614,10 +3706,26 @@ class BehaviorDialog(_DiscardGuard, _FitDialog):
             self._note("行为库不可用：这次保存没做（检查数据目录是否可写）")
             return False
         _steps = self._collect_steps()
+        # R3（v2.10.0）：重名**不静默** —— 先问用户（覆盖 / 同名并存 / 换个名字 / 取消）。
+        # 判据来自 pet_behaviors.find_by_name（唯一来源）；这里只管"问法"与"落法"。
+        _overwrote = False
+        _mode, _name, _dup_id = self._resolve_name_clash(
+            self._name.text().strip(), allow_overwrite=not self._editing_id)
+        if _mode == "cancel":
+            self._note("已取消：已经有一条叫「%s」的行为了，这一条没有再写进去（库里没动）"
+                       % _name)
+            return False
         if self._editing_id:
-            _ok, _err = self.svc.update(self._editing_id, self._name.text(), _steps)
+            _ok, _err = self.svc.update(self._editing_id, _name, _steps)
+        elif _mode == "overwrite":
+            # 覆盖 = 改的是**已有那条**（id 不变）：保存完这个窗口就在编辑它
+            # （所以下面必须把 _editing_id 接过去，否则再点一次「保存」会又新建一条）
+            _ok, _err = self.svc.update(_dup_id, _name, _steps)
+            if _ok:
+                self._editing_id = _dup_id
+                _overwrote = True
         else:
-            _b, _err = self.svc.add(self._name.text(), _steps)
+            _b, _err = self.svc.add(_name, _steps)
             _ok = _b is not None
             if _ok:
                 self._editing_id = _b["id"]  # 新建成功后进入编辑态（试播/再保存走 update）
@@ -3638,9 +3746,16 @@ class BehaviorDialog(_DiscardGuard, _FitDialog):
         # 末尾看不见（"保存了像没保存"）。现在按 id 定位新条目并滚到可见处。
         self._select_behavior(_saved_id)
         self._refresh_state_label()
-        self._note("行为「%s」已保存（已在库里；可以接着改，或者点「试播」看一遍）" % _saved_name)
-        if not quiet:
-            _toast(self.pet, "行为「%s」已保存" % _saved_name)
+        if _overwrote:
+            self._note("行为「%s」已保存：覆盖了同名的旧条目（id 没变，可以直接「试播」）"
+                       % _saved_name)
+            if not quiet:
+                _toast(self.pet, "已覆盖行为「%s」（同名的旧内容被这一份替换了）" % _saved_name)
+        else:
+            self._note("行为「%s」已保存（已在库里；可以接着改，或者点「试播」看一遍）"
+                       % _saved_name)
+            if not quiet:
+                _toast(self.pet, "行为「%s」已保存" % _saved_name)
         return True
 
     def _select_behavior(self, bid):
@@ -4076,6 +4191,11 @@ class AISettingsDialog(_FitDialog):
         test_row = QHBoxLayout()
         self._test_btn = QPushButton("测试连接")
         self._test_btn.clicked.connect(self._test_connection)
+        # v2.11.0（B5 · 只补"决定成败"的那两处，不铺开）：测试用的是**当前填写的**参数，
+        # 而且它**不改配置**——用户很容易把它当成"保存"。tooltip 只作补充，同一句话在
+        # 窗口底部还有一行常驻小字（见 _save_note），保证不悬停也看得到。
+        self._test_btn.setToolTip("用当前填写的地址/模型/Key 试一次能不能通；"
+                                  "它只测不改配置——要让改动生效还得点「保存」。")
         self._test_label = QLabel("")
         self._test_label.setWordWrap(True)
         test_row.addWidget(self._test_btn)
@@ -4151,12 +4271,28 @@ class AISettingsDialog(_FitDialog):
                           "「清理日志」只清对话历史，不会动它。")
         _lt_hint.setWordWrap(True)
         root.addWidget(_lt_hint)
+        # v2.11.0（B5）：**决定成败的那句话放在窗口里看得见的地方，而不是只写进 tooltip**。
+        # 这一页改了地址/模型/人设/开关，全都要点「保存」才生效，点「取消」/关窗会丢掉本次改动；
+        # 而「测试连接」只按当前填写的值试一次（不改配置）。审计的原话是"关键信息只写在 tooltip
+        # 里＝等于没写"（tooltip 不可发现、键盘/触屏没有 hover）——所以这里是**常驻一行小字**，
+        # 挂在滚动区之外（和按钮行一起），滚到哪儿都看得见；tooltip 只是同一句话的补充。
+        self._save_note = QLabel("这一页改的东西点了「保存」才生效；点「取消」或直接关窗会丢掉"
+                                 "本次改动。「测试连接」只按当前填写的地址与模型试一次，不改配置。")
+        self._save_note.setWordWrap(True)
+        # 外层布局由上面的 scroll_content(self) 建好（它自己 QVBoxLayout(dlg)），这里只往上挂；
+        # **不写 QVBoxLayout(self) 兜底**：那正是 v2.5.0 B 的护栏禁止的"裸顶层布局"
+        # （tests/test_dialog_fit_v250.py::test_pet_dialogs里没有裸顶层布局也没有写死resize）。
+        _outer_lay = self.layout()
+        if _outer_lay is not None:
+            _outer_lay.addWidget(self._save_note)
         btns = QHBoxLayout()
         ok = QPushButton("保存")
         cancel = QPushButton("取消")
         ok.setDefault(True)
         ok.clicked.connect(self._save)
         cancel.clicked.connect(self.reject)
+        ok.setToolTip("把这一页的改动写进配置、立即生效（窗口关闭）。")
+        cancel.setToolTip("丢掉本次改动关窗；配置保持原样。")
         # v2.7.0 第 5 轮（P1-1）：保存失败时的**非模态**状态行——窗口不关，原因就在按钮旁边
         self._save_hint = QLabel("")
         self._save_hint.setWordWrap(True)
@@ -5296,6 +5432,13 @@ class LinesDialog(_DiscardGuard, _FitDialog):
         self._banner = QLabel("")
         self._banner.setWordWrap(True)
         root.addWidget(self._banner)
+        # v2.11.0 第 9 轮（V7 · 原则 4「同一语义同一种表现」）：列表内连续操作的回执走
+        # **窗口内状态行**（与 BehaviorDialog 同款），不再用宠物气泡——同一语义两种表现
+        # 是本轮要收掉的那类不一致。**独立于 _banner**：_refresh_all 会重写 _banner
+        # （"台词库不可用"/失效引用统计），复用会把回执冲掉。
+        self._notes = QLabel("")
+        self._notes.setWordWrap(True)
+        root.addWidget(self._notes)
         self._tabs = QTabWidget()
         self._tabs.addTab(self._build_lines_tab(), "台词库")
         self._tabs.addTab(self._build_dialogue_tab(), "对白编排")
@@ -5501,6 +5644,19 @@ class LinesDialog(_DiscardGuard, _FitDialog):
         self._food.setCurrentIndex(_fi if _fi >= 0 else 0)
         self._baseline = self._form_signature()   # A5：载入即基线
 
+    def _note(self, text):
+        """窗口内状态行（V7）：列表内连续操作的回执走这里，不用宠物气泡。
+
+        与 BehaviorDialog._note 同款（措辞与出口都一致）——为什么不是气泡：
+        Bubble 是**单窗口覆盖式**（pet_widgets.py 直接 setText + show + 5 秒定时器，无队列），
+        连点三次只有最后一条可见；而"到顶/到底"这类回执发生在**列表内连续操作**里，
+        用户的眼睛在窗口里，不在宠物身上。
+        """
+        try:
+            self._notes.setText(str(text or ""))
+        except Exception as e:
+            pet_log.log_error("lines notes failed: %r" % (e,))
+
     def _move_line(self, delta):
         """台词排序（上移/下移）：按当前列表顺序整体重排，立即落盘。"""
         if self._lib is None:
@@ -5514,8 +5670,10 @@ class LinesDialog(_DiscardGuard, _FitDialog):
         j = max(0, min(len(ids) - 1, row + int(delta)))
         if j == row:
             # v2.8.0 第 6 轮：到顶/到底以前是静默 return —— 点了没反应与"已经到边界"在
-            # 用户那边长得一模一样，这里按"轻提示用气泡"的口径说一句。
-            _toast(self._pet, "已经是最上面了" if int(delta) < 0 else "已经是最下面了")
+            # 用户那边长得一模一样，这里说一句。
+            # v2.11.0（V7）：出口从宠物气泡改成**窗口内状态行**（措辞一个字不改）——
+            # 与 BehaviorDialog 的同语义回执统一（原则 4）。
+            self._note("已经是最上面了" if int(delta) < 0 else "已经是最下面了")
             return
         ids[row], ids[j] = ids[j], ids[row]
         ok, err = self._lib.reorder(ids)
@@ -5824,7 +5982,8 @@ class LinesDialog(_DiscardGuard, _FitDialog):
         j = max(0, min(len(ids) - 1, row + int(delta)))
         if j == row:
             # 与台词「上移/下移」同一套措辞（P3-6：同一动作同一批对话框同一套话）
-            _toast(self._pet, "已经是最上面了" if int(delta) < 0 else "已经是最下面了")
+            # v2.11.0（V7）：出口同样改成窗口内状态行（与上面那句一字不差）
+            self._note("已经是最上面了" if int(delta) < 0 else "已经是最下面了")
             return
         ids[row], ids[j] = ids[j], ids[row]
         ok, _err = self._lib.save_dialogue(self._editing_dlg, line_ids=ids)
@@ -6090,6 +6249,73 @@ class PhysicsDialog(_FitDialog):
         _toast(self._pet, msg or "物理参数已更新~")
 
 
+# ---------------- v2.11.0（B8）：语音合成的「在途 / 失败」反馈 ----------------
+# 要解决的问题（实测）：点「朗读」→ svc.speak_line() 只是**入队**就返回 True，调用方当场
+# 写一句"✅ 开始朗读…"；真正的合成在 worker 线程里，云端后端首次要几秒到十几秒。这期间
+# 用户看到的是"已经开始了"（其实没有），而**合成失败**只会经 桌宠.py 的 voice_error → 宠物
+# 气泡（对话框是 modal + 置顶，气泡在它后面）→ 用户在窗口里永远等不到任何结果。
+# 为什么不给每个 VoiceDialog 各注册一次回调：VoiceService 只有 on_*、**没有 off_***
+# （本模块也不该去改 pet_voice 的公开面）——那样每开一次窗口就多一个回调，而回调捕获了
+# 对话框实例 → 关窗后仍被服务强引用（写已删除控件 + 泄漏）。所以按**服务实例**只挂一次，
+# 转发器再向"当前活着的对话框"发信号。
+_VOICE_UI_HOOKED = weakref.WeakSet()    # 已挂钩的 VoiceService（每个实例一次）
+_VOICE_UI_DIALOGS = weakref.WeakSet()   # 当前活着的 VoiceDialog
+
+
+def _route_voice_event(svc, key, text=""):
+    """工作线程 → 主线程：把一条语音事件转给用**这个服务**的活对话框。
+
+    绝不直接碰控件——只 emit 对话框自己的信号，槽由 Qt 排队到主线程执行。
+    逐个包 try：某个对话框正在析构（RuntimeError）不该影响其余监听者，也不该打断合成线程。
+    """
+    for dlg in list(_VOICE_UI_DIALOGS):
+        try:
+            if getattr(dlg, "_svc", None) is not svc:
+                continue
+            dlg._voice_evt.emit(str(key), str(text or ""))
+        except RuntimeError:
+            # v2.11.0 收尾（审计裁决 · 收紧）：这里要挡的只有一种情况——C++ 对象已被
+            # deleteLater 回收，emit 抛 RuntimeError（正常关窗的 teardown 竞态，实测必走）。
+            # 此前写的是 except Exception: pass：那会把重构引入的 AttributeError /
+            # TypeError 也一起吞掉（那条路正是 B8 要修的那条，会零痕迹消失）。
+            # 收紧后：真·析构竞态照旧静默（WeakSet 下一轮自然清掉），我写错了则会出声。
+            pass
+
+
+def _hook_voice_ui(svc):
+    """按服务实例挂钩一次（幂等）：started / finished / error 三种通知转给对话框侧。
+
+    老替身/旧注入没有这几个注册口时静默跳过——退化成"没有在途反馈"，朗读本身不受影响。
+    """
+    if svc is None:
+        return
+    try:
+        if svc in _VOICE_UI_HOOKED:
+            return
+        _VOICE_UI_HOOKED.add(svc)
+    except TypeError as e:
+        # v2.11.0 第 9 轮（代理 A · 静默 except 判定）：这里**不再静默**——"钩不上"意味着
+        # 这条服务上的在途/失败反馈**整条缺席**（B8 修的就是这个缺陷），必须留一条可查的痕。
+        # 限流键固定：同一个不可弱引用的替身反复打开设置窗也只记一条/分钟（不刷屏）。
+        pet_log.log_throttled("voice_ui_hook",
+                              "语音 UI 挂钩失败（不可弱引用/不可哈希的服务对象）：%r" % (e,))
+        return  # 挂钩失败即放弃本次挂钩（朗读本身不受影响）
+    for _reg, _key in ((getattr(svc, "on_speaking_started", None), "started"),
+                       (getattr(svc, "on_speaking_finished", None), "finished"),
+                       (getattr(svc, "on_error", None), "error")):
+        if not callable(_reg):
+            continue
+        try:
+            # 只取最后一个实参：error 是 (msg,)，started/finished 是 (role_slot, line_id)
+            _reg(lambda *_a, _k=_key, _s=svc: _route_voice_event(_s, _k, _a[-1] if _a else ""))
+        except Exception as e:
+            # v2.11.0 第 9 轮（代理 A · 静默 except 判定）：注册口在、却**不接受这个回调**
+            # ＝接线/签名不匹配 → 该事件的在途反馈会永远不出现（静默失败）→ 必须留痕。
+            # 按 (服务类型, 事件) 限流，别在反复打开设置窗时刷屏。
+            pet_log.log_throttled("voice_ui_reg:%s:%s" % (type(svc).__name__, _key),
+                                  "语音事件注册失败（%s）：%r" % (_key, e))
+
+
 def open_physics(pet):
     """P1-手感：物理参数对话框入口（置顶+显式焦点，同其它对话框套路）。"""
     try:
@@ -6107,6 +6333,12 @@ class VoiceDialog(_FitDialog):
     存储分工：声音素材在「资源管理 → 声音素材」（资源库），本面板只做**绑定与合成播放**；
     台词文本在「台词设置」，本面板只**读取并朗读**。"""
 
+    # v2.11.0（B8）：合成/播放通知从**工作线程**来（pet_voice._emit 在合成线程里发），
+    # Qt 控件只能主线程碰——所以转发器只 emit 这个信号，槽在收到的那一刻已经在主线程
+    # （跨线程 AutoConnection 自动排队，与 桌宠.py 里 voice.on_speaking_started(
+    # signals.voice_started.emit) 是同一套口径）。
+    _voice_evt = Signal(str, str)
+
     EVENTS = (("reply", "AI 回复"), ("feed", "喂食"), ("poke", "被戳"),
               ("sleep", "睡觉"), ("wake", "醒来"))
 
@@ -6120,6 +6352,17 @@ class VoiceDialog(_FitDialog):
         self._lines = _get(parent, "lines_lib")
         self._param_widgets = {}
         self._bind_combos = {}
+        # v2.11.0（B8）：本窗口发起的一次朗读/试听还没落定（落定前，_play_label 归它）
+        self._voice_waiting = False
+        _VOICE_UI_DIALOGS.add(self)
+        try:
+            self._voice_evt.connect(self._on_voice_event)
+        except Exception as e:
+            # v2.11.0 第 9 轮（代理 A · 静默 except 判定）：连接失败就是"在途/失败反馈
+            # 永远不出现"（B8 修的正是在途反馈），不许静默——留痕并按窗口类限流。
+            pet_log.log_throttled("voice_ui_connect:%s" % (type(self).__name__,),
+                                  "语音事件信号连接失败：%r" % (e,))
+        _hook_voice_ui(self._svc)
         self.setWindowTitle("语音设置（AI 配音）")
         self.setStyleSheet(DIALOG_QSS)
         clamp_dialog(self, 700, 640)   # v2.5.0 B
@@ -6709,6 +6952,28 @@ class VoiceDialog(_FitDialog):
             for d in self._lines.dialogues():
                 self._dlg_combo.addItem("%s（%d 条）" % (d["name"], len(d["line_ids"])), d["id"])
 
+    def _on_voice_event(self, key, text):
+        """语音事件（主线程，由 _voice_evt 排队过来）：只反映**本窗口发起的那一次**。
+
+        为什么只在 _voice_waiting 时写标签：这个服务是**全局**的——宠物自己在读日常台词、
+        闹钟在播报时也会发同样的事件。没有这道闸，窗口里那条结论会被别处的朗读覆盖掉
+        （用户刚看到"❌ 台词不存在"，一转眼变成"✅ 这条读完了。"）。
+        """
+        if not self._voice_waiting:
+            return
+        if key == "started":
+            self._play_label.setText("▶ 正在播放……（合成好了，这就读出来）")
+            return
+        self._voice_waiting = False
+        if key == "error":
+            # 原则 5：错误 = 发生了什么 + 下一步能做什么。合成失败的原因由服务给
+            # （"参考音不见了"/"合成失败"/"缓存写不进去"），下一步固定指向两个能自己动手的入口。
+            self._play_label.setText(
+                "❌ 配音失败：%s\n（下一步：点「测试后端」看配置；或去「资源管理 → 声音素材」"
+                "确认素材还在。详情见数据目录的 error.log）" % (text or "服务没有给出原因"))
+            return
+        self._play_label.setText("✅ 这条读完了。")
+
     def _speak_line(self):
         if self._svc is None or self._lines is None:
             self._play_label.setText("❌ 语音/台词服务不可用")
@@ -6719,7 +6984,15 @@ class VoiceDialog(_FitDialog):
             return
         self._save(silent=True)
         ok, err = self._svc.speak_line(lid)
-        self._play_label.setText(("✅ 开始朗读…" if ok else "❌ " + (err or "朗读失败")))
+        if not ok:
+            self._voice_waiting = False
+            self._play_label.setText("❌ " + (err or "朗读失败"))
+            return
+        # v2.11.0（B8）：入队成功≠已经在播——首次合成要几秒（云端十几秒）。这句话如实说
+        # "还在合成"，随后的 started / error / finished 由 _on_voice_event 接着写。
+        self._voice_waiting = True
+        self._play_label.setText("✅ 已开始朗读：正在合成（首次会慢一点），合成好自动播放；"
+                                 "失败会在这里说明")
 
     def _regen_line(self):
         if self._svc is None:
@@ -6729,6 +7002,7 @@ class VoiceDialog(_FitDialog):
             return
         ok, err = self._svc.regenerate(lid)
         if not ok:
+            self._voice_waiting = False
             self._play_label.setText("❌ " + (err or "重新生成失败"))
             return
         self._speak_line()
@@ -6736,6 +7010,7 @@ class VoiceDialog(_FitDialog):
     def _stop(self):
         if self._svc is not None:
             self._svc.stop()
+        self._voice_waiting = False   # v2.11.0（B8）：用户喊停后，迟到的事件不许再盖这句
         self._play_label.setText("已停止。")
 
     def _speak_dialogue(self):
@@ -6747,7 +7022,13 @@ class VoiceDialog(_FitDialog):
             return
         self._save(silent=True)
         ok, err = self._svc.speak_dialogue(did)
-        self._play_label.setText(("✅ 开始按顺序朗读…" if ok else "❌ " + (err or "朗读失败")))
+        if not ok:
+            self._voice_waiting = False
+            self._play_label.setText("❌ " + (err or "朗读失败"))
+            return
+        self._voice_waiting = True
+        self._play_label.setText("✅ 已开始按顺序朗读：正在合成（首次会慢一点），"
+                                 "一条条播完；失败会在这里说明")
 
     # ---------- 页 4：事件音效（v2.0 能力，保留） ----------
     def _build_event_tab(self):
