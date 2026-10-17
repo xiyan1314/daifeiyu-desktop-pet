@@ -15,6 +15,7 @@ import math
 import random
 import threading
 import time
+import datetime  # v2.11.0（第 11 轮 · UX E2）：时段问候要读"现在几点"（只 import 模块，不用 time.strftime）
 import copy
 import ctypes
 # v2.4.1（未使用导入清理）：原 "from ctypes import wintypes" 的意义只在一个副作用——
@@ -31,7 +32,7 @@ from PySide6.QtCore import (
     # v2.11.0 第 9 轮（A1）：缓动令牌在 pet_motion.EASE 里（纯字符串），这里只做
     # "名字 → QEasingCurve.Type" 的唯一映射点（见 _ease）。
     QEasingCurve,
-    # v2.11.0 第 9 轮（A4）：三件套的几何全用浮点矩形/点（QRect 是整数，会把光晕抖成 1px）。
+    # v2.11.0 第 9 轮（A4）：绘制层的几何全用浮点矩形/点（QRect 是整数，会把涟漪抖成 1px）。
     QRectF, QPointF,
     # v2.11.0 第 9 轮（B8）：AI 在途指示的写入点（pet_chat.ask）理论上可能来自非主线程，
     # 用它做"绝不在工作线程里碰 Qt 控件"的守卫。
@@ -39,15 +40,16 @@ from PySide6.QtCore import (
 )
 from PySide6.QtGui import (
     QPixmap, QImage, QTransform, QColor, QPainter, QCursor, QIcon,
-    # v2.11.0 第 9 轮（A4）：三件套的绘制资源（光晕渐变 / 描边路径 / 涟漪画笔）。
-    QPainterPath, QRadialGradient, QBrush, QPen,
+    # v2.11.0 第 9 轮（A4）：涟漪的画笔。⚠ 2026-10-16 用户裁决撤销了悬停光晕与按下描边
+    # → 它们用过的 QRadialGradient / QPainterPath / QBrush 三个类不再需要（随之删除）。
+    QPen,
 )
 from PySide6.QtWidgets import (
     QApplication, QWidget, QMenu, QGraphicsView, QGraphicsScene,
     QGraphicsPixmapItem, QInputDialog, QMessageBox, QFrame,
     QSystemTrayIcon, QDialog, QFileDialog,
-    # v2.11.0 第 9 轮（A4）：光晕/涟漪是椭圆绘制项，描边是圆角矩形路径项。
-    QGraphicsEllipseItem, QGraphicsPathItem,
+    # v2.11.0 第 9 轮（A4）：涟漪是椭圆绘制项（按下描边用的 QGraphicsPathItem 已撤销）。
+    QGraphicsEllipseItem,
     # v2.4.1：本模块内零引用，但**必须保留**——_verify_v13.py:1529 与 _verify_green.py:87 用
     # main.QWidgetAction 断「菜单里有大小滑块」（再导出，与 242 行那批同一性质；删掉即 AttributeError）。
     QWidgetAction,  # noqa: F401
@@ -74,6 +76,9 @@ import pet_alarm
 import pet_tools  # v2.3.0（1.2）：工具注册表/执行器（Qt-free，无环）
 import pet_io  # v2.3.1：原子写/清扫临时文件（P2-B 导入恢复、L4 退出清 tmp）
 import pet_services  # v2.5.0（A1）：子系统构造注册表（服务构造的单一产地，含 pet_ 前缀自动进护栏）
+import pet_time_mood  # v2.11.0（第 11 轮 · 旧第 8 轮那批 ⑧ UX E2）：纯逻辑、0 Qt、时钟可注入的时段情绪
+import pet_notify  # v2.11.0（第 11 轮 · 旧第 8 轮那批 ① 的系统通知那一半）：托盘通知 + 限流，零新依赖
+import pet_windows  # v2.11.0（第 11 轮 · 方向 4）：前台窗口全屏判定（纯逻辑 + 可注入探针 + 节流/去抖）
 from pet_plugin_host import PluginHost as _PluginHost  # v2.5.1：PetHub 插件宿主（接线在 __init__ 一行）
 # v2.5.0（A1）：上面少了 8 个 import pet_xxx——pet_book / pet_wander / pet_weather /
 # pet_balance / pet_menu / pet_ai / pet_actions / pet_mood 的服务构造整段搬进了 pet_services，本文件
@@ -82,7 +87,7 @@ from pet_plugin_host import PluginHost as _PluginHost  # v2.5.1：PetHub 插件�
 
 
 APP_NAME = "大肥鱼桌宠"
-VERSION = "2.10.0"
+VERSION = "2.11.0"
 PAD = 1.25  # 窗口相对角色的透明边距（为压扁/回弹预留空间）
 IDLE_FRAME_MS = 140      # 待机帧间隔
 IDLE_FORM_HOLD_SECS = 8  # v2.1.3：只有形态、没有动作可播时的展示期上限（到期回用户形态）
@@ -94,6 +99,19 @@ DIGEST_MS = 12000         # v2.1.6：吃饱形态保留（消化）时长——�
 MEAL_ZZZ_MS = 10000       # 喂食后第一个小盹（= 消化窗口内，DIGEST_MS 前 2s）
 MEAL_QUIET_MS = 13000     # 消化结束后的安静时长，期满打第二个小盹
 EAT_FRAME_MS = 110       # 进食帧间隔
+# v2.11.0（第 11 轮 W2「动起来好看 I」）：走路帧集 assets/walk_f00..f07.png（由
+# _dev/gen_walk_frames.py 从 character.png 程序化派生：同画布、同质心，只做细微的
+# 上下起伏/侧倾——画布或质心一变，走路时角色就会一跳一跳）。
+#
+# ⚠ **刻意不进 _DEFAULT_FRAME_SETS**：那张表是"默认角色四组素材"的唯一真源，而"四组全名"
+# 被 tests/test_petting_guard_v250.py:183 与 tests/test_relay_v243.py:471 逐字钉住，
+# 接力装载的分片步数也按组算（tests/test_startup_defer_v242.py）——把 walk 塞进那张表会
+# 改掉别人的判据。走路的帧是"真的要移动时才需要"的素材，所以由 PetWindow._walk_anim 在
+# **首次真的要移动**时按需解一次（_frames_loaded["walk"] 幂等）：构造期与首帧之后的接力
+# 装载一分钱都不花，这正是延迟装载的原始口径（消费点上付钱）。
+_WALK_FRAME_PREFIX = "walk"   # assets/<前缀>_f%02d.png
+_WALK_FRAME_COUNT = 8         # 8 帧一轮
+WALK_FRAME_MS = 120           # 走路帧间隔（8 帧走完一轮 ≈0.96s，与 WALK_INTERVAL_MS 同拍）
 # v2.4.1（UI 卡顿 C1/C2）：帧解码的两级策略——实测（_dev/repro_frame_freeze.py）
 # 切到一个 60 帧 512px 真实美术角色要占住主线程 456 ms、启动 411 ms，
 # 期间事件循环一次都不转（心跳缺口 = 阻塞时长），用户看到窗口假死。
@@ -248,6 +266,17 @@ DEFAULT_CONFIG = {
     # v2.11.0 第 9 轮（A3）：高对比度——"auto" = 跟随系统深色主题（读不到按关闭）。
     # 对比度下限 4.5:1 由 pet_motion.contrast_ratio() 算出来验（PALETTE_LIGHT/PALETTE_DARK）。
     "high_contrast": "auto",
+    # ---- v2.11.0 第 11 轮（旧第 8 轮那批）：四个新键 ----
+    # 全屏自动隐藏（方向 4）：默认开。判定失败一律"不当全屏"（pet_windows 的安全侧），
+    # 所以最坏后果是"该藏不藏"，绝不会"误藏"。
+    "fullscreen_hide": True,
+    # 系统通知（方向 3 的另一半）：默认开。托盘发不出去时 pet_notify 返回 False →
+    # 调用方退回气泡，所以默认开不会让用户"什么都收不到"。
+    "notify": True,
+    # 时段问候（UX E2）：**默认关**。这 9 项是"加餐"，老用户升级后不该突然多气泡。
+    "time_mood": False,
+    # 时段问候"当天已发过哪些"（{slot_key: "YYYY-MM-DD"}；与 pet_alarm.last_fired_date 同口径）
+    "time_mood_sent": {},
 }
 
 # P1-3：config.json schema 版本（1=旧版全量存储；2=diff 只存改动项）
@@ -264,7 +293,9 @@ _SOFT_FIX_KEYS = {"always_on_top", "ai_enabled", "follow_mouse", "wander", "soun
                   "idle_behavior", "idle_behavior_seconds", "transform_seconds",
                   "idle_trigger_delay", "idle_delay_after_full", "idle_form", "idle_actions",
                   "idle_play_mode", "idle_resume_on_interrupt",
-                  "reduce_motion", "high_contrast"}  # v2.11.0（A2/A3）：枚举字符串，坏值软归一化
+                  "reduce_motion", "high_contrast",  # v2.11.0（A2/A3）：枚举字符串，坏值软归一化
+                  "fullscreen_hide", "notify", "time_mood",  # v2.11.0（第 11 轮）：布尔开关
+                  "time_mood_sent"}
 
 
 def _fix_entry(k, a, b):
@@ -941,6 +972,17 @@ class PetWindow(QWidget):
         self.view.viewport().setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
         self.item = QGraphicsPixmapItem()
         self.scene.addItem(self.item)
+        # v2.11.0（第 11 轮 W2）：状态切换交叉淡入的"上一帧"图层。**建窗时就创建**——
+        # 它计入场景对象基线（"对象数回基线"的断言不必为它做例外），平时隐藏。
+        # 切换时它淡出、item 淡入；**只写 opacity**，绝不写 scale/squash/窗口尺寸/item 变换
+        # （A4 硬口径：交叉淡入是绘制层的事，不是几何的事）。z=-1：永远在角色主体之下，
+        # 不遮挡头顶表情（z=2）与特效层（z=1）。
+        self.ghost_item = QGraphicsPixmapItem()
+        self.ghost_item.setZValue(-1)
+        self.ghost_item.hide()
+        self.scene.addItem(self.ghost_item)
+        self._crossfade_anim = None   # 在途的交叉淡入（None = 没有）
+        self._xfade_gen = 0           # 切换代次：嵌套切换时作废前一次欠下的"淡入"
         self.emote_item = QGraphicsPixmapItem()
         self.emote_item.hide()
         self.scene.addItem(self.emote_item)
@@ -1024,6 +1066,7 @@ class PetWindow(QWidget):
         # 形态图，即 v2.2.5 的旧行为，安全兜底。
         self._idle_full_frames = []
         self._eat_frames = []
+        self._walk_frames = []            # v2.11.0（W2）：走路帧集（首次真的要移动时按需解）
         self._fx_petpet = []
         self._frames_loaded = {}          # 组名 -> 已解（幂等判据；_ensure_default_frames）
         # v2.4.3（第三轮找茬 P2-3）：自定义角色不解任何默认素材帧集（实测四组 37 帧
@@ -1081,6 +1124,23 @@ class PetWindow(QWidget):
         self.mood_timer = QTimer(self)
         self.mood_timer.setInterval(1000)
         self.mood_timer.timeout.connect(self._gslot('_mood_tick', self._mood_tick))
+        # v2.11.0（第 11 轮 · UX E2）：时段问候复用这条 1 秒拍子 —— **不新建定时器**
+        # （新建定时器就要进 _quit 的停止元组、就要有对象数回基线的断言；这里 0 个新对象）。
+        # 传参走 lambda 闭包会拖住 self，所以直接连绑定方法（与 _mood_tick 同形）。
+        self.mood_timer.timeout.connect(self._gslot('_time_mood_tick', self._time_mood_tick))
+        # ---- v2.11.0（第 11 轮 · 方向 4）：全屏自动隐藏 ----
+        # Win32 **不会通知**"前台窗口变了"，只能轮询；间隔比 POLL_MIN_INTERVAL_MS 略大，
+        # 保证每一拍都能真查（否则会被它自己的节流挡掉一半）。开关关着就不起定时器。
+        self._hidden_for_fullscreen = False   # 当前是不是"因为我们主动藏起来"
+        self._fs_override = False             # 用户手动叫出来 → 本轮全屏内不再自动藏
+        # 构造搬进 _build_fs_watch()：__init__ 里只留"装配" —— 本仓 test_services_registry_v250
+        # 钉着「__init__ 里只允许三处 pet_xxx 服务构造 + 两个只读系统探针」，多一处 pet_windows.*
+        # 就会让它红（那条门守的是"服务构造搬进 pet_services"的架构口径，不该被这层打破）。
+        self._fs_watch = self._build_fs_watch()
+        self._fullscreen_timer = QTimer(self)
+        self._fullscreen_timer.timeout.connect(self._gslot('_check_fullscreen', self._check_fullscreen))
+        if self.cfg.get("fullscreen_hide", True) is not False:
+            self._fullscreen_timer.start(pet_windows.POLL_MIN_INTERVAL_MS + 50)
         self.mood_timer.start()
 
         # v2.0.5：闹钟轮询（15s 一拍，秒级精度足够；到点判定纯函数）
@@ -1127,16 +1187,16 @@ class PetWindow(QWidget):
         self._flight_timer.setInterval(16)
         self._flight_timer.timeout.connect(self._gslot('_flight_tick', self._flight_tick))
 
-        # ---- v2.11.0 第 9 轮（A1/A2/A3/A4/A5）：动效地基 + 视觉三件套 ----
+        # ---- v2.11.0 第 9 轮（A1/A2/A3/A4/A5）：动效地基 + 视觉反馈 ----
         # 令牌表的**唯一来源**是 pet_motion（时长/缓动/幅度/阈值都在那儿，含 HCI 依据）；
-        # 这里只放"当前状态"。三件套一律**只画在场景里**（绘制层），绝不碰
-        # scale / squash / 窗口尺寸 / item 变换——悬停缩放与按压缩放都会和角色自己的
+        # 这里只放"当前状态"。绘制层**只画在场景里**，绝不碰
+        # scale / squash / 窗口尺寸 / item 变换——缩放反馈会和角色自己的
         # 呼吸/摇摆相位叠加，看起来像抖动（上一轮复盘出的教训）。
-        self._hover = False           # 悬停中（光晕）
-        self._pressed = False         # 按压中（描边）
-        self._glow_item = None        # 悬停光晕绘制项（懒建，复用）
-        self._glow_anim = None
-        self._outline_item = None     # 按下描边绘制项（懒建，复用）
+        # ⚠ 2026-10-16 用户裁决：**悬停光晕**与**按下描边**两层绘制已撤销
+        # （_glow_item / _glow_anim / _outline_item 三个属性随之删除）——今天悬停与
+        # 按压只改状态与光标，**不画任何东西**（见 enterEvent / leaveEvent / _press_squash）。
+        self._hover = False           # 悬停中（只用于光标提示）
+        self._pressed = False         # 按压中（状态位；不再画描边）
         self._ripples = []            # [(item, anim)] 在途涟漪 —— 收尾后必须回到空表
         self._hearts = []             # [(item, anim)] 在途心形（B4，同上）
         self._slide_anim = None       # A5 在途的贴边缓动
@@ -2162,7 +2222,12 @@ class PetWindow(QWidget):
             try:
                 self.alarms.mark_fired(_a["id"], pet_alarm.today_str())
                 _label = _a.get("label") or "闹钟"
-                self.show_bubble("⏰ %s 到点啦！" % _label)
+                # v2.11.0（第 11 轮 · 方向 3；三审 #1 修正）：闹钟到点走 _notify —— 系统通知
+                # **和**气泡各发一条（气泡是宠物自己的通道，看得见就一定显示）。
+                # 口径：托盘不可用 / 被限流 / 开关关 → 退回气泡；**托盘接受了但系统丢弃的，
+                # 程序无法感知**（showMessage 没有送达回执，见 pet_notify 模块头）。
+                # 「音效」关掉时闹钟也有气泡＋语音两条看得见的回执（这是三审要拦的回归）。
+                self._notify("⏰ %s 到点啦！" % _label)
                 _rt = self.alarms.ringtone_path(_a.get("ringtone") or "")
                 # 铃声与默认音统一受「音效」开关控制（关闭=只气泡+语音，不响铃）
                 if _rt and self.cfg.get("sound", True):
@@ -3009,6 +3074,12 @@ class PetWindow(QWidget):
             # 任一帧损坏 → 整动作空集（回退静态），与 form_animations 的 isfile 语义一致
             # v2.0.1：注册全部动作键（内建 idle/eat/poke/sleep + 自定义命名帧动作）
             plan = [(act, list(cur.get(act) or [])) for act in self._anim_actions(cur)]
+            # v2.11.0（W2）：「形态×动作」表里没有 walk → walk 槽**显式清空**。不写这句的话，
+            # 上一任角色（默认角色）按需解好的走路帧会被带过来，自定义角色就会播别人家的
+            # 走路帧。表里有 walk 的角色照旧注册（walk 今天就是合法的自定义动作名，
+            # 见 pet_resources.is_valid_custom_action —— 所以**不**往 ANIM_ACTIONS 里塞它）。
+            if "walk" not in {act for act, _paths in plan}:
+                self.anim.add_set("walk", [])
             # v2.4.1（UI 卡顿 C1/C2）：先把整批帧在**一个切片预算内**解出来；解不完
             # 就转分片（见 _anim_start_async），主线程立刻回到事件循环。
             # 小帧集（测试角色/默认素材）整个批次都落在首片里 → 同步装好，
@@ -3239,10 +3310,160 @@ class PetWindow(QWidget):
     def _on_frame_changed(self, _idx):
         # 帧下标由信号携带，但直接以 current() 为唯一取帧入口（单一事实来源）
         # P1-7：state/sleep 也纳入（poke 动画/睡眠动画走帧播放；静态展示时 anim 已停不发帧）
-        if self.anim_mode in ("idle", "eat", "state", "sleep"):
+        # v2.11.0（W2）：**walk 也纳入**——走路帧同样靠这个信号贴图（漏了它 = anim 在播、
+        # 画面不动，用户看到的是"走起来像滑冰"）。
+        if self.anim_mode in ("idle", "walk", "eat", "state", "sleep"):
             pix = self.anim.current()
             if pix is not None and not pix.isNull():
                 self.item.setPixmap(pix)
+
+    # ---------- v2.11.0（第 11 轮 W2）：走路播帧 + 状态切换交叉淡入 ----------
+    def _walk_anim(self, on):
+        """散步/跟随时**真的在移动**就播 walk 帧集（on=True）；停下回 idle（on=False）。
+
+        调用点只有一个：pet_wander.WanderController.tick（要移动的那一支 / 停下的那几支）。
+        **不许**在 busy / 睡觉 / 飞行 / 被拖拽时调它——那几条路 tick 自己就早退了。
+
+        **无帧集兜底（MASTER_CHECKLIST 原文的硬要求）**：walk 帧集为空（自定义角色的
+        「形态×动作」表里没有 walk / 素材缺失）→ 这里**一个像素都不改**、返回 False：
+        角色继续走原来那条「静态图 + squash 起伏」的路（pet_wander.tick 的既有行为），
+        不报错、也不会静默不动（位移由 tick 驱动，与有没有帧集无关）。
+
+        默认角色的 walk 帧集**按需解**：首次真的要移动时才解一次（幂等，
+        _frames_loaded["walk"]），构造期与接力装载一分钱不花（见 _WALK_FRAME_PREFIX 注释）。
+
+        不变量（改这里之前先读 _play_idle 的 S1/M1 注）：
+          · 吃帧在途绝不抢 `anim.play()`——它内部先 stop()，会顶掉 _eat_done，
+            busy 永久卡死（与 _play_idle 的 S1 守卫同一条病）；
+          · 热路径（每 tick 一次）必须在"同一批帧集正在播"时零成本早退；
+          · 只写 anim_mode / 帧集 / opacity，**不写任何几何**（A4 硬口径）。
+        """
+        if not on:
+            if self.anim_mode == "walk":
+                self._play_idle()  # 停下回 idle（_play_idle 自带 S1 守卫）
+            return False
+        if self.busy and self.anim_mode == "eat":
+            return False
+        if not self._custom_role and self.form != self.form_keys[0]:
+            # 默认角色的 walk 帧是**首形态**的画法：吃饱形态借过来播 = 把吃饱图换成常态图
+            # （v2.2.5 修的正是这个症状）→ 非首形态不播走路帧，退回待机那套判据。
+            if self.anim_mode == "walk":
+                self._play_idle()
+            return False
+        frames = self.anim._sets.get("walk") or []
+        if not frames and not self._custom_role:
+            if not self._frames_loaded.get("walk"):
+                self._walk_frames = pet_anim.load_frame_set(
+                    self._assets_dir, _WALK_FRAME_PREFIX, _WALK_FRAME_COUNT)
+                self._frames_loaded["walk"] = True
+                if not self._walk_frames:
+                    _log_error("walk frames missing: %s_f00..f%02d（走路回退静态兜底）"
+                               % (_WALK_FRAME_PREFIX, _WALK_FRAME_COUNT - 1))
+            frames = self._walk_frames
+            if frames:
+                self.anim.add_set("walk", frames)
+        if not frames:
+            return False    # 无帧集角色：静态兜底（不报错、不改动画状态、不动任何几何）
+        if (self.anim_mode == "walk" and self.anim._name == "walk"
+                and self.anim._frames is frames):
+            return True     # 已经在播同一批走帧（每 tick 都会走到这里）
+        gen = self._begin_anim_switch("walk")
+        self.anim_mode = "walk"
+        self.anim.play("walk", WALK_FRAME_MS, loops=-1,
+                       rate_factor=self._frame_rate_factor())
+        self._end_anim_switch(gen)
+        return True
+
+    def _begin_anim_switch(self, mode, force=False):
+        """状态切换的**前一半**：把"当前最后一帧"交给 ghost 层淡出（交叉淡入 100–200ms）。
+
+        调用契约：`gen = self._begin_anim_switch(新状态)` → 写 anim_mode / 换帧 →
+        `self._end_anim_switch(gen)`（gen 为 0 时收尾是空操作）。
+
+        三条硬口径：
+          · **时长只从令牌表来**：pet_motion.DUR["TRANSITION"]（=200ms，HCI「状态转换
+            150–250ms」档），走 duration_ms(name, reduce_motion)，所以「减少动效」开着 →
+            0 → **瞬时切帧**：不建动画对象、不动 opacity、ghost 保持隐藏，返回 0；
+          · **绝不改角色几何**（A4）：只写 ghost / item 两个绘制层的 **opacity**——
+            scale / squash / 窗口尺寸 / item 变换一个都不写；
+          · **对象数回基线**：ghost 是**建窗时**就创建的固定图层（已计入场景基线），
+            这里只 show / hide，绝不 addItem / removeItem。
+
+        返回**代次**（>0 才需要淡入）：嵌套的状态切换（例如吃帧集为空时 anim.play 会同步
+        回调 _eat_done → _play_idle）会让前一次"欠下的淡入"作废——`_xfade_gen` 一加，
+        内层那次拿到的号就比外层大，外层的 _end_anim_switch 自动变成空操作。
+
+        force：**同一个 anim_mode 但画面确实要换图**时用（唯一调用点 = _play_idle 的静态
+        形态分支：_set_form 先把 anim_mode 写成 "form_idle"，等 _play_idle 跑到那里时
+        "状态名"已经相同，靠 mode 判据会漏掉 form_idle 的淡入）。
+        """
+        self._xfade_gen += 1
+        gen = self._xfade_gen
+        if mode == self.anim_mode and not force:
+            return 0        # 同一个状态只是换了帧集：不是状态切换，不淡
+        self._crossfade_settle()   # 上一次没跑完：先收到终态（幂等，避免叠两个 ghost）
+        if pet_motion.duration_ms("TRANSITION", self._reduce_motion()) <= 0:
+            return 0        # 减少动效 = 瞬时（settle 已把 opacity 归 1、ghost 藏起来）
+        pix = self.item.pixmap()
+        if pix is None or pix.isNull():
+            return 0        # 连"上一帧"都还没有（构造早期）：没什么可淡出的
+        self.ghost_item.setPixmap(pix)
+        # 只对齐 ghost 自己的绘制变换（主体 item 的几何一个都不动；_apply_transform 每帧
+        # 还会再同步一次，走路 squash 起伏时淡出的影子也跟着起伏）
+        self.ghost_item.setTransform(self.item.transform())
+        self.ghost_item.setPos(self.item.pos())
+        self.ghost_item.setOpacity(1.0)
+        self.ghost_item.show()
+        self.item.setOpacity(0.0)   # 新第一帧随即被 setPixmap 写进来，由 0 淡到 1
+        return gen
+
+    def _end_anim_switch(self, gen):
+        """状态切换的**后一半**：新第一帧已就位 → 启动淡入（ghost 同步淡出到 0）。
+
+        gen 为 0（同状态 / 减少动效 / 没有上一帧）或**已被更新的一次切换顶掉**时是空操作：
+        不产生动画对象，也不留半截 opacity（那一路由顶掉它的那次负责收尾）。
+        """
+        if not gen or gen != self._xfade_gen:
+            return
+        ms = pet_motion.duration_ms("TRANSITION", self._reduce_motion())
+        if ms <= 0:                     # 开关在 begin 与 end 之间被切了：瞬时收尾
+            self._crossfade_settle()
+            return
+        anim = QVariantAnimation(self)
+        anim.setDuration(ms)
+        anim.setEasingCurve(self._ease("LINEAR"))   # 交叉溶解是线性淡入淡出，不加缓动
+        anim.setStartValue(0.0)
+        anim.setEndValue(1.0)
+
+        def _on_val(v):
+            # 只写 opacity（两个绘制层）。ghost 的变换由 _apply_transform 同步，
+            # 所以淡出的一定是"同一位置同一形状"的上一帧，不是错位的影子。
+            self.item.setOpacity(float(v))
+            self.ghost_item.setOpacity(1.0 - float(v))
+
+        anim.valueChanged.connect(_on_val)
+        anim.finished.connect(self._crossfade_settle)
+        self._crossfade_anim = anim
+        anim.start()
+
+    def _crossfade_settle(self):
+        """交叉淡入收尾（幂等）：ghost 隐藏回基线、主体 opacity 归 1、丢弃在途动画。
+
+        三个调用点同一条判据：动画自然结束 / 被下一次切换顶掉 / 「减少动效」要瞬时收尾。
+        """
+        anim, self._crossfade_anim = getattr(self, "_crossfade_anim", None), None
+        if anim is not None:
+            try:
+                anim.stop()        # 已经结束再 stop 是空操作
+                anim.deleteLater()
+            except RuntimeError:
+                pass  # 有意忽略：动画可能已被 deleteLater 回收（幂等清理）
+        try:
+            self.item.setOpacity(1.0)
+            self.ghost_item.setOpacity(0.0)
+            self.ghost_item.hide()
+        except RuntimeError:
+            pass  # 有意忽略：退出过程中绘制项可能已销毁（幂等清理）
 
     def _play_idle(self, _name=None):
         # v2.1.4 修复（S1）：吃帧进行中绝不复位——anim.play() 内部会先 stop()，
@@ -3283,6 +3504,13 @@ class PetWindow(QWidget):
         #     f2/f3 无帧静态）。
         _static_form = (self.form != self.form_keys[0] and not idle_frames)
         if _static_form:
+            # v2.11.0（W2）：状态切换（→form_idle）走交叉淡入；减少动效 = 瞬时（gen=0）。
+            # force 的判据 = "画面上这一帧真的要被换掉"：_set_form 先把 anim_mode 写成
+            # form_idle，只比状态名会漏掉这条；同图重贴（没换形态）就不淡。
+            _side = self.sprites[self.form]["side"]
+            _cur = self.item.pixmap()
+            _xgen = self._begin_anim_switch(
+                "form_idle", force=(_cur is None or _cur.cacheKey() != _side.cacheKey()))
             # 非首形态显示该形态静态图（默认角色=吃饱静态图；自定义角色=无帧形态静态图）
             if self.anim_mode != "form_idle":
                 self.anim.stop()
@@ -3290,24 +3518,30 @@ class PetWindow(QWidget):
             # H1：setPixmap 必须在守卫外——f1→f2 时 anim_mode 已是 form_idle，否则旧形态滞留
             self.item.setPixmap(self.sprites[self.form]["side"])
             self._using_front = False
+            self._end_anim_switch(_xgen)
         elif idle_frames:
             # v2.4.1（找茬 M2）：anim_mode == "idle" **不等于**"正在播的就是当前帧集"。
             # 帧集对象换了（换素材后重新注册 / 分片装好后）而模式没变时，anim._frames 还指向
             # 旧列表 → 画面一直停在旧贴图（用户原地换 PNG"看不出任何变化"就是这么来的）。
             if (self.anim_mode != "idle" or self.anim._name != "idle"
                     or self.anim._frames is not idle_frames):
+                # v2.11.0（W2）：walk→idle / eat→idle / state→idle 都在这里交叉淡入
+                _xgen = self._begin_anim_switch("idle")
                 self.anim_mode = "idle"
                 # D1：素材帧走**帧率倍率**——「减少动效」开着时帧照播，只是更慢（不是停帧）
                 self.anim.play("idle", interval, loops=-1,
                                rate_factor=self._frame_rate_factor())
+                self._end_anim_switch(_xgen)
         else:
             if self.anim_mode != "idle":
+                _xgen = self._begin_anim_switch("idle")  # v2.11.0（W2）：同上
                 self.anim.stop()
                 self.anim_mode = "idle"
                 # S1：从表情/睡眠返回待机必须强制恢复 front（_using_front 可能仍为 True，
                 # 仅当非待机转入时才换贴图，否则表情图会永久滞留）
                 self.item.setPixmap(self.sprites[self.form]["front"])
                 self._using_front = True
+                self._end_anim_switch(_xgen)
             elif not self._using_front:
                 self.item.setPixmap(self.sprites[self.form]["front"])
                 self._using_front = True
@@ -3315,6 +3549,7 @@ class PetWindow(QWidget):
 
     def _play_eat(self):
         self._stop_tween()  # v2.0.1：吃帧开始前停合成动作（防 squash 污染 + 收尾顶掉 _eat_done）
+        _xgen = self._begin_anim_switch("eat")  # v2.11.0（W2）：状态切换交叉淡入
         self.anim_mode = "eat"
         # P1-7：帧间隔——自定义角色 forms[i].anim_interval_ms 优先，缺省沿用 EAT_FRAME_MS
         interval = EAT_FRAME_MS
@@ -3324,6 +3559,9 @@ class PetWindow(QWidget):
         # D1：素材帧走**帧率倍率**（减少动效 = 吃帧更慢，帧照播）
         self.anim.play("eat", interval, loops=2, on_finish=self._eat_done,
                        rate_factor=self._frame_rate_factor())
+        # ⚠ 必须在 play 之后：吃帧集为空时 play 会**同步**回调 _eat_done → _play_idle，
+        # 那次嵌套切换把 _xfade_gen 顶大了，这里拿到的旧 gen 于是自动作废（见 _begin_anim_switch）。
+        self._end_anim_switch(_xgen)
         # v2.1.4 修复（S1）：看门狗——吃帧回调可能被任何 anim.play()/stop() 顶掉（stop 不回调），
         # 那样 busy 永远没人释放。这里按"吃帧理论时长 + 余量"兜底释放，保证不会永久卡死。
         _frames = len(self.anim._sets.get("eat") or []) or 7
@@ -3535,6 +3773,7 @@ class PetWindow(QWidget):
         if state in self.POKE_STATES and self._custom_role:
             poke_frames = self.anim._sets.get("poke") or []
             if poke_frames:
+                _xgen = self._begin_anim_switch("state")  # v2.11.0（W2）
                 self.anim.stop()
                 self.anim_mode = "state"
                 self._cur_state = state
@@ -3542,17 +3781,20 @@ class PetWindow(QWidget):
                 interval = self._cur_form_anim().get("interval_ms") or EAT_FRAME_MS
                 self.anim.play("poke", interval, loops=1, on_finish=self._state_done,
                                rate_factor=self._frame_rate_factor())
+                self._end_anim_switch(_xgen)
                 return
         pix = self._state_pix(state)
         if pix is None:
             _log_error("state image missing: %s" % state)
             return
+        _xgen = self._begin_anim_switch("state")  # v2.11.0（W2）：表情切换也交叉淡入
         self.anim.stop()
         self.anim_mode = "state"
         self._cur_state = state  # 记录当前表情，供切形态时按新形态素材重绘
         self._state_timer.stop()
         self.item.setPixmap(pix)
         self._state_timer.start(duration_ms)
+        self._end_anim_switch(_xgen)
 
     def _state_done(self, _name=None):
         if self.anim_mode == "state":
@@ -3571,6 +3813,7 @@ class PetWindow(QWidget):
             if _sf and _sf != self.form:
                 self._sleep_home = self.form
                 self._set_form(_sf, display_only=True)  # 睡眠是临时展示，不改用户选定形态
+        _xgen = self._begin_anim_switch("sleep")  # v2.11.0（W2）：入睡也交叉淡入
         self.anim.stop()
         self.anim_mode = "sleep"
         self._cur_state = "sleep"
@@ -3585,6 +3828,7 @@ class PetWindow(QWidget):
             pix = self._state_pix("sleep")
             if pix is not None:
                 self.item.setPixmap(pix)
+        self._end_anim_switch(_xgen)
         self._show_emote("zzz")
 
     def _wake(self):
@@ -3599,7 +3843,15 @@ class PetWindow(QWidget):
             self._play_idle()
 
     def _show_pet(self):
-        """把桌宠带回视野（置顶显示在最前）。"""
+        """把桌宠带回视野（置顶显示在最前）。
+
+        v2.11.0（三审 #4）：这里必须置 `_fs_override`——上面 :1135 的注释写的是
+        "用户手动叫出来 → 本轮全屏内不再自动藏"，而此前全仓只有 `_check_fullscreen` /
+        `set_fullscreen_hide` 两处把它写成 False，**没有任何一处写 True**：字段是死的，
+        "叫出来之后又被藏回去"只是靠 `_hidden_for_fullscreen` 的既有值巧合躲开。
+        置位放在 show() 之前：判据顺序是"先记豁免，再显示"，同一拍里不会被轮询打断。
+        """
+        self._fs_override = True
         self.show()
         self.raise_()
         self._wake()
@@ -3631,6 +3883,128 @@ class PetWindow(QWidget):
     def _mood_emote(self, kind):
         if not self.busy and not self._petting:  # 摸摸头期间抑制 heart 等（S3 修复）
             self._show_emote(kind)
+
+    # ---- v2.11.0（第 11 轮 · 方向 4）：全屏自动隐藏 ----
+    def _fs_log(self, kind, err):
+        """全屏判定的错误留痕（限流）：错误不许静默，也不许刷爆 error.log。"""
+        pet_log.log_throttled(kind, "fullscreen %s: %r" % (kind, err))
+
+    def _build_fs_watch(self):
+        """装配全屏判定器（探针 + 节流/去抖）。构造放这里、不放 __init__ 的理由见调用点注释。"""
+        probe = pet_windows.Win32Probe(on_error=lambda e: self._fs_log("fs_probe", e))
+        return pet_windows.FullscreenWatcher(
+            probe=probe,
+            screen_rects=self._physical_screen_rects,
+            own_hwnds=lambda: {int(self.winId())},
+            on_error=lambda e: self._fs_log("fs_watch", e))
+
+    def _physical_screen_rects(self):
+        """屏幕矩形 → **物理像素**（pet_windows 的探针读数就是物理像素）。
+
+        为什么不能直接给 Qt 的 geometry()：Qt 6 给的是**逻辑(DIP)像素**，150% 缩放下差 1.5 倍，
+        直接把逻辑像素喂给判据 = "永远不触发"（不报错、只是功能静默失效）。
+        已知边界：整机同一缩放比时这条换算与真实物理像素逐像素相等；**混合 DPI** 下副屏原点
+        仍会算错（要彻底解需要 MonitorFromWindow 作补偿输入，本轮有意不做，已登记）。
+        """
+        out = []
+        try:
+            for scr in QApplication.screens():
+                g = scr.geometry()
+                dpr = scr.devicePixelRatio() or 1.0
+                out.append((round(g.x() * dpr), round(g.y() * dpr),
+                            round((g.x() + g.width()) * dpr),
+                            round((g.y() + g.height()) * dpr)))
+        except Exception as e:  # noqa: BLE001 —— 无屏/退出过程中取不到屏幕：返回空表 = 判定为"不是全屏"
+            pet_log.log_throttled("fs_screens", "screen rects: %r" % (e,))
+            return []
+        return out
+
+    def _check_fullscreen(self):
+        """全屏自动隐藏的一拍。poll() 返回**状态**（不是"这一拍有没有变化"），所以由这里记上一次。"""
+        if self.cfg.get("fullscreen_hide", True) is False:
+            return
+        if self._closing or self._dragging or self._flying:
+            return  # 交互/动画中不藏（拖拽途中藏掉会让用户以为丢了）
+        try:
+            now_fs = self._fs_watch.poll()
+        except Exception as e:  # noqa: BLE001 —— 判定层炸掉不许把定时器槽带崩（安全侧 = 不藏）
+            pet_log.log_throttled("fs_poll", "fullscreen poll: %r" % (e,))
+            return
+        if not now_fs:
+            self._fs_override = False  # 退出全屏 → 手动显示的"豁免"自动失效
+        if now_fs == self._hidden_for_fullscreen or (now_fs and self._fs_override):
+            return
+        if now_fs:
+            self.bubble.hide()
+            self.hide()
+        else:
+            self.show()
+        self._hidden_for_fullscreen = now_fs
+
+    def _set_notify(self, on):
+        """「🔔 系统通知」开关：落盘即生效（_notify 每次都读 cfg，不需要缓存生效值）。"""
+        self.cfg["notify"] = bool(on)
+        save_config(self.cfg)
+
+    def _set_time_mood(self, on):
+        """「⏰ 时段问候」开关：落盘即生效（槽本身每秒读一次 cfg，默认关）。"""
+        self.cfg["time_mood"] = bool(on)
+        save_config(self.cfg)
+
+    def set_fullscreen_hide(self, on):
+        """菜单开关：落盘 + 起停定时器 + 归位（别让旧去抖计数跨开关生效）。"""
+        self.cfg["fullscreen_hide"] = bool(on)
+        save_config(self.cfg)
+        self._fs_override = False
+        try:
+            self._fs_watch.reset()
+        except Exception as e:  # noqa: BLE001 —— 归位失败只影响下一拍，不影响开关本身
+            pet_log.log_throttled("fs_reset", "watcher reset: %r" % (e,))
+        self._hidden_for_fullscreen = False
+        if on:
+            self._fullscreen_timer.start(pet_windows.POLL_MIN_INTERVAL_MS + 50)
+        else:
+            self._fullscreen_timer.stop()
+            if not self.isVisible():
+                self.show()  # 关掉开关时：别把"被我们藏起来的"留着
+
+    # ---- v2.11.0（第 11 轮 · 旧第 8 轮那批 ⑧ UX E2）：时段问候 ----
+    def _time_mood_tick(self):
+        """1 秒一拍：到点就问候一次（**每段每天只一次**，默认关闭）。
+
+        为什么单独一条槽而不是并进 _mood_tick：那条槽带着"消化窗口/在途调皮"的既有语义，
+        掺进来就会与 pet_mood 现有机制打架（W4-c 的硬约束）。
+
+        为什么"只有真显示出来才记账"：`due()` 只判"该不该发"，`remember()` 才落账。
+        在途气泡没让位 / 正在退出 / 无可用屏幕这几种情况下 show_bubble 返回 False →
+        **当天名额不会被吃掉**（否则用户当天就再也收不到这句问候）。
+        """
+        if self._closing or self._sleeping or self.busy or self._petting:
+            return  # 三个既有闸门，零新增状态位
+        if self.cfg.get("time_mood") is not True:
+            return  # 默认关：且只认 True（"true"/1 不算 —— 配置没归一化就少一句问候，不许乱弹）
+        try:
+            now = datetime.datetime.now()
+        except Exception as e:  # noqa: BLE001 —— 系统时钟坏掉不许把定时器槽带崩
+            pet_log.log_throttled("time_mood:now", "time mood now(): %r" % (e,))
+            return
+        got = pet_time_mood.due(now, self.cfg.get("time_mood_sent"),
+                                enabled=True)
+        if got is None:
+            return
+        _key, _text = got
+        if not pet_time_mood.may_interrupt(_key, self.bubble.isVisible()):
+            return  # 低优先（早安/催睡）不压在途气泡：**不记账**，下一秒再看，名额还在
+        try:
+            shown = self.show_bubble(_text)
+        except Exception as e:  # noqa: BLE001 —— 弹气泡失败不许把 1 秒拍子带崩
+            pet_log.log_throttled("time_mood:show", "time mood show_bubble: %r" % (e,))
+            return
+        if not shown:
+            return  # 没真显示出来 → 不记账
+        self.cfg["time_mood_sent"] = pet_time_mood.remember(
+            self.cfg.get("time_mood_sent"), now, _key)
+        save_config(self.cfg)
 
     def _mood_tick(self):
         # v2.2.2（修正 v2.2.1 的过激门控）：只在**调度内部调皮事件**这一层挡吃饱形态——
@@ -3818,6 +4192,13 @@ class PetWindow(QWidget):
             self.item.setPos(0, -dy + _poy)
         else:
             self.item.setPos(0, _poy)
+        # v2.11.0（W2）：交叉淡入期间 ghost 必须与主体**同变换同位置**，否则淡出的是"错位的
+        # 影子"（走路的 squash 每 tick 都在变，不跟就会看到两层错开）。只写 ghost 自己的
+        # 绘制变换——**主体 item 的几何一个都不动**（A4 硬口径）。
+        _ghost = getattr(self, "ghost_item", None)
+        if _ghost is not None and _ghost.isVisible():
+            _ghost.setTransform(t)
+            _ghost.setPos(self.item.pos())
         self._update_click_mask()  # P3-1：缩放/贴图变化后重建穿透遮罩（关闭时清遮罩，开销可忽略）
 
     def set_scale(self, s):
@@ -3893,7 +4274,7 @@ class PetWindow(QWidget):
     def _pad_top(self):
         return int((self.height() - self.base_h * self.scale) / 2)
 
-    def show_bubble(self, text):
+    def show_bubble(self, text, hold_ms=None):
         """弹一条气泡 → **是否真的显示出来了**（v2.8.0 第 6 轮 A3：返回值变成实报）。
 
         改前这里两条早退路径都是裸 `return`（返回 None），而 pet_dialogs._toast 只看"回调没抛
@@ -3905,10 +4286,44 @@ class PetWindow(QWidget):
         if not text:
             return False
         gp = self._bubble_anchor()
-        self.bubble.show_text(text, gp)
+        # v2.11.0（第 11 轮）：hold_ms=None 走原样（令牌 5s），≤0 常驻，>0 指定毫秒
+        self.bubble.show_text(text, gp, hold_ms=hold_ms)
         # 气泡窗口在"没有可用屏幕"时会自己放弃（Bubble.show_text 的早退），所以这里按
         # 可见性如实回报——调用方（_toast）要的就是"用户到底看没看到"这个事实。
         return bool(self.bubble.isVisible())
+
+    def _notify(self, text, title="大肥鱼桌宠", hold_ms=None):
+        """关键事件 → **两条通道各走各的**：系统通知 + 宠物气泡（v2.11.0 第 11 轮 · 方向 3）。
+
+        为什么要第二条回执通道：闹钟到点时窗口可能被别的应用盖住，气泡看不见。
+        但 Windows 托盘通知**没有送达回执**（showMessage 只是交出去，见 pet_notify 模块头）：
+        远程桌面 / explorer 没起来 / 托盘区折叠 / 系统关了通知，它都会静默什么都不做。
+        所以"pet_notify 返回 True"只等于"交出去了"，**不等于**"用户看见了"——旧版据此跳过
+        气泡（三审 #1：一条会静默丢的回执），闹钟在「音效」也关掉时就变成零感知。
+
+        现在：
+          · 气泡**总是**弹（宠物自己的通道，看得见就一定显示 → 唯一有真回执的一条）；
+          · 系统通知照发（窗口被盖住 / 缩在托盘时它是管用的那条）；
+          · 「⚙️ 设置 → 系统通知」关 / 托盘不可用 / 被限流 / showMessage 抛异常
+            → 只少一条通知，气泡照旧（这几条 pet_notify 都如实返回 False）。
+        返回值 = **气泡是否真的显示出来**（show_bubble 的实报）。系统通知那条有没有真弹出来
+        程序无法感知，所以**不**计入返回值：宁可少报一条，也不把"交出去了"说成"看见了"。
+        """
+        delivered = False
+        if self.cfg.get("notify", True) is not False:
+            try:
+                delivered = pet_notify.notify(self.tray, title, text) is True
+            except Exception as e:  # noqa: BLE001 —— 通知失败不许把调它的那条路径带崩
+                pet_log.log_throttled("notify:call", "notify: %r" % (e,))
+                delivered = False
+        bubble = self.show_bubble(text, hold_ms=hold_ms)
+        if not bubble and delivered:
+            # 通知交出去了、气泡却没显示（例如窗口正在退出）：这条要留痕。
+            # 不在这里再补第二条通道 —— 气泡就是兜底，它自己都弹不出来时没有第三条。
+            pet_log.log_throttled("notify:no-bubble",
+                                  "系统通知已交出、气泡未显示（托盘是否真弹出无法感知）：%s"
+                                  % str(text)[:60])
+        return bool(bubble)
 
     def _bubble_anchor(self):
         """气泡锚点（全局坐标）：角色头顶中点；挂了余额挂件时改挂挂件上方。
@@ -4436,17 +4851,18 @@ class PetWindow(QWidget):
         return screen_geometry_at(pt)[1]
 
     def _press_squash(self, pressed):
-        """按下反馈：**只补描边，不改几何**（v2.11.0 A4）。
+        """按下反馈：**只记状态位，不改几何、不画东西**（v2.11.0 A4 + 2026-10-16 用户裁决）。
 
         改前这里是 squash_x=0.92 / squash_y=1.06（把角色压扁）+ _anchor_bottom——
         那个几何变化会和角色自己的呼吸/摇摆相位叠加，看起来像抖动（上一轮复盘出的教训）。
-        现在按压只切一个"描边"开关：**scale / squash / 窗口尺寸 / item 变换一个都不写**
+        现在按压**一个几何量都不写**：scale / squash / 窗口尺寸 / item 变换
         （连"复位成 1.0"都不写——在播的呼吸/摇摆会被这一下打断成一帧闪动）。
-        描边的几何因子取 pet_motion.SCALE["PRESS"]（恒 1.0），由 _sync_press_outline 消费。
-        函数名保留：调用点与既有证据锚点都指向它，语义收窄成"按下反馈"。
+        2026-10-16 用户裁决又把原来那圈"按下描边"（深蓝圆角框）撤掉了 → 这里只剩状态位。
+        判据仍在且更严：按下期间几何五元组逐项不变、且**场景里不许出现新绘制项**
+        （tests/test_motion_v2110.py 的 test_press_outline_appears_and_geometry_is_untouched）。
+        函数名保留：调用点与既有证据锚点都指向它，语义收窄成"按下状态"。
         """
         self._pressed = bool(pressed)
-        self._sync_press_outline()
 
     def _snap_to_edge(self):
         """贴边：算好目标位置后**滑过去**（A5：目标计算与旧版逐字相同，只有"怎么去"变了）。
@@ -4552,112 +4968,31 @@ class PetWindow(QWidget):
                 except RuntimeError:
                     pass  # 已被销毁：下面的 _retire_overlay 仍要把项摘掉
                 self._retire_overlay(item, anim, bucket)
-        if self._glow_anim is not None:
-            try:
-                self._glow_anim.stop()
-                self._glow_anim.deleteLater()
-            except RuntimeError:
-                pass
-            self._glow_anim = None
 
-    # ---- A4 ①：悬停 = 只做光晕（不缩放） ----
+    # ---- A4 ①：悬停（2026-10-16 用户裁决：**光晕撤销**，只留状态与光标提示） ----
     def enterEvent(self, e):
-        """悬停进入：亮起光晕。**几何量一律不动**（不缩放、不改窗口尺寸、不动 item 变换）。"""
+        """悬停进入：只切状态与光标。**不画光晕、几何量一律不动**。
+
+        2026-10-16 用户裁决：「鼠标到桌宠周围」那个暖黄光圈不要了 —— 桌宠常驻桌面、
+        鼠标频繁路过，光晕比「没有反馈」更吵。原实现（径向渐变椭圆 + 100ms 淡入，
+        令牌 GLOW / DUR["FEEDBACK"]）见 git 历史（v2.11.0 第 9 轮 A4）。
+        判据方向随之翻转：**悬停期间场景里不许出现新绘制项、几何五元组一个都不变**
+        （tests/test_motion_v2110.py 的 test_hover_glow_does_not_change_geometry）。
+        """
         super().enterEvent(e)
         self._hover = True
         self._set_cursor_hint(True)
-        self._sync_hover_glow()
 
     def leaveEvent(self, e):
-        """悬停离开：光晕收掉。按压状态**不在这里清**（松手路径负责，免得拖到窗外丢事件）。"""
+        """悬停离开：收状态与光标。按压状态**不在这里清**（松手路径负责，免得拖到窗外丢事件）。"""
         super().leaveEvent(e)
         self._hover = False
         self._set_cursor_hint(False)
-        self._sync_hover_glow()
 
-    def _place_glow(self):
-        """把光晕摆成"包住角色"的椭圆（光晕在角色**之下**，不遮脸）。"""
-        if self._glow_item is None:
-            return
-        pad = float(pet_motion.GLOW["RADIUS_PX"])
-        r = self._character_rect().adjusted(-pad, -pad, pad, pad)
-        self._glow_item.setRect(r)
-        base = QColor(pet_motion.GLOW["COLOR"])
-        edge = QColor(base)
-        edge.setAlpha(int(pet_motion.GLOW["ALPHA"]))
-        mid = QColor(base)
-        mid.setAlpha(max(0, int(pet_motion.GLOW["ALPHA"]) // 3))
-        clear = QColor(base)
-        clear.setAlpha(0)
-        grad = QRadialGradient(r.center(), max(1.0, max(r.width(), r.height()) / 2.0))
-        grad.setColorAt(0.0, clear)   # 中心透明：光晕是"外圈"，不是给角色蒙一层
-        grad.setColorAt(0.82, mid)
-        grad.setColorAt(1.0, edge)
-        self._glow_item.setBrush(QBrush(grad))
-
-    def _sync_hover_glow(self):
-        """悬停光晕：**只改绘制层的不透明度**。
-
-        SCALE["HOVER"] 恒 1.0 = 这里的几何因子就是"不缩放"；关掉「减少动效」时
-        **瞬时**亮起/熄灭（时长为 0 → 直接设终值，不留动画对象）。
-        """
-        target = 1.0 if self._hover else 0.0
-        if self._glow_item is None:
-            self._glow_item = QGraphicsEllipseItem()
-            self._glow_item.setZValue(-1)  # 角色之下
-            self._glow_item.setPen(Qt.PenStyle.NoPen)
-            self._glow_item.setOpacity(0.0)
-            self.scene.addItem(self._glow_item)
-        self._place_glow()
-        if self._glow_anim is not None:
-            try:
-                self._glow_anim.stop()
-                self._glow_anim.deleteLater()
-            except RuntimeError:
-                pass
-            self._glow_anim = None
-        ms = pet_motion.duration_ms("FEEDBACK", self._reduce_motion())
-        if ms <= 0:
-            self._glow_item.setOpacity(target)
-            return
-        anim = QVariantAnimation(self)
-        anim.setDuration(ms)
-        anim.setStartValue(float(self._glow_item.opacity()))
-        anim.setEndValue(target)
-        anim.setEasingCurve(self._ease("ENTER"))
-        anim.valueChanged.connect(self._glow_item.setOpacity)
-        anim.finished.connect(lambda a=anim: self._retire_anim("_glow_anim", a))
-        self._glow_anim = anim
-        anim.start()
-
-    # ---- A4 ②：按下 = 只补描边（不缩放） ----
-    def _sync_press_outline(self):
-        """按下描边：几何因子取 SCALE["PRESS"]（恒 1.0，即**不缩放**），只画一圈框。
-
-        描边是**状态**不是动效：关掉「减少动效」时它照旧出现（瞬时 = 没有过渡帧，
-        而不是没有反馈）——所以这里不需要时长令牌。
-        """
-        if self._outline_item is None:
-            self._outline_item = QGraphicsPathItem()
-            self._outline_item.setZValue(3)  # 角色与特效之上：它是"被按到了"的提示
-            col = QColor(pet_motion.OUTLINE["COLOR"])
-            col.setAlpha(int(pet_motion.OUTLINE["ALPHA"]))
-            self._outline_item.setPen(QPen(col, float(pet_motion.OUTLINE["WIDTH_PX"])))
-            self._outline_item.setBrush(Qt.BrushStyle.NoBrush)
-        if not self._pressed:
-            self._outline_item.hide()
-            return
-        f = pet_motion.visual_scale("PRESS")
-        m = float(pet_motion.OUTLINE["MARGIN_PX"])
-        r = self._character_rect()
-        w, h = r.width() * f + 2 * m, r.height() * f + 2 * m
-        path = QPainterPath()
-        path.addRoundedRect(QRectF(r.center().x() - w / 2.0, r.center().y() - h / 2.0, w, h),
-                            10.0, 10.0)
-        self._outline_item.setPath(path)
-        if self._outline_item.scene() is None:
-            self.scene.addItem(self._outline_item)
-        self._outline_item.show()
+    # ---- A4 ②：按下（2026-10-16 用户裁决：**描边撤销**）
+    # 按下只切状态位（见 _press_squash），**不画任何东西** —— 原来这里画的是一圈深蓝
+    # 圆角框（令牌 OUTLINE + SCALE["PRESS"]），见 git 历史。
+    # ↓ 紧跟着的是 A4 ③ 点击涟漪（**仍在**：它是"点到了"的一次性反馈，不是悬停装饰）。
 
     # ---- A4 ③：点击 = 涟漪（一次性、自己消失、可被「减少动效」关掉） ----
     def _spawn_ripple(self, scene_pos):
@@ -4834,6 +5169,10 @@ class PetWindow(QWidget):
         save_config(self.cfg)
         on = self._reduce_motion()
         self._clear_motion_overlays()  # 刚打开：把在途的一次性动效收干净
+        if on:
+            # v2.11.0（W2）：在途的**交叉淡入**也立刻收到终态——否则打开开关的那一瞬间
+            # 会留一个还在淡的画面（半截 opacity），与"减少动效 = 瞬时"的语义矛盾。
+            self._crossfade_settle()
         self.bubble.set_motion_reduced(on)
         self._sync_thinking()  # B8：在途指示只停脉动，**绝不消失**（它是信息）
         self.anim.set_rate_factor(self._frame_rate_factor())  # D1：在播的素材帧当场换速
@@ -4841,7 +5180,11 @@ class PetWindow(QWidget):
         if state == "auto":
             self.show_bubble("动效：跟随系统（现在是%s）~" % ("减少" if on else "全开"))
         else:
-            self.show_bubble("动效已关掉，只留瞬时反馈~" if on else "动效已恢复~")
+            # A-07（裁决 = 收窄声明）：这句回执**不许**写成无条件的全称。「减少动效」只管
+            # **代码驱动的时长动画**（瞬时完成）；走路 / 甩抛飞行 / 食物托盘飞行 / 拖拽弹簧
+            # 这 4 处**位移不在此列**。边界登记在 pet_motion.effective_duration 的「已知边界」
+            # 与 tests/test_boundary_claims_v2110.py（谁把开关接到那 4 处上面，那条钉子就红）。
+            self.show_bubble("动效已关掉（走路、甩抛等位移不在此列）~" if on else "动效已恢复~")
 
     def _set_high_contrast(self, state):
         """菜单开关：三态 "auto" / "on" / "off"（勾选框给出的 bool 记为 on/off），立即生效。
@@ -5024,6 +5367,10 @@ class PetWindow(QWidget):
             self._stop_slide()            # A5：新操作顶掉在途贴边滑动（免得"追着走"）
             self._was_walking = self.walk_timer.isActive()
             self.walk_timer.stop()
+            # v2.11.0（三审 #7，已实测）：光停计时器不够——正在走的角色 anim_mode 还是
+            # "walk"，按住 / 拖拽 / 甩抛期间它会**原地迈腿**（实测 1.5s 仍在换帧）。
+            # 停走要连帧一起收（_walk_anim(False) 内部只管 walk → idle，别的模式零成本早退）。
+            self._walk_anim(False)
             self._press_squash(True)
             if self.cfg.get("sound", True):
                 play_sound("boing")
@@ -6086,16 +6433,20 @@ class PetWindow(QWidget):
                       self._digest_zzz_timer,  # v2.2.5：饭点小盹 #1（喂食事件时钟）
                       self._nap_zzz_timer,     # v2.2.5：饭点小盹 #2（消化结束+13s）
                       self._idle_check_timer,  # v2.1.8：待机触发高速检查
+                      self._fullscreen_timer,  # v2.11.0（第 11 轮 · 方向 4）：全屏轮询
                       self._alarm_timer):  # v2.0.5：闹钟轮询
                 if t is not None:
                     t.stop()
             # 缩放防抖未到期就退出：立即落盘，避免最后一次调大小丢失
             if self._save_scale_timer is not None and self._save_scale_timer.isActive():
                 save_config(self.cfg)
+            # v2.11.0（W2）：在途的交叉淡入先收到终态（ghost 隐藏 + 主体 opacity 归 1），
+            # 再和其它动画一起停——否则退出瞬间可能停在"半透明"那一帧上。
+            self._crossfade_settle()
             for a in (getattr(self, "_tween_anim", None), getattr(self, "_emote_anim", None),
-                      getattr(self, "_balance_anim", None), getattr(self, "_glow_anim", None),
+                      getattr(self, "_balance_anim", None),
                       getattr(self, "_slide_anim", None),
-                      getattr(self, "_thinking_anim", None)):  # v2.11.0：光晕/贴边/AI 在途脉动
+                      getattr(self, "_thinking_anim", None)):  # v2.11.0：贴边/AI 在途脉动
                 if a is not None:
                     try:
                         a.stop()

@@ -58,9 +58,9 @@
     },
     {
       "id": "M-C5",
-      "why": "README 的 桌宠.py 函数数字改错（此前那行没有任何用例看着） **v2.11.0 第 9 轮重锚（代理 C）**：本轮 桌宠.py 函数数 255 → **291**（README.md / README.en.md 已同步；pet_dialogs.py 现值 398），旧锚点命中 0。**原意不变**（README 的函数数字必须被用例看着，test_readme_annotation_scope_matches_the_code 会红）。⚠ 该数字随本轮改动还会漂：**每次改 桌宠.py / pet_dialogs.py 都要回来同步 README 与这条锚点**。 ｜ 重锚（本轮）：源码改过 → 旧锚点命中 0；锚点已挪到**同一处代码**的新写法上，改坏的语义与强度一字未变，`new` 未动。",
+      "why": "README 的 桌宠.py 函数数字改错（此前那行没有任何用例看着） **v2.11.0 第 9 轮重锚（代理 C）**：本轮 桌宠.py 函数数 255 → **291**（README.md / README.en.md 已同步；pet_dialogs.py 现值 398），旧锚点命中 0。**原意不变**（README 的函数数字必须被用例看着，test_readme_annotation_scope_matches_the_code 会红）。⚠ 该数字随本轮改动还会漂：**每次改 桌宠.py / pet_dialogs.py 都要回来同步 README 与这条锚点**。 ｜ 重锚（本轮）：源码改过 → 旧锚点命中 0；锚点已挪到**同一处代码**的新写法上，改坏的语义与强度一字未变，`new` 未动。**2026-10-16 晚重锚（dsh-main-r11）**：README 的 桌宠.py 函数数 294 → **291**（2026-10-16 用户裁决撤销悬停光晕/按下描边 → 桌宠.py 净删 `_place_glow` / `_sync_hover_glow` / `_sync_press_outline` 三个方法；README.md 与 README.en.md 已同步）→ 旧锚点命中 0，锚点随 README 改成 291，`new`（999）未动，**原意不变**。",
       "file": "README.md",
-      "old": "`桌宠.py`（294 函数）",
+      "old": "`桌宠.py`（305 函数）",
       "new": "`桌宠.py`（999 函数）",
       "tests": [
         "tests/test_round3_a_fixes.py::test_readme_annotation_scope_matches_the_code"
@@ -68,7 +68,7 @@
       "expect_fail": [
         "tests/test_round3_a_fixes.py::test_readme_annotation_scope_matches_the_code"
       ],
-      "note": "v2.8.0 第 6 轮（代理 C）重锚：函数数 254→255。v2.11.0 第 9 轮再重锚：255→291（README 同步）。"
+      "note": "v2.8.0 第 6 轮（代理 C）重锚：函数数 254→255。v2.11.0 第 9 轮再重锚：255→294（README 同步）。2026-10-16 晚重锚：294→291（撤销悬停光晕/按下描边，净删 3 个方法）。"
     },
     {
       "id": "M-C6",
@@ -178,7 +178,7 @@
   ],
   "results": {
     "title": "变异验证 spec：mutations_compat_v243.json",
-    "checked_at": "2026-10-16 16:46:37",
+    "checked_at": "2026-10-17 16:22:56",
     "total": 13,
     "caught": 13,
     "not_caught": 0,
@@ -188,7 +188,7 @@
         "id": "M-C1",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "2 failed in 1.48s",
+        "tail": "2 failed in 1.77s",
         "failed": [
           "tests/test_round3_a_fixes.py::test_no_shipped_source_hardcodes_a_single_font_family",
           "tests/test_round3_a_fixes.py::test_dialog_qss_uses_the_single_source_fallback_chain"
@@ -200,7 +200,7 @@
         "id": "M-C2",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.63s",
+        "tail": "1 failed in 0.75s",
         "failed": [
           "tests/test_round3_a_fixes.py::test_dialog_qss_uses_the_single_source_fallback_chain"
         ],
@@ -211,7 +211,7 @@
         "id": "M-C3",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.76s",
+        "tail": "1 failed in 1.02s",
         "failed": [
           "tests/test_round3_a_fixes.py::test_font_fallback_mechanism_comment_is_hedged"
         ],
@@ -222,7 +222,7 @@
         "id": "M-C4",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed, 1 passed in 0.63s",
+        "tail": "1 failed, 1 passed in 0.76s",
         "failed": [
           "tests/test_deps_bounds_v24.py::test_every_declared_package_has_an_upper_bound"
         ],
@@ -233,7 +233,7 @@
         "id": "M-C5",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.70s",
+        "tail": "1 failed in 0.86s",
         "failed": [
           "tests/test_round3_a_fixes.py::test_readme_annotation_scope_matches_the_code"
         ],
@@ -244,7 +244,7 @@
         "id": "M-C6",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.93s",
+        "tail": "1 failed in 1.11s",
         "failed": [
           "tests/test_release_check.py::test_clean_tree_shows_utf8_paths_not_octal_escapes"
         ],
@@ -255,7 +255,7 @@
         "id": "M-C7",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 1.03s",
+        "tail": "1 failed in 1.17s",
         "failed": [
           "tests/test_release_check.py::test_asset_manifest_ignores_gitignored_files"
         ],
@@ -266,7 +266,7 @@
         "id": "M-C8",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 1.39s",
+        "tail": "1 failed in 1.75s",
         "failed": [
           "tests/test_relay_v243.py::test_custom_role_first_feed_does_not_decode_default_sets"
         ],
@@ -277,7 +277,7 @@
         "id": "M-C9",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.54s",
+        "tail": "1 failed in 0.65s",
         "failed": [
           "tests/test_compat_v242_fixes.py::test_manifest_timestamp_is_fixed_so_exports_are_reproducible"
         ],
@@ -288,7 +288,7 @@
         "id": "M-C10",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.62s",
+        "tail": "1 failed in 0.75s",
         "failed": [
           "tests/test_round3_a_fixes.py::test_refresh_resets_guard_when_thread_start_fails"
         ],
@@ -299,7 +299,7 @@
         "id": "M-C11",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.58s",
+        "tail": "1 failed in 0.71s",
         "failed": [
           "tests/test_round3_a_fixes.py::test_closing_flag_renamed_does_not_silently_drop_results"
         ],
@@ -310,7 +310,7 @@
         "id": "M-C12",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "2 failed in 0.53s",
+        "tail": "2 failed in 0.65s",
         "failed": [
           "tests/test_release_check.py::test_mutation_evidence_notes_flags_a_stale_result_json",
           "tests/test_release_check.py::test_stale_fingerprints_reports_only_mismatches"
@@ -322,7 +322,7 @@
         "id": "M-C13",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.52s",
+        "tail": "1 failed in 0.65s",
         "failed": [
           "tests/test_release_check.py::test_asset_manifest_notes_when_the_check_cannot_run"
         ],
@@ -350,23 +350,23 @@
     ],
     "note": "变异只在 %TEMP% 影子副本里做，真实仓库只读（只写 _dev/.mutation.lock）",
     "repo_fingerprint": {
-      "桌宠.py": "b33888cadc15",
+      "桌宠.py": "d71ee3fe3c47",
       "pet_export.py": "db474bdd6670",
       "pet_lines.py": "5332f60b5f26",
       "pet_alarm.py": "1149e94deee3",
       "pet_behaviors.py": "732273f95fb4",
-      "_check_release.py": "dca4541e2829",
+      "_check_release.py": "a265ca1341e9",
       "pet_balance.py": "045129227ee2",
       "pet_plugin.py": "2f7853298fc3",
       "pet_plugin_host.py": "82fb7b1384c8",
-      "pet_dialogs.py": "ae3e1a1c76b0",
-      "pet_menu.py": "44224c3320c6",
+      "pet_dialogs.py": "a80c69368b64",
+      "pet_menu.py": "c5d7f8b8339e",
       "pet_plugin_index.py": "e5e9845785e8",
       "pet_ai.py": "a5989e7fe646",
-      "pet_config.py": "b46e0f180880",
+      "pet_config.py": "a8d7b1cb6b7c",
       "pet_io.py": "6b1e0413fb7f",
       "pet_services.py": "ecebb6ab5891",
-      "pet_widgets.py": "b8de517121e1",
+      "pet_widgets.py": "929458a553ce",
       "pet_resources.py": "5d8df41558df",
       "pet_tools.py": "46e9030d073f",
       "pet_voice.py": "3a9c9cc3324e",
@@ -376,7 +376,7 @@
       "pet_actions.py": "a4871b371ea0",
       "pet_book.py": "098676ac52d4",
       "_check_static.py": "6286f9f493bd",
-      "pet_motion.py": "e4fbc789b327",
+      "pet_motion.py": "a737b42a336f",
       "tests/test_dialog_buttons_v270.py": "4f95acca7fc6",
       "tests/test_import_thread.py": "1c6fc2ec5d05"
     },

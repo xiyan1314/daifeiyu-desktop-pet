@@ -448,9 +448,15 @@ def _ask_name_clash(parent, name, other, allow_overwrite=True):
 #     气泡仍压在上面，所以面板内也能用气泡。
 #   · 失败 / 需要用户决策 → _warn / _info / _confirm（模态）。
 # 全部调用点都走这两个函数：以后若要换成"内联标签"只需改这一处。
-def _toast(pet, text, status=None):
+def _toast(pet, text, status=None, hold_ms=None):
     """成功回执：宠物气泡。**尽力而为**——返回 False 只表示"气泡这条路明确没通"
     （没有 pet / 没有 show_bubble / 文本为空 / show_bubble 抛异常 / **回调如实回报没显示**）。
+
+    v2.11.0（三审 #6）：多了 `hold_ms` —— **透传给 show_bubble**（0/负数 = 常驻，
+    None = 令牌默认 5s）。备份成功那条回执含 zip 全路径，值得读完；旧版只在注释里写了
+    "hold_ms=0 由 show_bubble 透传"，实际调的是 `fn(str(text))`，参数根本没传下去
+    （实测 5 秒就没了）。`hold_ms is None` 时**一个多余实参都不传**——用例里那些只收
+    text 的老替身照旧可用。
 
     v2.7.0 第 5 轮（F5：文档承诺与实现不符）：改前这里写的是"返回是否**真的发出**"，
     而那时的 桌宠.show_bubble 在退出守卫下会**静默早退**（`_closing` 分支直接 return，
@@ -470,7 +476,10 @@ def _toast(pet, text, status=None):
     if not callable(fn):
         return False
     try:
-        res = fn(str(text))
+        if hold_ms is None:
+            res = fn(str(text))
+        else:
+            res = fn(str(text), hold_ms=hold_ms)
     except Exception as e:
         pet_log.log_error("show_bubble failed: %r" % (e,))
         _toast_fallback(text, status)
@@ -7948,6 +7957,125 @@ def open_bubble_style(pet):
         modal(dlg)
     except Exception as e:
         _dialog_failed(pet, "气泡样式", e)
+
+
+# ---------------- v2.11.0（第 11 轮 · 旧第 8 轮那批 ③）：用户数据备份 / 恢复 ----------------
+# 为什么 v1 用"文件对话框 + 确认框"而不是独立窗口：恢复这件事最要紧的是**让用户先看见包里是什么**
+# 再点确定 —— 这一点在确认文案里就能做到（清单摘要 + 文件数 + 备份时间），而独立窗口要过
+# tests/test_dialog_fit_v250.py 的 scroll_content / stick_buttons / clamp_dialog 三件套。
+# 独立窗口留作后续；今天的形态**不会**让用户在"不知道自己会覆盖什么"的情况下点确定。
+
+
+def _backup_rules():
+    """取用户数据目录 + 版本号 + **本版 config 的 schema 版本**。
+
+    取法：从 sys.modules 里拿已经加载的「桌宠」模块——**不顶层 import**（避免成环；
+    同 _fallback_host 的取法）。第三个返回值是 pet_backup 判断"包里的 config.json 是不是
+    未来版本"要用的（见 pet_backup.current_config_schema；模块没加载时是 None = 那一项不判）。
+    """
+    import sys as _sys
+    m = _sys.modules.get("桌宠")
+    return (getattr(m, "DATA_DIR", "") or "", getattr(m, "VERSION", "") or "",
+            getattr(m, "CONFIG_SCHEMA_VERSION", None))
+
+
+def open_backup(pet):
+    """「备份数据…」：选一个 zip 落点，把用户数据打进去，回执走气泡/兜底。"""
+    import os as _os
+    import pet_backup
+    data_dir, version, _schema = _backup_rules()
+    if not data_dir:
+        _warn(pet, "备份", "拿不到数据目录，这次没有备份。")
+        return False
+    try:
+        default_path = pet_backup.default_backup_path(data_dir)
+    except Exception as e:  # noqa: BLE001 —— 算不出默认落点不是"静默无反馈"：照本仓入口惯例出声
+        _dialog_failed(pet, "备份", e)
+        return False
+    path, _ = QFileDialog.getSaveFileName(pet, "备份到…", default_path, "备份包 (*.zip)")
+    if not path:
+        return False
+    ok, msg = pet_backup.create_backup(data_dir, path, app_version=version)
+    if ok:
+        # 常驻：这件事的结果值得读完（含 zip 全路径）。hold_ms=0 现在**真的**透传到
+        # show_bubble（三审 #6：旧版只把这句话写在注释里，参数没传，5 秒就没了）。
+        _toast(pet, msg, hold_ms=0)
+    else:
+        _warn(pet, "备份没完成", msg)
+    return ok
+
+
+def _reload_cfg_after_restore(pet):
+    """恢复成功后把**内存里的配置**换成盘上那份 → 是否成功（不抛）。
+
+    为什么必须做（三审 #3 / 兼容 #3，两路独立命中）：恢复做完那一刻，磁盘已经是包里那份
+    旧数据，而 `pet.cfg` 还是**恢复前**的内存副本；全仓二十多处 `save_config(pet.cfg)`
+    （每个菜单开关、每个对话框的保存）会在用户下一次随手操作时把旧配置写回磁盘——
+    恢复被悄悄盖回去，用户还以为自己恢复了。
+    取法：`桌宠.load_config()`（模块级函数，与导入失败回滚 `_restore_import_state` :2700
+    用的是同一条），经由 sys.modules 拿模块（与 _backup_rules 同一路数，不顶层 import）。
+    失败也不抛：返回 False，由调用方在回执里把"**必须**重启"说清楚。
+    """
+    import sys as _sys
+    m = _sys.modules.get("桌宠")
+    fn = getattr(m, "load_config", None)
+    if not callable(fn):
+        pet_log.log_throttled("restore:reload", "恢复后拿不到 load_config：配置未能重载（必须重启）")
+        return False
+    try:
+        cfg = fn()
+    except Exception as e:  # noqa: BLE001 —— 重载失败只影响"就地上新"，不影响恢复本身已落盘的数据
+        pet_log.log_error("restore reload cfg failed: %r" % (e,))
+        return False
+    try:
+        pet.cfg = cfg
+    except Exception as e:  # noqa: BLE001 —— 只读替身/宿主对象上赋值会抛，同样不算致命
+        pet_log.log_error("restore apply cfg failed: %r" % (e,))
+        return False
+    return True
+
+
+def open_restore(pet):
+    """「从备份恢复…」：先给用户看清单摘要，再确认；恢复前 pet_backup 自动留快照。
+
+    v2.11.0（三审 #3）：成功后**当场重载配置**（把"旧 cfg 写回磁盘"这条后路堵掉），
+    回执常驻并明说"必须重启"——恢复只换文件，角色/台词/闹钟这些服务对象要重启才重读。
+    """
+    import os as _os
+    import pet_backup
+    data_dir, version, schema = _backup_rules()
+    if not data_dir:
+        _warn(pet, "恢复", "拿不到数据目录，这次没有恢复。")
+        return False
+    start = ""
+    try:
+        start = _os.path.dirname(pet_backup.default_backup_path(data_dir))
+    except Exception as e:  # noqa: BLE001 —— 同上：走 _dialog_failed，不许"点了没反应"
+        _dialog_failed(pet, "恢复", e)
+        return False
+    path, _ = QFileDialog.getOpenFileName(pet, "选一个备份包…", start, "备份包 (*.zip)")
+    if not path:
+        return False
+    manifest, why = pet_backup.read_manifest(path)
+    if not manifest:
+        _warn(pet, "这个包不能用", why or "读不出清单。")
+        return False
+    files = manifest.get("files") or []
+    summary = ("包里有 %d 个文件（%s）\n备份时间：%s\n来源版本：%s\n\n"
+               "继续会用包里的内容**覆盖当前数据**（恢复前会自动留一份快照）。"
+               % (len(files), pet_backup._size_text(manifest.get("total_bytes") or 0),
+                  pet_backup._short_time(manifest.get("created_at")),
+                  manifest.get("app_version") or "未知"))
+    if not _confirm(pet, "从备份恢复", summary):
+        return False
+    ok, msg = pet_backup.restore_backup(path, data_dir, app_version=version,
+                                        config_schema=schema)
+    if ok:
+        _reload_cfg_after_restore(pet)
+        _toast(pet, msg, hold_ms=0)   # 常驻：这段话（含快照路径 + "必须重启"）要读完
+    else:
+        _warn(pet, "恢复没完成", msg)
+    return ok
 
 
 def open_idle(pet):

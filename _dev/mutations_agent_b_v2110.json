@@ -141,7 +141,7 @@
   ],
   "results": {
     "title": "变异验证 spec：mutations_agent_b_v2110.json",
-    "checked_at": "2026-10-16 16:32:50",
+    "checked_at": "2026-10-17 16:12:06",
     "total": 10,
     "caught": 10,
     "not_caught": 0,
@@ -151,7 +151,7 @@
         "id": "M-B2110-01-bad-reply-falls-back",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "3 failed, 18 passed in 1.65s",
+        "tail": "3 failed, 18 passed in 1.68s",
         "failed": [
           "tests/test_feedback_v2110_b.py::test_回复结构看不懂_说成服务商回复看不懂并给下一步",
           "tests/test_feedback_v2110_b.py::test_响应体不是JSON也算服务商回复看不懂",
@@ -164,7 +164,7 @@
         "id": "M-B2110-02-400-back-to-question",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed, 20 passed in 1.19s",
+        "tail": "1 failed, 20 passed in 1.17s",
         "failed": [
           "tests/test_feedback_v2110_b.py::test_400_422给的是下一步而不是反问"
         ],
@@ -175,7 +175,7 @@
         "id": "M-B2110-03-fallback-back-to-network",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed, 20 passed in 1.22s",
+        "tail": "1 failed, 20 passed in 1.38s",
         "failed": [
           "tests/test_feedback_v2110_b.py::test_我们自己的意外不再谎称网络不好"
         ],
@@ -186,7 +186,7 @@
         "id": "M-B2110-04-import-tip-points-at-save",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "2 failed, 69 passed in 33.10s",
+        "tail": "2 failed, 69 passed in 33.16s",
         "failed": [
           "tests/test_feedback_v2110_b.py::test_导入向导的添加形态_tooltip_指向本窗口真有的按钮",
           "tests/test_dialogs_feedback_v280.py::test_wording_table_is_applied_to_new_and_add_buttons"
@@ -198,7 +198,7 @@
         "id": "M-B2110-05-save-note-into-scroll-area",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed, 20 passed in 1.30s",
+        "tail": "1 failed, 20 passed in 1.24s",
         "failed": [
           "tests/test_feedback_v2110_b.py::test_AI设置的关键信息在窗口里看得见而不是只在tooltip里"
         ],
@@ -209,7 +209,7 @@
         "id": "M-B2110-06-menu-items-missing",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "3 failed, 18 passed in 1.27s",
+        "tail": "3 failed, 18 passed in 1.29s",
         "failed": [
           "tests/test_feedback_v2110_b.py::test_设置子菜单有两个无障碍开关_勾选状态读生效值",
           "tests/test_feedback_v2110_b.py::test_菜单开关的勾选会调到A的方法",
@@ -222,7 +222,7 @@
         "id": "M-B2110-07-checked-reads-raw-config",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed, 20 passed in 1.50s",
+        "tail": "1 failed, 20 passed in 1.29s",
         "failed": [
           "tests/test_feedback_v2110_b.py::test_设置子菜单有两个无障碍开关_勾选状态读生效值"
         ],
@@ -233,7 +233,7 @@
         "id": "M-B2110-08-voice-event-gate-removed",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "3 failed, 18 passed in 1.59s",
+        "tail": "3 failed, 18 passed in 1.50s",
         "failed": [
           "tests/test_feedback_v2110_b.py::test_合成失败写进窗口并给下一步_且不覆盖别的朗读",
           "tests/test_feedback_v2110_b.py::test_朗读成功走完会说读完了_停止后迟到事件不许再写",
@@ -246,7 +246,7 @@
         "id": "M-B2110-09-speak-optimistic-no-inflight",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "3 failed, 18 passed in 1.55s",
+        "tail": "3 failed, 18 passed in 1.50s",
         "failed": [
           "tests/test_feedback_v2110_b.py::test_朗读入队后说正在合成而不是已经开播",
           "tests/test_feedback_v2110_b.py::test_合成失败写进窗口并给下一步_且不覆盖别的朗读",
@@ -259,7 +259,7 @@
         "id": "M-B2110-10-hook-log-on-happy-path",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed, 20 passed in 1.45s",
+        "tail": "1 failed, 20 passed in 1.44s",
         "failed": [
           "tests/test_feedback_v2110_b.py::test_正常路径一次都不许命中语音UI的异常日志"
         ],
@@ -274,23 +274,23 @@
     ],
     "note": "变异只在 %TEMP% 影子副本里做，真实仓库只读（只写 _dev/.mutation.lock）",
     "repo_fingerprint": {
-      "桌宠.py": "b33888cadc15",
+      "桌宠.py": "d71ee3fe3c47",
       "pet_export.py": "db474bdd6670",
       "pet_lines.py": "5332f60b5f26",
       "pet_alarm.py": "1149e94deee3",
       "pet_behaviors.py": "732273f95fb4",
-      "_check_release.py": "dca4541e2829",
+      "_check_release.py": "a265ca1341e9",
       "pet_balance.py": "045129227ee2",
       "pet_plugin.py": "2f7853298fc3",
       "pet_plugin_host.py": "82fb7b1384c8",
-      "pet_dialogs.py": "ae3e1a1c76b0",
-      "pet_menu.py": "44224c3320c6",
+      "pet_dialogs.py": "a80c69368b64",
+      "pet_menu.py": "c5d7f8b8339e",
       "pet_plugin_index.py": "e5e9845785e8",
       "pet_ai.py": "a5989e7fe646",
-      "pet_config.py": "b46e0f180880",
+      "pet_config.py": "a8d7b1cb6b7c",
       "pet_io.py": "6b1e0413fb7f",
       "pet_services.py": "ecebb6ab5891",
-      "pet_widgets.py": "b8de517121e1",
+      "pet_widgets.py": "929458a553ce",
       "pet_resources.py": "5d8df41558df",
       "pet_tools.py": "46e9030d073f",
       "pet_voice.py": "3a9c9cc3324e",
@@ -300,7 +300,7 @@
       "pet_actions.py": "a4871b371ea0",
       "pet_book.py": "098676ac52d4",
       "_check_static.py": "6286f9f493bd",
-      "pet_motion.py": "e4fbc789b327",
+      "pet_motion.py": "a737b42a336f",
       "tests/test_dialog_buttons_v270.py": "4f95acca7fc6",
       "tests/test_import_thread.py": "1c6fc2ec5d05"
     },

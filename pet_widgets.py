@@ -326,8 +326,25 @@ class Bubble(QWidget):
         self._motion_reduced = False
         self._anchor = None   # 最近一次锚点（全局坐标）：跟随重定位用
         self._opacity = 1.0   # 淡入淡出的**平台无关读数**（见 _apply_opacity）
+        # v2.11.0（W3-d 持续气泡）：这条气泡"看多久"。None = 令牌表默认（5s）；
+        # 0/负数 = 常驻（不自动隐藏）；正数 = 指定毫秒。见 _set_hold。
+        self._hold_ms = None
 
-    def show_text(self, text, anchor_global):
+    def show_text(self, text, anchor_global, hold_ms=None):
+        """弹一条气泡。
+
+        v2.11.0（W3-d「持续气泡 + 系统通知」的**气泡那一半**）给 `hold_ms` 加了三种取值；
+        来源是用户 #194 提交的附件方案 + 2026-10-16 用户裁决并入 v2.11.0（**不是用户原话**）：
+
+          · **None（默认）** → 保持既有行为：展示 pet_motion.DUR["BUBBLE_HOLD"]（5s）后自动隐藏；
+          · **0 / 负数**   → **常驻**：不起自动隐藏计时，直到 hide() 或下一条气泡取代它；
+          · **正数**       → 这条气泡只看这么多毫秒。
+
+        为什么默认值是 None 而不是"把 5000 挪进签名"：既有调用点全是
+        `show_text(text, gp)` 这种两参形式，"默认行为一个字节都不变"这件事只能由
+        "默认什么都不传、仍然去查令牌表"来保证——把默认值写死成 5000 就等于绕过令牌表，
+        令牌改一次这里就漏改一次。
+        """
         # P1-4：先定位屏（间隙取最近屏）；无屏直接放弃，不做半截状态变更
         scr = screen_geometry_at(anchor_global)[1]
         if scr is None:
@@ -367,7 +384,35 @@ class Bubble(QWidget):
         # 展示时长令牌（原处硬编码 5000 已搬家：pet_motion.DUR["BUBBLE_HOLD"]）。
         # ⚠ 展示时长是"这条信息该看多久"，**不随「减少动效」归零**
         # （归零 = 气泡闪一下就没，等于没显示——那是对信息的破坏，不是降级）
-        self._timer.start(pet_motion.duration_ms("BUBBLE_HOLD"))
+        self._set_hold(hold_ms)
+
+    def _set_hold(self, hold_ms):
+        """按 hold_ms 决定这条气泡"看多久"（None=令牌表 5s / ≤0=常驻 / >0=指定毫秒）。
+
+        **常驻这一支必须先 stop()**：上一条气泡可能已经起了一个 5s 计时，那个计时到点会把
+        **这条**常驻气泡淡出关掉——用户看到的是"设成常驻反而更短命"。反方向不需要任何
+        粘滞状态：常驻之后来一条普通气泡，start() 会把间隔重新写回 5s，于是
+        "常驻过一次就再也关不掉"这条路根本不存在（自愈，不是靠额外的状态机）。
+
+        坏值（非数值，例如配置里手写的 "一会儿"）→ **回到默认 5s**：气泡是 UI，
+        不许因为一个参数把展示时长变成 0（闪一下就没）或把异常抛给调用方。
+        """
+        try:
+            self._hold_ms = None if hold_ms is None else int(hold_ms)
+        except (TypeError, ValueError) as e:
+            # 坏值回默认是**安全侧**，但不能一声不响：这是"调用点/配置写错了"，
+            # 静默回退会让下一个人对着"气泡怎么还是 5s"猜。限流留痕（同一条一分钟一条），
+            # 也满足本仓"静默 except 必须登记或留痕"的口径。
+            pet_log.log_throttled("bubble.hold_ms",
+                                  "气泡展示时长参数读不懂（按令牌表 5s 处理）：%r（%r）"
+                                  % (hold_ms, e))
+            self._hold_ms = None
+        if self._hold_ms is None:
+            self._timer.start(pet_motion.duration_ms("BUBBLE_HOLD"))
+        elif self._hold_ms > 0:
+            self._timer.start(self._hold_ms)
+        else:
+            self._timer.stop()
 
     # ---- v2.11.0 第 9 轮（B2/B3）：定位、淡入淡出、跟随 ----
     def _anchor_xy(self, anchor_global, w, h):
@@ -461,6 +506,18 @@ class Bubble(QWidget):
             self._apply_opacity(1.0)  # 下次 show_text 从满不透明度起步（淡入会自己置 0）
 
         self._fade_to(0.0, on_done=_done)
+
+    def hide(self):
+        """隐藏气泡时**连自动隐藏计时一起停掉**（v2.11.0 · W3-d）。
+
+        为什么要覆盖：show_text 起的是单发计时，窗口先被藏起来（收进托盘 / 面板把它盖住 /
+        退出清理）之后那个计时照样会到点，然后在**一个看不见的窗口**上再起一次淡出动画——
+        这正是"关不干净"的那一类残留（对象数回不到基线）。
+        对常驻气泡无副作用（它本来就没有计时）；隐藏之后下一条 show_text 会按它自己的
+        hold_ms 重新计时，所以"常驻 → 藏起来 → 再来一条普通气泡"这条路照样通。
+        """
+        self._timer.stop()
+        super().hide()
 
     def follow_to(self, anchor_global):
         """B3：气泡跟随角色——按**同一份锚点算法**重定位，不重启自动隐藏计时。

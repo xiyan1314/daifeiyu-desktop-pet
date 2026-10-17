@@ -24,7 +24,7 @@
       "why": "可选能力降级（音效/动画/缩放/预览/悬停提示）：失败＝该能力缺席，不丢数据",
       "evidence": "except Exception: pass",
       "lines": [
-        163
+        173
       ]
     },
     {
@@ -64,7 +64,7 @@
       "count": 1,
       "tier": "B",
       "reason": "fallback",
-      "why": "坏值回默认（反序列化/归一化/类型转换）：帧率倍率不是数值 → 回 1.0（原速）。与 pet_motion.frame_rate_factor 同一口径的**安全侧**回退（绝不返回 0/负 → 不把角色冻成一张图，D1 用户明确否掉的那一支）。契约出处：令牌真源侧 tests/test_motion_v2110.py::test_frame_rate_factor_is_a_compromise_and_never_freezes（:260-267）；本函数是 pet_anim 侧的消费闸，行为级由 tests/test_host_v2100_round.py::test_frame_rate_token_contract（:236-238 关 1.0 / 开 0.5 / >0）、::test_idle_material_frames_slow_down_and_never_freeze（:251-277 倍率 0.5 → 间隔 ×2、关掉恢复原速、帧仍在推进）、::test_eat_watchdog_covers_the_slowed_frames（:280-301）钉住。⚠ 如实登记：全仓 tests/ 里 _safe_rate_factor 0 命中（它没有专属坏值用例），改这个回退值前先补一条。",
+      "why": "坏值回默认（反序列化/归一化/类型转换）：不改变用户可见结果",
       "evidence": "except (TypeError, ValueError): return 1.0",
       "lines": [
         43
@@ -81,7 +81,7 @@
       "why": "坏值回默认（反序列化/归一化/类型转换）：不改变用户可见结果",
       "evidence": "except Exception: pix = QPixmap()",
       "lines": [
-        121
+        181
       ]
     },
     {
@@ -228,6 +228,455 @@
       ]
     },
     {
+      "key": "pet_backup.py|_close_quietly|0d4b0e40a6",
+      "file": "pet_backup.py",
+      "func": "_close_quietly",
+      "shape": "0d4b0e40a6",
+      "count": 1,
+      "tier": "C",
+      "reason": "cleanup",
+      "why": "尽力而为的清理/回滚：失败只会在磁盘上留孤儿文件，不改变用户可见结果",
+      "evidence": "except Exception: pass",
+      "lines": [
+        1128
+      ]
+    },
+    {
+      "key": "pet_backup.py|_commit|5d4d860b6a",
+      "file": "pet_backup.py",
+      "func": "_commit",
+      "shape": "5d4d860b6a",
+      "count": 1,
+      "tier": "B",
+      "reason": "reported",
+      "why": "失败已随返回值/哨兵上报调用方（调用方据此弹提示或降级），不需要再写一条日志",
+      "evidence": "except OSError as e: return placed, \"读临时文件失败（%s）\" % (e,)",
+      "lines": [
+        987
+      ]
+    },
+    {
+      "key": "pet_backup.py|_config_schema_problem|8a172e7f74",
+      "file": "pet_backup.py",
+      "func": "_config_schema_problem",
+      "shape": "8a172e7f74",
+      "count": 1,
+      "tier": "B",
+      "reason": "fallback",
+      "why": "同函数内的兜底分支：回默认值/继续，不改变用户可见结果（2026-10-17 修复波补登记）：except (UnicodeDecodeError, ValueError): return \"\"",
+      "evidence": "except (UnicodeDecodeError, ValueError): return \"\"",
+      "lines": [
+        726
+      ]
+    },
+    {
+      "key": "pet_backup.py|_config_schema_problem|d2966c22d1",
+      "file": "pet_backup.py",
+      "func": "_config_schema_problem",
+      "shape": "d2966c22d1",
+      "count": 1,
+      "tier": "B",
+      "reason": "fallback",
+      "why": "同函数内的兜底分支：回默认值/继续，不改变用户可见结果（2026-10-17 修复波补登记）：except (KeyError, OSError, RuntimeError, zipfile.BadZipFile): return \"\"",
+      "evidence": "except (KeyError, OSError, RuntimeError, zipfile.BadZipFile): return \"\"",
+      "lines": [
+        720
+      ]
+    },
+    {
+      "key": "pet_backup.py|_digest|14a7c158e9",
+      "file": "pet_backup.py",
+      "func": "_digest",
+      "shape": "14a7c158e9",
+      "count": 1,
+      "tier": "B",
+      "reason": "fallback",
+      "why": "坏值回默认（反序列化/归一化/类型转换）：不改变用户可见结果",
+      "evidence": "except (TypeError, ValueError): raw = repr(obj)",
+      "lines": [
+        1059
+      ]
+    },
+    {
+      "key": "pet_backup.py|_extract_entries|ebcb071757",
+      "file": "pet_backup.py",
+      "func": "_extract_entries",
+      "shape": "ebcb071757",
+      "count": 2,
+      "tier": "B",
+      "reason": "reported",
+      "why": "失败已随返回值/哨兵上报调用方（调用方据此弹提示或降级），不需要再写一条日志",
+      "evidence": "except KeyError: return [], \"备份不完整：包里找不到 %s\" % name",
+      "lines": [
+        857,
+        863
+      ]
+    },
+    {
+      "key": "pet_backup.py|_inspect_zip|86ecd74a64",
+      "file": "pet_backup.py",
+      "func": "_inspect_zip",
+      "shape": "86ecd74a64",
+      "count": 1,
+      "tier": "B",
+      "reason": "reported",
+      "why": "失败已随返回值/哨兵上报调用方（调用方据此弹提示或降级），不需要再写一条日志",
+      "evidence": "except zipfile.BadZipFile as e: return [], None, \"这个文件不是有效的 zip（可能没下完整）：%s（%s）\" % (_base_name(path), e)",
+      "lines": [
+        770
+      ]
+    },
+    {
+      "key": "pet_backup.py|_inspect_zip|be2d7e6ba2",
+      "file": "pet_backup.py",
+      "func": "_inspect_zip",
+      "shape": "be2d7e6ba2",
+      "count": 1,
+      "tier": "B",
+      "reason": "reported",
+      "why": "失败已随返回值/哨兵上报调用方（调用方据此弹提示或降级），不需要再写一条日志",
+      "evidence": "except (OSError, RuntimeError) as e: return [], None, \"读备份包失败：%s（%s）\" % (_base_name(path), e)",
+      "lines": [
+        772
+      ]
+    },
+    {
+      "key": "pet_backup.py|_inspect_zip|c47a1aed01",
+      "file": "pet_backup.py",
+      "func": "_inspect_zip",
+      "shape": "c47a1aed01",
+      "count": 1,
+      "tier": "B",
+      "reason": "reported",
+      "why": "失败已随返回值/哨兵上报调用方（调用方据此弹提示或降级），不需要再写一条日志",
+      "evidence": "except (OSError, RuntimeError) as e: return [], None, \"读备份包时出错（%s）\" % (e,)",
+      "lines": [
+        792
+      ]
+    },
+    {
+      "key": "pet_backup.py|_inspect_zip|cb3469aa95",
+      "file": "pet_backup.py",
+      "func": "_inspect_zip",
+      "shape": "cb3469aa95",
+      "count": 1,
+      "tier": "B",
+      "reason": "reported",
+      "why": "失败已随返回值/哨兵上报调用方（调用方据此弹提示或降级），不需要再写一条日志",
+      "evidence": "except zipfile.BadZipFile as e: return [], None, \"备份包坏了（%s）——可能没下完整，或被改过\" % (e,)",
+      "lines": [
+        790
+      ]
+    },
+    {
+      "key": "pet_backup.py|_official_packs|e412f7283e",
+      "file": "pet_backup.py",
+      "func": "_official_packs",
+      "shape": "e412f7283e",
+      "count": 1,
+      "tier": "B",
+      "reason": "fallback",
+      "why": "坏值回默认（反序列化/归一化/类型转换）：不改变用户可见结果",
+      "evidence": "except (OSError, ValueError): return set()",
+      "lines": [
+        178
+      ]
+    },
+    {
+      "key": "pet_backup.py|_read_manifest_from|af10a25154",
+      "file": "pet_backup.py",
+      "func": "_read_manifest_from",
+      "shape": "af10a25154",
+      "count": 1,
+      "tier": "B",
+      "reason": "reported",
+      "why": "失败已随返回值/哨兵上报调用方（调用方据此弹提示或降级），不需要再写一条日志",
+      "evidence": "except KeyError: return None, \"这个包里没有备份清单（%s），不是大肥鱼的备份包\" % MANIFEST_NAME",
+      "lines": [
+        551
+      ]
+    },
+    {
+      "key": "pet_backup.py|_read_manifest_from|ff1a5f1127",
+      "file": "pet_backup.py",
+      "func": "_read_manifest_from",
+      "shape": "ff1a5f1127",
+      "count": 1,
+      "tier": "B",
+      "reason": "reported",
+      "why": "失败已随返回值/哨兵上报调用方（调用方据此弹提示或降级），不需要再写一条日志",
+      "evidence": "except (UnicodeDecodeError, ValueError) as e: return None, \"备份清单读不懂（%s）\" % (e,)",
+      "lines": [
+        558
+      ]
+    },
+    {
+      "key": "pet_backup.py|_remove|0d4b0e40a6",
+      "file": "pet_backup.py",
+      "func": "_remove",
+      "shape": "0d4b0e40a6",
+      "count": 1,
+      "tier": "C",
+      "reason": "cleanup",
+      "why": "尽力而为的清理/回滚：失败只会在磁盘上留孤儿文件，不改变用户可见结果",
+      "evidence": "except OSError: pass",
+      "lines": [
+        1120
+      ]
+    },
+    {
+      "key": "pet_backup.py|_rmtree|0d4b0e40a6",
+      "file": "pet_backup.py",
+      "func": "_rmtree",
+      "shape": "0d4b0e40a6",
+      "count": 1,
+      "tier": "C",
+      "reason": "cleanup",
+      "why": "尽力而为的清理/回滚：失败只会在磁盘上留孤儿文件，不改变用户可见结果",
+      "evidence": "except Exception: pass",
+      "lines": [
+        1136
+      ]
+    },
+    {
+      "key": "pet_backup.py|_rollback|5f95dd0fb7",
+      "file": "pet_backup.py",
+      "func": "_rollback",
+      "shape": "5f95dd0fb7",
+      "count": 1,
+      "tier": "C",
+      "reason": "cleanup",
+      "why": "尽力而为的清理/回滚：失败只会在磁盘上留孤儿文件，不改变用户可见结果",
+      "evidence": "except FileNotFoundError: continue",
+      "lines": [
+        1019
+      ]
+    },
+    {
+      "key": "pet_backup.py|_rollback|adca417acb",
+      "file": "pet_backup.py",
+      "func": "_rollback",
+      "shape": "adca417acb",
+      "count": 1,
+      "tier": "C",
+      "reason": "reported",
+      "why": "失败已随返回值/哨兵上报调用方（调用方据此弹提示或降级），不需要再写一条日志",
+      "evidence": "except OSError as e: return False, \"删不掉这一趟新加的文件 %s（%s）\" % (rel, e)",
+      "lines": [
+        1021
+      ]
+    },
+    {
+      "key": "pet_backup.py|_schema_int|ea239d3505",
+      "file": "pet_backup.py",
+      "func": "_schema_int",
+      "shape": "ea239d3505",
+      "count": 1,
+      "tier": "B",
+      "reason": "fallback",
+      "why": "失败方向安全（回默认/空值，调用方走安全侧）：except ValueError: return None",
+      "evidence": "except ValueError: return None",
+      "lines": [
+        685
+      ]
+    },
+    {
+      "key": "pet_backup.py|_short_time|0ed297cac6",
+      "file": "pet_backup.py",
+      "func": "_short_time",
+      "shape": "0ed297cac6",
+      "count": 1,
+      "tier": "B",
+      "reason": "fallback",
+      "why": "坏值回默认（反序列化/归一化/类型转换）：不改变用户可见结果",
+      "evidence": "except (ValueError, TypeError): return raw or \"未知时间\"",
+      "lines": [
+        1051
+      ]
+    },
+    {
+      "key": "pet_backup.py|_size_text|8a172e7f74",
+      "file": "pet_backup.py",
+      "func": "_size_text",
+      "shape": "8a172e7f74",
+      "count": 1,
+      "tier": "B",
+      "reason": "fallback",
+      "why": "坏值回默认（反序列化/归一化/类型转换）：不改变用户可见结果",
+      "evidence": "except (TypeError, ValueError): return \"未知大小\"",
+      "lines": [
+        1092
+      ]
+    },
+    {
+      "key": "pet_backup.py|_skip_names|fef37b58bf",
+      "file": "pet_backup.py",
+      "func": "_skip_names",
+      "shape": "fef37b58bf",
+      "count": 1,
+      "tier": "B",
+      "reason": "fallback",
+      "why": "坏值回默认（反序列化/归一化/类型转换）：不改变用户可见结果",
+      "evidence": "except Exception: return frozenset()",
+      "lines": [
+        276
+      ]
+    },
+    {
+      "key": "pet_backup.py|_write_zip_atomic|07b3a2575c",
+      "file": "pet_backup.py",
+      "func": "_write_zip_atomic",
+      "shape": "07b3a2575c",
+      "count": 1,
+      "tier": "B",
+      "reason": "reported",
+      "why": "失败已随返回值/哨兵上报调用方（调用方据此弹提示或降级），不需要再写一条日志",
+      "evidence": "except (OSError, zipfile.BadZipFile, ValueError) as e: return False, \"备份没写成：%s（原数据没动）\" % (e,)",
+      "lines": [
+        625
+      ]
+    },
+    {
+      "key": "pet_backup.py|_write_zip_atomic|adca417acb",
+      "file": "pet_backup.py",
+      "func": "_write_zip_atomic",
+      "shape": "adca417acb",
+      "count": 1,
+      "tier": "B",
+      "reason": "reported",
+      "why": "失败已随返回值/哨兵上报调用方（调用方据此弹提示或降级），不需要再写一条日志",
+      "evidence": "except OSError as e: return False, \"备份没写成：建不了目标目录 %s（%s）\" % (d, e)",
+      "lines": [
+        605
+      ]
+    },
+    {
+      "key": "pet_backup.py|collect_user_files|60c0ba5dbc",
+      "file": "pet_backup.py",
+      "func": "collect_user_files",
+      "shape": "60c0ba5dbc",
+      "count": 1,
+      "tier": "B",
+      "reason": "fallback",
+      "why": "坏值回默认（反序列化/归一化/类型转换）：不改变用户可见结果",
+      "evidence": "except OSError: names = []",
+      "lines": [
+        371
+      ]
+    },
+    {
+      "key": "pet_backup.py|create_backup|8cb5cefee5",
+      "file": "pet_backup.py",
+      "func": "create_backup",
+      "shape": "8cb5cefee5",
+      "count": 1,
+      "tier": "B",
+      "reason": "reported",
+      "why": "失败已随返回值/哨兵上报调用方（调用方据此弹提示或降级），不需要再写一条日志",
+      "evidence": "except OSError as e: return False, \"备份没写成：读不到用户数据（%s）\" % (e,)",
+      "lines": [
+        587
+      ]
+    },
+    {
+      "key": "pet_backup.py|create_backup|d6a593f552",
+      "file": "pet_backup.py",
+      "func": "create_backup",
+      "shape": "d6a593f552",
+      "count": 1,
+      "tier": "B",
+      "reason": "reported",
+      "why": "失败已随返回值/哨兵上报调用方（调用方据此弹提示或降级），不需要再写一条日志",
+      "evidence": "except RulesUnavailable as e: return False, str(e)",
+      "lines": [
+        585
+      ]
+    },
+    {
+      "key": "pet_backup.py|is_user_data|ea239d3505",
+      "file": "pet_backup.py",
+      "func": "is_user_data",
+      "shape": "ea239d3505",
+      "count": 1,
+      "tier": "B",
+      "reason": "fallback",
+      "why": "坏值回默认（反序列化/归一化/类型转换）：不改变用户可见结果",
+      "evidence": "except Exception: return False",
+      "lines": [
+        353
+      ]
+    },
+    {
+      "key": "pet_backup.py|list_snapshots|0e3d3bb412",
+      "file": "pet_backup.py",
+      "func": "list_snapshots",
+      "shape": "0e3d3bb412",
+      "count": 1,
+      "tier": "B",
+      "reason": "fallback",
+      "why": "坏值回默认（反序列化/归一化/类型转换）：不改变用户可见结果",
+      "evidence": "except OSError: return []",
+      "lines": [
+        455
+      ]
+    },
+    {
+      "key": "pet_backup.py|read_manifest|1d77b9e27f",
+      "file": "pet_backup.py",
+      "func": "read_manifest",
+      "shape": "1d77b9e27f",
+      "count": 1,
+      "tier": "B",
+      "reason": "reported",
+      "why": "失败已随返回值/哨兵上报调用方（调用方据此弹提示或降级），不需要再写一条日志",
+      "evidence": "except zipfile.BadZipFile as e: return None, \"这个文件不是有效的 zip（可能没下完整）：%s（%s）\" % (_base_name(path), e)",
+      "lines": [
+        541
+      ]
+    },
+    {
+      "key": "pet_backup.py|read_manifest|5ba58118c4",
+      "file": "pet_backup.py",
+      "func": "read_manifest",
+      "shape": "5ba58118c4",
+      "count": 1,
+      "tier": "B",
+      "reason": "reported",
+      "why": "失败已随返回值/哨兵上报调用方（调用方据此弹提示或降级），不需要再写一条日志",
+      "evidence": "except (OSError, RuntimeError) as e: return None, \"读备份包失败：%s（%s）\" % (_base_name(path), e)",
+      "lines": [
+        543
+      ]
+    },
+    {
+      "key": "pet_backup.py|restore_backup|d6a593f552",
+      "file": "pet_backup.py",
+      "func": "restore_backup",
+      "shape": "d6a593f552",
+      "count": 1,
+      "tier": "B",
+      "reason": "reported",
+      "why": "失败已随返回值/哨兵上报调用方（调用方据此弹提示或降级），不需要再写一条日志",
+      "evidence": "except RulesUnavailable as e: return False, str(e)",
+      "lines": [
+        956
+      ]
+    },
+    {
+      "key": "pet_backup.py|restore_backup|ff1a5f1127",
+      "file": "pet_backup.py",
+      "func": "restore_backup",
+      "shape": "ff1a5f1127",
+      "count": 1,
+      "tier": "B",
+      "reason": "reported",
+      "why": "失败已随返回值/哨兵上报调用方（调用方据此弹提示或降级），不需要再写一条日志",
+      "evidence": "except (OSError, RuntimeError) as e: return False, \"恢复时出错（%s）——已中止\" % (e,)",
+      "lines": [
+        958
+      ]
+    },
+    {
       "key": "pet_balance.py|_closing|ea239d3505",
       "file": "pet_balance.py",
       "func": "_closing",
@@ -238,7 +687,7 @@
       "why": "坏值回默认（反序列化/归一化/类型转换）：不改变用户可见结果",
       "evidence": "except Exception: return True",
       "lines": [
-        138
+        139
       ]
     },
     {
@@ -252,7 +701,7 @@
       "why": "日志设施自身的兜底：写日志失败无处可记（代码内已有 stderr 出口）",
       "evidence": "except Exception: pass",
       "lines": [
-        145
+        146
       ]
     },
     {
@@ -266,7 +715,7 @@
       "why": "失败已随返回值/哨兵上报调用方（调用方据此弹提示或降级），不需要再写一条日志",
       "evidence": "except Exception as e: return False, repr(e)",
       "lines": [
-        121
+        122
       ]
     },
     {
@@ -280,7 +729,7 @@
       "why": "可选能力降级（音效/动画/缩放/预览/悬停提示）：失败＝该能力缺席，不丢数据",
       "evidence": "except Exception: pass",
       "lines": [
-        180
+        181
       ]
     },
     {
@@ -294,7 +743,7 @@
       "why": "关闭/退出/销毁路径：进程即将结束或对象即将销毁，记日志没有接收方",
       "evidence": "except RuntimeError: pass",
       "lines": [
-        294
+        295
       ]
     },
     {
@@ -308,7 +757,7 @@
       "why": "坏值回默认（反序列化/归一化/类型转换）：不改变用户可见结果",
       "evidence": "except (TypeError, ValueError): cur = cfg.get(\"budget\", 0.0) or 0.0",
       "lines": [
-        367
+        375
       ]
     },
     {
@@ -677,7 +1126,7 @@
       "why": "坏值回默认（反序列化/归一化/类型转换）：不改变用户可见结果",
       "evidence": "except Exception: cfg[\"bubble_style\"] = dict(defaults[\"bubble_style\"])",
       "lines": [
-        305
+        343
       ]
     },
     {
@@ -691,8 +1140,8 @@
       "why": "坏值回默认（反序列化/归一化/类型转换）：不改变用户可见结果",
       "evidence": "except (TypeError, ValueError): cfg[\"scale\"] = 1.0",
       "lines": [
-        202,
-        240
+        231,
+        278
       ]
     },
     {
@@ -706,7 +1155,7 @@
       "why": "坏值回默认（反序列化/归一化/类型转换）：不改变用户可见结果",
       "evidence": "except (TypeError, ValueError): cfg[_k] = _d",
       "lines": [
-        229
+        267
       ]
     },
     {
@@ -720,7 +1169,7 @@
       "why": "坏值回默认（反序列化/归一化/类型转换）：不改变用户可见结果",
       "evidence": "except (TypeError, ValueError): cfg[\"transform_seconds\"] = _bcfg[\"transform_seconds\"]",
       "lines": [
-        277
+        315
       ]
     },
     {
@@ -734,7 +1183,7 @@
       "why": "坏值回默认（反序列化/归一化/类型转换）：不改变用户可见结果",
       "evidence": "except (TypeError, ValueError): cfg[k] = 0.0",
       "lines": [
-        310
+        348
       ]
     },
     {
@@ -762,8 +1211,8 @@
       "why": "可选能力降级（音效/动画/缩放/预览/悬停提示）：失败＝该能力缺席，不丢数据",
       "evidence": "except Exception: pass",
       "lines": [
-        1341,
-        5293
+        1438,
+        5626
       ]
     },
     {
@@ -777,7 +1226,7 @@
       "why": "坏值回默认（反序列化/归一化/类型转换）：不改变用户可见结果",
       "evidence": "except (TypeError, ValueError): pass",
       "lines": [
-        5116
+        5449
       ]
     },
     {
@@ -791,7 +1240,7 @@
       "why": "可选能力降级（音效/动画/缩放/预览/悬停提示）：失败＝该能力缺席，不丢数据",
       "evidence": "except Exception: assets = []",
       "lines": [
-        7543
+        8112
       ]
     },
     {
@@ -805,7 +1254,7 @@
       "why": "坏值回默认（反序列化/归一化/类型转换）：不改变用户可见结果",
       "evidence": "except Exception: names = []",
       "lines": [
-        6558
+        6939
       ]
     },
     {
@@ -819,7 +1268,7 @@
       "why": "可选能力降级（音效/动画/缩放/预览/悬停提示）：失败＝该能力缺席，不丢数据",
       "evidence": "except Exception: pass",
       "lines": [
-        7161
+        7611
       ]
     },
     {
@@ -833,7 +1282,7 @@
       "why": "可选能力降级（音效/动画/缩放/预览/悬停提示）：失败＝该能力缺席，不丢数据",
       "evidence": "except Exception: pass",
       "lines": [
-        6849
+        7236
       ]
     },
     {
@@ -847,7 +1296,7 @@
       "why": "坏值回默认（反序列化/归一化/类型转换）：不改变用户可见结果",
       "evidence": "except Exception: return []",
       "lines": [
-        7291
+        7741
       ]
     },
     {
@@ -861,7 +1310,7 @@
       "why": "日志设施自身的兜底：写日志失败无处可记（代码内已有 stderr 出口）",
       "evidence": "except Exception: pass",
       "lines": [
-        338
+        346
       ]
     },
     {
@@ -875,7 +1324,7 @@
       "why": "尽力而为的清理/回滚：失败只会在磁盘上留孤儿文件，不改变用户可见结果",
       "evidence": "except Exception: pass",
       "lines": [
-        2752
+        2849
       ]
     },
     {
@@ -889,7 +1338,7 @@
       "why": "坏值回默认（反序列化/归一化/类型转换）：不改变用户可见结果",
       "evidence": "except Exception: return True",
       "lines": [
-        8541
+        9110
       ]
     },
     {
@@ -903,7 +1352,7 @@
       "why": "坏值回默认（反序列化/归一化/类型转换）：不改变用户可见结果",
       "evidence": "except (TypeError, ValueError): weight = 1.0",
       "lines": [
-        7343
+        7793
       ]
     },
     {
@@ -917,7 +1366,7 @@
       "why": "坏值回默认（反序列化/归一化/类型转换）：不改变用户可见结果",
       "evidence": "except Exception: return None",
       "lines": [
-        713
+        730
       ]
     },
     {
@@ -931,7 +1380,7 @@
       "why": "可选能力降级（音效/动画/缩放/预览/悬停提示）：失败＝该能力缺席，不丢数据",
       "evidence": "except Exception: pass",
       "lines": [
-        7487
+        7937
       ]
     },
     {
@@ -945,7 +1394,7 @@
       "why": "失败已随返回值/哨兵上报调用方（调用方据此弹提示或降级），不需要再写一条日志",
       "evidence": "except Exception as e: path, err = None, \"下载失败：%r\" % (e,)",
       "lines": [
-        8463
+        9032
       ]
     },
     {
@@ -959,7 +1408,7 @@
       "why": "尽力而为的清理/回滚：失败只会在磁盘上留孤儿文件，不改变用户可见结果",
       "evidence": "except OSError: pass",
       "lines": [
-        8533
+        9102
       ]
     },
     {
@@ -973,7 +1422,7 @@
       "why": "失败已随返回值/哨兵上报调用方（调用方据此弹提示或降级），不需要再写一条日志",
       "evidence": "except Exception as e: return None, \"抽帧失败：%s\" % e",
       "lines": [
-        1173
+        1270
       ]
     },
     {
@@ -987,7 +1436,7 @@
       "why": "坏值回默认（反序列化/归一化/类型转换）：不改变用户可见结果",
       "evidence": "except Exception: return None",
       "lines": [
-        314
+        322
       ]
     },
     {
@@ -1001,7 +1450,7 @@
       "why": "日志设施自身的兜底：写日志失败无处可记（代码内已有 stderr 出口）",
       "evidence": "except Exception: pass",
       "lines": [
-        8563
+        9132
       ]
     },
     {
@@ -1015,7 +1464,7 @@
       "why": "失败已随返回值/哨兵上报调用方（调用方据此弹提示或降级），不需要再写一条日志",
       "evidence": "except Exception as e: data, err = None, \"读取索引失败：%r\" % (e,)",
       "lines": [
-        8379
+        8948
       ]
     },
     {
@@ -1029,7 +1478,7 @@
       "why": "坏值回默认（反序列化/归一化/类型转换）：不改变用户可见结果",
       "evidence": "except (TypeError, ValueError): self._lwait.setValue(30)",
       "lines": [
-        6597
+        6978
       ]
     },
     {
@@ -1043,7 +1492,7 @@
       "why": "可选能力降级（音效/动画/缩放/预览/悬停提示）：失败＝该能力缺席，不丢数据",
       "evidence": "except Exception: self._preview_full.setPixmap(QPixmap()) self._preview_full.setText(\"吃饱图无法预览\")",
       "lines": [
-        4557
+        4654
       ]
     },
     {
@@ -1057,7 +1506,7 @@
       "why": "能力/存在性探针：失败本身就是安全的假值（is_running=False / 没有这个能力）",
       "evidence": "except Exception: pass",
       "lines": [
-        1759
+        1856
       ]
     },
     {
@@ -1071,8 +1520,8 @@
       "why": "可选能力降级（音效/动画/缩放/预览/悬停提示）：失败＝该能力缺席，不丢数据",
       "evidence": "except Exception: pass",
       "lines": [
-        578,
-        593
+        595,
+        610
       ]
     },
     {
@@ -1086,7 +1535,7 @@
       "why": "失败已随返回值/哨兵上报调用方（调用方据此弹提示或降级），不需要再写一条日志",
       "evidence": "except Exception as e: return False, \"处理失败：%s\" % e",
       "lines": [
-        2656
+        2753
       ]
     },
     {
@@ -1100,7 +1549,7 @@
       "why": "可选能力降级（音效/动画/缩放/预览/悬停提示）：失败＝该能力缺席，不丢数据",
       "evidence": "except Exception: pass",
       "lines": [
-        6179
+        6512
       ]
     },
     {
@@ -1114,7 +1563,7 @@
       "why": "可选能力降级（音效/动画/缩放/预览/悬停提示）：失败＝该能力缺席，不丢数据",
       "evidence": "except Exception: cur = {}",
       "lines": [
-        6860
+        7247
       ]
     },
     {
@@ -1128,7 +1577,7 @@
       "why": "坏值回默认（反序列化/归一化/类型转换）：不改变用户可见结果",
       "evidence": "except Exception: st = {}",
       "lines": [
-        6606
+        6987
       ]
     },
     {
@@ -1142,7 +1591,7 @@
       "why": "可选能力降级（音效/动画/缩放/预览/悬停提示）：失败＝该能力缺席，不丢数据",
       "evidence": "except Exception: pass",
       "lines": [
-        4497
+        4594
       ]
     },
     {
@@ -1156,7 +1605,7 @@
       "why": "坏值回默认（反序列化/归一化/类型转换）：不改变用户可见结果",
       "evidence": "except Exception: binds = {}",
       "lines": [
-        4980
+        5094
       ]
     },
     {
@@ -1170,7 +1619,7 @@
       "why": "坏值回默认（反序列化/归一化/类型转换）：不改变用户可见结果",
       "evidence": "except (TypeError, ValueError): # 有意忽略：坏值回默认（load 时 normalize 已兜底，此处防御外部直改 cfg） self._idle_secs.setValue(pet_behaviors.DEFAULT_BEH...",
       "lines": [
-        3489
+        3586
       ]
     },
     {
@@ -1184,7 +1633,7 @@
       "why": "可选能力降级（音效/动画/缩放/预览/悬停提示）：失败＝该能力缺席，不丢数据",
       "evidence": "except Exception: slots = None",
       "lines": [
-        4766
+        4880
       ]
     },
     {
@@ -1198,7 +1647,7 @@
       "why": "坏值回默认（反序列化/归一化/类型转换）：不改变用户可见结果",
       "evidence": "except Exception: return None",
       "lines": [
-        652
+        669
       ]
     },
     {
@@ -1212,8 +1661,8 @@
       "why": "可选能力降级（音效/动画/缩放/预览/悬停提示）：失败＝该能力缺席，不丢数据",
       "evidence": "except Exception: pass",
       "lines": [
-        5483,
-        6840
+        5816,
+        7227
       ]
     },
     {
@@ -1227,7 +1676,7 @@
       "why": "尽力而为的清理/回滚：失败只会在磁盘上留孤儿文件，不改变用户可见结果",
       "evidence": "except RuntimeError: # v2.11.0 收尾（审计裁决 · 收紧）：这里要挡的只有一种情况——C++ 对象已被 # deleteLater 回收，emit 抛 RuntimeError（正常关窗的 teardown 竞态，实测必走）。 #...",
       "lines": [
-        6276
+        6609
       ]
     },
     {
@@ -1241,11 +1690,11 @@
       "why": "坏值回默认（反序列化/归一化/类型转换）：不改变用户可见结果",
       "evidence": "except Exception: pass",
       "lines": [
-        2700,
-        2716,
-        2730,
-        2740,
-        7145
+        2797,
+        2813,
+        2827,
+        2837,
+        7595
       ]
     },
     {
@@ -1259,7 +1708,7 @@
       "why": "关闭/退出/销毁路径：进程即将结束或对象即将销毁，记日志没有接收方",
       "evidence": "except Exception: pass",
       "lines": [
-        1642
+        1739
       ]
     },
     {
@@ -1273,7 +1722,7 @@
       "why": "关闭/退出/销毁路径：进程即将结束或对象即将销毁，记日志没有接收方",
       "evidence": "except (RuntimeError, TypeError): pass",
       "lines": [
-        1635
+        1732
       ]
     },
     {
@@ -1287,7 +1736,7 @@
       "why": "能力/存在性探针：失败本身就是安全的假值（is_running=False / 没有这个能力）",
       "evidence": "except RuntimeError: _running = False",
       "lines": [
-        4322
+        4419
       ]
     },
     {
@@ -1301,7 +1750,7 @@
       "why": "坏值回默认（反序列化/归一化/类型转换）：不改变用户可见结果",
       "evidence": "except Exception: return default",
       "lines": [
-        5354
+        5687
       ]
     },
     {
@@ -1315,8 +1764,8 @@
       "why": "失败已随返回值/哨兵上报调用方（调用方据此弹提示或降级），不需要再写一条日志",
       "evidence": "except Exception: return None, \"读取图片失败\"",
       "lines": [
-        1691,
-        2617
+        1788,
+        2714
       ]
     },
     {
@@ -1330,7 +1779,7 @@
       "why": "可选能力降级（音效/动画/缩放/预览/悬停提示）：失败＝该能力缺席，不丢数据",
       "evidence": "except Exception: pass",
       "lines": [
-        5493
+        5826
       ]
     },
     {
@@ -1344,7 +1793,7 @@
       "why": "关闭/退出/销毁路径：进程即将结束或对象即将销毁，记日志没有接收方",
       "evidence": "except Exception: pass",
       "lines": [
-        1837
+        1934
       ]
     },
     {
@@ -1358,7 +1807,7 @@
       "why": "关闭/退出/销毁路径：进程即将结束或对象即将销毁，记日志没有接收方",
       "evidence": "except (TypeError, RuntimeError): pass",
       "lines": [
-        4361
+        4458
       ]
     },
     {
@@ -1372,7 +1821,7 @@
       "why": "能力/存在性探针：失败本身就是安全的假值（is_running=False / 没有这个能力）",
       "evidence": "except RuntimeError: _running = False",
       "lines": [
-        4356
+        4453
       ]
     },
     {
@@ -1386,7 +1835,7 @@
       "why": "能力/存在性探针：失败本身就是安全的假值（is_running=False / 没有这个能力）",
       "evidence": "except Exception: return None",
       "lines": [
-        936
+        953
       ]
     },
     {
@@ -1400,7 +1849,7 @@
       "why": "失败已随返回值/哨兵上报调用方（调用方据此弹提示或降级），不需要再写一条日志",
       "evidence": "except Exception as e: self._index_retire(gen, \"线程启动失败：%r\" % (e,)) self._apply_index(None, \"取数失败：%r\" % (e,)) return False",
       "lines": [
-        8350
+        8919
       ]
     },
     {
@@ -1414,7 +1863,7 @@
       "why": "失败已随返回值/哨兵上报调用方（调用方据此弹提示或降级），不需要再写一条日志",
       "evidence": "except Exception as e: self.failed.emit(\"处理失败：%s\" % e)",
       "lines": [
-        1308
+        1405
       ]
     },
     {
@@ -1428,8 +1877,8 @@
       "why": "失败已随返回值/哨兵上报调用方（调用方据此弹提示或降级），不需要再写一条日志",
       "evidence": "except ImportCancelled: self.failed.emit(\"已取消处理\")",
       "lines": [
-        1306,
-        4133
+        1403,
+        4230
       ]
     },
     {
@@ -1443,7 +1892,7 @@
       "why": "可选能力降级（音效/动画/缩放/预览/悬停提示）：失败＝该能力缺席，不丢数据",
       "evidence": "except Exception: pass",
       "lines": [
-        7674
+        8243
       ]
     },
     {
@@ -1457,7 +1906,7 @@
       "why": "关闭/退出/销毁路径：进程即将结束或对象即将销毁，记日志没有接收方",
       "evidence": "except RuntimeError: pass",
       "lines": [
-        4153
+        4250
       ]
     },
     {
@@ -1743,6 +2192,160 @@
       "evidence": "except Exception: pass",
       "lines": [
         183
+      ]
+    },
+    {
+      "key": "pet_guard.py|_as_int|91dfaff564",
+      "file": "pet_guard.py",
+      "func": "_as_int",
+      "shape": "91dfaff564",
+      "count": 1,
+      "tier": "B",
+      "reason": "fallback",
+      "why": "坏值回默认（反序列化/归一化/类型转换）：不改变用户可见结果",
+      "evidence": "except (ValueError, OverflowError): # 有限 float 的 int() 不会抛，留着兜底以防将来改实现 return default",
+      "lines": [
+        103
+      ]
+    },
+    {
+      "key": "pet_guard.py|_clean_timestamps|0e3d3bb412",
+      "file": "pet_guard.py",
+      "func": "_clean_timestamps",
+      "shape": "0e3d3bb412",
+      "count": 1,
+      "tier": "B",
+      "reason": "fallback",
+      "why": "坏值回默认（反序列化/归一化/类型转换）：不改变用户可见结果",
+      "evidence": "except TypeError: return []",
+      "lines": [
+        138
+      ]
+    },
+    {
+      "key": "pet_guard.py|_number|c5a9d60157",
+      "file": "pet_guard.py",
+      "func": "_number",
+      "shape": "c5a9d60157",
+      "count": 1,
+      "tier": "B",
+      "reason": "fallback",
+      "why": "坏值回默认（反序列化/归一化/类型转换）：不改变用户可见结果",
+      "evidence": "except (TypeError, ValueError, OverflowError): return None",
+      "lines": [
+        91
+      ]
+    },
+    {
+      "key": "pet_guard.py|backoff_delay|8652c00199",
+      "file": "pet_guard.py",
+      "func": "backoff_delay",
+      "shape": "8652c00199",
+      "count": 1,
+      "tier": "B",
+      "reason": "fallback",
+      "why": "坏值回默认（反序列化/归一化/类型转换）：不改变用户可见结果",
+      "evidence": "except (TypeError, ValueError, OverflowError): k = 0",
+      "lines": [
+        266
+      ]
+    },
+    {
+      "key": "pet_guard.py|backoff_delay|a451e28804",
+      "file": "pet_guard.py",
+      "func": "backoff_delay",
+      "shape": "a451e28804",
+      "count": 1,
+      "tier": "B",
+      "reason": "fallback",
+      "why": "坏值回默认（反序列化/归一化/类型转换）：不改变用户可见结果",
+      "evidence": "except OverflowError: # factor**k 溢出（k 很大）：直接落封顶，不抛 delay = p.max_delay",
+      "lines": [
+        270
+      ]
+    },
+    {
+      "key": "pet_guard.py|is_guard_launch|0d4b0e40a6",
+      "file": "pet_guard.py",
+      "func": "is_guard_launch",
+      "shape": "0d4b0e40a6",
+      "count": 1,
+      "tier": "C",
+      "reason": "fallback",
+      "why": "坏值回默认（反序列化/归一化/类型转换）：不改变用户可见结果",
+      "evidence": "except TypeError: # 喂了不可迭代的坏 argv：不抛 pass",
+      "lines": [
+        574
+      ]
+    },
+    {
+      "key": "pet_guard.py|is_guard_launch|ea239d3505",
+      "file": "pet_guard.py",
+      "func": "is_guard_launch",
+      "shape": "ea239d3505",
+      "count": 1,
+      "tier": "B",
+      "reason": "fallback",
+      "why": "坏值回默认（反序列化/归一化/类型转换）：不改变用户可见结果",
+      "evidence": "except Exception: return False",
+      "lines": [
+        579
+      ]
+    },
+    {
+      "key": "pet_guard.py|load_marker|fef37b58bf",
+      "file": "pet_guard.py",
+      "func": "load_marker",
+      "shape": "fef37b58bf",
+      "count": 1,
+      "tier": "B",
+      "reason": "fallback",
+      "why": "坏值回默认（反序列化/归一化/类型转换）：不改变用户可见结果",
+      "evidence": "except Exception: # pet_io 承诺不抛；这层兜底是为了\"启动器绝不因读标记而崩\" return empty_marker()",
+      "lines": [
+        511
+      ]
+    },
+    {
+      "key": "pet_guard.py|now|ea239d3505",
+      "file": "pet_guard.py",
+      "func": "now",
+      "shape": "ea239d3505",
+      "count": 1,
+      "tier": "B",
+      "reason": "fallback",
+      "why": "坏值回默认（反序列化/归一化/类型转换）：不改变用户可见结果",
+      "evidence": "except Exception: return None",
+      "lines": [
+        387
+      ]
+    },
+    {
+      "key": "pet_guard.py|restart_command|60c0ba5dbc",
+      "file": "pet_guard.py",
+      "func": "restart_command",
+      "shape": "60c0ba5dbc",
+      "count": 1,
+      "tier": "B",
+      "reason": "fallback",
+      "why": "坏值回默认（反序列化/归一化/类型转换）：不改变用户可见结果",
+      "evidence": "except TypeError: extra = []",
+      "lines": [
+        553
+      ]
+    },
+    {
+      "key": "pet_guard.py|save_marker|9b726e7fdf",
+      "file": "pet_guard.py",
+      "func": "save_marker",
+      "shape": "9b726e7fdf",
+      "count": 1,
+      "tier": "B",
+      "reason": "reported",
+      "why": "失败已随返回值/哨兵上报调用方（调用方据此弹提示或降级），不需要再写一条日志",
+      "evidence": "except Exception as e: # 兜底：写标记失败不许把启动器带走 return str(e)",
+      "lines": [
+        528
       ]
     },
     {
@@ -2146,10 +2749,10 @@
       "count": 1,
       "tier": "B",
       "reason": "fallback",
-      "why": "坏值回默认：归一化/类型转换不改变用户可见结果——调用方给了非数值对象时回 0ms（瞬时）。v2.11.0 收尾（审计裁决）把 ValueError 从这个出口里拿掉了：str(name) 之后它只可能来自「令牌表里写了非数值」，那是自己写错，必须出声。表值这一类由 tests/test_motion_v2110.py::test_every_token_value_is_numeric 前置钉住；调用点打错令牌名由 test_every_token_name_used_at_a_call_site_exists 钉住。",
+      "why": "坏值回默认（反序列化/归一化/类型转换）：不改变用户可见结果",
       "evidence": "except TypeError: # v2.11.0 收尾（审计裁决 · 收紧）：str(name) 之后 ValueError 只可能来自 # 「表里写了非数值」（例如 \"1500ms\"）——那是我们自己写错，不许静默回 0 # （等于那条动效偷偷消失）。...",
       "lines": [
-        125
+        145
       ]
     },
     {
@@ -2163,7 +2766,7 @@
       "why": "坏值回默认（反序列化/归一化/类型转换）：不改变用户可见结果",
       "evidence": "except (TypeError, ValueError): return 0",
       "lines": [
-        148
+        184
       ]
     },
     {
@@ -2174,10 +2777,10 @@
       "count": 1,
       "tier": "B",
       "reason": "fallback",
-      "why": "坏值回默认（反序列化/归一化/类型转换）：RATE 表的 FRAME_REDUCED 键不是数值 → 回 1.0（原速）。D1 的安全侧：宁可「没放慢」，也绝不返回 0/负（0 倍速 = 把角色冻成一张图，是用户明确否掉的那一支）。契约出处：tests/test_motion_v2110.py::test_frame_rate_factor_is_a_compromise_and_never_freezes（:260-267 逐条喂 「坏值」/None/[]/0/-0.5 与「删掉该键」都断言 == 1.0，不抛）；令牌口径另由 tests/test_host_v2100_round.py::test_frame_rate_token_contract（:236-238）钉住。",
+      "why": "坏值回默认（反序列化/归一化/类型转换）：不改变用户可见结果",
       "evidence": "except (TypeError, ValueError): return 1.0",
       "lines": [
-        202
+        207
       ]
     },
     {
@@ -2191,7 +2794,7 @@
       "why": "坏值回默认（反序列化/归一化/类型转换）：不改变用户可见结果",
       "evidence": "except ValueError: return default",
       "lines": [
-        249
+        309
       ]
     },
     {
@@ -2205,7 +2808,7 @@
       "why": "能力/存在性探针：失败本身就是安全的假值（is_running=False / 没有这个能力）",
       "evidence": "except Exception: return None",
       "lines": [
-        221
+        281
       ]
     },
     {
@@ -2219,7 +2822,7 @@
       "why": "能力/存在性探针：失败本身就是安全的假值（is_running=False / 没有这个能力）",
       "evidence": "except Exception: return None",
       "lines": [
-        192
+        252
       ]
     },
     {
@@ -2233,7 +2836,7 @@
       "why": "坏值回默认（反序列化/归一化/类型转换）：不改变用户可见结果",
       "evidence": "except (TypeError, ValueError): return 1.0",
       "lines": [
-        169
+        229
       ]
     },
     {
@@ -3281,7 +3884,7 @@
       "why": "能力/存在性探针：失败本身就是安全的假值（is_running=False / 没有这个能力）",
       "evidence": "except Exception: return False",
       "lines": [
-        1211
+        1316
       ]
     },
     {
@@ -3426,7 +4029,7 @@
       "why": "尽力而为的清理/回滚：失败只会在磁盘上留孤儿文件，不改变用户可见结果",
       "evidence": "except Exception: pass",
       "lines": [
-        1260
+        1365
       ]
     },
     {
@@ -3440,7 +4043,7 @@
       "why": "坏值回默认（反序列化/归一化/类型转换）：不改变用户可见结果",
       "evidence": "except (TypeError, ValueError): cap = 400",
       "lines": [
-        1249
+        1354
       ]
     },
     {
@@ -3483,8 +4086,8 @@
       "why": "坏值回默认（反序列化/归一化/类型转换）：不改变用户可见结果",
       "evidence": "except (TypeError, ValueError): cache_max = 400",
       "lines": [
-        1625,
-        1636
+        1741,
+        1752
       ]
     },
     {
@@ -3512,7 +4115,7 @@
       "why": "尽力而为的清理/回滚：失败只会在磁盘上留孤儿文件，不改变用户可见结果",
       "evidence": "except Exception: pass",
       "lines": [
-        1280
+        1385
       ]
     },
     {
@@ -3526,8 +4129,8 @@
       "why": "尽力而为的清理/回滚：失败只会在磁盘上留孤儿文件，不改变用户可见结果",
       "evidence": "except Exception: pass",
       "lines": [
-        1018,
-        1041
+        1100,
+        1123
       ]
     },
     {
@@ -3541,8 +4144,8 @@
       "why": "失败已随返回值/哨兵上报调用方（调用方据此弹提示或降级），不需要再写一条日志",
       "evidence": "except Exception as e: return False, \"语音目录创建失败：%s\" % e",
       "lines": [
-        1008,
-        1044
+        1090,
+        1126
       ]
     },
     {
@@ -3675,7 +4278,7 @@
       "why": "失败已随返回值/哨兵上报调用方（调用方据此弹提示或降级），不需要再写一条日志",
       "evidence": "except Exception as e: return False, \"探测失败：%s\" % e",
       "lines": [
-        1312
+        1417
       ]
     },
     {
@@ -3689,8 +4292,8 @@
       "why": "失败已随返回值/哨兵上报调用方（调用方据此弹提示或降级），不需要再写一条日志",
       "evidence": "except requests.exceptions.Timeout: return False, \"服务无响应（超时）：确认已启动：%s\" % base",
       "lines": [
-        1308,
-        1310
+        1413,
+        1415
       ]
     },
     {
@@ -3733,7 +4336,7 @@
       "why": "尽力而为的清理/回滚：失败只会在磁盘上留孤儿文件，不改变用户可见结果",
       "evidence": "except RuntimeError: pass",
       "lines": [
-        450
+        499
       ]
     },
     {
@@ -3747,7 +4350,7 @@
       "why": "尽力而为的清理/回滚：失败只会在磁盘上留孤儿文件，不改变用户可见结果",
       "evidence": "except RuntimeError: pass",
       "lines": [
-        399
+        448
       ]
     },
     {
@@ -3761,7 +4364,7 @@
       "why": "坏值回默认（反序列化/归一化/类型转换）：不改变用户可见结果",
       "evidence": "except Exception: border = QColor(\"#203170\") bg = QColor(\"#ffffff\") fg = QColor(\"#203170\") font_size = 10 radius = 16",
       "lines": [
-        492
+        553
       ]
     },
     {
@@ -3775,7 +4378,77 @@
       "why": "坏值回默认（反序列化/归一化/类型转换）：不改变用户可见结果",
       "evidence": "except Exception: font_size = 10",
       "lines": [
-        334
+        355
+      ]
+    },
+    {
+      "key": "pet_windows.py|__init__|d842675176",
+      "file": "pet_windows.py",
+      "func": "__init__",
+      "shape": "d842675176",
+      "count": 1,
+      "tier": "B",
+      "reason": "optional",
+      "why": "可选能力降级（音效/动画/缩放/预览/悬停提示）：失败＝该能力缺席，不丢数据",
+      "evidence": "except Exception as e: # noqa: BLE001 # 后端连**构造**都失败（ctypes 被裁 / DLL 缺失）：可选能力不该把桌宠启动带崩， # 但也不能装没事——记下来，由 on_error 出声。 self.last_er...",
+      "lines": [
+        300
+      ]
+    },
+    {
+      "key": "pet_windows.py|_load|8a172e7f74",
+      "file": "pet_windows.py",
+      "func": "_load",
+      "shape": "8a172e7f74",
+      "count": 1,
+      "tier": "B",
+      "reason": "probe",
+      "why": "能力/存在性探针：失败本身就是安全的假值（is_running=False / 没有这个能力）",
+      "evidence": "except (AttributeError, OSError): return None",
+      "lines": [
+        210
+      ]
+    },
+    {
+      "key": "pet_windows.py|_report|0d4b0e40a6",
+      "file": "pet_windows.py",
+      "func": "_report",
+      "shape": "0d4b0e40a6",
+      "count": 1,
+      "tier": "C",
+      "reason": "optional",
+      "why": "可选能力降级（音效/动画/缩放/预览/悬停提示）：失败＝该能力缺席，不丢数据",
+      "evidence": "except Exception: # noqa: BLE001 pass",
+      "lines": [
+        275
+      ]
+    },
+    {
+      "key": "pet_windows.py|_sample|582e47bfe3",
+      "file": "pet_windows.py",
+      "func": "_sample",
+      "shape": "582e47bfe3",
+      "count": 1,
+      "tier": "B",
+      "reason": "reported",
+      "why": "失败已随返回值/哨兵上报调用方（调用方据此弹提示或降级），不需要再写一条日志",
+      "evidence": "except Exception as e: # noqa: BLE001 # 宽口径：注入的探针 / 屏幕列表是调用方的代码，形状错什么都可能抛； # 失败方向安全（不藏）。但一条不落地记下来，并转手 on_error。 self.last_error = ...",
+      "lines": [
+        449
+      ]
+    },
+    {
+      "key": "pet_windows.py|read|582e47bfe3",
+      "file": "pet_windows.py",
+      "func": "read",
+      "shape": "582e47bfe3",
+      "count": 1,
+      "tier": "B",
+      "reason": "reported",
+      "why": "失败已随返回值/哨兵上报调用方（调用方据此弹提示或降级），不需要再写一条日志",
+      "evidence": "except Exception as e: # noqa: BLE001 # **宽口径是有意的**：这里的错误域是 ctypes / 系统调用（ArgumentError、OSError、 # AttributeError、假后端给的任何东西），穷举不完；...",
+      "lines": [
+        337
       ]
     },
     {
@@ -3789,10 +4462,10 @@
       "why": "能力/存在性探针：失败本身就是安全的假值（is_running=False / 没有这个能力）",
       "evidence": "except Exception: pass",
       "lines": [
-        881,
-        1149,
-        1162,
-        1199
+        930,
+        1230,
+        1243,
+        1280
       ]
     },
     {
@@ -3806,7 +4479,7 @@
       "why": "坏值回默认（反序列化/归一化/类型转换）：不改变用户可见结果",
       "evidence": "except (TypeError, ValueError): pet_resources.FRAME_MAX = 24",
       "lines": [
-        863
+        912
       ]
     },
     {
@@ -3820,7 +4493,7 @@
       "why": "可选能力降级（音效/动画/缩放/预览/悬停提示）：失败＝该能力缺席，不丢数据",
       "evidence": "except Exception: # noqa: BLE001 superseded = True",
       "lines": [
-        3069
+        3182
       ]
     },
     {
@@ -3834,7 +4507,7 @@
       "why": "能力/存在性探针：失败本身就是安全的假值（is_running=False / 没有这个能力）",
       "evidence": "except Exception: pass",
       "lines": [
-        2747
+        2854
       ]
     },
     {
@@ -3848,7 +4521,7 @@
       "why": "关闭/退出/销毁路径：进程即将结束或对象即将销毁，记日志没有接收方",
       "evidence": "except RuntimeError: pass",
       "lines": [
-        1666
+        1768
       ]
     },
     {
@@ -3862,7 +4535,7 @@
       "why": "坏值回默认（反序列化/归一化/类型转换）：不改变用户可见结果",
       "evidence": "except Exception: pass",
       "lines": [
-        2792
+        2899
       ]
     },
     {
@@ -3870,14 +4543,28 @@
       "file": "桌宠.py",
       "func": "_clear_motion_overlays",
       "shape": "0d4b0e40a6",
+      "count": 1,
+      "tier": "C",
+      "reason": "cleanup",
+      "why": "尽力而为的清理/回滚：失败只会在磁盘上留孤儿文件，不改变用户可见结果",
+      "evidence": "except RuntimeError: pass",
+      "lines": [
+        4968
+      ]
+    },
+    {
+      "key": "桌宠.py|_crossfade_settle|0d4b0e40a6",
+      "file": "桌宠.py",
+      "func": "_crossfade_settle",
+      "shape": "0d4b0e40a6",
       "count": 2,
       "tier": "C",
       "reason": "cleanup",
       "why": "尽力而为的清理/回滚：失败只会在磁盘上留孤儿文件，不改变用户可见结果",
       "evidence": "except RuntimeError: pass",
       "lines": [
-        4469,
-        4476
+        3459,
+        3465
       ]
     },
     {
@@ -3891,7 +4578,7 @@
       "why": "能力/存在性探针：失败本身就是安全的假值（is_running=False / 没有这个能力）",
       "evidence": "except Exception: pass",
       "lines": [
-        3465
+        3753
       ]
     },
     {
@@ -3905,7 +4592,7 @@
       "why": "能力/存在性探针：失败本身就是安全的假值（is_running=False / 没有这个能力）",
       "evidence": "except Exception: pass",
       "lines": [
-        180
+        198
       ]
     },
     {
@@ -3919,7 +4606,7 @@
       "why": "能力/存在性探针：失败本身就是安全的假值（is_running=False / 没有这个能力）",
       "evidence": "except Exception: return d",
       "lines": [
-        186
+        204
       ]
     },
     {
@@ -3933,7 +4620,7 @@
       "why": "坏值回默认（反序列化/归一化/类型转换）：不改变用户可见结果",
       "evidence": "except (TypeError, ValueError): _after_delay = 0",
       "lines": [
-        4213
+        4680
       ]
     },
     {
@@ -3947,7 +4634,7 @@
       "why": "坏值回默认（反序列化/归一化/类型转换）：不改变用户可见结果",
       "evidence": "except (TypeError, ValueError): _secs = _d_secs",
       "lines": [
-        1705
+        1807
       ]
     },
     {
@@ -3961,7 +4648,7 @@
       "why": "关闭/退出/销毁路径：进程即将结束或对象即将销毁，记日志没有接收方",
       "evidence": "except RuntimeError: pass",
       "lines": [
-        3310
+        3598
       ]
     },
     {
@@ -3975,7 +4662,7 @@
       "why": "能力/存在性探针：失败本身就是安全的假值（is_running=False / 没有这个能力）",
       "evidence": "except Exception: pass",
       "lines": [
-        3810
+        4243
       ]
     },
     {
@@ -3989,8 +4676,8 @@
       "why": "日志设施自身的兜底：写日志失败无处可记（代码内已有 stderr 出口）",
       "evidence": "except Exception: pass",
       "lines": [
-        6019,
-        6049
+        6508,
+        6538
       ]
     },
     {
@@ -4004,7 +4691,7 @@
       "why": "关闭/退出/销毁路径：进程即将结束或对象即将销毁，记日志没有接收方",
       "evidence": "except RuntimeError: pass",
       "lines": [
-        4055
+        4522
       ]
     },
     {
@@ -4018,7 +4705,7 @@
       "why": "能力/存在性探针：失败本身就是安全的假值（is_running=False / 没有这个能力）",
       "evidence": "except Exception: return None",
       "lines": [
-        2861
+        2968
       ]
     },
     {
@@ -4032,7 +4719,7 @@
       "why": "坏值回默认（反序列化/归一化/类型转换）：不改变用户可见结果",
       "evidence": "except Exception: pix = QPixmap()",
       "lines": [
-        1339
+        1441
       ]
     },
     {
@@ -4046,7 +4733,7 @@
       "why": "坏值回默认（反序列化/归一化/类型转换）：不改变用户可见结果",
       "evidence": "except Exception: texts = []",
       "lines": [
-        5645
+        6130
       ]
     },
     {
@@ -4060,7 +4747,7 @@
       "why": "失败已随返回值/哨兵上报调用方（调用方据此弹提示或降级），不需要再写一条日志",
       "evidence": "except Exception: return random.choice(fallback) if fallback else \"\"",
       "lines": [
-        5652
+        6137
       ]
     },
     {
@@ -4074,7 +4761,7 @@
       "why": "坏值回默认（反序列化/归一化/类型转换）：不改变用户可见结果",
       "evidence": "except (TypeError, ValueError): return 1",
       "lines": [
-        393
+        424
       ]
     },
     {
@@ -4088,7 +4775,7 @@
       "why": "失败已随返回值/哨兵上报调用方（调用方据此弹提示或降级），不需要再写一条日志",
       "evidence": "except (OSError, TypeError, ValueError): return (str(path), None, None)",
       "lines": [
-        2824
+        2931
       ]
     },
     {
@@ -4102,7 +4789,7 @@
       "why": "关闭/退出/销毁路径：进程即将结束或对象即将销毁，记日志没有接收方",
       "evidence": "except RuntimeError: pass",
       "lines": [
-        3289
+        3577
       ]
     },
     {
@@ -4116,15 +4803,15 @@
       "why": "关闭/退出/销毁路径：进程即将结束或对象即将销毁，记日志没有接收方",
       "evidence": "except Exception: pass",
       "lines": [
-        5912,
-        5919,
-        5924,
-        5937,
-        5965,
-        5973,
-        5977,
-        5984,
-        6008
+        6397,
+        6404,
+        6409,
+        6422,
+        6454,
+        6462,
+        6466,
+        6473,
+        6497
       ]
     },
     {
@@ -4138,7 +4825,7 @@
       "why": "可选能力降级（音效/动画/缩放/预览/悬停提示）：失败＝该能力缺席，不丢数据",
       "evidence": "except Exception: texts = []",
       "lines": [
-        5632
+        6117
       ]
     },
     {
@@ -4152,7 +4839,7 @@
       "why": "可选能力降级（音效/动画/缩放/预览/悬停提示）：失败＝该能力缺席，不丢数据",
       "evidence": "except Exception: _empty = True",
       "lines": [
-        5627
+        6112
       ]
     },
     {
@@ -4166,7 +4853,7 @@
       "why": "可选能力降级（音效/动画/缩放/预览/悬停提示）：失败＝该能力缺席，不丢数据",
       "evidence": "except Exception: pass",
       "lines": [
-        3191
+        3304
       ]
     },
     {
@@ -4180,7 +4867,7 @@
       "why": "尽力而为的清理/回滚：失败只会在磁盘上留孤儿文件，不改变用户可见结果",
       "evidence": "except Exception: # 有意忽略：清理本身尽力而为（幂等清理）；下面只登记\"没删掉\"供调用方提示 if failed is not None and p not in failed: failed.append(p)",
       "lines": [
-        311
+        342
       ]
     },
     {
@@ -4194,7 +4881,7 @@
       "why": "关闭/退出/销毁路径：进程即将结束或对象即将销毁，记日志没有接收方",
       "evidence": "except RuntimeError: pass",
       "lines": [
-        4863
+        5340
       ]
     },
     {
@@ -4208,7 +4895,7 @@
       "why": "关闭/退出/销毁路径：进程即将结束或对象即将销毁，记日志没有接收方",
       "evidence": "except RuntimeError: pass",
       "lines": [
-        3821
+        4254
       ]
     },
     {
@@ -4222,7 +4909,7 @@
       "why": "尽力而为的清理/回滚：失败只会在磁盘上留孤儿文件，不改变用户可见结果",
       "evidence": "except RuntimeError: pass",
       "lines": [
-        4444
+        4943
       ]
     },
     {
@@ -4236,8 +4923,8 @@
       "why": "尽力而为的清理/回滚：失败只会在磁盘上留孤儿文件，不改变用户可见结果",
       "evidence": "except RuntimeError: pass",
       "lines": [
-        4455,
-        4460
+        4954,
+        4959
       ]
     },
     {
@@ -4251,7 +4938,7 @@
       "why": "尽力而为的清理/回滚：失败只会在磁盘上留孤儿文件，不改变用户可见结果",
       "evidence": "except RuntimeError: pass",
       "lines": [
-        4706
+        5124
       ]
     },
     {
@@ -4265,7 +4952,7 @@
       "why": "坏值回默认（反序列化/归一化/类型转换）：不改变用户可见结果",
       "evidence": "except ValueError: return False",
       "lines": [
-        1646
+        1748
       ]
     },
     {
@@ -4279,7 +4966,7 @@
       "why": "关闭/退出/销毁路径：进程即将结束或对象即将销毁，记日志没有接收方",
       "evidence": "except RuntimeError: pass",
       "lines": [
-        3686
+        4112
       ]
     },
     {
@@ -4293,7 +4980,7 @@
       "why": "关闭/退出/销毁路径：进程即将结束或对象即将销毁，记日志没有接收方",
       "evidence": "except RuntimeError: pass",
       "lines": [
-        1842
+        1944
       ]
     },
     {
@@ -4307,7 +4994,7 @@
       "why": "坏值回默认（反序列化/归一化/类型转换）：不改变用户可见结果",
       "evidence": "except (TypeError, ValueError): _secs = IDLE_FORM_HOLD_SECS",
       "lines": [
-        1836
+        1938
       ]
     },
     {
@@ -4321,7 +5008,7 @@
       "why": "关闭/退出/销毁路径：进程即将结束或对象即将销毁，记日志没有接收方",
       "evidence": "except RuntimeError: pass",
       "lines": [
-        1828
+        1930
       ]
     },
     {
@@ -4335,7 +5022,7 @@
       "why": "尽力而为的清理/回滚：失败只会在磁盘上留孤儿文件，不改变用户可见结果",
       "evidence": "except RuntimeError: pass",
       "lines": [
-        4697
+        5115
       ]
     },
     {
@@ -4349,7 +5036,7 @@
       "why": "尽力而为的清理/回滚：失败只会在磁盘上留孤儿文件，不改变用户可见结果",
       "evidence": "except RuntimeError: pass",
       "lines": [
-        4821
+        5298
       ]
     },
     {
@@ -4363,7 +5050,7 @@
       "why": "关闭/退出/销毁路径：进程即将结束或对象即将销毁，记日志没有接收方",
       "evidence": "except RuntimeError: pass",
       "lines": [
-        4137
+        4604
       ]
     },
     {
@@ -4377,22 +5064,8 @@
       "why": "尽力而为的清理/回滚：失败只会在磁盘上留孤儿文件，不改变用户可见结果",
       "evidence": "except Exception: pass",
       "lines": [
-        5396,
-        5401
-      ]
-    },
-    {
-      "key": "桌宠.py|_sync_hover_glow|0d4b0e40a6",
-      "file": "桌宠.py",
-      "func": "_sync_hover_glow",
-      "shape": "0d4b0e40a6",
-      "count": 1,
-      "tier": "C",
-      "reason": "cleanup",
-      "why": "尽力而为的清理/回滚：失败只会在磁盘上留孤儿文件，不改变用户可见结果",
-      "evidence": "except RuntimeError: pass",
-      "lines": [
-        4533
+        5881,
+        5886
       ]
     },
     {
@@ -4406,7 +5079,7 @@
       "why": "能力/存在性探针：失败本身就是安全的假值（is_running=False / 没有这个能力）",
       "evidence": "except Exception: pass",
       "lines": [
-        3917
+        4384
       ]
     },
     {
@@ -4420,7 +5093,7 @@
       "why": "失败已随返回值/哨兵上报调用方（调用方据此弹提示或降级），不需要再写一条日志",
       "evidence": "except (TypeError, ValueError) as e: return False, \"记账数据读不出来：%r\" % (e,)",
       "lines": [
-        2162
+        2269
       ]
     },
     {
@@ -4434,7 +5107,7 @@
       "why": "失败已随返回值/哨兵上报调用方（调用方据此弹提示或降级），不需要再写一条日志",
       "evidence": "except (TypeError, ValueError): return {\"ok\": False, \"error\": \"minutes 得是数字\"}",
       "lines": [
-        2270
+        2377
       ]
     },
     {
@@ -4448,7 +5121,7 @@
       "why": "失败已随返回值/哨兵上报调用方（调用方据此弹提示或降级），不需要再写一条日志",
       "evidence": "except Exception as e: ok, msg = False, \"等待后端就绪出错：%s\" % e",
       "lines": [
-        5370
+        5855
       ]
     },
     {
@@ -4462,7 +5135,7 @@
       "why": "坏值回默认（反序列化/归一化/类型转换）：不改变用户可见结果",
       "evidence": "except (TypeError, ValueError): pass",
       "lines": [
-        5567
+        6052
       ]
     },
     {
@@ -4476,8 +5149,8 @@
       "why": "关闭/退出/销毁路径：进程即将结束或对象即将销毁，记日志没有接收方",
       "evidence": "except Exception: pass",
       "lines": [
-        3944,
-        3953
+        4411,
+        4420
       ]
     },
     {
@@ -4491,7 +5164,7 @@
       "why": "坏值回默认（反序列化/归一化/类型转换）：不改变用户可见结果",
       "evidence": "except Exception: _quit_now = False",
       "lines": [
-        3939
+        4406
       ]
     },
     {
@@ -4505,7 +5178,7 @@
       "why": "关闭/退出/销毁路径：进程即将结束或对象即将销毁，记日志没有接收方",
       "evidence": "except RuntimeError: pass",
       "lines": [
-        4303
+        4782
       ]
     },
     {
@@ -4519,7 +5192,7 @@
       "why": "坏值回默认（反序列化/归一化/类型转换）：不改变用户可见结果",
       "evidence": "except Exception: return False",
       "lines": [
-        6068
+        6557
       ]
     },
     {
@@ -4533,7 +5206,7 @@
       "why": "坏值回默认（反序列化/归一化/类型转换）：不改变用户可见结果",
       "evidence": "except FileNotFoundError: # 兼容审查 L4：**首次运行**（还没有 config.json）不是错误，不该往 error.log 里写 # 吓人的\"读取失败\"。与 pet_resources._read_json 的\"首次无文件=...",
       "lines": [
-        438
+        469
       ]
     },
     {
@@ -4547,7 +5220,7 @@
       "why": "坏值回默认（反序列化/归一化/类型转换）：不改变用户可见结果",
       "evidence": "except (TypeError, ValueError): delay = 0",
       "lines": [
-        1776
+        1878
       ]
     },
     {
@@ -4561,7 +5234,7 @@
       "why": "可选能力降级（音效/动画/缩放/预览/悬停提示）：失败＝该能力缺席，不丢数据",
       "evidence": "except Exception: pass",
       "lines": [
-        5277
+        5762
       ]
     },
     {
@@ -4575,7 +5248,7 @@
       "why": "能力/存在性探针：失败本身就是安全的假值（is_running=False / 没有这个能力）",
       "evidence": "except Exception: pass",
       "lines": [
-        573
+        604
       ]
     },
     {
@@ -4589,7 +5262,7 @@
       "why": "尽力而为的清理/回滚：失败只会在磁盘上留孤儿文件，不改变用户可见结果",
       "evidence": "except FileNotFoundError: pass",
       "lines": [
-        6087
+        6576
       ]
     },
     {
@@ -4603,7 +5276,7 @@
       "why": "坏值回默认（反序列化/归一化/类型转换）：不改变用户可见结果",
       "evidence": "except FileNotFoundError: # 目标键不存在（个别环境 Run 键缺失）：创建后写入，不把环境差异当错误 key = winreg.CreateKeyEx(winreg.HKEY_CURRENT_USER, AUTOSTART_KEY,...",
       "lines": [
-        6078
+        6567
       ]
     },
     {
@@ -4617,7 +5290,7 @@
       "why": "失败已随返回值/哨兵上报调用方（调用方据此弹提示或降级），不需要再写一条日志",
       "evidence": "except Exception as e: return False, str(e)",
       "lines": [
-        6091
+        6580
       ]
     },
     {
@@ -4631,7 +5304,7 @@
       "why": "关闭/退出/销毁路径：进程即将结束或对象即将销毁，记日志没有接收方",
       "evidence": "except RuntimeError: pass",
       "lines": [
-        4040
+        4507
       ]
     },
     {

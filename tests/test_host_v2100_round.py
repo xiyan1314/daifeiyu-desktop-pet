@@ -391,7 +391,8 @@ def _is_rate_factor_switch(node):
 def test_every_material_frame_play_site_carries_the_rate_token():
     """**角色**素材帧的每一条播放路径都带帧率令牌（少一条 = 那条在减少动效下仍是原速）。
 
-    扫描面 = 桌宠.py（idle/eat/poke/sleep 四条字面帧集）+ pet_actions.py（命名帧动作：
+    扫描面 = 桌宠.py（idle/eat/poke/sleep **/ walk** 五条字面帧集；walk 是 v2.11.0 第 11 轮
+    W2 的走路播帧，同样带 rate_factor —— 用户裁决 D1「纳入、折中」：放慢不停帧）+ pet_actions.py（命名帧动作：
     帧集名来自变量，是**用户给角色配的**素材帧序列，同样必须带令牌 —— 不带的话
     pet_anim.play() 会把倍率重置回默认 1.0，那一段就以原速整段播完）。
 
@@ -443,7 +444,9 @@ def test_every_material_frame_play_site_carries_the_rate_token():
                 named.add(node.args[0].value)
             else:
                 dynamic.add((rel, ast.unparse(node.args[0])))
-    assert named == {"idle", "eat", "poke", "sleep"}, (
+    # v2.11.0（第 11 轮 W2）：「走路播帧」把 "walk" 加进这张清单 —— 它确实带了
+    # rate_factor=self._frame_rate_factor()（D1 的折中放慢，见 桌宠.py 的 _walk_anim）。
+    assert named == {"idle", "eat", "poke", "sleep", "walk"}, (
         "字面帧集的播放路径清单变了（新加一条时请一并想清楚它要不要走帧率倍率）：%r"
         % (sorted(named),))
     assert dynamic == {("pet_actions.py", "name")}, (

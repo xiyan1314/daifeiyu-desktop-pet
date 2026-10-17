@@ -59,13 +59,34 @@ SYNC_FILES = ["桌宠.py", "main.py", "pet_actions.py", "pet_ai.py", "pet_alarm.
               # v2.11.0 第 9 轮（代理 A）：动效令牌表——桌宠.py 与 pet_widgets.py 都 import 它，
               # 漏了这一行绿色版/发布包必 ImportError（check_imported_modules_shipped 反向校验）。
               "pet_motion.py",
+              # v2.11.0 第 11 轮（旧第 8 轮那批）：本轮新增的四个运行时模块。
+              # 现在就写进清单，是因为**发布门只会拦"被 import 却没在清单里"**，
+              # 而漏登记的表现是"绿色版/发布包缺文件 → 用户双击 ImportError"，
+              # 那是最晚才被发现、代价最贵的一种缺件。四个都是纯标准库 + PySide6，零新依赖。
+              "pet_windows.py",     # 全屏检测（方向 4）
+              "pet_backup.py",      # 用户数据 zip 备份/恢复（方向 5）
+              "pet_guard.py",       # 崩溃自动重启的判定/熔断/标记（方向 6）
+              "pet_time_mood.py",   # 时间感知情绪（UX E2）
+              "pet_notify.py",      # 系统通知（方向 3 的另一半，W3-d）
               "README.md", "README.en.md", "LICENSE", VBS_NAME]
 
 # 用户运行时数据（绿色版目录与发布包里都不该有）
 USER_DATA_NAMES = {"config.json", "roles.json", "audio.json", "voice.json", "voice_assets.json",
                    "voice_backend.json", "voice_backend.log", "alarms.json", "behaviors.json",
                    "lines.json", "ledger.json", "ledger_archive.json", "error.log",
-                   "memory.log", "usage.json", "memory.json"}
+                   "memory.log", "usage.json", "memory.json",
+                   # v2.11.0（旧第 8 轮那批 ⑤「发行拆分」）：**专注/番茄钟的记录**
+                   # 今天还不存在（第 1 轮，v2.13.0 才做），但**现在就划线**的理由是：
+                   # ① 它是"用户攒出来的数据"，不是可选素材 —— 少了用户会想"我的专注记录呢"；
+                   # ② 这条台账同时被**备份/恢复**与**发布包白名单**共用（plan §14.1：
+                   #    发行拆分的前提就是"什么算用户数据"这条线），晚加一天，就多一天
+                   #    可能被发布门当成"残留"删掉。加在这里 = 提前钉死，零成本。
+                   "focus.json",
+                   # v2.11.0 第 11 轮（旧第 8 轮那批 ④「崩溃自动重启」）：熔断计数/崩溃戳。
+                   # 定性：**运行时状态**，不是用户资产；但它与 config.json / error.log /
+                   # memory.log 同类——"绿色版目录与发布包里都不该出现"，所以放这里正确。
+                   # 名字的唯一来源是 pet_guard.MARKER_FILENAME（全仓只此一处字面量）。
+                   "crash_recovery.json"}
 # v2.6.0 第 4 轮（兼容审查 P2-2）：补进 "prompts/custom" —— 它是**用户自建人设**的家
 # （插件落地的 prompt 类内容也落在这里，见 pet_plugin_host.PROMPTS_CUSTOM_DIRNAME）。
 # 此前它既不在 SYNC_FILES 也不在 USER_DATA_DIRS：把绿色版目录整体打包时，用户自己的人设

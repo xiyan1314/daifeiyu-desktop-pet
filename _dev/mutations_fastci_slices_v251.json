@@ -71,7 +71,7 @@
   ],
   "results": {
     "title": "变异验证 spec：mutations_fastci_slices_v251.json",
-    "checked_at": "2026-10-16 16:48:48",
+    "checked_at": "2026-10-17 16:25:42",
     "total": 5,
     "caught": 5,
     "not_caught": 0,
@@ -81,7 +81,7 @@
         "id": "F1 分片步忽略预算（一整批一片解完）",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 1.91s",
+        "tail": "1 failed in 2.31s",
         "failed": [
           "tests/test_anim_slice_v241.py::test_cold_big_frame_set_is_sliced_and_completes"
         ],
@@ -92,7 +92,7 @@
         "id": "F2 进异步分支不再自损",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 1.18s",
+        "tail": "1 failed in 1.37s",
         "failed": [
           "tests/test_anim_slice_v241.py::test_async_window_does_not_play_the_previous_roles_frames"
         ],
@@ -103,7 +103,7 @@
         "id": "F3 首片同步段忽略预算",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "2 failed in 1.99s",
+        "tail": "2 failed in 2.47s",
         "failed": [
           "tests/test_anim_slice_v241.py::test_cold_big_frame_set_is_sliced_and_completes",
           "tests/test_anim_slice_v241.py::test_async_window_does_not_play_the_previous_roles_frames"
@@ -115,7 +115,7 @@
         "id": "F4 UI 侧不分片（budget_ms=None）",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 1.23s",
+        "tail": "1 failed in 1.55s",
         "failed": [
           "tests/test_export_slice_v242.py::test_export_role_drives_the_writer_in_slices"
         ],
@@ -126,7 +126,7 @@
         "id": "F5 BundleWriter.step 忽略 budget_ms",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 1.27s",
+        "tail": "1 failed in 1.49s",
         "failed": [
           "tests/test_export_slice_v242.py::test_export_role_drives_the_writer_in_slices"
         ],
@@ -142,23 +142,23 @@
     ],
     "note": "变异只在 %TEMP% 影子副本里做，真实仓库只读（只写 _dev/.mutation.lock）",
     "repo_fingerprint": {
-      "桌宠.py": "b33888cadc15",
+      "桌宠.py": "d71ee3fe3c47",
       "pet_export.py": "db474bdd6670",
       "pet_lines.py": "5332f60b5f26",
       "pet_alarm.py": "1149e94deee3",
       "pet_behaviors.py": "732273f95fb4",
-      "_check_release.py": "dca4541e2829",
+      "_check_release.py": "a265ca1341e9",
       "pet_balance.py": "045129227ee2",
       "pet_plugin.py": "2f7853298fc3",
       "pet_plugin_host.py": "82fb7b1384c8",
-      "pet_dialogs.py": "ae3e1a1c76b0",
-      "pet_menu.py": "44224c3320c6",
+      "pet_dialogs.py": "a80c69368b64",
+      "pet_menu.py": "c5d7f8b8339e",
       "pet_plugin_index.py": "e5e9845785e8",
       "pet_ai.py": "a5989e7fe646",
-      "pet_config.py": "b46e0f180880",
+      "pet_config.py": "a8d7b1cb6b7c",
       "pet_io.py": "6b1e0413fb7f",
       "pet_services.py": "ecebb6ab5891",
-      "pet_widgets.py": "b8de517121e1",
+      "pet_widgets.py": "929458a553ce",
       "pet_resources.py": "5d8df41558df",
       "pet_tools.py": "46e9030d073f",
       "pet_voice.py": "3a9c9cc3324e",
@@ -168,7 +168,7 @@
       "pet_actions.py": "a4871b371ea0",
       "pet_book.py": "098676ac52d4",
       "_check_static.py": "6286f9f493bd",
-      "pet_motion.py": "e4fbc789b327",
+      "pet_motion.py": "a737b42a336f",
       "tests/test_dialog_buttons_v270.py": "4f95acca7fc6",
       "tests/test_import_thread.py": "1c6fc2ec5d05"
     },

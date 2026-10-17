@@ -150,6 +150,27 @@ class MenuBuilder:
         ct_act.setCheckable(True)
         ct_act.setChecked(pet.cfg.get("click_through", False))
         ct_act.toggled.connect(pet._set_click_through)
+        # ---- v2.11.0（第 11 轮 · 旧第 8 轮那批）：三个新开关 ----
+        # 都进「⚙️ 设置…」子菜单，**一条都不加顶层**：顶层非空文本项已是 18（硬上限，
+        # _verify_green.py 与 tests/test_feedback_v2110_b.py 两处钉着），C-34 就是这条的旧账。
+        # 勾选态一律读「此刻的生效值」；开关回调自己落盘（与上面几条同形）。
+        fs_act = set_menu.addAction("🖥️ 全屏时自动隐藏")
+        fs_act.setCheckable(True)
+        fs_act.setChecked(pet.cfg.get("fullscreen_hide", True) is not False)
+        fs_act.toggled.connect(pet.set_fullscreen_hide)
+        notify_act = set_menu.addAction("🔔 系统通知")
+        notify_act.setCheckable(True)
+        notify_act.setChecked(pet.cfg.get("notify", True) is not False)
+        notify_act.toggled.connect(pet._set_notify)
+        # v2.11.0（第 11 轮 · 方向 5）：用户数据备份 / 恢复（同样进子菜单，顶层不加项）
+        backup_act = set_menu.addAction("💾 备份数据…")
+        backup_act.triggered.connect(lambda checked=False: pet_dialogs.open_backup(pet))
+        restore_act = set_menu.addAction("♻️ 从备份恢复…")
+        restore_act.triggered.connect(lambda checked=False: pet_dialogs.open_restore(pet))
+        time_mood_act = set_menu.addAction("⏰ 时段问候")
+        time_mood_act.setCheckable(True)
+        time_mood_act.setChecked(pet.cfg.get("time_mood") is True)
+        time_mood_act.toggled.connect(pet._set_time_mood)
         # v2.11.0 第 9 轮（A2/A3 · 代理 B 接线）：两个无障碍开关。托盘菜单里也有一份
         # （由桌宠负责，桌面类的活），但「设置…」是用户找设置的第一落点，两边文案与语义
         # **逐字一致**（原则 4：同语义同表现）。
@@ -268,8 +289,14 @@ class MenuBuilder:
                 a.triggered.connect(lambda checked=False, n=_name: pet.actions.play_action(n, force=True))
 
         # v2.0.2 断点#12：变身（仅自定义角色有变身形态时显示）
+        # v2.11.0（C-34）：**从顶层挪进「🐡 形态」子菜单**。原因：顶层非空文本项静态数已是 18
+        # （_verify_green.py:86 与 tests/test_feedback_v2110_b.py 的硬断言），而这一项只在
+        # 「自定义角色 + 配了变身形态」时才出现 → 会把顶层顶到 19，破那条硬断言，而且
+        # **今天没有任何判据看得见**（两个验证器都先隔离数据目录 / 先还原默认角色）。
+        # 挪进子菜单后顶层**恒 ≤18**；语义不变（临时切到变身形态，transform_seconds 后回原形态）。
         if pet.has_transform_form:
-            tf_act = menu.addAction("🐡 变身")
+            form_menu.addSeparator()
+            tf_act = form_menu.addAction("🐡 变身")
             tf_act.triggered.connect(lambda checked=False: pet._do_transform())
 
         praise_act = menu.addAction("❤️ 夸夸她")

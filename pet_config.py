@@ -245,6 +245,15 @@ def normalize_cfg(cfg, defaults, persona_ids):
     cfg["ai_tools_enabled"] = _to_bool(cfg.get("ai_tools_enabled", True), True)
     cfg["ai_tools_confirm"] = _to_bool(cfg.get("ai_tools_confirm", True), True)
     cfg["badge"] = _to_bool(cfg.get("badge", False), False)
+    # ---- v2.11.0 第 11 轮（旧第 8 轮那批）：四个新键的归一化 ----
+    # 三个开关走 _to_bool（手改 config.json 塞 "true"/1/null/[] 都不许把功能静默带偏）；
+    # time_mood_sent 是"当天已发过哪些"的映射，坏值一律回空表（宁可多发一次问候，也不许
+    # 因为一条坏记录让用户永远收不到）。**归一化后类型必须仍然是 bool / dict** ——
+    # tests/test_config_robustness.py 会逐个键塞毒值来钉这一条。
+    for _k, _d in (("fullscreen_hide", True), ("notify", True), ("time_mood", False)):
+        cfg[_k] = _to_bool(cfg.get(_k, _d), _d)
+    _sent = cfg.get("time_mood_sent", {})
+    cfg["time_mood_sent"] = dict(_sent) if isinstance(_sent, dict) else {}
     # ---- v1.3 新增配置归一化 ----
     cfg["role"] = str(cfg.get("role", "") or "")
     cfg["scale_compensated_role"] = str(cfg.get("scale_compensated_role", "") or "")

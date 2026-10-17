@@ -252,7 +252,7 @@
   ],
   "results": {
     "title": "变异验证 spec：mutations_silent_except_v260.json",
-    "checked_at": "2026-10-16 17:02:15",
+    "checked_at": "2026-10-17 16:40:17",
     "total": 19,
     "caught": 19,
     "not_caught": 0,
@@ -262,7 +262,7 @@
         "id": "M-S1",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.77s",
+        "tail": "1 failed in 0.79s",
         "failed": [
           "tests/test_silent_except_v252.py::test_decrypt_secret_failure_is_logged"
         ],
@@ -273,7 +273,7 @@
         "id": "M-S2",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.84s",
+        "tail": "1 failed in 0.59s",
         "failed": [
           "tests/test_silent_except_v252.py::test_role_stage_file_failure_is_logged"
         ],
@@ -284,7 +284,7 @@
         "id": "M-S3",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.65s",
+        "tail": "1 failed in 0.59s",
         "failed": [
           "tests/test_silent_except_v252.py::test_audio_preview_failure_is_logged"
         ],
@@ -295,7 +295,7 @@
         "id": "M-S4",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 1.65s",
+        "tail": "1 failed in 1.35s",
         "failed": [
           "tests/test_silent_except_v252.py::test_window_preview_audio_failure_is_logged"
         ],
@@ -306,7 +306,7 @@
         "id": "M-S5",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 1.06s",
+        "tail": "1 failed in 0.89s",
         "failed": [
           "tests/test_silent_except_v252.py::test_persona_file_text_logs_only_for_custom_personas"
         ],
@@ -317,7 +317,7 @@
         "id": "M-S6",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.57s",
+        "tail": "1 failed in 0.67s",
         "failed": [
           "tests/test_silent_except_v252.py::test_describe_call_keeps_args_when_describe_raises"
         ],
@@ -339,7 +339,7 @@
         "id": "M-S8",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.58s",
+        "tail": "1 failed in 0.59s",
         "failed": [
           "tests/test_silent_except_v252.py::test_guard_slot_still_throttles_after_refactor"
         ],
@@ -350,7 +350,7 @@
         "id": "M-S9",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed, 12 warnings in 43.21s",
+        "tail": "1 failed, 12 warnings in 50.29s",
         "failed": [
           "tests/test_silent_except_v252.py::test_every_silent_except_has_an_owner"
         ],
@@ -361,7 +361,7 @@
         "id": "M-S10",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed, 12 warnings in 42.75s",
+        "tail": "1 failed, 12 warnings in 52.12s",
         "failed": [
           "tests/test_silent_except_v252.py::test_every_silent_except_has_an_owner"
         ],
@@ -372,7 +372,7 @@
         "id": "M-S11",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed, 12 warnings in 43.30s",
+        "tail": "1 failed, 12 warnings in 47.57s",
         "failed": [
           "tests/test_silent_except_v252.py::test_every_silent_except_has_an_owner"
         ],
@@ -383,7 +383,7 @@
         "id": "M-S12",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed, 12 warnings in 42.34s",
+        "tail": "1 failed, 12 warnings in 46.22s",
         "failed": [
           "tests/test_silent_except_v252.py::test_every_silent_except_has_an_owner"
         ],
@@ -394,7 +394,7 @@
         "id": "M-S13",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.59s",
+        "tail": "1 failed in 0.72s",
         "failed": [
           "tests/test_plugin_market_v252.py::test_明文http一律拒_只收https"
         ],
@@ -405,7 +405,7 @@
         "id": "M-S14",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.59s",
+        "tail": "1 failed in 0.80s",
         "failed": [
           "tests/test_plugin_market_v252.py::test_远端索引不许指向本地路径_随包索引不受限"
         ],
@@ -416,7 +416,7 @@
         "id": "M-S15",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.75s",
+        "tail": "1 failed in 0.71s",
         "failed": [
           "tests/test_plugin_market_v252.py::test_相对地址拒路径穿越与空段"
         ],
@@ -427,7 +427,7 @@
         "id": "M-S16",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.68s",
+        "tail": "1 failed in 0.77s",
         "failed": [
           "tests/test_plugin_market_v252.py::test_file_url折成本机路径"
         ],
@@ -438,7 +438,7 @@
         "id": "M-S17",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.57s",
+        "tail": "1 failed in 0.69s",
         "failed": [
           "tests/test_silent_except_v252.py::test_describe_call_amount_not_a_number_stays_visible"
         ],
@@ -449,7 +449,7 @@
         "id": "M-S18",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.80s",
+        "tail": "1 failed in 1.25s",
         "failed": [
           "tests/test_plugin_host_v251.py::test_prompt插件更新_用户没改过就允许覆盖新版内容"
         ],
@@ -460,7 +460,7 @@
         "id": "M-S19",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.85s",
+        "tail": "1 failed in 1.31s",
         "failed": [
           "tests/test_plugin_market_v252.py::test_底排必须有本地包安装入口_而且真的能装"
         ],
@@ -489,23 +489,23 @@
     ],
     "note": "变异只在 %TEMP% 影子副本里做，真实仓库只读（只写 _dev/.mutation.lock）",
     "repo_fingerprint": {
-      "桌宠.py": "b33888cadc15",
+      "桌宠.py": "d71ee3fe3c47",
       "pet_export.py": "db474bdd6670",
       "pet_lines.py": "5332f60b5f26",
       "pet_alarm.py": "1149e94deee3",
       "pet_behaviors.py": "732273f95fb4",
-      "_check_release.py": "dca4541e2829",
+      "_check_release.py": "a265ca1341e9",
       "pet_balance.py": "045129227ee2",
       "pet_plugin.py": "2f7853298fc3",
       "pet_plugin_host.py": "82fb7b1384c8",
-      "pet_dialogs.py": "ae3e1a1c76b0",
-      "pet_menu.py": "44224c3320c6",
+      "pet_dialogs.py": "a80c69368b64",
+      "pet_menu.py": "c5d7f8b8339e",
       "pet_plugin_index.py": "e5e9845785e8",
       "pet_ai.py": "a5989e7fe646",
-      "pet_config.py": "b46e0f180880",
+      "pet_config.py": "a8d7b1cb6b7c",
       "pet_io.py": "6b1e0413fb7f",
       "pet_services.py": "ecebb6ab5891",
-      "pet_widgets.py": "b8de517121e1",
+      "pet_widgets.py": "929458a553ce",
       "pet_resources.py": "5d8df41558df",
       "pet_tools.py": "46e9030d073f",
       "pet_voice.py": "3a9c9cc3324e",
@@ -515,7 +515,7 @@
       "pet_actions.py": "a4871b371ea0",
       "pet_book.py": "098676ac52d4",
       "_check_static.py": "6286f9f493bd",
-      "pet_motion.py": "e4fbc789b327",
+      "pet_motion.py": "a737b42a336f",
       "tests/test_dialog_buttons_v270.py": "4f95acca7fc6",
       "tests/test_import_thread.py": "1c6fc2ec5d05"
     },

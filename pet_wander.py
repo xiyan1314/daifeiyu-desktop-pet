@@ -6,6 +6,15 @@
 （busy/has_frames/item/sprites/form/pos/width/move/flip/walk_phase/squash_y/
 _apply_transform/walk_timer/_walk_interval/_wander_target/_was_walking/_wake/菜单 act）。
 
+v2.11.0（第 11 轮 W2）：**走路播帧**的唯一开关点是这里的 tick —— 真的移动时
+`pet._walk_anim(True)`（切 walk 帧集），停下的那三支 `pet._walk_anim(False)`（回 idle）。
+只做"切帧集"，**位移与 squash 起伏一个字都没改**（U-16 未裁决：位移不算动效，见
+pet_motion.effective_duration 的「已知边界」）；无帧集角色那边 `_walk_anim` 自己返回
+False，于是仍然走**静态图 + squash** 这条老路（不报错、也不停住不动）。
+⚠ 睡眠 / busy / 飞行 三支在切换**之前**就 return —— 所以这三支必须**先**停走帧
+（`pet._walk_anim(False)`），否则散步途中睡着/忙起来/被甩飞时走帧还在原地循环。
+「不许在这三种状态下切到走帧」由早退结构保证，不是靠调用方自觉。
+
 v2.5.0（A1/A2）：服务构造搬进 pet_services.ServiceRegistry；本模块（该子系统）补全类型注解。
 """
 import random
@@ -57,6 +66,7 @@ class WanderController:
             pet.walk_timer.start(pet._walk_interval)
         else:
             pet.walk_timer.stop()
+            pet._walk_anim(False)  # v2.11.0（W2）：全关 = 停下回 idle（无帧集角色是空操作）
             if not pet.has_frames and not pet._using_front:
                 pet.item.setPixmap(pet.sprites[pet.form]["front"])
                 pet._using_front = True
@@ -95,12 +105,17 @@ class WanderController:
     def tick(self) -> None:
         pet = self.pet
         if getattr(pet, "_sleeping", False):
+            pet._walk_anim(False)   # v2.11.0（W2 尾巴）：睡着 = 停走帧（否则走帧在睡眠里继续循环）
             return  # v2.2（质量审查）：睡着不再满屏漂移（v2.1.7 起跟随/散步中允许入睡，但没停 walk_timer）
         if pet.busy:
+            pet._walk_anim(False)   # v2.11.0（W2 尾巴）：busy（喂食飞盘/吃帧）停走帧，别原地迈腿
             return  # 喂食/吃帧期间暂停行走，避免「边吃边漂」（M3）
         if getattr(pet, "_flying", False):
+            pet._walk_anim(False)   # v2.11.0（W2 尾巴）：甩抛飞行中停走帧（空中不许迈腿）
             return  # P1-手感：甩抛飞行中暂停行走，落地静止后恢复
-        if not pet.has_frames and pet._using_front and pet.anim_mode not in ("state", "sleep"):
+        # v2.11.0（W2）：walk 也要排除——有走路帧但没有 idle 帧集的角色（自定义角色只配了
+        # walk）正在播走路帧时，这里贴 side 静态图会把走帧盖掉（走起来像滑冰）。
+        if not pet.has_frames and pet._using_front and pet.anim_mode not in ("state", "sleep", "walk"):
             pet.item.setPixmap(pet.sprites[pet.form]["side"])
             pet._using_front = False
         cfg = self._cfg()
@@ -110,6 +125,7 @@ class WanderController:
             # 距光标 60px 内停住伴飞：不追到光标正下方，给用户留出点击空间
             cx, cy = pet.frameGeometry().center().x(), pet.frameGeometry().center().y()
             if abs(target.x() - cx) < 60 and abs(target.y() - cy) < 60:
+                pet._walk_anim(False)   # v2.11.0（W2）：伴飞停住 = 停下回 idle
                 # 伴飞静止时复位正面贴图（静止显侧身很怪）
                 if not pet.has_frames and not pet._using_front:
                     pet.item.setPixmap(pet.sprites[pet.form]["front"])
@@ -131,11 +147,13 @@ class WanderController:
                 pet._wander_target = QPoint(random.randint(xmin, xmax), random.randint(ymin, ymax))
             target = pet._wander_target
         if target is None:
+            pet._walk_anim(False)   # v2.11.0（W2）：没有目标（全关/无屏）= 停下回 idle
             return
         cur = pet.pos()
         dx = target.x() - cur.x()
         dy = target.y() - cur.y()
         if abs(dx) < 3 and abs(dy) < 3:
+            pet._walk_anim(False)   # v2.11.0（W2）：到点了 = 停下回 idle
             return
         # 三区速度（v1.4.2）：远距（>200px）快追防 4K 大屏龟速；
         # 近距缓行（8px 上限，温柔不吓人）；60px 内跟随模式已伴飞停下
@@ -154,6 +172,9 @@ class WanderController:
         pet.walk_phase = (pet.walk_phase + 1) % 2
         pet.squash_y = 0.95 if pet.walk_phase == 0 else 1.0
         pet._apply_transform()
+        # v2.11.0（W2）：**真的要移动**才切走帧（上面所有早退分支都还没走到这里）。
+        # 无帧集角色在这里拿回 False → 继续静态图 + squash（硬要求的安全兜底）。
+        pet._walk_anim(True)
 
     def _reached(self, target: Any) -> bool:
         p = self.pet.pos()

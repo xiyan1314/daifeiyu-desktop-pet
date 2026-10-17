@@ -4,7 +4,8 @@
 **判定一律是结构性断言**（不看眼看、不看墙钟）：
 
 · A4 三件套：悬停/按下时**几何量逐项不变**（窗口尺寸、scale、squash、item 变换、item 位置
-  五元组逐个比），按下**描边出现**，涟漪收尾后**场景对象数回到基线**（不是"看起来没了"）；
+  五元组逐个比），**悬停与按下都不许往场景里画任何东西**（光晕/描边已按 2026-10-16 用户裁决撤销），
+  涟漪收尾后**场景对象数回到基线**（不是"看起来没了"）；
 · A2 减少动效：**逐条列举每个动效点**，开关打开后断言"该动的都不动了"（各自动画对象为 None /
   时长为 0 / 一次性动效不产生），再反向断言"开关关掉后它们又动了"；
 · A3 高对比度：对比度用 pet_motion.contrast_ratio **算出来**钉 ≥ 4.5:1；
@@ -183,7 +184,8 @@ def test_token_table_shape_and_hci_values():
     # 缓动名字必须真的能映射到 Qt 枚举（写错名字 = 静默退化）
     for _name in pet_motion.EASE:
         assert hasattr(QEasingCurve.Type, pet_motion.easing_name(_name)), _name
-    for _name in ("GLOW", "OUTLINE", "RIPPLE", "HEART", "THINKING", "DRAG"):
+    # ⚠ GLOW / OUTLINE 两张表已随"悬停光晕 / 按下描边"一起撤销（2026-10-16 用户裁决）
+    for _name in ("RIPPLE", "HEART", "THINKING", "DRAG"):
         assert isinstance(getattr(pet_motion, _name), dict), _name
 
 
@@ -417,9 +419,13 @@ def test_all_animation_durations_go_through_the_table():
     # 换成 AST 之后不许把"谁在消费这些令牌"这件事丢掉
     used = {tok for _, _, _, tok, _ in sites if tok}
     for _token in ("EMOTE_FLOAT", "EAT_SQUASH", "EDGE", "RIPPLE", "PET_HOLD",
-                   "THINKING_PULSE", "BUBBLE_HOLD", "BUBBLE_FADE", "FEEDBACK",
+                   "THINKING_PULSE", "BUBBLE_HOLD", "BUBBLE_FADE",
                    "JUMP", "BALANCE_ROLL"):
         assert _token in used, "%s 在产品侧已经没有调用点了" % _token
+    # FEEDBACK 是**唯一**走祖父条款的"反馈档"（原消费点=悬停光晕/按下描边，已按用户裁决撤销）。
+    # 反向钉子：谁把它用回来（把光晕或描边加回来），就必须先把它从 _DUR_RESERVED 删掉。
+    assert "FEEDBACK" not in used, \
+        "FEEDBACK 又有消费点了 —— 撤销的绘制层回来了？把它从 _DUR_RESERVED 里删掉"
     # A-04 的三处必须在扫描面内，且**走的是开关**（不是靠祖父条款混过去的）
     strict = {(f, tok) for f, _, fn, tok, arg in sites
               if arg is not None and _is_switch_expr(arg)}
@@ -433,9 +439,14 @@ def test_all_animation_durations_go_through_the_table():
 # ---------------- C-09：反向钉子——表里每个键都要有人用 ----------------
 
 # 备用档位（**显式祖父化**，每个带理由）；新加的死键不在这张名单里 → 上面那条用例会红。
+# v2.11.0（第 11 轮 W2）：**TRANSITION 已从这份名单删掉** —— 状态切换的交叉淡入
+# （桌宠.PetWindow._begin_anim_switch，调用点 `duration_ms("TRANSITION", self._reduce_motion())`）
+# 成了它的消费点，而名单下面有一条反钉"名单里的键不许有消费点"。
 _DUR_RESERVED = {
-    "TRANSITION": "HCI「状态转换」档的定义值（150–250ms）；消费点都用更具体的 BUBBLE_FADE",
     "LARGE": "HCI「大位移」档的定义值（≈300ms）；消费点都用更具体的 EDGE / RIPPLE",
+    # 2026-10-16 用户裁决：撤销悬停光晕与按下描边 → 这条键原来的两个消费点都没了，
+    # 「局部反馈 ≤100ms」这条档位的定义值保留（下面那条反向钉子会拦住"偷偷又用上"）。
+    "FEEDBACK": "HCI「局部反馈」档的定义值（≤100ms）；原消费点（悬停光晕/按下描边）已撤销",
 }
 
 
@@ -443,15 +454,18 @@ def test_every_token_in_the_table_is_actually_used():
     """C-09：反向钉子 —— 表里**每个键**都要有消费点（死配置会让下一个人以为有档位在用）。
 
     只钉"调用点用的名字在表里"是单向的：表里多出来的键（没人用的档位）永远不会红。
-    DUR["TRANSITION"] / DUR["LARGE"] 今天产品侧 **0 个消费点** → 显式登记在 _DUR_RESERVED
-    并写明理由；**新出现的死键不在名单里 → 这里当场红**。
+    DUR["LARGE"] 今天产品侧 **0 个消费点** → 显式登记在 _DUR_RESERVED 并写明理由；
+    **新出现的死键不在名单里 → 这里当场红**。⚠ DUR["TRANSITION"] 原本也在这份名单上，
+    v2.11.0（第 11 轮 W2）状态切换的交叉淡入把它消费掉了 → 已从名单删除（留着会红）。
     """
     used = {tok for name in _DURATION_SOURCE_FILES
             for _, _, tok, _ in _duration_call_sites(_src(name)) if tok}
     dead = sorted(set(pet_motion.DUR) - used - set(_DUR_RESERVED))
     assert dead == [], "这些令牌在表里、产品侧却没有消费点（死配置）：%r" % (dead,)
     # 反向对照：上面那个表达式必须真能报出死键（否则它是一条恒过的空检查）
-    assert sorted({"TRANSITION", "LARGE", "没人用的键"} - used - set(_DUR_RESERVED)) == ["没人用的键"]
+    # 反向对照的样本换成**仍然**在名单里的两个键 + 一个不存在的键（TRANSITION 已被消费，
+    # 再拿它当样本会让这条对照误报）
+    assert sorted({"FEEDBACK", "LARGE", "没人用的键"} - used - set(_DUR_RESERVED)) == ["没人用的键"]
     # 祖父条款自己也要被钉住：它们真的还没人用（哪天被用上了，就该从名单里删掉）
     for _k in _DUR_RESERVED:
         assert _k not in used, "%s 已经有消费点了 —— 把它从 _DUR_RESERVED 里删掉" % _k
@@ -477,7 +491,8 @@ def test_default_follows_system_and_never_downgrades():
 
 def test_every_animation_point_is_covered_by_the_switch(win, monkeypatch):
     """**逐条列举**本用例覆盖的动效点（v2.11.0 定版：①–⑧ + 本轮新增 ⑩⑪⑫ = 11 条；
-    第 ⑨ 条"合成动作"在同文件的 test_proc_actions_are_covered_by_the_switch）：
+    第 ⑨ 条"合成动作"在同文件的 test_proc_actions_are_covered_by_the_switch；
+    v2.11.0 第 11 轮 W2 补第 ⑬ 条 = 状态切换的交叉淡入，见下面 ⑬）：
     开关打开后"该动的都不动了"，关掉后又动了；**新补的三条还要结果值与开动效时逐项相同**。
 
     ⚠ 名字里的 "every" 指的是**本用例逐条列举的这些点**，不是"全仓穷举"：
@@ -491,16 +506,19 @@ def test_every_animation_point_is_covered_by_the_switch(win, monkeypatch):
     monkeypatch.setattr(win, "_say_line", lambda *a, **k: None)
     win._set_reduce_motion(True)
     assert win._reduce_motion() is True
-    # ① 悬停光晕：不建动画对象，瞬时到位
+    # ① 悬停：**已按 2026-10-16 用户裁决撤销**（没有光晕、也不建任何动画对象）
+    # ② 按下：同样**不画东西**（原来那圈描边已撤销）
+    # —— 这两条从"开关要管住的动效点"变成"产品里不许存在的绘制层"：判据更严，不是更松。
+    _items0 = sorted(id(it) for it in win.scene.items())
     _enter(win)
-    assert win._glow_anim is None, "减少动效下悬停光晕仍在做过渡动画"
-    assert win._glow_item.opacity() == 1.0, "减少动效下光晕应当是瞬时亮起"
+    assert win._hover is True
+    assert sorted(id(it) for it in win.scene.items()) == _items0, "悬停又往场景里画了东西"
     _leave(win)
-    assert win._glow_item.opacity() == 0.0
-    # ② 按下描边：**照旧出现**（状态不是动效），但没有过渡动画
+    assert win._hover is False
     win.mousePressEvent(_Ev())
-    assert win._outline_item is not None and win._outline_item.isVisible()
-    win.mouseReleaseEvent(_Ev())
+    assert win._pressed is True
+    assert sorted(id(it) for it in win.scene.items()) == _items0, "按下又往场景里画了东西"
+    win.mouseReleaseEvent(_Ev())   # 减少动效下松手也不会产生涟漪（下面 ③ 单独钉）
     # ③ 点击涟漪：根本不产生
     scene_n = len(win.scene.items())
     assert win._spawn_ripple(QPointF(20, 20)) is None
@@ -559,16 +577,33 @@ def test_every_animation_point_is_covered_by_the_switch(win, monkeypatch):
     win.balance.on_updated(11, 9.0, "CNY", 0.0)
     assert win._balance_anim is None, "减少动效下余额徽章仍挂着滚动动画"
     assert win._shown_balance == 9.0, "减少动效下余额没有落到终值"
+    # ⑬ 状态切换的**交叉淡入**（v2.11.0 第 11 轮 W2；DUR["TRANSITION"] 的消费点）：
+    # 减少动效 = 时长 0 → **瞬时切帧**：不建动画对象、ghost 不显示、不留半截 opacity，
+    # 结果帧与场景对象数照旧正确。
+    win._state_timer.stop()
+    win._play_idle()
+    assert win._crossfade_anim is None, "减少动效下 _play_idle 也留下了交叉淡入动画对象"
+    _scene_x = len(win.scene.items())
+    win._show_state("laugh")
+    assert win._crossfade_anim is None, "减少动效下状态切换仍产生交叉淡入动画对象"
+    assert not win.ghost_item.isVisible(), "减少动效下 ghost 仍被显示（半截绘制层）"
+    assert win.item.opacity() == 1.0, "减少动效下留了半截 opacity"
+    assert win.item.pixmap().cacheKey() == win._state_pix("laugh").cacheKey(), \
+        "减少动效下交叉淡入的结果帧不对"
+    assert len(win.scene.items()) == _scene_x, "减少动效下状态切换改了场景对象数"
     # 三处的"结果值"留档：下面反向那一半要**逐项**比对（减少动效 = 没有过程，结果一样）
     reduced_results = (jump_home, (win.squash_x, win.squash_y), win._shown_balance)
 
     # ---- 反向：开关关掉之后，同样的动作**又动了** ----
     win._set_reduce_motion(False)
+    # ①② 反向：开着动效时**悬停照样不画东西**——撤销的是绘制层本身，与开关无关
+    _items1 = sorted(id(it) for it in win.scene.items())
     _enter(win)
-    assert win._glow_anim is not None
+    assert win._hover is True
+    assert sorted(id(it) for it in win.scene.items()) == _items1, "悬停又往场景里画了东西"
     _leave(win)
-    _drive(win._glow_anim)
     assert win._spawn_ripple(QPointF(20, 20)) is not None
+    assert len(win.scene.items()) == len(_items1) + 1, "涟漪没有被加进场景"
     assert win._spawn_hearts() > 0
     # _set_reduce_motion 自己弹了一条回执气泡 → 重新摆好"从看不见起步"的前提
     win.bubble.hide()
@@ -607,6 +642,21 @@ def test_every_animation_point_is_covered_by_the_switch(win, monkeypatch):
     assert win._balance_anim.duration() == pet_motion.DUR["BALANCE_ROLL"], "余额滚动没走令牌表"
     _drive(win._balance_anim)
     assert win._shown_balance == reduced_results[2], "余额终值与减少动效下的结果不一致"
+    # ⑬ 反向：关掉开关后**同样**的状态切换真的淡入，时长走令牌表，收尾回基线
+    win._state_timer.stop()
+    win._play_idle()
+    if win._crossfade_anim is not None:
+        _drive(win._crossfade_anim)
+    assert win._crossfade_anim is None, "前提：起点不该有在途的交叉淡入"
+    _scene_x2 = len(win.scene.items())
+    win._show_state("laugh")
+    assert win._crossfade_anim is not None, "关掉减少动效后状态切换没有交叉淡入"
+    assert win._crossfade_anim.duration() == pet_motion.DUR["TRANSITION"], \
+        "交叉淡入的时长没走令牌表（%r）" % (win._crossfade_anim.duration(),)
+    assert win.ghost_item.isVisible(), "交叉淡入没有显示 ghost 层（旧帧没在淡出）"
+    _drive(win._crossfade_anim)
+    assert not win.ghost_item.isVisible() and win.item.opacity() == 1.0, "交叉淡入收尾不干净"
+    assert len(win.scene.items()) == _scene_x2, "交叉淡入收尾后场景对象数没回基线"
 
 
 def test_proc_actions_are_covered_by_the_switch(win):
@@ -655,33 +705,59 @@ def test_reduce_motion_toggle_persists_and_clears_inflight(win):
     assert saved.get("reduce_motion") == "off"
 
 
-# ===================== A4：视觉三件套 =====================
+# ============ A4：悬停 / 按下的视觉反馈（光晕与描边已按用户裁决撤销） ============
+
+def _scene_snapshot(win):
+    """场景绘制项的**身份快照**（按 id 排序）——只用来判"多了没有"。
+
+    为什么不用 len()：对象数相同但换了项也是回归（旧版"看起来没了，其实项还在"
+    正是靠对象数抓的）；这里比的是同一批对象。
+    """
+    return sorted(id(it) for it in win.scene.items())
+
 
 def test_hover_glow_does_not_change_geometry(win):
-    """① 悬停时**角色的几何尺寸不变**（断言，不是眼看）+ 光晕真的亮起来。"""
+    """① 悬停：**不往场景里画任何东西 + 几何五元组一个都不变**（断言，不是眼看）。
+
+    ⚠ 名字保留（nodeid 被 _dev/mutations_agent_a_v2110.json 的 M-A2110-02 锚定）——
+    语义已按 **2026-10-16 用户裁决**翻转：原来断言的是「悬停只做光晕」，今天产品侧
+    **连光晕也没有**（桌宠.py 的 enterEvent 只切状态与光标提示）→ 判据改成反向钉子：
+    悬停期间场景里**一件绘制项都不许多**（谁敢把绘制层加回来，这里当场红）。
+    """
     before = _geometry(win)
+    items_before = _scene_snapshot(win)
     _enter(win)
-    assert win._glow_item is not None, "悬停没有光晕"
-    assert _geometry(win) == before, "悬停改了角色的几何量（A4 明令：悬停只做光晕）"
-    _drive(win._glow_anim)
-    assert win._glow_item.opacity() == 1.0
+    assert win._hover is True, "悬停状态没切（光标提示也跟着不工作）"
+    assert _geometry(win) == before, "悬停改了角色的几何量（A4 明令：悬停不许动几何）"
+    assert _scene_snapshot(win) == items_before, "悬停往场景里画了东西（用户裁决：不要悬停特效）"
     _leave(win)
+    assert win._hover is False
     assert _geometry(win) == before, "离开时改了角色的几何量"
-    _drive(win._glow_anim)
-    assert win._glow_item.opacity() == 0.0
+    assert _scene_snapshot(win) == items_before, "悬停离开留下了绘制项"
 
 
 def test_press_outline_appears_and_geometry_is_untouched(win):
-    """② 按下时尺寸不变 + 描边出现；松手描边收掉、几何仍不变。"""
+    """② 按下：**不往场景里画任何东西 + 几何五元组一个都不变**；松手同样什么都不留。
+
+    ⚠ 名字保留（nodeid 被 _dev/mutations_agent_a_v2110.json 的 M-A2110-01 锚定）——
+    语义已按 **2026-10-16 用户裁决**翻转：原来断言的是「按下补一圈描边」，今天
+    **连描边也没有**（桌宠.py 的 _press_squash 只写状态位）→ 判据改成反向钉子：
+    按下期间场景里**一件绘制项都不许多**（谁敢把描边加回来，这里当场红）。
+    松手会放一次**点击涟漪**（那是"点到了"的一次性反馈，**仍在**）→ 把它推到终态后，
+    场景必须回到按下之前那一批对象（既不残留，也不是"看起来没了"）。
+    """
     before = _geometry(win)
+    items_before = _scene_snapshot(win)
     win.mousePressEvent(_Ev())
     assert win._pressed is True
-    assert win._outline_item is not None and win._outline_item.isVisible(), "按下没有描边"
-    assert _geometry(win) == before, "按压缩放了角色（A4 明令：按下只补描边、不改几何）"
+    assert _scene_snapshot(win) == items_before, "按下往场景里画了东西（用户裁决：不要按下边框）"
+    assert _geometry(win) == before, "按压缩放了角色（A4 明令：按下不许动几何）"
     win.mouseReleaseEvent(_Ev())
     assert win._pressed is False
-    assert not win._outline_item.isVisible(), "松手后描边还挂着"
     assert _geometry(win) == before
+    _drive(win._ripples[0][1]) if win._ripples else None   # 点击涟漪：推到终态
+    assert win._ripples == [], "松手后的涟漪没有收尾"
+    assert _scene_snapshot(win) == items_before, "按下/松手这条路径留下了绘制项"
 
 
 def test_press_does_not_fight_an_inflight_breathing_animation(win):
@@ -1063,6 +1139,13 @@ def test_no_global_shortcut_and_no_focus_stealing(win):
     # 反例对照：这段合成源码必须被认出来（否则上面那条是"恒过"的空检查）
     assert _shortcut_hits("from PySide6.QtGui import QShortcut\n") == ["QShortcut"]
     assert _shortcut_hits("x = Qt.ShortcutContext.ApplicationShortcut\n") == ["ApplicationShortcut"]
+    # ⚠ **这条是"有意钉死"，不是随手写的断言**（C-39 / 2026-10-16 真机取证）：
+    # 桌宠常驻桌面，抢焦点会打断用户正在敲的东西 —— 所以 WindowDoesNotAcceptFocus 是**设计**。
+    # 真机实测（`_dev/probe_a10_real_machine.md`）：该 flag 在 Windows 上落成 WS_EX_NOACTIVATE
+    # （exstyle 0x08080088，对照组 0x00080088 没有这一位）→ **点它不激活、主窗口拿不到键盘焦点**，
+    # 于是主窗口的 Esc/Enter/Space 只在"窗口已经获得焦点"时才可能生效，**托盘菜单才是可靠入口**。
+    # 谁要为了让主窗口收键而去掉这个 flag：先读发布说明里"抢焦点"的代价，再改这条断言 ——
+    # 不要因为"窗口开始抢键盘焦点了"这句红看起来像在说别的事，就顺手把它改掉。
     assert bool(win.windowFlags() & Qt.WindowType.WindowDoesNotAcceptFocus),         "窗口开始抢键盘焦点了（Esc 会抢到用户当前应用的按键）"
     assert win.focusPolicy() != Qt.FocusPolicy.NoFocus
 
@@ -1126,10 +1209,16 @@ def test_petting_survives_the_drag_threshold(win):
 
 
 def test_press_feedback_is_synchronous(win):
-    """B1.4：press 里立刻有的反馈**一秒都不许延后**（探针：状态在同一个调用里就变了）。"""
+    """B1.4：press 里立刻有的反馈**一秒都不许延后**（探针：状态在同一个调用里就变了）。
+
+    ⚠ 2026-10-16 用户裁决撤销了按下描边 → "同步出现的反馈"今天只剩**状态位**
+    （按下不画东西）；断言仍在同一个调用里读，并顺带钉住"这一下没往场景里加东西"。
+    """
     win._hold_timer.stop()
+    _items_before = _scene_snapshot(win)
     win.mousePressEvent(_Ev(gp=(400, 400)))
-    assert win._pressed is True and win._outline_item.isVisible(), "按下反馈不是同步出现的"
+    assert win._pressed is True, "按下反馈不是同步出现的"
+    assert _scene_snapshot(win) == _items_before, "按下往场景里画了东西"
     assert win._hold_timer.isActive() and win._hold_timer.remainingTime() > 0
     assert win._dragging is False and win._moved is False
     win.mouseReleaseEvent(_Ev(gp=(400, 400)))
