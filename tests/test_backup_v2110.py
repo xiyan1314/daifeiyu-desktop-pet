@@ -23,9 +23,16 @@ import pet_plugin         # 条目名安全线的真源：与 pet_backup 共用�
 
 # ---------------- 测试用的小工具 ----------------
 
+# 注入时钟的时区：**显式**写出来，绝不从本机取。
+# CI #60 的事故：旧版 _now() 是 datetime(...).astimezone()——拿到的是**跑测机器**的偏移，
+# 断言却写死了东八区那一串；本机（东八区）绿、GitHub runner（UTC）红。同一条判据两种
+# 结论，那就不是判据。显式 tzinfo 之后，"哪一刻 + 哪个偏移"只由用例自己决定。
+_TZ8 = datetime.timezone(datetime.timedelta(hours=8))
+
+
 def _now():
-    """注入时钟：manifest 的 created_at 由它决定，所以断言可以写死。"""
-    return datetime.datetime(2026, 10, 17, 13, 15, 0).astimezone()
+    """注入时钟：manifest 的 created_at 由它决定，断言自己算一份来比（不比字符串写死的偏移）。"""
+    return datetime.datetime(2026, 10, 17, 13, 15, 0, tzinfo=_TZ8)
 
 
 def _put(base, rel, data):
@@ -113,7 +120,7 @@ def _hostile_zip(path, entry_name, payload=b"pwned"):
     man = {
         "format": pet_backup.BACKUP_FORMAT,
         "schema": 1,
-        "created_at": "2026-10-17T13:15:00+08:00",
+        "created_at": _now().isoformat(),
         "app_version": "2.11.0",
         "files": [{"name": entry_name, "size": len(payload), "sha256": _sha(payload)}],
     }
@@ -179,7 +186,12 @@ def test_manifest_内容(data_dir, tmp_path):
     assert err == ""
     assert man["format"] == pet_backup.BACKUP_FORMAT
     assert man["schema"] == pet_backup.BACKUP_SCHEMA
-    assert man["created_at"] == "2026-10-17T13:15:00+08:00"
+    # created_at 与注入时钟比"哪一刻"，不与字符串比——断言里没有任何写死的时区偏移，
+    # 所以东八区的本机与 UTC 的 runner 是同一条判据（CI #60 红的就是这一行）。
+    created = datetime.datetime.fromisoformat(man["created_at"])
+    assert created == _now(), man["created_at"]                          # 同一时刻
+    assert created.utcoffset() == _now().utcoffset(), man["created_at"]  # 注入的偏移原样落盘
+    assert man["created_at"].startswith("2026-10-17T13:15:00"), man["created_at"]  # 墙钟没被改写
     assert man["app_version"] == "2.11.0"
     assert man["file_count"] == len(USER_FILES)
     assert man["total_bytes"] == sum(len(v) for v in USER_FILES.values())
@@ -409,7 +421,7 @@ def test_重名条目必须拒绝(tmp_path, data_dir):
     first, second = b"AAAA", b"BBBB"
     man = {
         "format": pet_backup.BACKUP_FORMAT, "schema": 1,
-        "created_at": "2026-10-17T13:15:00+08:00", "app_version": "2.11.0",
+        "created_at": _now().isoformat(), "app_version": "2.11.0",
         "files": [{"name": "config.json", "size": len(first), "sha256": _sha(first)}],
     }
     with zipfile.ZipFile(evil, "w") as zf:
