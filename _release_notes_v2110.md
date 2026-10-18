@@ -49,4 +49,18 @@
 
 ## 六、验证读数
 
-**待取**：pytest / v13 / 静态 / 锚点 / nodeid / pinned / 证据整批 —— 在定版、冻结、整批复跑之后一次性回写（对着出货修订跑出来的才算）。
+**读数（2026-10-18 22:11 现场跑；树 `620002e` = 出货树 `895975a` + 清账 5 条 —— 唯一的产品码改动是删掉 `main.py` 里一个无人读的死变量，不改行为、不改判据）**：
+
+| 门 | 命令 | 读数 |
+|---|---|---|
+| 全量用例 | `python -B -m pytest -o addopts= -q` | **1740 passed / 0 failed**（345.8s） |
+| 护栏 | `python -B _verify_v13.py` | **TOTAL CHECKS 273 / FAILS 0** |
+| 静态 | `python -B _check_static.py` | **问题 0 条，待确认 1 条**（`BUBBLE_STYLE_CANON` 零引用，既有老账） |
+| 锚点 | `python -B _dev/mutate_batch_v270.py --scan-only` | **556 条锚点 / 坏 0** |
+| nodeid | `python -B _dev/check_mutation_nodeids.py` | **1340 条 / 坏 0** |
+| pinned | `python -B _dev/check_pinned_ast.py` | **35 份 / 530 条 / 过期 0 / 已消失 0** |
+| 静默 except | `python -B _dev/silent_except_whitelist.py --check` | **373 条 / A 档 0 / rc 0** |
+| 绿版同步 | `check_sync()` | **`([], [])`**（47 个文件全一致） |
+| 发布门 | `python -B _check_release.py` | **RELEASE CHECK OK**（证据提示 0 条 —— 那两份缺 `pinned_ast` 的证据已补齐） |
+
+**证据整批**：`python -B _dev/mutate_batch_v270.py` → **36 项 / 0 项非 0**（2026-10-17 定版当日那一批；其中 `mutations_agent_c_v280.json` 一次 rc=2 是影子副本里的**基线崩溃**，按流程重跑后 **97/97 CAUGHT**，记录见 `_dev/results_batch_v270.json` 的 `addendum`）。**本轮没有重跑整批** —— 这一行是那一批的读数，日期如实标出，不冒充今天的。
