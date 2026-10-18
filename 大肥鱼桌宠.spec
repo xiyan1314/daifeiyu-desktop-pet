@@ -1,8 +1,10 @@
 # -*- mode: python ; coding: utf-8 -*-
 
 
+# v2.12.0（第 12 轮 · 遗留-1）：入口改成 main.py —— 它是崩溃自动重启的守护入口。
+# 此前这里是 桌宠.py ⇒ 打包出来的 exe 上 pet_guard 一次都不执行（见 _dev/REMAINING.md 遗留-1）。
 a = Analysis(
-    ['桌宠.py'],
+    ['main.py'],
     pathex=[],
     binaries=[],
     datas=[('assets', 'assets')],

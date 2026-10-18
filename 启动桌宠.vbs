@@ -3,6 +3,13 @@ Dim fso, folder, fl, target, ws, content
 Set fso = CreateObject("Scripting.FileSystemObject")
 Set folder = fso.GetFolder(fso.GetParentFolderName(WScript.ScriptFullName))
 target = ""
+' v2.12.0（第 12 轮 · 遗留-1）：**先用显式名 main.py**（它是崩溃自动重启的守护入口），
+' 找不到才退回下面那条"扫标记"的兼容路径（老包 / 入口被改名的包）。
+' 顺序不许倒：main.py 与 桌宠.py 现在都带标记，扫标记的结果取决于目录枚举顺序，不可信。
+If fso.FileExists(folder.Path & "\main.py") Then
+    target = "main.py"
+End If
+If target = "" Then
 For Each fl In folder.Files
     If LCase(fso.GetExtensionName(fl.Name)) = "py" Then
         If InStr(1, fl.Name, "pet_", vbTextCompare) > 0 Then
@@ -18,6 +25,7 @@ For Each fl In folder.Files
         End If
     End If
 Next
+End If
 If target = "" Then
     MsgBox "Cannot locate the pet app script (entry marker not found).", vbCritical, "DaFeiYu Pet"
     WScript.Quit 1

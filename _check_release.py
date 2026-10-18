@@ -68,6 +68,8 @@ SYNC_FILES = ["桌宠.py", "main.py", "pet_actions.py", "pet_ai.py", "pet_alarm.
               "pet_guard.py",       # 崩溃自动重启的判定/熔断/标记（方向 6）
               "pet_time_mood.py",   # 时间感知情绪（UX E2）
               "pet_notify.py",      # 系统通知（方向 3 的另一半，W3-d）
+              # v2.12.0 第 12 轮（UX 三小项）：首次引导的纯逻辑模块（桌宠.py import 它）
+              "pet_first_run.py",
               "README.md", "README.en.md", "LICENSE", VBS_NAME]
 
 # 用户运行时数据（绿色版目录与发布包里都不该有）

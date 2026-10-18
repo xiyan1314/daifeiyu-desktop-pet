@@ -153,6 +153,8 @@ SLEEP_AFTER_SECONDS = 60 # 无交互多久入睡
 STATE_DURATION_MS = 2500 # 状态图默认展示时长
 # 跟随/散步行走参数（v1.4.2 降速档）实现迁至 pet_wander：此处保留模块级名字（tests/v13 依赖）
 from pet_wander import WALK_INTERVAL_MS, WALK_EASE, WALK_STEP_MIN, WALK_STEP_MAX, _walk_step  # noqa: E402,F401
+# v2.12.0（第 12 轮 · D1 首次引导）：纯逻辑模块（判定/落盘/展示三段可注入，零 Qt）
+import pet_first_run  # noqa: E402
 SOUND_KIND_MAP = {"boing": "press", "pop": "release", "feed": "feed"}
 
 
@@ -277,6 +279,18 @@ DEFAULT_CONFIG = {
     "time_mood": False,
     # 时段问候"当天已发过哪些"（{slot_key: "YYYY-MM-DD"}；与 pet_alarm.last_fired_date 同口径）
     "time_mood_sent": {},
+    # ---- v2.12.0 第 12 轮（UX 三小项）：两个一次性标记 ----
+    # D1 首次引导（方向 6）：弹过一次就置真；这是**落盘**的标记 —— 此前 _HIDE_TIP_SHOWN 是
+    # 进程级全局，重启就忘（"首次"变成"每次首启"）。
+    "first_run_done": False,
+    # 关窗收进托盘的那句提示：同上，只出现第一次（键名与 first_run_done 分开：两件事各自一次性）。
+    "tray_tip_done": False,
+    # D2 菜单悬停预览（UX D2）：**默认关** —— 停在菜单上就播动作对老用户是"手一抖就动"。
+    "menu_hover_preview": False,
+    # E1 惊喜彩蛋（UX E1）：默认开（连戳/连喂/时段/角落四类，低频 + 每类每天一次）。
+    "easter_eggs": True,
+    # 彩蛋"今天已经放过哪些"（{kind: "YYYY-MM-DD"}；坏值回空表 —— 宁可多发一次，也不永远哑掉）
+    "easter_sent": {},
 }
 
 # P1-3：config.json schema 版本（1=旧版全量存储；2=diff 只存改动项）
@@ -295,6 +309,8 @@ _SOFT_FIX_KEYS = {"always_on_top", "ai_enabled", "follow_mouse", "wander", "soun
                   "idle_play_mode", "idle_resume_on_interrupt",
                   "reduce_motion", "high_contrast",  # v2.11.0（A2/A3）：枚举字符串，坏值软归一化
                   "fullscreen_hide", "notify", "time_mood",  # v2.11.0（第 11 轮）：布尔开关
+                  "first_run_done", "tray_tip_done",  # v2.12.0（第 12 轮）：一次性标记（布尔）
+                  "menu_hover_preview", "easter_eggs", "easter_sent",  # v2.12.0：UX 三小项
                   "time_mood_sent"}
 
 
@@ -1327,6 +1343,9 @@ class PetWindow(QWidget):
         self._show_state("laugh", 3200)  # 开场第一个表情：开心大笑
         # v2.1：开场台词也来自台词库（用户可增删改「开场」类别），空池兜底
         self._say_line(self._pick_line(("startup",), fallback="绳匠，你来啦！"))
+        # v2.12.0（第 12 轮 · D1）：首次引导**排在开场台词之后**（先打招呼、再说怎么用），
+        # 而且只在 first_run_done 为假时弹一条；第二次启动一条都不弹。
+        QTimer.singleShot(2600, self, self._gslot("first_run", self._first_run_guide))
         # v2.4（M4）：lines.json 在磁盘上却没读到（记事本「ANSI」另存成 GBK / 共享占用）时，
         # 台词库静默退回内置种子——用户只会觉得"我的台词没了"，必须明说一次。延后 8s，
         # 不顶掉开场台词。（备份发生在下一次保存前，见 pet_lines._save）
@@ -4274,6 +4293,23 @@ class PetWindow(QWidget):
     def _pad_top(self):
         return int((self.height() - self.base_h * self.scale) / 2)
 
+    # ---------- v2.12.0（第 12 轮 · D1）：首次引导 ----------
+    def _first_run_guide(self):
+        """只弹一次的启动引导（第二次启动一条都不弹）。
+
+        纯逻辑在 pet_first_run（判定/落盘/展示三段可注入、零 Qt）；这里只把**真的**
+        `save_config` 与 `show_bubble` 递进去，并按返回值留痕 —— 落盘失败时用户仍然只看到
+        这一次（内存里已置真），下次启动会再试一次落盘。
+        """
+        try:
+            shown, err = pet_first_run.guide(self.cfg, save_config, self.show_bubble)
+        except Exception as e:          # noqa: BLE001 —— 引导绝不许把启动带崩
+            _log_error("first_run_guide: %r" % (e,))
+            return False
+        if err:
+            _log_error("first_run_guide: %s" % (err,))
+        return shown
+
     def show_bubble(self, text, hold_ms=None):
         """弹一条气泡 → **是否真的显示出来了**（v2.8.0 第 6 轮 A3：返回值变成实报）。
 
@@ -4423,8 +4459,13 @@ class PetWindow(QWidget):
         self._reset_pointer_state()
         try:
             self.hide()
-            if not globals().get("_HIDE_TIP_SHOWN"):
-                globals()["_HIDE_TIP_SHOWN"] = True
+            # v2.12.0（第 12 轮 · D1）：这句提示改成**落盘**的一次性标记 —— 此前是进程级全局
+            # （重启就忘），于是"关窗提示"每次首启都弹。落盘失败只影响"下次还弹"，不重复骚扰。
+            if self.cfg.get("tray_tip_done") is not True:
+                self.cfg["tray_tip_done"] = True
+                _err = save_config(self.cfg)
+                if _err:
+                    _log_error("tray_tip_done: %s" % (_err,))
                 self.show_bubble("我先收进托盘啦，右键托盘图标可以叫我出来~")
         except Exception as e:
             _log_error("closeEvent hide: %r" % (e,))

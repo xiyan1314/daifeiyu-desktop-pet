@@ -107,19 +107,41 @@ def acquire_single_instance():
         return True  # 获取失败按放行处理
 
 
+# 入口文件名（v2.12.0 第 12 轮 · 遗留-1）：新包用 main.py（崩溃自动重启的守护入口），
+# 老包 / 入口被改名退回 桌宠.py。顺序写死在元组里，别在两处各判一次。
+ENTRY_NAMES = ("main.py", "桌宠.py")
+
+
+def entry_name(app_dir):
+    """应用入口文件名：**先 main.py**（守护入口），没有再退回 桌宠.py。
+
+    纯函数（只看磁盘上那个文件在不在），不 import Qt、不读环境变量 —— 测试可以拿临时目录
+    直接喂三分支（两个都在 / 只有老入口 / 都没有）。
+    """
+    for name in ENTRY_NAMES:
+        if os.path.isfile(os.path.join(app_dir, name)):
+            return name
+    return ENTRY_NAMES[-1]   # 都没有：回退老入口名（拼出来的路径不存在，用户能看见"打不开"）
+
+
 def autostart_command(app_dir, sys_executable):
-    """自启命令行：绿色版优先用 wscript 拉起 vbs（隐藏窗口）；源码运行用 pythonw。"""
+    """自启命令行：绿色版优先用 wscript 拉起 vbs（隐藏窗口）；源码运行用 pythonw。
+
+    v2.12.0（第 12 轮 · 遗留-1）：三条兜底路径都改指 `entry_name()` —— 此前全写死 桌宠.py，
+    于是"开机自启"拉起来的永远是**没有守护**的那个入口（打包 exe 上崩溃自动重启不执行）。
+    """
     base = app_dir
+    entry = entry_name(base)
     vbs = os.path.join(base, "启动桌宠.vbs")
     if os.path.isfile(vbs):
         ws = os.path.join(os.environ.get("SystemRoot", r"C:\Windows"), "System32", "wscript.exe")
         return '"%s" "%s"' % (ws, vbs)
     pyw = os.path.join(base, "pythonw.exe")
-    main_py = os.path.join(base, "桌宠.py")
+    main_py = os.path.join(base, entry)
     if os.path.isfile(pyw) and os.path.isfile(main_py):
         return '"%s" "%s"' % (pyw, main_py)
     # 源码运行：优先同目录 pythonw（隐藏窗口），避免登录时闪控制台
     pyw_next = os.path.join(os.path.dirname(sys_executable), "pythonw.exe")
     if os.path.isfile(pyw_next):
-        return '"%s" "%s"' % (pyw_next, os.path.join(base, "桌宠.py"))
-    return '"%s" "%s"' % (sys_executable, os.path.join(base, "桌宠.py"))
+        return '"%s" "%s"' % (pyw_next, os.path.join(base, entry))
+    return '"%s" "%s"' % (sys_executable, os.path.join(base, entry))

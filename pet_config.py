@@ -250,8 +250,17 @@ def normalize_cfg(cfg, defaults, persona_ids):
     # time_mood_sent 是"当天已发过哪些"的映射，坏值一律回空表（宁可多发一次问候，也不许
     # 因为一条坏记录让用户永远收不到）。**归一化后类型必须仍然是 bool / dict** ——
     # tests/test_config_robustness.py 会逐个键塞毒值来钉这一条。
-    for _k, _d in (("fullscreen_hide", True), ("notify", True), ("time_mood", False)):
+    for _k, _d in (("fullscreen_hide", True), ("notify", True), ("time_mood", False),
+                   # v2.12.0（第 12 轮 · UX 三小项）：两个一次性标记同样是布尔 ——
+                   # 手写 "true"/1/null 都不许把"已引导过"读成"没引导过"（除非真是坏值）。
+                   ("first_run_done", False), ("tray_tip_done", False),
+                   # D2 菜单悬停预览：默认关（老用户升级后菜单行为不该变）
+                   ("menu_hover_preview", False),
+                   # E1 彩蛋：默认开（低频小惊喜），关掉即全部静默
+                   ("easter_eggs", True)):
         cfg[_k] = _to_bool(cfg.get(_k, _d), _d)
+    _easter = cfg.get("easter_sent", {})
+    cfg["easter_sent"] = dict(_easter) if isinstance(_easter, dict) else {}
     _sent = cfg.get("time_mood_sent", {})
     cfg["time_mood_sent"] = dict(_sent) if isinstance(_sent, dict) else {}
     # ---- v1.3 新增配置归一化 ----
