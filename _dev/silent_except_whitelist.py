@@ -365,7 +365,9 @@ def load_whitelist(path=None):
 
 def save_whitelist(data, path=None):
     path = path or WL_PATH
-    with io.open(path, "w", encoding="utf-8") as fh:
+    # C-40（第 12 轮清账）：不传 newline 时 Windows 会把 "\n" 翻成 CRLF，而本仓是纯 LF
+    # —— 每跑一次 --write 就把 361 条冻结表染成 CRLF（本次是手工归一的）。显式钉 LF。
+    with io.open(path, "w", encoding="utf-8", newline="\n") as fh:
         json.dump(data, fh, ensure_ascii=False, indent=1, sort_keys=False)
         fh.write("\n")
 

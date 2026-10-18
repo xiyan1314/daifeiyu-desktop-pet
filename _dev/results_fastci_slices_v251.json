@@ -8,7 +8,7 @@
       "rc": 0,
       "verdict": "OK",
       "failed": [],
-      "tail": "3 passed in 3.36s",
+      "tail": "3 passed in 4.74s",
       "metrics": [],
       "asserts": []
     },
@@ -19,7 +19,7 @@
       "rc": 0,
       "verdict": "OK",
       "failed": [],
-      "tail": "3 passed in 3.35s",
+      "tail": "3 passed in 4.54s",
       "metrics": [
         "METRICS m4 per_step=[2, 1, 1, 1, 1, 1, 1, 1, 1, 0] cap=4 sync_units=1 decodes=10 steps=10 spin=n=11 min=5.0 med=5.0 max=5.0",
         "METRICS m2 per_step=[3, 1, 1, 1, 1, 1, 0] cap=4 steps=7 spin=n=24 min=5.0 med=5.0 max=5.0",
@@ -34,10 +34,10 @@
       "rc": 0,
       "verdict": "OK",
       "failed": [],
-      "tail": "3 passed in 2.23s",
+      "tail": "3 passed in 2.44s",
       "metrics": [
-        "METRICS m4 per_step=[2, 1, 1, 1, 1, 2, 2, 0] cap=4 sync_units=1 decodes=10 steps=8 spin=n=11 min=5.0 med=5.0 max=5.0",
-        "METRICS m2 per_step=[3, 1, 1, 1, 2, 0] cap=4 steps=6 spin=n=24 min=5.0 med=5.0 max=5.0",
+        "METRICS m4 per_step=[3, 2, 1, 2, 2, 0] cap=4 sync_units=2 decodes=10 steps=6 spin=n=12 min=5.0 med=5.0 max=5.0",
+        "METRICS m2 per_step=[3, 2, 2, 1] cap=4 steps=4 spin=n=25 min=5.0 med=5.0 max=5.0",
         "METRICS export steps=8 deltas=[2, 2, 2, 2, 2, 2, 2, 2] cap=4 total=16 spin=n=16 min=8.0 med=8.0 max=8.0"
       ],
       "asserts": []
@@ -49,11 +49,11 @@
       "rc": 0,
       "verdict": "OK",
       "failed": [],
-      "tail": "3 passed in 5.38s",
+      "tail": "3 passed in 6.23s",
       "metrics": [
         "METRICS m4 per_step=[3, 2, 2, 2, 1] cap=4 sync_units=2 decodes=10 steps=5 spin=n=12 min=50.0 med=50.0 max=50.0",
         "METRICS m2 per_step=[3, 2, 2, 1] cap=4 steps=4 spin=n=26 min=50.0 med=50.0 max=50.0",
-        "METRICS export steps=8 deltas=[2, 2, 2, 2, 2, 2, 2, 2] cap=4 total=16 spin=n=16 min=80.0 med=80.0 max=80.2"
+        "METRICS export steps=8 deltas=[2, 2, 2, 2, 2, 2, 2, 2] cap=4 total=16 spin=n=16 min=80.0 med=80.0 max=80.0"
       ],
       "asserts": []
     },
@@ -67,14 +67,14 @@
         "tests/test_anim_slice_v241.py::test_async_window_does_not_play_the_previous_roles_frames",
         "tests/test_export_slice_v242.py::test_export_role_drives_the_writer_in_slices"
       ],
-      "tail": "2 failed, 1 passed in 3.00s",
+      "tail": "2 failed, 1 passed in 3.97s",
       "metrics": [
-        "METRICS m4 per_step=[4, 2, 2, 2, 0] cap=4 sync_units=2 decodes=10 steps=5 spin=[]"
+        "METRICS m4 per_step=[3, 2, 2, 2, 1, 0] cap=4 sync_units=1 decodes=10 steps=6 spin=[]"
       ],
       "asserts": [
-        "E       AssertionError: 收尾分片逐片解了 [7, 1] 张（上界 4 = ceil(预算 12.0ms ÷ 单位成本 5.0ms) + 1）：要么分片循环的预算检查没生效、要么注入的解码 spy 没生效",
+        "E       AssertionError: 收尾分片逐片解了 [5, 1, 2, 0] 张（上界 4 = ceil(预算 12.0ms ÷ 单位成本 5.0ms) + 1）：要么分片循环的预算检查没生效、要么注入的解码 spy 没生效",
         "tests\\test_anim_slice_v241.py:368: AssertionError",
-        "E       AssertionError: 有一片写了 7 条（上界 4 = ceil(预算 12.0ms ÷ 单位成本 8.0ms) + 2）：要么 step 的预算检查没生效、要么注入的写入 spy 没生效（逐片 [6, 7, 3]）",
+        "E       AssertionError: 有一片写了 6 条（上界 4 = ceil(预算 12.0ms ÷ 单位成本 8.0ms) + 2）：要么 step 的预算检查没生效、要么注入的写入 spy 没生效（逐片 [5, 6, 5]）",
         "tests\\test_export_slice_v242.py:351: AssertionError"
       ]
     },
@@ -93,15 +93,15 @@
         "tests/test_anim_slice_v241.py::test_async_window_does_not_play_the_previous_roles_frames",
         "tests/test_export_slice_v242.py::test_export_role_drives_the_writer_in_slices"
       ],
-      "tail": "3 failed in 2.00s",
+      "tail": "3 failed in 3.02s",
       "metrics": [],
       "asserts": [
-        "E       AssertionError: (c) 有一片解了 10 张（上界 4 = ceil(预算 12.0ms ÷ 单位成本 5.0ms) + 1）：要么分片循环的预算检查没生效、要么注入的解码 spy 没生效（逐片 [10, 0]）",
+        "E       AssertionError: (c) 有一片解了 10 张（上界 4 = ceil(预算 12.0ms ÷ 单位成本 5.0ms) + 1）：要么分片循环的预算检查没生效、要么注入的解码 spy 没生效（逐片 [10]）",
         "tests\\test_anim_slice_v241.py:236: AssertionError",
         "E       AssertionError: 前提不成立：没进异步分支（每单位 5.0ms × 8 张 = 40.0ms，预算 12.0ms）",
         "tests\\test_anim_slice_v241.py:355: AssertionError",
-        "E       AssertionError: 首个气泡不是进度：['角色包已导出，可以分享给朋友啦~']",
-        "tests\\test_export_slice_v242.py:330: AssertionError"
+        "E       AssertionError: 有一片写了 11 条（上界 4 = ceil(预算 12.0ms ÷ 单位成本 8.0ms) + 2）：要么 step 的预算检查没生效、要么注入的写入 spy 没生效（逐片 [11, 5]）",
+        "tests\\test_export_slice_v242.py:351: AssertionError"
       ]
     },
     {
@@ -117,9 +117,9 @@
         "tests/test_anim_slice_v241.py::test_cold_big_frame_set_is_sliced_and_completes",
         "tests/test_anim_slice_v241.py::test_async_window_does_not_play_the_previous_roles_frames"
       ],
-      "tail": "2 failed, 1 passed in 3.61s",
+      "tail": "2 failed, 1 passed in 4.99s",
       "metrics": [
-        "METRICS export steps=8 deltas=[2, 2, 2, 2, 2, 2, 2, 2] cap=4 total=16 spin=n=16 min=8.0 med=8.0 max=8.1"
+        "METRICS export steps=8 deltas=[2, 2, 2, 2, 2, 2, 2, 2] cap=4 total=16 spin=n=16 min=8.0 med=8.0 max=8.0"
       ],
       "asserts": [
         "E       AssertionError: (c) 有一片解了 10 张（上界 4 = ceil(预算 12.0ms ÷ 单位成本 5.0ms) + 1）：要么分片循环的预算检查没生效、要么注入的解码 spy 没生效（逐片 [10]）",
@@ -139,7 +139,7 @@
       "failed": [
         "tests/test_anim_slice_v241.py::test_async_window_does_not_play_the_previous_roles_frames"
       ],
-      "tail": "1 failed, 2 passed in 3.64s",
+      "tail": "1 failed, 2 passed in 4.72s",
       "metrics": [
         "METRICS m4 per_step=[2, 1, 1, 1, 1, 1, 1, 1, 1, 0] cap=4 sync_units=1 decodes=10 steps=10 spin=n=11 min=5.0 med=5.0 max=5.0",
         "METRICS export steps=8 deltas=[2, 2, 2, 2, 2, 2, 2, 2] cap=4 total=16 spin=n=16 min=8.0 med=8.0 max=8.0"
@@ -162,12 +162,12 @@
         "tests/test_anim_slice_v241.py::test_cold_big_frame_set_is_sliced_and_completes",
         "tests/test_anim_slice_v241.py::test_async_window_does_not_play_the_previous_roles_frames"
       ],
-      "tail": "2 failed, 1 passed in 3.13s",
+      "tail": "2 failed, 1 passed in 4.12s",
       "metrics": [
-        "METRICS export steps=8 deltas=[2, 2, 2, 2, 2, 2, 2, 2] cap=4 total=16 spin=n=16 min=8.0 med=8.0 max=8.1"
+        "METRICS export steps=8 deltas=[2, 2, 2, 2, 2, 2, 2, 2] cap=4 total=16 spin=n=16 min=8.0 med=8.0 max=8.0"
       ],
       "asserts": [
-        "E       AssertionError: (a) 首片就把 10 帧全解完了：每单位注入 5.0ms（整批合计 50.0ms、预算 12.0ms）——分片路径没被覆盖到（首片同步段 152.6ms、取了 10 次帧）",
+        "E       AssertionError: (a) 首片就把 10 帧全解完了：每单位注入 5.0ms（整批合计 50.0ms、预算 12.0ms）——分片路径没被覆盖到（首片同步段 178.6ms、取了 10 次帧）",
         "tests\\test_anim_slice_v241.py:224: AssertionError",
         "E       AssertionError: 前提不成立：没进异步分支（每单位 5.0ms × 8 张 = 40.0ms，预算 12.0ms）",
         "tests\\test_anim_slice_v241.py:357: AssertionError"
@@ -184,10 +184,10 @@
       "failed": [
         "tests/test_export_slice_v242.py::test_export_role_drives_the_writer_in_slices"
       ],
-      "tail": "1 failed, 2 passed in 3.46s",
+      "tail": "1 failed, 2 passed in 4.17s",
       "metrics": [
-        "METRICS m4 per_step=[2, 1, 1, 1, 1, 1, 1, 1, 1, 0] cap=4 sync_units=1 decodes=10 steps=10 spin=n=11 min=5.0 med=5.0 max=5.1",
-        "METRICS m2 per_step=[3, 1, 1, 1, 1, 1, 0] cap=4 steps=7 spin=n=24 min=5.0 med=5.0 max=5.1"
+        "METRICS m4 per_step=[2, 1, 1, 1, 1, 1, 1, 1, 1, 0] cap=4 sync_units=1 decodes=10 steps=10 spin=n=11 min=5.0 med=5.0 max=5.0",
+        "METRICS m2 per_step=[3, 1, 1, 1, 1, 1, 0] cap=4 steps=7 spin=n=24 min=5.0 med=5.0 max=5.0"
       ],
       "asserts": [
         "E       AssertionError: 第一片没有按 _EXPORT_SLICE_MS 预算切（steps=[None]）",
@@ -205,10 +205,10 @@
       "failed": [
         "tests/test_export_slice_v242.py::test_export_role_drives_the_writer_in_slices"
       ],
-      "tail": "1 failed, 2 passed in 3.45s",
+      "tail": "1 failed, 2 passed in 4.20s",
       "metrics": [
         "METRICS m4 per_step=[2, 1, 1, 1, 1, 1, 1, 1, 1, 0] cap=4 sync_units=1 decodes=10 steps=10 spin=n=11 min=5.0 med=5.0 max=5.0",
-        "METRICS m2 per_step=[3, 1, 1, 1, 1, 1, 0] cap=4 steps=7 spin=n=24 min=5.0 med=5.0 max=5.0"
+        "METRICS m2 per_step=[3, 1, 1, 1, 1, 1, 0] cap=4 steps=7 spin=n=24 min=5.0 med=5.0 max=5.1"
       ],
       "asserts": [
         "E       AssertionError: 首个气泡不是进度：['角色包已导出，可以分享给朋友啦~']",
@@ -247,5 +247,10 @@
     "pet_motion.py": "a737b42a336f",
     "tests/test_dialog_buttons_v270.py": "4f95acca7fc6",
     "tests/test_import_thread.py": "1c6fc2ec5d05"
+  },
+  "pinned_ast": {
+    "tests/test_anim_slice_v241.py::test_cold_big_frame_set_is_sliced_and_completes": "0848c62f61a4",
+    "tests/test_anim_slice_v241.py::test_async_window_does_not_play_the_previous_roles_frames": "c5b754bc38ca",
+    "tests/test_export_slice_v242.py::test_export_role_drives_the_writer_in_slices": "a3c1db1766fb"
   }
 }

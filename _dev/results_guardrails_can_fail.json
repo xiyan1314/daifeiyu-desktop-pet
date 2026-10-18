@@ -1,6 +1,6 @@
 {
   "title": "护栏能真失败自检（tests/test_guardrails_v24.py 的用例 / 定向变异）",
-  "checked_at": "2026-10-17 16:48:41",
+  "checked_at": "2026-10-18 21:53:02",
   "total": 9,
   "caught": 9,
   "not_caught": 0,
@@ -93,5 +93,15 @@
     "pet_motion.py": "a737b42a336f",
     "tests/test_dialog_buttons_v270.py": "4f95acca7fc6",
     "tests/test_import_thread.py": "1c6fc2ec5d05"
+  },
+  "pinned_ast": {
+    "tests/test_guardrails_v24.py::test_a1_readonly_direct_and_write_gated": "4d3ddff2a671",
+    "tests/test_guardrails_v24.py::test_a2_refused_writes_keep_ledger_budget_alarms": "1b80c8fac683",
+    "tests/test_guardrails_v24.py::test_a3_ai_context_privacy_switch": "f8f55f2ecbe3",
+    "tests/test_guardrails_v24.py::test_a4_memory_history_and_long_term_do_not_clobber": "21f3a0ac9c08",
+    "tests/test_guardrails_v24.py::test_a5_tool_rounds_and_calls_are_capped": "8b31b655d335",
+    "tests/test_guardrails_v24.py::test_a6_persona_file_overrides_builtin": "30c3eb7ec36d",
+    "tests/test_guardrails_v24.py::test_b7_static_signal_arity_check": "6eb117882bfd",
+    "tests/test_guardrails_v24.py::test_b8_static_thread_write_check": "8941201fa6ac"
   }
 }

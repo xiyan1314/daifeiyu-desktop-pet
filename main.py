@@ -73,7 +73,10 @@ def run():
     # 坑②：flag 只用来表达"我是被拉起的"，进 Qt 之前摘掉
     if pet_guard.RESTART_FLAG in sys.argv:
         sys.argv.remove(pet_guard.RESTART_FLAG)
-    launched = pet_guard.is_guard_launch()
+    # 2026-10-18（第 12 轮清账）：此处原有一行 `launched = pet_guard.is_guard_launch()` ——
+    # 全文件**无人读**（没进日志、没进判定）。死变量已删：要么用它、要么不写。
+    # 判定能力本身还在 pet_guard（tests/test_guard_v2110.py 直接钉着它）；
+    # 重启标记已在上面摘掉，这里不需要再认一次"我是不是被拉起的"。
 
     marker_file = pet_guard.marker_path(APP_DIR)
     marker = pet_guard.load_marker(marker_file)

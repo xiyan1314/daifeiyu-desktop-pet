@@ -27,7 +27,7 @@ except Exception:
 import pet_chat  # noqa: E402
 import pet_io  # noqa: E402
 import pet_tools  # noqa: E402
-from _mutate_lib import repo_fingerprint, shadow, write_results  # noqa: E402
+from _mutate_lib import pinned_ast_map, repo_fingerprint, shadow, write_results  # noqa: E402
 
 
 # ---------------- 变体定义 ----------------
@@ -140,6 +140,19 @@ def _child(case):
     return 1
 
 
+GUARD_TEST_FILE = "tests/test_guardrails_v24.py"
+
+
+def _pinned_nodeids():
+    """证据要钉的 nodeid（同一用例的多条变异只算一次）—— 供 pinned_ast 记用例体摘要。"""
+    out = []
+    for key in ("a1", "a2", "a3", "a4", "a5c", "a5r", "a6", "b7", "b8"):
+        nid = GUARD_TEST_FILE + "::" + MUTATIONS[key][0]
+        if nid not in out:
+            out.append(nid)
+    return out
+
+
 def _driver():
     """驱动器：影子副本里逐条跑子进程（真实仓库只读，只写运行锁与结果 JSON）。"""
     import subprocess
@@ -172,7 +185,11 @@ def _driver():
                   "护栏能真失败自检（tests/test_guardrails_v24.py 的用例 / 定向变异）", results,
                   {"script": "_dev/verify_guardrails_can_fail.py",
                    "note": "变异只在 %TEMP% 影子副本里做，真实仓库只读（只写 _dev/.mutation.lock）",
-                   "repo_fingerprint": repo_fingerprint(real)})
+                   "repo_fingerprint": repo_fingerprint(real),
+                   # V1（第 12 轮清账）：补 pinned 用例体摘要 —— 这份证据此前是发布门
+                   # 「还没有 pinned_ast 段」点名的那 2 份之一（用例体被清空而 nodeid 不动时，
+                   # 文件指纹与 nodeid 体检都看不见，那条变异会静默失效）。
+                   "pinned_ast": pinned_ast_map(real, _pinned_nodeids())})
     return 1 if bad else 0
 
 

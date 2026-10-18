@@ -29,7 +29,7 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from _mutate_lib import last_line, repo_fingerprint, run_pytest, shadow  # noqa: E402
+from _mutate_lib import last_line, pinned_ast_map, repo_fingerprint, run_pytest, shadow  # noqa: E402
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 # 命名随仓里的 .gitignore 白名单（_dev/results_*.json 入库，其余 _dev/* 忽略）
@@ -243,8 +243,12 @@ def main():
         print("  " + ln)
     payload = {"title": "v2.5.2 分片判据去墙钟化：快机器不假红 + 牙齿", "results": results,
                "note": "变异/插桩只在 %TEMP% 影子副本里做，真实仓库只读（只写 _dev/.mutation.lock）",
-               "repo_fingerprint": repo_fingerprint(ROOT)}
-    with open(RESULT_JSON, "w", encoding="utf-8") as f:
+               "repo_fingerprint": repo_fingerprint(ROOT),
+               # V1（第 12 轮清账）：补 pinned 用例体摘要 —— 这份证据此前是发布门
+               # 「还没有 pinned_ast 段」点名的那 2 份之一（本驱动钉的就是 ALL3 那三条）。
+               "pinned_ast": pinned_ast_map(ROOT, ALL3)}
+    # C-40 同族（第 12 轮清账）：不传 newline= 时 Windows 把 "\n" 翻成 CRLF，本仓是纯 LF。
+    with open(RESULT_JSON, "w", encoding="utf-8", newline="") as f:
         json.dump(payload, f, ensure_ascii=False, indent=2)
         f.write(chr(10))
     print("结果已写：%s" % os.path.relpath(RESULT_JSON, ROOT))

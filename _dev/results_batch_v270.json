@@ -425,5 +425,14 @@
     "tests/test_import_thread.py": "1c6fc2ec5d05"
   },
   "fingerprint_moved": [],
+  "addendum": {
+    "added_at": "2026-10-18",
+    "by": "第 12 轮清账（交接 2026-10-17-2359 §3.2-4）",
+    "target": "mutations_agent_c_v280.json",
+    "observed": "整批里这一项 rc=2：基线在 %TEMP% 影子副本里崩溃（tail 停在 runpy 的 _run_module_as_main 行），不是变异逃逸，也不是判据失效。",
+    "followup": "按 _dev/README.md 重跑该 spec（python -B _dev/mutate_check.py _dev/mutations_agent_c_v280.json）→ mutations_agent_c_v280.json 的 results 段记 97 total / 97 caught / 0 not_caught / 0 blocked（checked_at 2026-10-17 16:56:54），且带 pinned_ast。",
+    "verdict": "环境性基线崩溃，判据侧无欠账（闭合）。",
+    "why_history_kept": "上面的 failed 列表与逐项 rc 是那一次整批的原始读数，不改 —— 记录的是当时的事实，追加不复写。"
+  },
   "note": "全部在 %%TEMP%% 影子副本里跑；真仓只写 _dev/.mutation.lock 与结果 JSON"
 }
