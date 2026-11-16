@@ -56,6 +56,7 @@ from PySide6.QtWidgets import (
 )
 
 import pet_log
+import pet_easter  # v2.12.0（第 12 轮 C · E1）：彩蛋判定（纯逻辑，无 Qt）
 import pet_motion  # v2.11.0 第 9 轮（A1）：动效令牌表（纯常量 + 纯函数，单一来源）
 import pet_physics
 import pet_voice
@@ -1280,6 +1281,15 @@ class PetWindow(QWidget):
         self.idle_timer = QTimer(self)
         self.idle_timer.timeout.connect(self._gslot('idle_tick', self.actions.idle_tick))
         self.idle_timer.start(15000)  # 随机小动作（跳/zzz）的节奏；不要调快，否则会变吵
+        # v2.12.0（第 12 轮 C · E1）：彩蛋状态。tracker 懒建（第一次判定才建，构造期零成本）；
+        # 角落停留要 2s 一采样（8s 阈值，用 15s 的 idle_timer 采样会拖到 15s 才响）。
+        self._easter = None
+        self._easter_loaded = False
+        self._corner_since = None
+        self.easter_timer = QTimer(self)
+        self.easter_timer.timeout.connect(self._gslot('easter.corner', self._easter_corner_sample))
+        if self.cfg.get("easter_eggs", True):
+            self.easter_timer.start(2000)
         # v2.1.8：待机**触发**用独立的高速检查（1s），让"无交互 N 秒"真正按时生效——
         # 此前靠上面 15s 的 tick 检查，配 8s 实际要等 15~23s（用户反馈"待机修得不够好"）。
         self._idle_check_timer = QTimer(self)
@@ -3329,6 +3339,90 @@ class PetWindow(QWidget):
             self._show_emote(self._last_emote_kind)  # 头顶表情随新窗口尺寸重排
 
     # ---------- 阶段1：帧动画与状态 ----------
+    # ---------- v2.12.0（第 12 轮 C · E1）：惊喜彩蛋 ----------
+    # 彩蛋只做「台词 + 表情」两种表现（v1 不做屏幕震动）。四类触发的判定全在 pet_easter，
+    # 这里只负责：取 tracker → 判 → 落盘 → 演。
+    _EASTER_EMOTE = {"poke": "sparkle", "feed": "heart", "late": "zzz", "corner": "note"}
+    _EASTER_LINES = {
+        "poke": "别戳了别戳了，本专员要报警了！",
+        "feed": "投喂三连……你是不是想把我养胖？",
+        "late": "这个点还不睡？行吧，本专员陪你熬。",
+        "corner": "在墙角蹲了八秒，你在找隐藏款吗？",
+    }
+
+    def _easter_tracker(self):
+        """懒建 tracker（只在第一次要判定时建，构造期零成本）。关掉开关 = 不建。"""
+        if self._easter is not None or self._easter_loaded:
+            return self._easter
+        self._easter_loaded = True
+        try:
+            enabled = bool(self.cfg.get("easter_eggs", True))
+            self._easter = pet_easter.EasterTracker(
+                state=self.cfg.get("easter_sent"), enabled=enabled)
+        except Exception as exc:
+            _log_error("easter init failed: %r" % (exc,))
+            self._easter = None
+        return self._easter
+
+    def _easter_save(self, tr):
+        try:
+            self.cfg["easter_sent"] = tr.to_cfg()
+            save_config(self.cfg)
+        except Exception as exc:
+            # 落盘失败不该让彩蛋反复骚扰：内存里已经记过 sent，这一次运行里不会再响。
+            _log_error("easter save failed: %r" % (exc,))
+
+    def _easter_check(self, kind, *args):
+        """唯一入口：返回触发的 kind 或 None。所有钩子都走它，保证「开关/每日/冷却」只有一份实现。"""
+        tr = self._easter_tracker()
+        if tr is None:
+            return None
+        fn = getattr(tr, "on_" + kind, None)
+        if fn is None:
+            return None
+        try:
+            hit = fn(*args)
+        except Exception as exc:
+            _log_error("easter %s failed: %r" % (kind, exc))
+            return None
+        if not hit:
+            return None
+        self._easter_save(tr)
+        try:
+            self._show_emote(self._EASTER_EMOTE.get(hit, "note"))
+            self.show_bubble(self._EASTER_LINES.get(hit, ""))
+        except Exception as exc:
+            _log_error("easter show failed: %r" % (exc,))
+        return hit
+
+    def _easter_corner_sample(self):
+        """角落停留采样（2s 一次）：连续在角上满 corner_sec 秒才算，离开即归零。"""
+        tr = self._easter_tracker()
+        if tr is None:
+            return
+        try:
+            g = self.frameGeometry()
+            scr = self._screen_geo(g.center())
+            if scr is None:
+                self._corner_since = None
+                return
+            now = time.monotonic()
+            radius = 48
+            cx, cy = g.center().x(), g.center().y()
+            near_x = abs(cx - scr.left()) <= radius or abs(cx - scr.right()) <= radius
+            near_y = abs(cy - scr.top()) <= radius or abs(cy - scr.bottom()) <= radius
+            if not (near_x and near_y):
+                self._corner_since = None
+                return
+            if self._corner_since is None:
+                self._corner_since = now
+                return
+            if now - self._corner_since >= float(tr.opts["corner_sec"]):
+                self._corner_since = None
+                self._easter_check("corner", tr.opts["corner_sec"])
+        except Exception as exc:
+            _log_error("easter corner failed: %r" % (exc,))
+
     def _take_walk_steps(self):
         """取走并清零"本 tick 推进了几帧"（root motion 的唯一输入）。
 
@@ -4755,6 +4849,7 @@ class PetWindow(QWidget):
             self.show_bubble(random.choice(["消化完啦，又饿了~", "瘦回来啦！", "还能再吃一点……"]))
 
     def feed(self, food):
+        self._easter_check("feed")  # v2.12.0（E1）：连喂彩蛋（判定在 pet_easter，这里只记一次）
         # v2.4.2（启动耗时 P2）：吃帧是延迟装载的三组之一，喂食前必须先补齐——否则
         # 下面读到的 anim._sets["eat"] 会是构造期注册的空集，喂食会错走"大笑表达"分支。
         # 补齐后指纹变了，_set_form 里的 _wire_anim_sets 会把真实吃帧注册进去。
@@ -5417,6 +5512,7 @@ class PetWindow(QWidget):
                 return  # P1-手感：飞行中不响应戳戳/摸摸头（落地静止后恢复）
             self._wake()
             self._touch_activity()  # v2.1：点击=交互（打断待机 + 两触发重新计时）
+            self._easter_check("poke")  # v2.12.0（E1）：连戳彩蛋（含开关/每日/冷却）
             self._drag_samples = []  # P1-手感：新一轮拖拽轨迹采样
             self._spring_vx = 0.0
             self._spring_vy = 0.0
@@ -6487,6 +6583,7 @@ class PetWindow(QWidget):
             self.mood.stop_all()
             self.balance.stop()
             for t in (self.idle_timer, self.walk_timer, self.cpu_timer, self.mood_timer,
+                      self.easter_timer,      # v2.12.0（E1）：角落停留采样
                       self._state_timer, self._drag_timer, self._digest_timer,
                       self._fly_timer, self._save_scale_timer, self._food_shown_timer,
                       self._hold_timer, self._pet_max, self._flight_timer,  # P1-手感

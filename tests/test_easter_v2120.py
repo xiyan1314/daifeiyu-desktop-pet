@@ -132,3 +132,51 @@ def test_bad_state_is_empty():
     tr = pet_easter.EasterTracker(now=lambda: _local(2026, 11, 16, 23, 10),
                                   state={"day": "x", "sent": ["late"], "last": "oops"})
     assert tr.on_hour(23) == "late"
+
+
+# ===================== 接线（v2.12.0 第 12 轮 · E1 四处钩子） =====================
+#
+# 纯逻辑绿了不等于功能存在：钩子没接，用户侧一个彩蛋都不会出现。下面几条钉住接线本身。
+# 能真失败：删掉任意一处 _easter_check(...) 调用 -> 对应断言红。
+
+
+def _src(name):
+    return open(os.path.join(HERE, name), encoding="utf-8").read()
+
+
+def test_hooks_are_wired_in_window():
+    src = _src("桌宠.py")
+    assert '_easter_check("poke")' in src, "点击钩子没接"
+    assert '_easter_check("feed")' in src, "喂食钩子没接"
+    assert '_easter_check("corner"' in src, "角落钩子没接"
+    assert "_easter_corner_sample" in src
+
+
+def test_late_hook_is_wired_in_idle_tick():
+    src = _src("pet_actions.py")
+    assert '_easter("late")' in src, "深夜钩子没接（idle_tick 里那句）"
+
+
+def test_corner_timer_respects_switch():
+    src = _src("桌宠.py")
+    i = src.index("self.easter_timer = QTimer(self)")
+    seg = src[i:i + 700]
+    assert 'self.cfg.get("easter_eggs", True)' in seg, "采样定时器必须受开关控制（关掉不该还在跑）"
+    assert "easter_timer.start(2000)" in seg
+    assert "self.easter_timer" in src, "退出时必须停掉（cleanup 那行）"
+
+
+def test_trigger_persists_to_cfg():
+    src = _src("桌宠.py")
+    i = src.index("def _easter_save")
+    seg = src[i:i + 400]
+    assert 'self.cfg["easter_sent"]' in seg, "触发后必须落盘（否则重启就重响）"
+    assert "save_config" in seg
+
+
+def test_trigger_is_silent_when_off():
+    src = _src("桌宠.py")
+    i = src.index("def _easter_tracker")
+    seg = src[i:i + 700]
+    assert 'self.cfg.get("easter_eggs", True)' in seg
+    assert "enabled=enabled" in seg

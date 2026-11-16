@@ -127,6 +127,11 @@ class ActionService:
     def idle_tick(self):
         pet = self.pet
         cfg = self._cfg()
+        # v2.12.0（第 12 轮 C · E1）：深夜彩蛋——挂在 idle_tick 上（15s 一次），
+        # 不开新定时器；判定本身有"每天一次 + 全局冷却"，多问几次不花钱。
+        _easter = getattr(pet, "_easter_check", None)
+        if _easter is not None:
+            _easter("late")
         if pet.busy or pet._petting:
             return  # 摸摸头期间不跳不发 zzz（S3 修复）
         if pet._sleeping:
