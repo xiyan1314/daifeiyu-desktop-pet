@@ -4,6 +4,43 @@
 > 发布节奏：v1.5.x 每批按「三轮审查 → 全面检查 → 绿色版检测 → Release」流水线交付。
 > v1.3.0 起才有逐版说明；更早的 v1.0 / v1.2.0 见 git 历史（bfb1aa6 / 35e9d1a）。
 
+## v2.13.0（2026-11-16）
+
+主题：**体积与暴露面**——解压体积 309.5 → 123.4 MiB（条目 3890 → 982）· 一级菜单 18 → 9 · 素材热重载 · README 首屏 GIF · `gallery/` 第 1 个官方包 · 首启 0 弹窗 · 崩溃自恢复端到端验收；另把 6 条只守形状的判据换成 AST（遗留-13）。
+
+> **版本号五处已升到 `2.13.0`**：`桌宠.py:91` 的 `VERSION` · `version_info.txt` 四行 · `_verify_green.py:49` · 本节标题 · `_release_notes_v2130.md` 标题。
+> 作业单：`_dev/task_r13_v2130_round.md`。判据：`tests/test_menu_v2130.py` · `tests/test_pack_v2130.py` · `tests/test_hotreload_v2130.py` · `tests/test_face_v2130.py` · `tests/test_round13_accept_v2130.py` · 遗留-13 落在 `tests/test_easter_v2120.py` / `tests/test_firstrun_v2120.py`。
+
+**① 体积与暴露面（本次头条）**
+
+- **打包白名单单一来源**：`_check_release.PACK_TOP_ALLOWED`（发布包顶层**穷举**）+ `PACK_PRUNE_DIRS / PY_KEEP / DLL_KEEP / PACK_KEEP`；新增发布门 `check_pack()`：**解压 ≤150 MiB · 条目 ≤1300 · 顶层越界红 · 瘦身清单命中红 · 保留项缺失红**。
+- **瘦身脚本** `_dev/prune_green.py`（先副本后真包）：删 PySide6 的 `qml/`（2519 文件）· `resources/`（WebEngine `.pak`）· 未用绑定/DLL/Qt 开发工具/类型桩 · `glue/ metatypes/ typesystems/ scripts/ support/ doc/ lib/ QtAsyncio/` · `Lib/distutils`。
+- **明令保留** `opengl32sw.dll`（19.7 MB）与 `avcodec-61.dll`（13.4 MB）；**QtNetwork 也必须留**（QtMultimedia 抽帧在 C++ 侧动态 import，删了 `_verify_green.py` 当场红——实测）。
+- 绿色版目录：**982 files / 123.4 MiB**（删掉 2923 files / 171.9 MiB）；瘦身后 `_verify_green.py` 在本机 **0 FAILS**。
+
+**② 一级菜单 18 → 9（只搬家，不删功能）**
+
+`💭 和它说话 · 🍖 喂食 · 🐟 角色 · 💰 记账 · 📦 资源管理 · ⚙️ 设置… · 🎭 动作 · ℹ️ 更多 · ⏹ 退出`
+余额/今日已用信息行收进「💰 记账」（只读首行）；置顶/音效/AI 对话/甩抛物理收进「⚙️ 设置…」第一组；夸夸/天气/城市/系统状态/关于收进「ℹ️ 更多」。两处硬断言（`_verify_green.py` / `_verify_v13.py`）与 4 条用例同步收紧到 **≤9**，另有 `tests/test_menu_v2130.py` 钉住"恰好 9 条 + 搬家后每条都还能触发"。
+
+**③ 素材热重载（Clover Shimeji 口径）**
+
+新模块 `pet_hotreload.py`（**纯逻辑、零 Qt**）：文件签名 = `mtime_ns + size`，`Watcher.prime/poll` 返回"自上次以来变了哪些"；窗口侧 2s 一拍，**只在待机态**重载贴图/状态图/帧集/音效（忙或非 idle 就等下一拍）。监听面 = 内置 `assets/` + 根级 `character*.png`；**用户角色文件不自动重读**（避免读到编辑到一半的半成品，角色切换走既有 `apply_role`）。
+
+**④ 门面**
+
+- `docs/demo.gif`：320×320 / 17 帧（10 idle + 7 eat，真实素材，不画新图），README 中英首屏引用。
+- `gallery/official_abyss.dfypet.zip` + 预览图：官方「深渊大肥鱼」，由内置 assets **色相旋转派生**（§16：不引外部素材）；生成脚本 `_dev/build_gallery_pack_v2130.py`，产物过 `pet_export.validate_bundle`。README 画廊表两处新增一行。
+
+**⑤ 两条验收（此前没有统一读数）**
+
+- **首启 0 弹窗**：真窗口跑 3.1s，`QMessageBox` 四个静态入口 + `QMessageBox.exec` + `QDialog.exec` 全程 0 次；D1 引导仍只走一条气泡且落盘。
+- **崩溃自恢复**：真跑 `main.py`（替身第一次 `SystemExit(3)`）→ 守护**拉起恰好一次** → 替身第二次正常返回即停；`crash_recovery.json` 落盘。此前只有 `pet_guard` 的纯逻辑判据。
+
+**⑥ 遗留-13：6 条只守形状的判据换 AST**
+
+`test_easter_v2120.py` 的 5 条 + `test_firstrun_v2120.py` 的 1 条：此前读源码字符串，**把调用注释掉仍然绿**（独立验收 X1 实测）。现在读 AST（注释天然不进语法树），影子副本实测 **8 个变异全部 RED**。
+
 ## v2.12.0（2026-11-16）
 
 主题：**收尾**——root motion（帧驱动位移 + 边界夹紧）· 遗留-1（入口链收口到 `main.py`）· UX 三小项（D1 首次引导 / E1 四类彩蛋 / D2 菜单悬停预览）· 事件分档。

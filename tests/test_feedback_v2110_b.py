@@ -550,7 +550,7 @@ def test_菜单开关的勾选会调到A的方法(pet, ui, monkeypatch):
 
 
 def test_无障碍开关在设置子菜单里_不在顶层(pet, ui, monkeypatch):
-    """硬约束（A 点出来的）：顶层菜单有 <=18 项断言——开关必须落在「设置…」子菜单里。"""
+    """硬约束（v2.13.0 收紧到 <=9）：开关必须落在「设置…」子菜单里，一条都不许加顶层。"""
     captured = {}
 
     class _CapMenu(QMenu):
@@ -565,7 +565,7 @@ def test_无障碍开关在设置子菜单里_不在顶层(pet, ui, monkeypatch)
     pet.menu_builder.open(QPoint(10, 10))
     top = captured.get("top") or []
     sub = captured.get("set") or []
-    assert len(top) <= 18, "顶层菜单超了 18 项：%d" % (len(top),)
+    assert len(top) <= 9, "顶层菜单超了 9 项：%d" % (len(top),)
     assert "🌊 减少动效" in sub and "🔲 高对比度" in sub, sub
     assert "🌊 减少动效" not in top and "🔲 高对比度" not in top, top
 

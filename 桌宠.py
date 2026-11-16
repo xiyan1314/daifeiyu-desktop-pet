@@ -88,7 +88,7 @@ from pet_plugin_host import PluginHost as _PluginHost  # v2.5.1：PetHub 插件�
 
 
 APP_NAME = "大肥鱼桌宠"
-VERSION = "2.12.0"
+VERSION = "2.13.0"
 PAD = 1.25  # 窗口相对角色的透明边距（为压扁/回弹预留空间）
 IDLE_FRAME_MS = 140      # 待机帧间隔
 IDLE_FORM_HOLD_SECS = 8  # v2.1.3：只有形态、没有动作可播时的展示期上限（到期回用户形态）
@@ -152,10 +152,14 @@ _MONEY_FRAME_COUNT = 86
 _MONEY_FRAME_PREFIX = "money"
 SLEEP_AFTER_SECONDS = 60 # 无交互多久入睡
 STATE_DURATION_MS = 2500 # 状态图默认展示时长
+# v2.13.0（第 13 轮 · 素材热重载）：2s 一拍看内置素材的文件签名（改了就不用重启）。
+ASSET_WATCH_INTERVAL_MS = 2000
 # 跟随/散步行走参数（v1.4.2 降速档）实现迁至 pet_wander：此处保留模块级名字（tests/v13 依赖）
 from pet_wander import WALK_INTERVAL_MS, WALK_EASE, WALK_STEP_MIN, WALK_STEP_MAX, _walk_step  # noqa: E402,F401
 # v2.12.0（第 12 轮 · D1 首次引导）：纯逻辑模块（判定/落盘/展示三段可注入，零 Qt）
 import pet_first_run  # noqa: E402
+# v2.13.0（第 13 轮 · 素材热重载）：纯逻辑模块（文件签名/变更判定，零 Qt）
+import pet_hotreload  # noqa: E402
 SOUND_KIND_MAP = {"boing": "press", "pop": "release", "feed": "feed"}
 
 
@@ -1176,6 +1180,15 @@ class PetWindow(QWidget):
         # ---- 阶段3：音频（参考项目 WAV + 合成回退）----
         pet_audio.init(os.path.join(resource_dir("assets"), "sounds"))
         self._apply_sound_group()  # v1.3：自定义音效组
+
+        # ---- v2.13.0（第 13 轮 · 素材热重载）----
+        # 2s 看一眼内置素材的签名（mtime_ns + size）。变了就重载贴图/帧集/音效，不用重启。
+        # 忙 / 吃帧时这一拍跳过（下一拍再说），避免把正在播的吃帧状态打断。
+        self._asset_watch = self._build_asset_watch()
+        self._asset_watch_timer = QTimer(self)
+        self._asset_watch_timer.setInterval(ASSET_WATCH_INTERVAL_MS)
+        self._asset_watch_timer.timeout.connect(self._gslot("assets.hot", self._hot_reload_tick))
+        self._asset_watch_timer.start()
 
         self.scale = 1.0
         self.squash_x = 1.0
@@ -3348,6 +3361,57 @@ class PetWindow(QWidget):
             pass  # 有意忽略：托盘图标更新失败不影响主窗口显示
         if self.emote_item.isVisible() and getattr(self, "_last_emote_kind", None):
             self._show_emote(self._last_emote_kind)  # 头顶表情随新窗口尺寸重排
+
+    # ---------------- v2.13.0（第 13 轮 · 素材热重载） ----------------
+    # 监听面 = 内置 assets/ 全树 + 根级 character*.png。**不含用户角色文件**：
+    # 那是用户数据，编辑到一半的半成品 PNG 不该被自动读进来（角色切换走 apply_role 重载）。
+    _ASSET_ROOT_FILES = ("character.png", "character_front.png",
+                         "character_full.png", "character_full_front.png")
+
+    def _build_asset_watch(self):
+        """构造监听器并起基线（v2.13.0 · 第 13 轮）。
+
+        和 _build_fs_watch 同一个理由：__init__ 只留"装配"，pet_xxx 的构造不直接写在
+        __init__ 里（tests/test_services_registry_v250.py 钉着那条架构口径）。
+        """
+        watcher = pet_hotreload.Watcher(self._asset_watch_paths)
+        watcher.prime()
+        return watcher
+
+    def _asset_watch_paths(self):
+        """当前监听面（每次 poll 现算：换盘/换素材根后自动跟随）。"""
+        root = app_dir()
+        return pet_hotreload.collect_assets(
+            resource_dir("assets"),
+            [os.path.join(root, name) for name in self._ASSET_ROOT_FILES])
+
+    def _hot_reload_tick(self):
+        """素材变了就重载，返回是否真的重载了（供判据/日志）。"""
+        # 只在"真的在待机"时重载：走路/表情/睡觉/吃帧/变身中途换贴图会把状态机搅乱，
+        # 等下一次待机再重载（素材又不会跑）。
+        if self.busy or getattr(self, "anim_mode", "") not in ("idle", "form_idle", ""):
+            return False
+        try:
+            changed = self._asset_watch.poll()
+        except Exception as exc:  # noqa: BLE001
+            _log_error("asset watch poll: %r" % (exc,))
+            self._asset_watch.prime()
+            return False
+        if not changed:
+            return False
+        try:
+            # 音效：init 是幂等的（重扫 + 重建效果器），与启动同一条路径。
+            pet_audio.init(os.path.join(resource_dir("assets"), "sounds"))
+            # 默认帧集的"解过没有"标记全部作废，_play_idle 会按需重解（延迟装载不变）。
+            for key in list(self._frames_loaded):
+                self._frames_loaded[key] = False
+            self._wire_key = None
+            self._reload_sprites()      # 贴图 / 状态图 / 尺寸 / 帧集 / 起播
+            self.show_bubble("素材已重新加载~")
+        except Exception as exc:  # noqa: BLE001
+            _log_error("asset hot reload: %r" % (exc,))
+            return False
+        return True
 
     # ---------- 阶段1：帧动画与状态 ----------
     # ---------- v2.12.0（第 12 轮 C · E1）：惊喜彩蛋 ----------

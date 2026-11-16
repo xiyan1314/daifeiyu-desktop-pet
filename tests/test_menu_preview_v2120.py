@@ -421,7 +421,7 @@ def test_two_settings_toggles_exist_and_read_effective_values():
     - 删掉 `egg_act` / `hover_act` 的任一入口 → 找不到 action；
     - 设成 `setCheckable(False)` 或把 `toggled` 接错方法 → 触发后 spy 对不上；
     - 勾选态硬编码（不读 cfg）→ cfg=False/True 下的勾选态反了；
-    - 把入口加到**顶层** → 顶层名单里出现且超 18 项。
+    - 把入口加到**顶层** → 顶层名单里出现且超 9 项。
     """
     pet = _MenuPet({"easter_eggs": False, "menu_hover_preview": True})
     acts, _settings, top = _settings_actions(pet)
@@ -434,9 +434,9 @@ def test_two_settings_toggles_exist_and_read_effective_values():
     assert hover.isChecked() is True, "cfg menu_hover_preview=True 却显示为未勾选"
 
     top_texts = [a.text() for a in top if a.text()]
-    assert "🎁 惊喜彩蛋" not in top_texts, "彩蛋开关不许加到顶层（硬上限 18 项）"
-    assert "👀 菜单悬停预览" not in top_texts, "悬停预览开关不许加到顶层（硬上限 18 项）"
-    assert len(top_texts) <= 18, "顶层菜单超了 18 项：%d" % (len(top_texts),)
+    assert "🎁 惊喜彩蛋" not in top_texts, "彩蛋开关不许加到顶层（硬上限 9 项）"
+    assert "👀 菜单悬停预览" not in top_texts, "悬停预览开关不许加到顶层（硬上限 9 项）"
+    assert len(top_texts) <= 9, "顶层菜单超了 9 项：%d" % (len(top_texts),)
 
     assert pet.toggled_calls == [], "建菜单就调了 setter（应只在用户点击时落盘）"
     egg.trigger()

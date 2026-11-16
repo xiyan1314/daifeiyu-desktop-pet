@@ -46,7 +46,7 @@ main.USAGE_PATH = os.path.join(_tmp, "usage.json")
 main.MEMORY_PATH = os.path.join(_tmp, "memory.json")  # P1-6：记忆文件同样隔离到临时目录
 main.pet_log.set_data_dir(_tmp)  # P0-2：pet_* 直连日志同样隔离
 
-check("green version", main.VERSION == "2.12.0", main.VERSION)
+check("green version", main.VERSION == "2.13.0", main.VERSION)
 
 from PySide6.QtWidgets import QApplication  # noqa: E402
 
@@ -83,7 +83,7 @@ try:
         if isinstance(obj, _Menu) and getattr(obj, "_captured", None) is not None:
             top = [a.text() for a in obj._captured if a.text()]
             break
-    check("menu compact", len(top) <= 18, "top=%d" % len(top))
+    check("menu compact", len(top) <= 9, "top=%d" % len(top))  # v2.13.0：18 → 9（体积与暴露面）
     check("menu has slider", any(isinstance(a, main.QWidgetAction)
                                   for a in gc.get_objects() if isinstance(a, main.QWidgetAction)))
 finally:

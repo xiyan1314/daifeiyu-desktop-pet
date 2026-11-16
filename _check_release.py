@@ -74,6 +74,8 @@ SYNC_FILES = ["桌宠.py", "main.py", "pet_actions.py", "pet_ai.py", "pet_alarm.
               # v2.12.0（三审 P1-10）：事件分档表（README「打扰还是陪伴」的机器可读版本）。
               # 它不被产品码 import（只被判据与文档引用），所以反向校验抓不到 → 必须手写进来。
               "pet_events.py",
+              # v2.13.0（第 13 轮）：素材热重载的纯逻辑（桌宠.py import 它，漏了必 ImportError）
+              "pet_hotreload.py",
               "README.md", "README.en.md", "LICENSE", VBS_NAME]
 
 # 用户运行时数据（绿色版目录与发布包里都不该有）
@@ -162,6 +164,112 @@ ZIP_EXTRA_NAMES = {"_verify_green.py", "_check_release.py", "_check_static.py", 
 # 此前只有 _verify_assets/ 一条前缀黑名单拦不住 → 补 "_dev/"。（SYNC_FILES **不要**加
 # _dev/ 里的报告文件：绿色版目录里没有它们，会让 check_sync 假红。）
 ZIP_EXTRA_PREFIX = ("_verify_assets/", "_dev/")
+
+
+# ---------------- v2.13.0（第 13 轮 · 体积与暴露面）：打包白名单 + 瘦身清单 ----------------
+# **唯一来源**：`_dev/prune_green.py`（绿色版瘦身脚本）与 `check_pack()`（发布门）都读这里，
+# 不许在别处手抄第二份清单。
+#
+# 为什么是"白名单"而不是"排除表"（做法参照 plan §26.1 的 SnowLuma release.json entry 白名单）：
+# 排除表漏了一条没人知道；白名单多出来一条 = 发布门当场红。
+PACK_CAP_BYTES = 150 * 1024 * 1024      # 解压后总量上限：150 MiB
+PACK_CAP_FILES = 1300                  # 解压后条目数上限
+PACK_KEEP = ("opengl32sw.dll", "avcodec-61.dll")   # §23.4 明令保留的两个大件
+# 发布包顶层允许出现的名字（**穷举**）。新增顶层文件/目录必须同时改这里 + 说明为什么。
+PACK_TOP_ALLOWED = frozenset([
+    "DLLs", "LICENSE", "Lib", "README.en.md", "README.md", "assets", "main.py",
+    "pet_actions.py", "pet_ai.py", "pet_alarm.py", "pet_anim.py", "pet_audio.py",
+    "pet_backup.py", "pet_balance.py", "pet_behaviors.py", "pet_book.py", "pet_chat.py",
+    "pet_config.py", "pet_dialogs.py", "pet_easter.py", "pet_events.py", "pet_export.py",
+    "pet_first_run.py", "pet_fx.py", "pet_guard.py", "pet_hotreload.py", "pet_io.py", "pet_lines.py",
+    "pet_log.py", "pet_main.py", "pet_menu.py", "pet_mood.py", "pet_motion.py",
+    "pet_notify.py", "pet_physics.py", "pet_plugin.py", "pet_plugin_host.py",
+    "pet_plugin_index.py", "pet_resources.py", "pet_screen.py", "pet_services.py",
+    "pet_time_mood.py", "pet_tools.py", "pet_voice.py", "pet_wander.py", "pet_weather.py",
+    "pet_widgets.py", "pet_windows.py", "plugins", "python.exe", "python3.dll",
+    "python310.dll", "pythonw.exe", "vcruntime140.dll", "vcruntime140_1.dll",
+    "version_info.txt", "启动桌宠.vbs", "桌宠.py",
+])
+# 绿色版瘦身：PySide6 里产品**不用**的开发件 / 绑定 / 资源（删前先确认全仓引用为 0）。
+# 判据（test_pack_v2130.py）会反向钉住：被删的模块不许在源码里被 import。
+PACK_PRUNE_DIRS = (
+    "Lib/site-packages/PySide6/qml",          # 23.9 MB / 2519 files，全仓无 QML
+    "Lib/site-packages/PySide6/resources",    # 101.4 MB，WebEngine 的 pak，全仓零引用
+    "Lib/site-packages/PySide6/metatypes",    # 2.5 MB，Qt 元类型（开发期用）
+    "Lib/site-packages/PySide6/typesystems",  # 0.8 MB
+    "Lib/site-packages/PySide6/glue",         # 0.2 MB
+    "Lib/site-packages/PySide6/scripts",      # 0.3 MB（qml 工具脚本）
+    "Lib/site-packages/PySide6/support",
+    "Lib/site-packages/PySide6/doc",
+    "Lib/site-packages/PySide6/QtAsyncio",
+    "Lib/site-packages/PySide6/lib",
+    "Lib/distutils",                          # 0.6 MB，Python 3.10 已废弃
+)
+# 产品真 import 的四个绑定（grep "from PySide6" 的现状；其余 .pyd 一律删）。
+PACK_PY_KEEP = ("QtCore", "QtGui", "QtWidgets", "QtMultimedia", "QtNetwork")
+# 与上面四个绑定配套的 Qt DLL；其余 Qt6*.dll 一律删（Qt6Network 是 QtMultimedia 的依赖）。
+PACK_DLL_KEEP = ("Qt6Core.dll", "Qt6Gui.dll", "Qt6Widgets.dll", "Qt6Multimedia.dll",
+                 "Qt6Network.dll", "Qt6OpenGL.dll", "Qt6Svg.dll",
+                 "Qt6OpenGLWidgets.dll", "Qt6SvgWidgets.dll")
+
+
+def pack_prune_hits(names):
+    """发布包条目名 → 命中了瘦身清单（该删却还在）的名字列表。"""
+    hits = []
+    for n in names:
+        if any(n == d or n.startswith(d + "/") for d in PACK_PRUNE_DIRS):
+            hits.append(n)
+            continue
+        prefix = "Lib/site-packages/PySide6/"
+        if not n.startswith(prefix):
+            continue
+        rest = n[len(prefix):]
+        base = rest.rsplit("/", 1)[-1]
+        if "/" not in rest and (base.endswith(".pyi") or base.endswith(".exe")):
+            hits.append(n)                       # 类型桩 / Qt 开发工具
+        elif "/" not in rest and base.endswith(".pyd") and base[:-4] not in PACK_PY_KEEP:
+            hits.append(n)                       # 未用绑定
+        elif "/" not in rest and base.startswith("Qt6") and base.endswith(".dll")                 and base not in PACK_DLL_KEEP:
+            hits.append(n)                       # 未用 Qt DLL
+        elif "/" not in rest and base == "pyside6qml.abi3.dll":
+            hits.append(n)
+    return hits
+
+
+def pack_stats(zip_path):
+    """(条目数, 解压字节数, 顶层名字集合)；不解压。"""
+    with zipfile.ZipFile(zip_path) as z:
+        infos = [i for i in z.infolist() if not i.is_dir()]
+    return (len(infos), sum(i.file_size for i in infos),
+            frozenset(i.filename.split("/")[0] for i in infos))
+
+
+def check_pack(zip_path):
+    """v2.13.0 体积与暴露面：白名单 + 体积/条目上限 + 瘦身清单 + 保留项。"""
+    fails = []
+    try:
+        count, total, tops = pack_stats(zip_path)
+    except Exception as e:
+        return ["发布包体积检查跑不起来：%r" % (e,)]
+    if count > PACK_CAP_FILES:
+        fails.append("发布包条目数 %d 超上限 %d（解压后文件数）" % (count, PACK_CAP_FILES))
+    if total > PACK_CAP_BYTES:
+        fails.append("发布包解压体积 %.1f MiB 超上限 %.0f MiB"
+                     % (total / 1048576.0, PACK_CAP_BYTES / 1048576.0))
+    extra = sorted(tops - PACK_TOP_ALLOWED)
+    if extra:
+        fails.append("发布包顶层出现白名单外的条目（新目录/未登记文件会悄悄进包）：%s"
+                     % ", ".join(extra))
+    with zipfile.ZipFile(zip_path) as z:
+        names = [i.filename for i in z.infolist() if not i.is_dir()]
+    hits = pack_prune_hits(names)
+    if hits:
+        fails.append("发布包里还有 %d 个该删的开发件（瘦身清单命中）：%s"
+                     % (len(hits), ", ".join(sorted(hits)[:8])))
+    for keep in PACK_KEEP:
+        if not any(n == keep or n.endswith("/" + keep) for n in names):
+            fails.append("发布包缺保留项（§23.4 明令保留）：%s" % keep)
+    return fails
 
 # v2.4（M3）：绿色版**根目录**不许留下的开发脚本（_dev/ 里的同名前缀脚本不算——
 # 那是绿色版的开发目录，按设计存在）。实测真包根目录混进过 repro_quiet.py。
@@ -1314,6 +1422,14 @@ def main():
     if os.path.isfile(zip_path):
         print("[3] 发布包：%s" % zip_path)
         fails += check_zip(zip_path, version)
+        # v2.13.0（第 13 轮 · 体积与暴露面）：体积/条目/白名单/瘦身清单，四件事一起看。
+        try:
+            _cnt, _bytes, _ = pack_stats(zip_path)
+            print("[3b] 包体积：%d 条目 / %.1f MiB（上限 %d / %.0f MiB）"
+                  % (_cnt, _bytes / 1048576.0, PACK_CAP_FILES, PACK_CAP_BYTES / 1048576.0))
+        except Exception:
+            pass  # 有意忽略：check_pack 会给出具体失败原因
+        fails += check_pack(zip_path)
     else:
         fails.append("发布包不存在：%s" % zip_path)
     if fails:

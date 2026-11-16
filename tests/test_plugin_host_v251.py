@@ -840,7 +840,7 @@ def test_菜单入口在设置子菜单里_顶层项数不超上限(pet_window):
         return out
 
     top = [a.text() for a in captured._captured if a.text()]
-    assert len(top) <= 18, "顶层菜单项超上限（v13 的硬断言）：%d 项" % len(top)
+    assert len(top) <= 9, "顶层菜单项超上限（v2.13.0 的硬断言）：%d 项" % len(top)
     assert "🧩 插件管理…" not in top, "插件入口跑到顶层菜单去了（必须在设置子菜单里）"
     assert "🧩 插件管理…" in _texts(captured._captured), "菜单里没有插件入口"
     settings = [a for a in captured._captured if a.text().startswith("⚙️")]

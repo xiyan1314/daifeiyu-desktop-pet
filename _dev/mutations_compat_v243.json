@@ -60,7 +60,7 @@
       "id": "M-C5",
       "why": "README 的 桌宠.py 函数数字改错（此前那行没有任何用例看着） **v2.11.0 第 9 轮重锚（代理 C）**：本轮 桌宠.py 函数数 255 → **291**（README.md / README.en.md 已同步；pet_dialogs.py 现值 398），旧锚点命中 0。**原意不变**（README 的函数数字必须被用例看着，test_readme_annotation_scope_matches_the_code 会红）。⚠ 该数字随本轮改动还会漂：**每次改 桌宠.py / pet_dialogs.py 都要回来同步 README 与这条锚点**。 ｜ 重锚（本轮）：源码改过 → 旧锚点命中 0；锚点已挪到**同一处代码**的新写法上，改坏的语义与强度一字未变，`new` 未动。**2026-10-16 晚重锚（dsh-main-r11）**：README 的 桌宠.py 函数数 294 → **291**（2026-10-16 用户裁决撤销悬停光晕/按下描边 → 桌宠.py 净删 `_place_glow` / `_sync_hover_glow` / `_sync_press_outline` 三个方法；README.md 与 README.en.md 已同步）→ 旧锚点命中 0，锚点随 README 改成 291，`new`（999）未动，**原意不变**。",
       "file": "README.md",
-      "old": "`桌宠.py`（313 函数）",
+      "old": "`桌宠.py`（316 函数）",
       "new": "`桌宠.py`（999 函数）",
       "tests": [
         "tests/test_round3_a_fixes.py::test_readme_annotation_scope_matches_the_code"
@@ -68,7 +68,7 @@
       "expect_fail": [
         "tests/test_round3_a_fixes.py::test_readme_annotation_scope_matches_the_code"
       ],
-      "note": "重锚历史（每一行都是当时的口径，别混着读）：254→255（v2.8.0）→ 294（v2.11.0 第 9 轮）→ 291（撤销悬停光晕/按下描边，净删 3 个方法）→ 311（第 12 轮加 root motion/彩蛋/分档）→ 313（2026-11-16 三审修复波：新增 _set_easter_eggs / _set_menu_hover_preview；README.md 与 README.en.md 已同步到 313）。"
+      "note": "重锚历史（每一行都是当时的口径，别混着读）：254→255（v2.8.0）→ 294（v2.11.0 第 9 轮）→ 291（撤销悬停光晕/按下描边，净删 3 个方法）→ 311（第 12 轮加 root motion/彩蛋/分档）→ 313（2026-11-16 三审修复波：新增 _set_easter_eggs / _set_menu_hover_preview；README.md 与 README.en.md 已同步到 313）→ **316（v2.13.0 第 13 轮：新增 _build_asset_watch / _asset_watch_paths / _hot_reload_tick；README.md 与 README.en.md 已同步到 316，锚点同步改 316，new 仍是 999）**。"
     },
     {
       "id": "M-C6",

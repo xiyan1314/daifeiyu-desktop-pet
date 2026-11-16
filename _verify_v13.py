@@ -1646,7 +1646,7 @@ def main_flow():
             return out
         texts = _all_texts(captured._captured)
         top = [a.text() for a in captured._captured if a.text()]
-        check("menu compact top-level", len(top) <= 18, "top=%d" % len(top))
+        check("menu compact top-level", len(top) <= 9, "top=%d" % len(top))  # v2.13.0：18 → 9
         check("menu all items", len(texts) >= 35, "count=%d" % len(texts))
         check("menu ledger item", any("账本" in t for t in texts))
         check("menu resource item", any("资源管理" in t for t in texts))

@@ -324,53 +324,129 @@ def _src(name):
     return open(os.path.join(HERE, name), encoding="utf-8").read()
 
 
+def _tree(name):
+    return ast.parse(_src(name))
+
+
+def _methods(tree):
+    return {n.name: n for n in ast.walk(tree) if isinstance(n, ast.FunctionDef)}
+
+
+def _const_str(node, value=None):
+    """node 是字符串常量（给了 value 时还要求字面量相等）。"""
+    return (isinstance(node, ast.Constant) and isinstance(node.value, str)
+            and (value is None or node.value == value))
+
+
+def _calls(node):
+    return [n for n in ast.walk(node) if isinstance(n, ast.Call)]
+
+
+# ⚠ 2026-11-16（第 13 轮 · 遗留-13）：下面五条**全部换成 AST**。此前读源码字符串，
+# 把调用注释掉照样绿（独立验收 X1 实测：_easter_check("poke") 改成注释 → rc=0）。
+# 注释天然不进语法树，所以 AST 判据对"注释可满足"这一类免疫。
+
+
 def test_hooks_are_wired_in_window():
-    """改什么会红：删掉 桌宠.py 里任意一处 _easter_check(...) 调用（poke 已实测）
-    → 对应断言红；删掉 _easter_corner_sample 方法 → 最后一条红。
+    """改什么会红：把任意一处 _easter_check("poke"/"feed"/"corner") 调用**注释掉**
+    （字还在注释里）→ 对应集合缺项 → 红；删掉 _easter_corner_sample 方法定义 → 红。
+
+    v2.12.0 旧版读源码字符串，注释掉仍然绿（遗留-13 的原始 bug）。
     """
-    src = _src("桌宠.py")
-    assert '_easter_check("poke")' in src, "点击钩子没接"
-    assert '_easter_check("feed")' in src, "喂食钩子没接"
-    assert '_easter_check("corner"' in src, "角落钩子没接"
-    assert "def _easter_corner_sample(self):" in src, "角落采样方法没定义"
+    tree = _tree("桌宠.py")
+    wired = set()
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call):
+            continue
+        fn = node.func
+        if not (isinstance(fn, ast.Attribute) and fn.attr == "_easter_check"):
+            continue
+        if node.args and _const_str(node.args[0]):
+            wired.add(node.args[0].value)
+    assert {"poke", "feed", "corner"} <= wired, "彩蛋钩子没接：缺 %r" % (
+        {"poke", "feed", "corner"} - wired,)
+    assert "_easter_corner_sample" in _methods(tree), "角落采样方法没定义"
 
 
 def test_late_hook_is_wired_in_idle_tick():
-    """改什么会红：删掉 pet_actions.py 的 idle_tick 里 _easter("late") → 红。"""
-    src = _src("pet_actions.py")
-    assert '_easter("late")' in src, "深夜钩子没接（idle_tick 里那句）"
+    """改什么会红：把 idle_tick 里那句 _easter("late") 注释掉/删掉 → 红；
+    把它挪出 idle_tick（挂到别处）→ 红（本条只认 idle_tick 函数体里的调用）。
+    """
+    tree = _tree("pet_actions.py")
+    fn = _methods(tree).get("idle_tick")
+    assert fn is not None, "pet_actions.py 里找不到 idle_tick"
+    hits = [c for c in _calls(fn)
+            if isinstance(c.func, ast.Name) and c.func.id == "_easter"
+            and c.args and _const_str(c.args[0], "late")]
+    assert hits, "深夜钩子没接（idle_tick 里那句 _easter(\"late\")）"
 
 
 def test_corner_timer_respects_switch():
-    """改什么会红：删掉起定时器前的 cfg 开关判断 → 关掉也照跑；删掉 start(2000) → 红。"""
-    src = _src("桌宠.py")
-    i = src.index("self.easter_timer = QTimer(self)")
-    j = src.index("self._idle_check_timer", i)
-    seg = src[i:j]
-    assert 'self.cfg.get("easter_eggs", True)' in seg, "采样定时器必须受开关控制"
-    assert "easter_timer.start(2000)" in seg
+    """改什么会红：删掉 start(2000) 外层的 cfg 开关 if → 红；
+    把开关判断挪到别处、start 无条件执行 → 红。
+    """
+    tree = _tree("桌宠.py")
+
+    def _is_eggs_read(test):
+        return any(isinstance(c, ast.Call) and isinstance(c.func, ast.Attribute)
+                   and c.func.attr == "get" and c.args and _const_str(c.args[0], "easter_eggs")
+                   for c in _calls(test))
+
+    ok = []
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.If) or not _is_eggs_read(node.test):
+            continue
+        for stmt in node.body:
+            for call in _calls(stmt):
+                if (isinstance(call.func, ast.Attribute) and call.func.attr == "start"
+                        and call.args and isinstance(call.args[0], ast.Constant)
+                        and call.args[0].value == 2000):
+                    ok.append(call.lineno)
+    assert ok, "采样定时器的 start(2000) 必须放在 cfg 的 easter_eggs 开关里"
 
 
 def test_trigger_persists_to_cfg():
-    """改什么会红：删掉 _easter_save 里 self.cfg["easter_sent"] 赋值 → 红；
-    删掉 save_config 调用 → 红。
+    """改什么会红：把 _easter_save 里 self.cfg["easter_sent"] = … 注释掉 → 红；
+    删掉 save_config(self.cfg) 调用 → 红。
     """
-    src = _src("桌宠.py")
-    i = src.index("def _easter_save")
-    seg = src[i:i + 400]
-    assert 'self.cfg["easter_sent"]' in seg, "触发后必须落盘（否则重启就重响）"
-    assert "save_config" in seg
+    fn = _methods(_tree("桌宠.py")).get("_easter_save")
+    assert fn is not None, "桌宠.py 里找不到 _easter_save"
+    wrote = False
+    for node in ast.walk(fn):
+        if not isinstance(node, ast.Assign):
+            continue
+        for tgt in node.targets:
+            if not isinstance(tgt, ast.Subscript):
+                continue
+            key = tgt.slice
+            if not isinstance(key, ast.Constant) and hasattr(key, "value"):
+                key = key.value  # Python 3.8 的 ast.Index 包装（3.10 下不会走到）
+            if (isinstance(tgt.value, ast.Attribute) and tgt.value.attr == "cfg"
+                    and isinstance(key, ast.Constant) and key.value == "easter_sent"):
+                wrote = True
+    assert wrote, "触发后必须落盘 self.cfg[\"easter_sent\"]（否则重启就重响）"
+    assert any(isinstance(c.func, ast.Name) and c.func.id == "save_config"
+               for c in _calls(fn)), "写了 cfg 却没调 save_config"
 
 
 def test_trigger_is_silent_when_off():
-    """改什么会红：把 _easter_tracker 里的 enabled=enabled 改成 enabled=True → 红；
-    删掉 cfg 开关读取 → 红。
+    """改什么会红：把 enabled=enabled 改成 enabled=True（关掉开关也照响）→ 红；
+    删掉 cfg 里 easter_eggs 的读取（enabled 变常量）→ 红。
     """
-    src = _src("桌宠.py")
-    i = src.index("def _easter_tracker")
-    seg = src[i:i + 700]
-    assert 'self.cfg.get("easter_eggs", True)' in seg
-    assert "enabled=enabled" in seg
+    fn = _methods(_tree("桌宠.py")).get("_easter_tracker")
+    assert fn is not None, "桌宠.py 里找不到 _easter_tracker"
+    reads_switch = any(isinstance(c, ast.Call) and isinstance(c.func, ast.Attribute)
+                       and c.func.attr == "get" and c.args and _const_str(c.args[0], "easter_eggs")
+                       for c in _calls(fn))
+    assert reads_switch, "_easter_tracker 必须现读 cfg 的 easter_eggs 开关"
+    passes_enabled = False
+    for call in _calls(fn):
+        if not (isinstance(call.func, ast.Attribute) and call.func.attr == "EasterTracker"):
+            continue
+        for kw in call.keywords:
+            if kw.arg == "enabled" and isinstance(kw.value, ast.Name) and kw.value.id == "enabled":
+                passes_enabled = True
+    assert passes_enabled, "EasterTracker 必须收到 enabled=<开关变量>，不许写死 True"
 
 
 def test_quit_stops_easter_timer():

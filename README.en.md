@@ -3,6 +3,8 @@
 > A spoiled, greedy, easily-startled desktop pet fish that calls you "Proxy" (绳匠)~
 > Catchphrase: **What I like, I never let go~**
 
+<img src="docs/demo.gif" width="320" alt="DaFeiYu desktop pet idle animation">
+
 A Windows desktop pet built with **PySide6 (Qt6) + Python 3.10**, MIT licensed.
 Transparent frameless window, always-on-top, draggable, feedable, chatty — perfect coding companion.
 
@@ -26,6 +28,8 @@ Transparent frameless window, always-on-top, draggable, feedable, chatty — per
 - 🐍 **Xixifu-style personality** (Zenless Zone Zero's Cissia, aka "啥子蛇"): self-proclaimed "villain" who follows only her instincts — cold-tongued but soft-hearted, calls herself "本专员" (this commissioner) and wraps her gluttony in fake case investigations, sometimes hisses "嘶~"
 - 💰 **Balance widget** (optional): DeepSeek API balance + today's usage, rolling numbers, auto-refresh every 60s
 - 🔐 **Key security**: API Key encrypted with Windows DPAPI, never stored in plaintext
+- 🔁 **Asset hot reload**: edit images / frames / sounds under `assets/` while it runs — changes apply within ~2 s, no restart
+- 🧭 **Nine-item top-level menu** (was 18): balance line moved into 记账, frequent toggles into 设置…
 - 🎵 **Sounds**: press / release / feed / AI-reply-done / balance-credit (winsound-first chain, fallback-safe)
 - 🖐️ **Petting**: hold the pet for 1.5s → petpet animation + shy line (inspired by the whale widget's petpet)
 - 💸 **Money rain**: successful balance check → coin sound + money GIF frames
@@ -122,7 +126,7 @@ Community-made characters: download a `.dfypet.zip`, then right-click the pet �
 
 | Character | Author | Description | Download |
 |-----------|--------|-------------|----------|
-| *(nobody has contributed yet — be the first 🐟)* | | | |
+| [Abyss DaFeiYu](gallery/official_abyss_preview.png) | Official | Deep-blue hue-shifted variant derived from the built-in assets (no third-party art) | [Download](gallery/official_abyss.dfypet.zip) |
 
 > Want to share yours? See [gallery/README.md](gallery/README.md) for the spec, or reply in the
 > ["show your character" discussion](https://github.com/xiyan1314/daifeiyu-desktop-pet/discussions/1).
@@ -179,7 +183,7 @@ AST, counting return annotations per module):
 | `pet_io.py` | ✅ 25/28 | every public API and pure function; the 3 missing are `_MergeGuard.__init__/__enter__/__exit__` |
 | `pet_book.py` | ⚠️ 25/34 | missing: 8 private helpers (`_load`/`_save_all`/`_archive_day`…) plus module-level `esc` |
 | `pet_chat.py` / `pet_balance.py` / `pet_widgets.py` / `pet_export.py` / `pet_config.py` / `pet_alarm.py` / `pet_behaviors.py` | ❌ 0 | unchanged this round |
-| `桌宠.py` (313 funcs) / `pet_dialogs.py` (425) / `pet_voice.py` (93) / `pet_resources.py` (80) / `pet_anim.py` (13) / `pet_actions.py` (7) | ❌ 0 | **tracked separately**, outside the "82/82" claim |
+| `桌宠.py` (316 funcs) / `pet_dialogs.py` (425) / `pet_voice.py` (93) / `pet_resources.py` (80) / `pet_anim.py` (13) / `pet_actions.py` (7) | ❌ 0 | **tracked separately**, outside the "82/82" claim |
 
 So: annotations exist for the Qt-free modules `pet_tools` / `pet_lines` / `pet_io` / `pet_book`
 (fully for the first two); the three core files and the other GUI modules still have none.

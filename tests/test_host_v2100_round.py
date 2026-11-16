@@ -574,7 +574,7 @@ def _walk_menu(menu, depth=0, out=None):
 
 
 def test_top_level_menu_items_are_within_the_hard_cap(win, monkeypatch):
-    """顶层菜单 <=18 项（_verify_green.py:86 / tests/test_feedback_v2110_b.py:568 的硬断言）。
+    """顶层菜单 <=9 项（_verify_green.py:86 / tests/test_feedback_v2110_b.py:568 的硬断言）。
 
     菜单定义在 pet_menu.py（不归本工作包）——这里只**数**并打印读数，供 D3（菜单去重）
     与任何"往顶层加东西"的改动当场看到数。
@@ -590,7 +590,7 @@ def test_top_level_menu_items_are_within_the_hard_cap(win, monkeypatch):
     monkeypatch.setattr(win, "_new_menu", lambda: _CapMenu(win))
     win._open_menu(QPoint(10, 10))
     top = captured["top"]
-    print("\n[P7/D3] 顶层菜单项数 = %d（硬上限 18）: %s"
+    print("\n[P7/D3] 顶层菜单项数 = %d（硬上限 9）: %s"
           % (len(top), " | ".join(_ascii(t) for t in top)))
     print("[P7/D3] 角色子菜单里含「导入角色」的条目: %s"
           % ([_ascii(t) for d, t in captured["all"] if d == 1 and "导入角色" in t],))
@@ -600,7 +600,7 @@ def test_top_level_menu_items_are_within_the_hard_cap(win, monkeypatch):
     # 顶层去重会动这两个数，所以把总条目数一并打出来，让去重的代价当场看得见。
     print("[P7/D3] 全菜单（含子菜单）非空文本条目数 = %d（_verify_v13.py:1633 要求 >= 35）"
           % (len(captured["all"]),))
-    assert len(top) <= 18, "顶层菜单超了 18 项：%d —— %r" % (len(top), top)
+    assert len(top) <= 9, "顶层菜单超了 9 项：%d —— %r" % (len(top), top)
     # ⚠ 顶层「📦 资源管理…」必须留着：_verify_v13.py:1635（any("资源管理" in t)）与
     # :1673（"资源管理" or "音频片段"）两条断言都靠它命中——D4 把「管理音频片段…」改名成
     # 「管理音效片段…」之后，"音频片段"这半已经不再命中，只剩"资源管理"这半兜着。

@@ -69,38 +69,11 @@ class MenuBuilder:
         pet = self.pet
         menu = pet._new_menu()
 
-        # 顶部信息行：余额 / 今日已用（仅展示，不可点）
-        if pet._shown_balance is not None:
-            if pet._currency == "CNY":
-                info_text = "💰 余额 ¥%.2f · 今日已用 ¥%.2f" % (pet._shown_balance, pet._usage or 0.0)
-            else:
-                info_text = "💰 余额 %s %.2f · 今日已用 %.2f" % (pet._currency, pet._shown_balance, pet._usage or 0.0)
-        else:
-            info_text = "📒 今日已用 %.2f" % (pet._usage or 0.0)
-        menu.addAction(info_text).setEnabled(False)
-        menu.addSeparator()
-
-        # 大小滑块（拖动实时缩放，替代原来的 6 项子菜单）
+        # v2.13.0（第 13 轮 · 体积与暴露面）：顶层非空文本项 18 → 9。
+        # 结构 = 说话 / 喂食 / 角色 / 记账 / 动作 / 资源管理 / 设置 / 更多 / 退出。
+        # 原来顶层的「余额信息行」收进「记账」，四个开关（置顶/音效/AI/甩抛）收进「设置」。
+        # 大小滑块是 QWidgetAction（无文本），不占名额，仍在最上面。
         menu.addAction(self._make_size_action(menu))
-
-        pet._top_act = menu.addAction("📌 窗口置顶")
-        pet._top_act.setCheckable(True)
-        pet._top_act.setChecked(pet.cfg.get("always_on_top", True))
-        pet._top_act.toggled.connect(pet._set_always_on_top)
-        sound_act = menu.addAction("🔊 音效")
-        sound_act.setCheckable(True)
-        sound_act.setChecked(pet.cfg.get("sound", True))
-        sound_act.toggled.connect(pet._set_sound)
-        pet._ai_act = menu.addAction("🤖 AI对话")
-        pet._ai_act.setCheckable(True)
-        pet._ai_act.setChecked(pet.cfg.get("ai_enabled", False))
-        pet._ai_act.toggled.connect(pet.ai.set_ai_enabled)
-        # P1-手感：甩抛物理开关（默认关闭；开启后拖动变弹簧跟手、松手可甩飞）
-        phys_act = menu.addAction("🌀 甩抛物理")
-        phys_act.setCheckable(True)
-        phys_act.setChecked(bool((pet.cfg.get("physics") or {}).get("enabled")))
-        phys_act.toggled.connect(pet._set_physics)
-        menu.addSeparator()
 
         talk_act = menu.addAction("💭 和它说话")
         talk_act.triggered.connect(pet.ai.talk)
@@ -151,6 +124,17 @@ class MenuBuilder:
         bundle_import_act.triggered.connect(lambda checked=False: pet._import_role_bundle())
 
         book_menu = menu.addMenu("💰 记账")
+        # v2.13.0（第 13 轮 · 暴露面）：余额信息行从顶层收进记账子菜单（只展示，不可点）。
+        if pet._shown_balance is not None:
+            if pet._currency == "CNY":
+                info_text = "💰 余额 ¥%.2f · 今日已用 ¥%.2f" % (pet._shown_balance, pet._usage or 0.0)
+            else:
+                info_text = "💰 余额 %s %.2f · 今日已用 %.2f" % (pet._currency, pet._shown_balance, pet._usage or 0.0)
+        else:
+            info_text = "📒 今日已用 %.2f" % (pet._usage or 0.0)
+        _info_act = book_menu.addAction(info_text)
+        _info_act.setEnabled(False)
+        book_menu.addSeparator()
         balance_act = book_menu.addAction("查询余额")
         balance_act.triggered.connect(pet.balance.fetch)
         badge_act = book_menu.addAction("📊 余额挂件")
@@ -172,6 +156,26 @@ class MenuBuilder:
         res_act.triggered.connect(lambda: pet_dialogs.open_resource_manager(pet, 0))
 
         set_menu = menu.addMenu("⚙️ 设置…")
+        # v2.13.0（第 13 轮 · 暴露面）：这四个开关原本在顶层，现收进设置的第一组。
+        # 语义/接线/勾选态一律与原来逐字一致，只换了位置（同语义同表现）。
+        pet._top_act = set_menu.addAction("📌 窗口置顶")
+        pet._top_act.setCheckable(True)
+        pet._top_act.setChecked(pet.cfg.get("always_on_top", True))
+        pet._top_act.toggled.connect(pet._set_always_on_top)
+        sound_act = set_menu.addAction("🔊 音效")
+        sound_act.setCheckable(True)
+        sound_act.setChecked(pet.cfg.get("sound", True))
+        sound_act.toggled.connect(pet._set_sound)
+        pet._ai_act = set_menu.addAction("🤖 AI对话")
+        pet._ai_act.setCheckable(True)
+        pet._ai_act.setChecked(pet.cfg.get("ai_enabled", False))
+        pet._ai_act.toggled.connect(pet.ai.set_ai_enabled)
+        # P1-手感：甩抛物理开关（默认关闭；开启后拖动变弹簧跟手、松手可甩飞）
+        phys_act = set_menu.addAction("🌀 甩抛物理")
+        phys_act.setCheckable(True)
+        phys_act.setChecked(bool((pet.cfg.get("physics") or {}).get("enabled")))
+        phys_act.toggled.connect(pet._set_physics)
+        set_menu.addSeparator()
         pet._follow_act = set_menu.addAction("🖱️ 跟随鼠标")
         pet._follow_act.setCheckable(True)
         pet._follow_act.setChecked(pet.cfg.get("follow_mouse", False))
@@ -378,15 +382,18 @@ class MenuBuilder:
             tf_act = form_menu.addAction("🐡 变身")
             tf_act.triggered.connect(lambda checked=False: pet._do_transform())
 
-        praise_act = menu.addAction("❤️ 夸夸她")
+        # v2.13.0（第 13 轮 · 暴露面）：陪伴/天气/状态/关于收进「ℹ️ 更多」，顶层只留一个入口。
+        more_menu = menu.addMenu("ℹ️ 更多")
+        praise_act = more_menu.addAction("❤️ 夸夸她")
         praise_act.triggered.connect(lambda checked=False: pet.mood.blush())
-        weather_act = menu.addAction("☀️ 今日天气")
+        weather_act = more_menu.addAction("☀️ 今日天气")
         weather_act.triggered.connect(pet.weather.fetch)
-        city_act = menu.addAction("📍 天气城市…")
+        city_act = more_menu.addAction("📍 天气城市…")
         city_act.triggered.connect(pet._set_city)
-        cpu_act = menu.addAction("🖥️ 系统状态")
+        cpu_act = more_menu.addAction("🖥️ 系统状态")
         cpu_act.triggered.connect(pet.actions.show_system_status)
-        about_act = menu.addAction("ℹ️ 关于")
+        more_menu.addSeparator()
+        about_act = more_menu.addAction("ℹ️ 关于")
         about_act.triggered.connect(pet._about)
         menu.addSeparator()
         quit_act = menu.addAction("⏹ 退出")

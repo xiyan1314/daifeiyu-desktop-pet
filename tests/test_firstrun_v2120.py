@@ -117,12 +117,31 @@ def test_normalized_config_turns_the_markers_into_bools(bad):
 def test_tray_tip_is_persisted_not_a_process_global():
     """关窗提示只许用配置里的一次性标记 —— 老的进程级全局不许再回来。
 
-    只看**代码**（AST 里的名字与字符串常量），不看注释：注释里解释"以前是什么"是允许的。
+    只看**代码**（AST 里的名字与字符串常量），不看源码字符串：注释里解释"以前是什么"是
+    允许的，而 v2.12.0 旧版第一条读的是源码字符串 → 把调用注释掉仍然绿（遗留-13）。
     globals() 的两种写法都会落进字符串常量里，所以两条都查。
     """
     src = open(os.path.join(HERE, "桌宠.py"), encoding="utf-8").read()
-    assert 'self.cfg.get("tray_tip_done") is not True' in src, "关窗提示没接落盘标记"
     tree = ast.parse(src)
+    # ① 关窗路径必须真的做 `self.cfg.get("tray_tip_done") is not True` 比较；注释不算。
+    persisted = []
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Compare) or len(node.ops) != 1:
+            continue
+        if not isinstance(node.ops[0], ast.IsNot):
+            continue
+        left = node.left
+        right = node.comparators[0]
+        if not (isinstance(left, ast.Call) and isinstance(left.func, ast.Attribute)
+                and left.func.attr == "get"):
+            continue
+        if not (left.args and isinstance(left.args[0], ast.Constant)
+                and left.args[0].value == "tray_tip_done"):
+            continue
+        if isinstance(right, ast.Constant) and right.value is True:
+            persisted.append(node.lineno)
+    assert persisted, "关窗提示没接落盘标记（self.cfg.get(\"tray_tip_done\") is not True）"
+    # ② 老的进程级全局不许回来（名字 / 字符串常量两种写法都查）。
     names = {n.id for n in ast.walk(tree) if isinstance(n, ast.Name)}
     consts = {n.value for n in ast.walk(tree)
               if isinstance(n, ast.Constant) and isinstance(n.value, str)}
