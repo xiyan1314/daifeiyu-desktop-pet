@@ -11,13 +11,51 @@ v2.5.0（A1/A2）：服务构造搬进 pet_services.ServiceRegistry；本模块�
 """
 from typing import Any, Callable
 
-from PySide6.QtCore import QPoint, Qt
+from PySide6.QtCore import QPoint, QTimer, Qt
 from PySide6.QtGui import QActionGroup
 from PySide6.QtWidgets import (QHBoxLayout, QLabel, QMenu, QSlider, QWidget,
                                QWidgetAction)
 
 import pet_config  # v2.10.0（C-13）：三态词表（auto/on/off）的单一来源，本模块不抄字符串
 import pet_dialogs  # 资源管理 / 气泡样式 / 台词 / AI 设置 / 帧数上限对话框入口
+import pet_motion  # v2.12.0（D2）：悬停预览的延时令牌 PREVIEW
+
+
+class HoverPreview(object):
+    """动作子菜单的悬停预览判定（**零 Qt**：起表与停表由外部 QTimer 执行）。
+
+    为什么把判定和 QTimer 拆开：QTimer 在 pytest 里只能靠 sleep 等，判据会变成"等 310ms
+    看有没有播"——慢且抖。这里只回答两件事："该不该起表"（返回毫秒数）与"该播谁"（fire）。
+    同一格上晃鼠标**不重置**计时（否则手一抖就永远不播）；换格才重新起表。
+    """
+
+    def __init__(self, delay_ms, fire, enabled=True):
+        self.delay_ms = int(delay_ms)
+        self._fire = fire
+        self.enabled = bool(enabled)
+        self._key = None
+
+    def hover(self, key):
+        """返回 0 = 不起表（停掉旧表）；返回 >0 = 用这个间隔起表。
+
+        只认 tuple/list（动作名 + 实参）；分隔线 / 子菜单 / 无 data 的条目一律 None。
+        """
+        if not self.enabled or not isinstance(key, (tuple, list)) or not key:
+            self._key = None
+            return 0
+        key = tuple(key)
+        if key == self._key:
+            return 0
+        self._key = key
+        return self.delay_ms
+
+    def fire(self):
+        key, self._key = self._key, None
+        if key:
+            self._fire(key)
+
+    def cancel(self):
+        self._key = None
 
 
 class MenuBuilder:
@@ -275,9 +313,11 @@ class MenuBuilder:
         # P3-2：右键点播任意动画（与闲逛加权目录共用 play_action）
         act_menu = menu.addMenu("🎭 动作")
         jump_act = act_menu.addAction("原地小跳")
+        jump_act.setData(("jump", None))   # v2.12.0（D2）：悬停预览靠它认"预览谁"
         jump_act.triggered.connect(lambda checked=False: pet.actions.play_action("jump", force=True))
         for _label, _arg in (("打盹 zzz", "zzz"), ("音符", "note"), ("星光", "sparkle"), ("爱心", "heart")):
             a = act_menu.addAction(_label)
+            a.setData(("emote", _arg))
             a.triggered.connect(lambda checked=False, k=_arg: pet.actions.play_action("emote", k, force=True))
         # v2.0.1：自定义命名动作（帧动作/程序化合成）动态列出
         _custom = pet.custom_actions()
@@ -286,7 +326,32 @@ class MenuBuilder:
             for _name, _kind in _custom:
                 _label = "✦ %s（合成）" % _name if _kind == "proc" else "✦ %s" % _name
                 a = act_menu.addAction(_label)
+                a.setData((_name, None))
                 a.triggered.connect(lambda checked=False, n=_name: pet.actions.play_action(n, force=True))
+
+        # v2.12.0（D2）：动作子菜单悬停 300ms 预览一次。默认关（menu_hover_preview=False）：
+        # 老用户升级后菜单行为不变；开着的用户才建计时器（不建 = 这条代码路径零成本）。
+        pet._hover_preview_timer = None
+        pet._hover_preview = None
+        if (getattr(pet, "cfg", None) or {}).get("menu_hover_preview"):
+            _hp = HoverPreview(
+                pet_motion.duration_ms("PREVIEW"),
+                lambda key: pet.actions.play_action(key[0], key[1], force=True, preview=True))
+            _tm = QTimer(pet)
+            _tm.setSingleShot(True)
+
+            def _on_hover(act, _hp=_hp, _tm=_tm):
+                ms = _hp.hover(None if act is None else act.data())
+                if ms:
+                    _tm.start(ms)
+                else:
+                    _tm.stop()      # 移开 / 换到不可预览的条目：一个动作都不许晚到
+
+            _tm.timeout.connect(_hp.fire)
+            act_menu.hovered.connect(_on_hover)
+            act_menu.aboutToHide.connect(lambda: (_tm.stop(), _hp.cancel()))
+            pet._hover_preview_timer = _tm
+            pet._hover_preview = _hp
 
         # v2.0.2 断点#12：变身（仅自定义角色有变身形态时显示）
         # v2.11.0（C-34）：**从顶层挪进「🐡 形态」子菜单**。原因：顶层非空文本项静态数已是 18

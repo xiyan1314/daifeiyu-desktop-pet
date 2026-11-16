@@ -334,7 +334,10 @@ def test_every_token_value_is_numeric():
 _DURATION_ENTRY_POINTS = ("duration_ms", "effective_duration")
 
 # 扫描面 = 产品侧全部会取时长的文件（少一个，那个文件的调用点就无人看管）
-_DURATION_SOURCE_FILES = ("桌宠.py", "pet_widgets.py", "pet_actions.py", "pet_balance.py")
+# v2.12.0（第 12 轮 D2）：pet_menu.py 新增消费点（悬停预览 PREVIEW），扫描面跟着扩——
+# 不扩的话"调了令牌但打错名字"在菜单里静默退化成 0ms（预览变成"一碰就播"）。
+_DURATION_SOURCE_FILES = ("桌宠.py", "pet_widgets.py", "pet_actions.py", "pet_balance.py",
+                          "pet_menu.py")
 
 # 祖父条款：这些令牌的调用点**拿不到**开关表达式，但语义等价（"为什么"就写在值里）。
 # ⚠ 新令牌不许往这里加 —— 要加，先在评审里解释"它为什么不是动效"。
@@ -345,6 +348,9 @@ _GRANDFATHERED_SWITCH_FREE = {
     "BUBBLE_HOLD": "气泡**展示时长**（这条信息该看多久）刻意不随开关归零 —— 归零 = 闪一下就没",
     "PET_HOLD": "长按阈值是**交互阈值不是动效**：归零 = 按下即摸头（行为改变，不是降级）",
     "THINKING_PULSE": "唯一调用点只在动效开着时被调用（减少动效只停脉动、留着指示）",
+    # v2.12.0（第 12 轮 D2）：PREVIEW 是**输入延迟**不是动效时长——它决定"悬停多久算想预览"。
+    # 接上开关会让"减少动效"用户点菜单变得更迟钝（把无障碍做成更差的交互），与 A-11 的本意相反。
+    "PREVIEW": "输入延迟（悬停判定），不是动效时长；接开关 = 让减少动效用户菜单更迟钝",
 }
 
 

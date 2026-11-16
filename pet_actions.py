@@ -46,7 +46,7 @@ class ActionService:
         if _happy:
             _say(random.choice(_happy))
 
-    def play_action(self, name, arg=None, force=False):
+    def play_action(self, name, arg=None, force=False, preview=False):
         """P3-2：按名称点播动作（闲逛加权随机与右键「动作」菜单共用同一实现）。
 
         与 idle_tick 同款门控：busy/摸摸头/跟随/散步中不播；睡眠中先醒来再表演。
@@ -56,6 +56,21 @@ class ActionService:
         播一次回待机）→ v2.0.1 程序化合成动作（呼吸/摇摆/点头）。"""
         pet = self.pet
         if name == "none":
+            return
+        if preview:
+            # D2（v2.12.0）：**预览 = 只播一次**。不写 ledger / 不播 voice / 不改 cfg，
+            # 也不叫醒、不抢 busy——它只是"让用户看一眼这个动作长什么样"。
+            # 所以这里**先于**下面所有门控（悬停不该被"正在跟随/散步"吞掉）。
+            if name == "emote":
+                pet._show_emote(arg or "note")
+                return
+            if name == "jump":
+                pet._show_emote("note")   # 预览里跳跃只给头顶音符，不跑位移、不喊台词
+                return
+            if name in (getattr(pet.anim, "_sets", {}) or {}):
+                pet.anim.play(name, pet._cur_form_anim().get("interval_ms") or pet.EAT_FRAME_MS,
+                              loops=1, on_finish=pet._play_idle,
+                              rate_factor=pet._frame_rate_factor())
             return
         if pet.busy or pet._petting or ((self._cfg().get("follow_mouse") or self._cfg().get("wander"))
                                         and not force):
