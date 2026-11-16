@@ -35,6 +35,20 @@ DEFAULTS = {
 }
 
 
+def _as_number(value, default=0.0):
+    """严格取数：只接受 int/float（bool 不算），NaN/Inf 与非数值一律给 default。
+
+    刻意**不用 try/except**：静默 except 在本仓是受审对象（每一条都要登记理由），
+    而"类型判断"本来就该写成判断，不该写成"抛了再说"。
+    """
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return default
+    v = float(value)
+    if v != v or v in (float("inf"), float("-inf")):
+        return default
+    return v
+
+
 def normalize_state(raw):
     """把 easter_sent 的任意输入归一成 {"day": str, "sent": list, "last": float}。
 
@@ -50,14 +64,7 @@ def normalize_state(raw):
     sent = raw.get("sent")
     if isinstance(sent, (list, tuple)):
         out["sent"] = [k for k in sent if k in KINDS]
-    last = raw.get("last")
-    try:
-        v = float(last)
-    except (TypeError, ValueError):
-        v = 0.0
-    if v != v or v in (float("inf"), float("-inf")):
-        v = 0.0
-    out["last"] = v
+    out["last"] = _as_number(raw.get("last"), 0.0)
     return out
 
 
@@ -102,10 +109,7 @@ class EasterTracker(object):
         self._roll_day(now)
         if kind in self.state["sent"]:
             return None
-        try:
-            cooldown = float(self.opts.get("cooldown_sec") or 0)
-        except (TypeError, ValueError):
-            cooldown = 0.0
+        cooldown = _as_number(self.opts.get("cooldown_sec"), 0.0)
         if cooldown > 0 and (now - float(self.state.get("last") or 0.0)) < cooldown:
             return None
         self.state["sent"].append(kind)
@@ -140,10 +144,10 @@ class EasterTracker(object):
         """时段：hour 缺省取 now() 的本地小时；边界写成含左不含右（22:59 不响 / 23:00 响）。"""
         if hour is None:
             hour = time.localtime(self._now()).tm_hour
-        try:
-            h = int(hour) % 24
-        except (TypeError, ValueError):
+        _h = _as_number(hour, -1.0)
+        if _h < 0:
             return None
+        h = int(_h) % 24
         start = int(self.opts["late_start"]) % 24
         end = int(self.opts["late_end"]) % 24
         if start == end:
@@ -156,9 +160,8 @@ class EasterTracker(object):
 
     def on_corner(self, dwell_sec):
         """角落：连续停留秒数到阈值才触发；离开时调用方传 0（本模块不记位置）。"""
-        try:
-            dwell = float(dwell_sec)
-        except (TypeError, ValueError):
+        dwell = _as_number(dwell_sec, -1.0)
+        if dwell < 0:
             return None
         if dwell < float(self.opts["corner_sec"]):
             return None

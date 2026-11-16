@@ -29,13 +29,13 @@ class HoverPreview(object):
     同一格上晃鼠标**不重置**计时（否则手一抖就永远不播）；换格才重新起表。
     """
 
-    def __init__(self, delay_ms, fire, enabled=True):
+    def __init__(self, delay_ms: int, fire: Callable[[tuple], None], enabled: bool = True) -> None:
         self.delay_ms = int(delay_ms)
         self._fire = fire
         self.enabled = bool(enabled)
         self._key = None
 
-    def hover(self, key):
+    def hover(self, key: Any) -> int:
         """返回 0 = 不起表（停掉旧表）；返回 >0 = 用这个间隔起表。
 
         只认 tuple/list（动作名 + 实参）；分隔线 / 子菜单 / 无 data 的条目一律 None。
@@ -49,12 +49,12 @@ class HoverPreview(object):
         self._key = key
         return self.delay_ms
 
-    def fire(self):
+    def fire(self) -> None:
         key, self._key = self._key, None
         if key:
             self._fire(key)
 
-    def cancel(self):
+    def cancel(self) -> None:
         self._key = None
 
 
@@ -340,7 +340,7 @@ class MenuBuilder:
             _tm = QTimer(pet)
             _tm.setSingleShot(True)
 
-            def _on_hover(act, _hp=_hp, _tm=_tm):
+            def _on_hover(act: Any, _hp: "HoverPreview" = _hp, _tm: QTimer = _tm) -> None:
                 ms = _hp.hover(None if act is None else act.data())
                 if ms:
                     _tm.start(ms)

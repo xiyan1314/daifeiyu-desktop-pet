@@ -53,6 +53,7 @@ SYNC_FILES = ["桌宠.py", "main.py", "pet_actions.py", "pet_ai.py", "pet_alarm.
               # 是**用户数据**，由 plugin_user_data_hits() 在发布包里点名（不在本清单里）。
               "plugins/index.json", "plugins/README.md",
               "pet_resources.py", "pet_screen.py",
+              "pet_easter.py",   # v2.12.0（第 12 轮 C）：彩蛋判定，桌宠.py import 它，漏了必 ImportError
               "pet_services.py",   # v2.5.0（A1）：子系统构造注册表（桌宠.py import 它，漏了必 ImportError）
               "pet_tools.py", "pet_voice.py", "pet_wander.py",
               "pet_weather.py", "pet_widgets.py", "version_info.txt", "_verify_green.py",
