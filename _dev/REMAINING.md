@@ -226,7 +226,7 @@
 | **遗留-2** | **首次引导 D1 / 惊喜彩蛋 E1 / 菜单悬停预览 D2 本轮没做** | §十三 ⑥⑦⑨（原文写着"本轮做"）· `_release_notes_v2110.md` §五 1 | **未做**（§十三 的状态列已按现树改成"本轮未做"） | 三条各自要新建判据；D1 还要一个**落盘**的一次性"已提示"标记（今天的 `_HIDE_TIP_SHOWN` 不落盘） | §十三 "现树起点"列：`first_run` / `彩蛋` / `hovered` 各 0 命中 | 遗留 |
 | **遗留-3** | **混合 DPI**：全屏判定用物理像素换算，**整机同一缩放比逐像素正确，副屏原点会算错** | `_release_notes_v2110.md` §五 2 · `pet_windows.py`（换算层） | **未做**（按任务书有意不做） | 补偿输入要 `MonitorFromWindow`（不是只取主屏原点）；改完要一条"两块屏不同缩放比"的判据 —— **今天 0 判据** | 找茬备查 #13：错误已披露、无判据 | 遗留 |
 | **遗留-4** | `_release_notes_v2110.md` §六「验证读数」仍是 **待取** | 发布说明 §六 · `CHANGELOG.md` v2.11.0 的「回归」段 | **未做**（有意：定版整批跑完才填） | 定版 → 冻结 → 证据整批复跑 → 一次性回写 pytest / v13 / 静态 / 锚点 / nodeid / pinned / 证据整批；**不许抄别处的旧读数** | 两处都写着"待取"，不是漏写 | 遗留 |
-| **遗留-5** | **冻结口径未来只收代码 / 测试 / 资产**（**不含** `ledger` / `roles` 两个用户数据文件） | 兼容审 #6 备查 · 冻结清单 `_v2110_release_freeze_final.txt` | **未做** | 今天的清单含两个用户数据文件 → **跑一次桌宠就会让冻结失效**（程序会写它们）。下次冻结只收三类：产品代码 / tests / assets | 兼容审实测：清单里含 ledger/roles | 遗留 |
+| **遗留-5** | **冻结口径未来只收代码 / 测试 / 资产**（**不含** `ledger` / `roles` 两个用户数据文件） | 兼容审 #6 备查 · 冻结清单 `_v2110_release_freeze_final.txt` | **已结单（2026-11-16 · v2.13.0）** | `_v2130_release_freeze_final.txt` 只收 产品代码 / tests / assets / docs / gallery / 发布工具（402 条），**不含 ledger/roles 等用户数据** —— 口径已按本条改掉 | 兼容审实测：清单里含 ledger/roles | 遗留 |
 | **遗留-6** | `_set_reduce_motion` 的开关回执仍是**全称**文案「动效已关掉，只留瞬时反馈~」，与 A-07 的收窄口径（行走 / 甩抛飞行 / 食物托盘飞行 / 拖拽弹簧不在此列）**不一致** | A-07 ①（档 A 的重核注）· 2026-10-17 本波读码复核 | **已结单**（2026-10-17 由产品代理落地 · `桌宠.py:5187`） | 改成**非全称**的回执（例如「时长动画已关掉（位移与素材帧不在此列）」）；改完 A-07 的反向钉子 `tests/test_boundary_claims_v2110.py` 仍必须绿 | 2026-10-17 现树 `桌宠.py` 的 `_set_reduce_motion`：`self.show_bubble("动效已关掉，只留瞬时反馈~" if on else "动效已恢复~")` | 遗留 |
 
 > **遗留-6 结单（2026-10-17 · 追加型）**：产品代理已在 `桌宠.py:5187` 把回执改成「**动效已关掉（走路、甩抛等位移不在此列）~**」（开时仍「动效已恢复~」）→ 与 A-07 的收窄口径一致；上表该行状态已标 **已结单**，**原登记文字一个字未删**。
@@ -254,10 +254,13 @@
 | **遗留-11** | D2 对**合成动作**（菜单里的「✦ xxx（合成）」）**不预览**：悬停 300ms 后什么都不发生（静默跳过，不接真播路径） | 质量审 P1-11 · `pet_actions.py` 预览分支 | **未做**（有意：真播要跑满 2 个周期，与"看一眼"语义冲突） | 若要预览合成动作，得先给 `_play_proc` 一个"只演一遍、不写状态"的模式 | P2 |
 | **遗留-12** | **root motion 没有独立开关**：观感不对时只能关散步/跟随或整版回退（`follow_mouse` / `wander` 默认都关，影响面小） | 兼容审 P2-4 | **未做**（有意：本轮不加新配置键） | 第 15 轮「手感与人格」一并设计（磁吸/情绪一起给动作层加开关） | P2 |
 
-| **遗留-13** | 6 条**只守形状**的判据（`tests/test_easter_v2120.py` 的 `test_hooks_are_wired_in_window` / `test_late_hook_is_wired_in_idle_tick` / `test_corner_timer_respects_switch` / `test_trigger_persists_to_cfg` / `test_trigger_is_silent_when_off`，以及 `tests/test_firstrun_v2120.py` 的 `test_tray_tip_is_persisted_not_a_process_global`）—— 守的是"源码文本里有这串字"，**把调用注释掉（字留在注释里）仍然绿** | 独立验收 X1 实测（`桌宠.py` 的 `_easter_check("poke")` 改成注释 → 仍 rc=0 绿） | **未做**（HEAD 里就有，非本轮新写） | 照 `test_quit_stops_easter_timer` 的写法统一换 AST（注释天然不在 AST 里） | P2 |
+| **遗留-13** | 6 条**只守形状**的判据（`tests/test_easter_v2120.py` 的 `test_hooks_are_wired_in_window` / `test_late_hook_is_wired_in_idle_tick` / `test_corner_timer_respects_switch` / `test_trigger_persists_to_cfg` / `test_trigger_is_silent_when_off`，以及 `tests/test_firstrun_v2120.py` 的 `test_tray_tip_is_persisted_not_a_process_global`）—— 守的是"源码文本里有这串字"，**把调用注释掉（字留在注释里）仍然绿** | 独立验收 X1 实测（`桌宠.py` 的 `_easter_check("poke")` 改成注释 → 仍 rc=0 绿） | **已结单（2026-11-16 · v2.13.0）** | 照 `test_quit_stops_easter_timer` 的写法统一换 AST（注释天然不在 AST 里）—— 已换；影子副本 **8 个变异全部 RED** | P2 |
 
 > ⚠ **本条登记不改变上面 §十四 的历史文字**：遗留-1 已实现、遗留-2 的 D1/E1/D2 三条**本轮全部实现**，
 > 但"真机端到端"仍欠（见遗留-8），所以**不算全结单**。
+>
+> **2026-11-16 回写（v2.13.0 · 第 13 轮）**：**遗留-13 已结单**（6 条判据换 AST，8 个变异全红）；
+> 第 13 轮新登记的 6 条见 **§十六**；本表其余未做项（遗留-3 / 7 / 8 / 9 / 10 / 11 / 12）**仍然未做**，不许读成已修。
 
 
 ---
