@@ -483,6 +483,13 @@ def load_config():
             # 迁移必须用原始值，否则 20 条/60 字的旧限制会在迁移时把数据吃掉（S3）。
             if isinstance(data.get("lines_extra"), dict):
                 cfg["_legacy_lines_extra"] = data.get("lines_extra")
+            # v2.12.0（三审 P1-9）：**老用户不该被"第一次见～"再问一次**。
+            # 配置文件本来就存在（不是首启）且里面没有这两个一次性标记 → 认定「以前跑过」，
+            # 直接置真：升级不弹引导、关窗不再看一遍托盘提示。（首启 = 文件不存在，走默认 False。）
+            if "first_run_done" not in data:
+                cfg["first_run_done"] = True
+            if "tray_tip_done" not in data:
+                cfg["tray_tip_done"] = True
     except FileNotFoundError:
         # 兼容审查 L4：**首次运行**（还没有 config.json）不是错误，不该往 error.log 里写
         # 吓人的"读取失败"。与 pet_resources._read_json 的"首次无文件=静默"口径保持一致。
@@ -1177,9 +1184,9 @@ class PetWindow(QWidget):
         self.busy = False
         self.walk_phase = 0
         self._walk_interval = WALK_INTERVAL_MS
-        # v2.12.0（第 12 轮 A · root motion）：走帧推进计数 + "此刻水平位移归帧管"标志
+        # v2.12.0（第 12 轮 A · root motion）：走帧推进计数——root motion 的**唯一**输入
+        # （见 _take_walk_steps；v2.12.0 三审 P1-3：原来那个只写不读的 _walk_root_on 已删）
         self._walk_steps = 0
-        self._walk_root_on = False
         self._wander_target = None
         self._click_composite = None  # P3-1：点击穿透命中画布（关闭/未启用时 None）
         self._click_cache_key = None
@@ -1286,6 +1293,10 @@ class PetWindow(QWidget):
         self._easter = None
         self._easter_loaded = False
         self._corner_since = None
+        # v2.12.0（三审 P1-7/P1-6）：陪伴类让位用的两个时间戳。
+        #   _disturb_until = 打扰类（通知/闹钟）气泡占着的截止时刻；_mood_spoke_at = 时段问候开口的时刻。
+        self._disturb_until = 0.0
+        self._mood_spoke_at = 0.0
         self.easter_timer = QTimer(self)
         self.easter_timer.timeout.connect(self._gslot('easter.corner', self._easter_corner_sample))
         if self.cfg.get("easter_eggs", True):
@@ -3373,12 +3384,32 @@ class PetWindow(QWidget):
             _log_error("easter save failed: %r" % (exc,))
 
     def _easter_check(self, kind, *args):
-        """唯一入口：返回触发的 kind 或 None。所有钩子都走它，保证「开关/每日/冷却」只有一份实现。"""
+        """唯一入口：返回触发的 kind 或 None。开关/每日/冷却只有这一份实现。
+
+        派发**查显式表** `pet_easter.KIND_METHODS`，不许再拼 `"on_" + kind`：
+        v2.12.0 上一版就是这么拼的，拼出 `on_late`，而方法叫 `on_hour` ——「深夜」这一类
+        **永远不响且不留痕**（三审 P0）。现在查不到 / 方法不存在一律记 error.log。
+
+        两条让位规则（三审 P1-6/P1-7）：
+          · **陪伴类不压打扰类**：系统通知 / 闹钟的气泡在途时（`_disturb_until`），这一条
+            **不消费**（每日/冷却都不动），过一会儿再判定；
+          · **深夜不与「时段问候」说两遍**：问候刚说完 30 分钟内不再补一句。
+        """
         tr = self._easter_tracker()
         if tr is None:
             return None
-        fn = getattr(tr, "on_" + kind, None)
+        if kind == "late":
+            _mood = float(getattr(self, "_mood_spoke_at", 0.0) or 0.0)
+            if _mood and (time.monotonic() - _mood) < 1800.0:
+                return None
+        if time.monotonic() < float(getattr(self, "_disturb_until", 0.0) or 0.0):
+            return None
+        # 开关**每次现读**：运行期在菜单里关掉彩蛋要立刻静音（三审 P1-8）。
+        tr.enabled = bool(self.cfg.get("easter_eggs", True))
+        name = pet_easter.KIND_METHODS.get(kind)
+        fn = getattr(tr, name, None) if name else None
         if fn is None:
+            _log_error("easter: 未知触发类 %r（KIND_METHODS 缺键，或 tracker 上没有对应方法）" % (kind,))
             return None
         try:
             hit = fn(*args)
@@ -3407,11 +3438,12 @@ class PetWindow(QWidget):
                 self._corner_since = None
                 return
             now = time.monotonic()
-            radius = 48
-            cx, cy = g.center().x(), g.center().y()
-            near_x = abs(cx - scr.left()) <= radius or abs(cx - scr.right()) <= radius
-            near_y = abs(cy - scr.top()) <= radius or abs(cy - scr.bottom()) <= radius
-            if not (near_x and near_y):
+            # v2.12.0 三审 P0 修法：按**窗口边到屏幕边**判定（pet_easter.near_corner），
+            # 不再拿窗口中心比 48px —— 默认窗口 320 宽，贴齐屏幕边时中心仍离边 160px，
+            # 那样「角落」这一类在产品里**永远不可达**（要缩到 30% 才可能）。
+            rect = (g.left(), g.top(), g.right(), g.bottom())
+            screen = (scr.left(), scr.top(), scr.right(), scr.bottom())
+            if not pet_easter.near_corner(rect, screen):
                 self._corner_since = None
                 return
             if self._corner_since is None:
@@ -3468,17 +3500,14 @@ class PetWindow(QWidget):
           · 只写 anim_mode / 帧集 / opacity，**不写任何几何**（A4 硬口径）。
         """
         if not on:
-            self._walk_root_on = False
             if self.anim_mode == "walk":
                 self._play_idle()  # 停下回 idle（_play_idle 自带 S1 守卫）
             return False
         if self.busy and self.anim_mode == "eat":
-            self._walk_root_on = False
             return False
         if not self._custom_role and self.form != self.form_keys[0]:
             # 默认角色的 walk 帧是**首形态**的画法：吃饱形态借过来播 = 把吃饱图换成常态图
             # （v2.2.5 修的正是这个症状）→ 非首形态不播走路帧，退回待机那套判据。
-            self._walk_root_on = False
             if self.anim_mode == "walk":
                 self._play_idle()
             return False
@@ -3495,15 +3524,17 @@ class PetWindow(QWidget):
             if frames:
                 self.anim.add_set("walk", frames)
         if not frames:
-            self._walk_root_on = False
             return False    # 无帧集角色：静态兜底（不报错、不改动画状态、不动任何几何）
-        # v2.12.0（第 12 轮 A）：从这里往下 = 走帧真的在播 → 水平位移交给帧推进。
-        self._walk_root_on = True
+        # v2.12.0（第 12 轮 A）：从这里往下 = 走帧真的在播 → 水平位移交给帧推进
+        # （闸不在这个函数里：pet_wander 只认 _take_walk_steps() 的帧计数）。
         if (self.anim_mode == "walk" and self.anim._name == "walk"
                 and self.anim._frames is frames):
             return True     # 已经在播同一批走帧（每 tick 都会走到这里）
         gen = self._begin_anim_switch("walk")
         self.anim_mode = "walk"
+        # 「减少动效」**照常接在帧率上**（全仓规则：每个素材帧播放点都要带开关，A-11 同族），
+        # 但**位移速度不受它影响**：pet_wander 按 1/倍率补偿每帧步长（帧慢了、一步走得更远）。
+        # 这正是 A-07 的口径——位移不是时长动画，开关只该改"看得见的帧"，不该改"走多快"。
         self.anim.play("walk", WALK_FRAME_MS, loops=-1,
                        rate_factor=self._frame_rate_factor())
         self._end_anim_switch(gen)
@@ -4086,6 +4117,24 @@ class PetWindow(QWidget):
         self.cfg["time_mood"] = bool(on)
         save_config(self.cfg)
 
+    def _set_easter_eggs(self, on):
+        """「🎁 惊喜彩蛋」开关：落盘 + 起停 2s 角落采样（判定本身每次现读 cfg，立刻静音）。"""
+        self.cfg["easter_eggs"] = bool(on)
+        save_config(self.cfg)
+        try:
+            if on:
+                self.easter_timer.start(2000)
+            else:
+                self.easter_timer.stop()
+                self._corner_since = None
+        except Exception as exc:   # noqa: BLE001 —— 开关不许把菜单带崩
+            _log_error("set_easter_eggs: %r" % (exc,))
+
+    def _set_menu_hover_preview(self, on):
+        """「👀 菜单悬停预览」开关：落盘（下次开菜单生效：计时器在菜单构建时才按它决定建不建）。"""
+        self.cfg["menu_hover_preview"] = bool(on)
+        save_config(self.cfg)
+
     def set_fullscreen_hide(self, on):
         """菜单开关：落盘 + 起停定时器 + 归位（别让旧去抖计数跨开关生效）。"""
         self.cfg["fullscreen_hide"] = bool(on)
@@ -4137,6 +4186,7 @@ class PetWindow(QWidget):
             return
         if not shown:
             return  # 没真显示出来 → 不记账
+        self._mood_spoke_at = time.monotonic()  # v2.12.0：深夜彩蛋据此避让 30 分钟
         self.cfg["time_mood_sent"] = pet_time_mood.remember(
             self.cfg.get("time_mood_sent"), now, _key)
         save_config(self.cfg)
@@ -4469,6 +4519,9 @@ class PetWindow(QWidget):
                 pet_log.log_throttled("notify:call", "notify: %r" % (e,))
                 delivered = False
         bubble = self.show_bubble(text, hold_ms=hold_ms)
+        if bubble:
+            # v2.12.0（三审 P1-7）：打扰类占了气泡 → 6 秒内陪伴类（彩蛋）让位，不许反压。
+            self._disturb_until = time.monotonic() + 6.0
         if not bubble and delivered:
             # 通知交出去了、气泡却没显示（例如窗口正在退出）：这条要留痕。
             # 不在这里再补第二条通道 —— 气泡就是兜底，它自己都弹不出来时没有第三条。
@@ -4849,7 +4902,6 @@ class PetWindow(QWidget):
             self.show_bubble(random.choice(["消化完啦，又饿了~", "瘦回来啦！", "还能再吃一点……"]))
 
     def feed(self, food):
-        self._easter_check("feed")  # v2.12.0（E1）：连喂彩蛋（判定在 pet_easter，这里只记一次）
         # v2.4.2（启动耗时 P2）：吃帧是延迟装载的三组之一，喂食前必须先补齐——否则
         # 下面读到的 anim._sets["eat"] 会是构造期注册的空集，喂食会错走"大笑表达"分支。
         # 补齐后指纹变了，_set_form 里的 _wire_anim_sets 会把真实吃帧注册进去。
@@ -4871,6 +4923,9 @@ class PetWindow(QWidget):
             self.show_bubble(random.choice(["这个形态不吃东西啦~", "本形态拒绝投喂！",
                                             "现在只想安静地当一条鱼~"]))
             return
+        # v2.12.0（E1）：**真的吃进去了**才记一次 —— 被 busy / 形态闸拒绝的喂食不算
+        # （v2.12.0 三审 P1-6：原先记在函数第一行，连点三次被拒也算"投喂三连"）。
+        self._easter_check("feed")
         # v2.1.7（M1）：临时展示（变身/睡眠/待机展示）期间的"当前形态"不是用户形态，
         # 喂食推进必须按**用户形态**算基准，否则会从变身形态往后推、跳过吃饱形态。
         # 注意：必须在下面 _touch_activity() 之前取（它会结束待机展示期）。
@@ -5512,7 +5567,6 @@ class PetWindow(QWidget):
                 return  # P1-手感：飞行中不响应戳戳/摸摸头（落地静止后恢复）
             self._wake()
             self._touch_activity()  # v2.1：点击=交互（打断待机 + 两触发重新计时）
-            self._easter_check("poke")  # v2.12.0（E1）：连戳彩蛋（含开关/每日/冷却）
             self._drag_samples = []  # P1-手感：新一轮拖拽轨迹采样
             self._spring_vx = 0.0
             self._spring_vy = 0.0
@@ -5602,6 +5656,9 @@ class PetWindow(QWidget):
             if was_petting:
                 return  # 摸头成功的松手：不戳、不贴边（M-1 修复）
             if not self._moved:
+                # v2.12.0（E1）：**真戳中的那一下**才计数——拖拽不算，摸头在上面已早退
+                # （v2.12.0 三审 P1-6：原先记在 press 第一段，拖拽/长按全被算成"戳"）。
+                self._easter_check("poke")
                 self.mood.poke()
                 self.voice.play_event("poke")  # v2.0：被戳语音片段
                 # A4 ③：点击涟漪——从**点击点**扩散、一次性、自己消失（不阻塞交互）

@@ -3,9 +3,13 @@ Dim fso, folder, fl, target, ws, content
 Set fso = CreateObject("Scripting.FileSystemObject")
 Set folder = fso.GetFolder(fso.GetParentFolderName(WScript.ScriptFullName))
 target = ""
-' v2.12.0（第 12 轮 · 遗留-1）：**先用显式名 main.py**（它是崩溃自动重启的守护入口），
-' 找不到才退回下面那条"扫标记"的兼容路径（老包 / 入口被改名的包）。
-' 顺序不许倒：main.py 与 桌宠.py 现在都带标记，扫标记的结果取决于目录枚举顺序，不可信。
+' v2.12.0 (r12 / legacy-1): try the explicit name main.py first -- it is the guard entry
+' that performs crash auto-restart. Only if it is missing, fall back to the marker scan below
+' (old packages / renamed entries). Do NOT reorder: both files carry the marker now, so the
+' scan result depends on directory enumeration order and is not trustworthy.
+' NOTE: keep this file pure ASCII. WSH decodes .vbs with the ANSI code page (CP936 here); a
+' non-ASCII byte at end of line can swallow the newline and break the whole script (v2.12.0
+' regression). tests/test_entry_chain_v2120.py pins it.
 If fso.FileExists(folder.Path & "\main.py") Then
     target = "main.py"
 End If
@@ -32,7 +36,7 @@ If target = "" Then
 End If
 Set ws = CreateObject("WScript.Shell")
 ws.CurrentDirectory = folder.Path
-' 清理宿主环境变量，防止干扰便携运行时解析 stdlib/site-packages
+' Clear host env vars so they cannot disturb the portable runtime resolving stdlib/site-packages
 ws.Environment("Process")("PYTHONHOME") = ""
 ws.Environment("Process")("PYTHONPATH") = ""
 ws.Run """" & folder.Path & "\pythonw.exe"" """ & target & """", 0, False

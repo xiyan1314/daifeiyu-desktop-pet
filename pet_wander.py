@@ -191,7 +191,22 @@ class WanderController:
         # 竖轴仍走 _walk_step：素材只有左右朝向，帧推进不该假装管上下。
         _take = getattr(pet, "_take_walk_steps", None)
         steps = _take() if _take is not None else 0
-        sdx = root_dx(dx, steps, pet_motion.ROOT["STEP_PX"])
+        if dist > WALK_FAR_DIST:
+            # v2.12.0 三审 P1-2：**远距快追仍走 tick 那条老路**（三区速度是 v1.4.2 的既有行为）。
+            # 上一版只要有走帧就用 root_dx（6px/帧），远距时与老一步 30~40px 交替出现
+            # → 忽快忽慢、平均速度掉到约 60%，与 pet_motion.ROOT 的注释和发布说明全都相反。
+            # 这里把帧计数**取走**（照常清零）但不用它的值：近距才由帧驱动。
+            steps = 0
+        # 「减少动效」会按倍率放慢**帧**（anim.play 的 rate_factor），但**位移速度不许跟着减半**
+        # （A-07：位移不是时长动画）。所以每帧步长按 1/倍率补偿：帧慢了、一步走得更远，
+        # 每秒位移不变。pet 上没有这个钩子（测试替身/老调用方）→ 倍率按 1.0。
+        step_px = pet_motion.ROOT["STEP_PX"]
+        _rate_fn = getattr(pet, "_frame_rate_factor", None)
+        if _rate_fn is not None:
+            _rate = float(_rate_fn() or 1.0)
+            if _rate > 0:
+                step_px = int(round(step_px / _rate))
+        sdx = root_dx(dx, steps, step_px)
         if sdx:
             nx = cur.x() + sdx
             # 边界夹紧：按**当前屏可用区**夹，角色整只不许出屏；被夹住就停在边上

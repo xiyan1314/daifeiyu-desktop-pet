@@ -128,3 +128,50 @@ def test_tray_tip_is_persisted_not_a_process_global():
               if isinstance(n, ast.Constant) and isinstance(n.value, str)}
     assert "_HIDE_TIP_SHOWN" not in names, "进程级全局 _HIDE_TIP_SHOWN 又回来了（重启就忘）"
     assert "_HIDE_TIP_SHOWN" not in consts, "globals()[\"_HIDE_TIP_SHOWN\"] 又回来了（重启就忘）"
+
+def test_window_schedules_the_first_run_guide():
+    """**接线判据**：窗口必须真的把 _first_run_guide 挂到定时器上。
+
+    三审 P0-1 的实测：把 `桌宠.py` 那行 `QTimer.singleShot(2600, self, self._gslot("first_run",
+    self._first_run_guide))` 整行删掉，17 条 D1 判据**全绿**——功能可以人间蒸发而门不动。
+    本条读 AST 里所有 `*.singleShot(...)` 调用，要求其中**至少一个**的参数里出现
+    `_first_run_guide`；删掉那行 → 当场红。
+    """
+    src = open(os.path.join(HERE, "桌宠.py"), encoding="utf-8").read()
+    tree = ast.parse(src)
+    hits = []
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call):
+            continue
+        fn = node.func
+        if isinstance(fn, ast.Attribute) and fn.attr == "singleShot":
+            if "_first_run_guide" in ast.unparse(node):
+                hits.append(node.lineno)
+    assert hits, "窗口里没有任何地方调度 _first_run_guide —— D1 首次引导等于没做"
+
+
+def test_existing_config_marks_an_old_user_as_done(tmp_path, monkeypatch):
+    """老用户升级不许被"第一次见～"再问一次（三审 P1-9）。
+
+    判据：磁盘上**已经有** config.json（而且没有这两个键）→ load_config 必须补成 True。
+    把 `load_config` 里那两行迁移删掉 → 本条红。
+    """
+    import json
+    import 桌宠 as main
+    p = tmp_path / "config.json"
+    p.write_text(json.dumps({"schema_version": main.CONFIG_SCHEMA_VERSION, "sound": False}),
+                 encoding="utf-8")
+    monkeypatch.setattr(main, "CONFIG_PATH", str(p))
+    cfg = main.load_config()
+    assert cfg["first_run_done"] is True, "老用户升级后仍会被弹一次首次引导"
+    assert cfg["tray_tip_done"] is True, "老用户关窗还会再看一遍托盘提示"
+
+
+def test_first_install_has_not_run_yet(tmp_path, monkeypatch):
+    """真·首启（config.json 还不存在）：两个标记都必须是 False（否则引导永远不弹）。"""
+    import 桌宠 as main
+    monkeypatch.setattr(main, "CONFIG_PATH", str(tmp_path / "config.json"))
+    cfg = main.load_config()
+    assert cfg["first_run_done"] is False
+    assert cfg["tray_tip_done"] is False
+

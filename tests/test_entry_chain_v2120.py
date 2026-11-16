@@ -97,3 +97,44 @@ def test_vbs_prefers_main_py_before_the_marker_scan():
     assert 'target = "main.py"' in text[explicit:], "显式分支找到了却没把 target 设成 main.py"
     scan = text.find("daifeiyu_pet_main", explicit)
     assert scan > explicit, "标记扫描出现在显式 main.py 分支之前（两者都带标记时会随枚举顺序猜错）"
+
+def test_vbs_is_pure_ascii():
+    """启动桌宠.vbs 必须**纯 ASCII**：WSH 按 ANSI 代码页解码它，非 ASCII 会吃掉行尾换行。
+
+    v2.12.0 的血案：第 6-8 行新增的中文注释让第 9 行报"缺少语句"——**整个脚本编译失败**，
+    而绿色版"双击启动"与开机自启都靠它；唯一的判据只做 text.find()，所以九门全绿。
+    机制（本机实测）：UTF-8 无 BOM + CP936 解码，"。"这类字符的末字节会被当成前导字节，
+    把后面的 0x0A 一起吃掉 → 两行并一行。
+
+    判据：文件里一个 >0x7F 的字节都不许有。改回中文注释 → 本用例当场红。
+    """
+    raw = open(os.path.join(HERE, "启动桌宠.vbs"), "rb").read()
+    bad = [(i, b) for i, b in enumerate(raw) if b > 127]
+    assert not bad, (
+        "启动桌宠.vbs 混入非 ASCII 字节 %d 个（WSH 按 ANSI 解码，行尾的多字节字符会吃掉换行，"
+        "整脚本编译失败）；首个 0x%02X 在偏移 %d" % (len(bad), bad[0][1], bad[0][0]))
+
+
+def test_autostart_command_second_fallback_still_points_at_the_guard_entry(tmp_path):
+    """兜底二：应用目录没有 pythonw.exe → 用解释器同目录的 pythonw，入口仍须是 main.py。
+
+    三审 P1-1 的实测：只把**第一条**兜底改回写死 桌宠.py，8 条用例仍全绿 —— 后两条没人走。
+    """
+    (tmp_path / "main.py").write_text("", encoding="utf-8")
+    (tmp_path / "桌宠.py").write_text("", encoding="utf-8")
+    interp = tmp_path / "runtime"
+    interp.mkdir()
+    (interp / "pythonw.exe").write_text("", encoding="utf-8")
+    cmd = pet_main.autostart_command(str(tmp_path), str(interp / "python.exe"))
+    assert "main.py" in cmd and "桌宠.py" not in cmd, "兜底二没指向守护入口：%r" % (cmd,)
+
+
+def test_autostart_command_last_fallback_still_points_at_the_guard_entry(tmp_path):
+    """兜底三：连解释器同目录都没有 pythonw → 直接用解释器本体，入口仍须是 main.py。"""
+    (tmp_path / "main.py").write_text("", encoding="utf-8")
+    (tmp_path / "桌宠.py").write_text("", encoding="utf-8")
+    interp = tmp_path / "runtime"
+    interp.mkdir()
+    cmd = pet_main.autostart_command(str(tmp_path), str(interp / "python.exe"))
+    assert "main.py" in cmd and "桌宠.py" not in cmd, "兜底三没指向守护入口：%r" % (cmd,)
+

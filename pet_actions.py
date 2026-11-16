@@ -61,6 +61,12 @@ class ActionService:
             # D2（v2.12.0）：**预览 = 只播一次**。不写 ledger / 不播 voice / 不改 cfg，
             # 也不叫醒、不抢 busy——它只是"让用户看一眼这个动作长什么样"。
             # 所以这里**先于**下面所有门控（悬停不该被"正在跟随/散步"吞掉）。
+            #
+            # 但**忙闸必须最先**：吃帧/其它动画进行中时 pet.anim.play() 内部第一件事是
+            # stop()，会把吃帧挂的 _eat_done 收尾回调一起丢掉 → busy 卡到看门狗
+            # （约 2.6s 不响应 + 一条 error.log）。此刻一个像素都不动，静默跳过。
+            if pet.busy or getattr(pet, "anim_mode", "") == "eat":
+                return
             if name == "emote":
                 pet._show_emote(arg or "note")
                 return
@@ -71,6 +77,11 @@ class ActionService:
                 pet.anim.play(name, pet._cur_form_anim().get("interval_ms") or pet.EAT_FRAME_MS,
                               loops=1, on_finish=pet._play_idle,
                               rate_factor=pet._frame_rate_factor())
+                return
+            # proc 类合成动作（菜单里的「✦ xxx（合成）」）**不预览**：真播必须走
+            # _play_proc，它会写 anim_mode / 停 _state_timer / 摆 squash 并跑满 2 个周期，
+            # 与"悬停看一眼"的轻量语义冲突；这里静默跳过，**不碰真播路径**。
+            # 菜单侧已在该项文案上标「（合成）」，用户不会误以为是「点了没反应」。
             return
         if pet.busy or pet._petting or ((self._cfg().get("follow_mouse") or self._cfg().get("wander"))
                                         and not force):

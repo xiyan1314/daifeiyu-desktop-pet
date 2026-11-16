@@ -8,30 +8,53 @@
 
 主题：**收尾**——root motion（帧驱动位移 + 边界夹紧）· 遗留-1（入口链收口到 `main.py`）· UX 三小项（D1 首次引导 / E1 四类彩蛋 / D2 菜单悬停预览）· 事件分档。
 
-> **版本号五处已升到 `2.12.0`**：`桌宠.py:91` 的 `VERSION` · `version_info.txt` 的四行（`filevers` / `prodvers` / `FileVersion` / `ProductVersion`）· `_verify_green.py:49` 的 green version 断言 · 本节标题 · `_release_notes_v2120.md` 标题 —— **再没有「版本号没升」这一步待办**。
+> **版本号五处已升到 `2.12.0`**：`桌宠.py:91` 的 `VERSION` · `version_info.txt` 的四行（`filevers` / `prodvers` / `FileVersion` / `ProductVersion`）· `_verify_green.py:49` 的 green version 断言 · 本节标题 · `_release_notes_v2120.md` 标题。
 > **验证读数待定版**（九门现场跑 + 证据整批复跑之后回写本节「回归」；没跑过的数字不写）。
 > 作业单：`_dev/task_r12_v2120_round.md`（四处判据）· 判据：`tests/test_root_motion_v2120.py` · `tests/test_entry_chain_v2120.py` · `tests/test_firstrun_v2120.py` · `tests/test_easter_v2120.py` · `tests/test_menu_preview_v2120.py` · `tests/test_action_taxonomy_v2120.py`。
+> **本轮经过三审（三路独立）+ 修复波**：下面标「三审」的条目是审查实测出来的真缺陷，不是顺手改的。
 
 **① 主题：root motion（帧驱动位移 + 边界夹紧）**
 
-- `pet_motion.ROOT = {"STEP_PX": 6}`（`pet_motion.py:92-96`）——**单独一张表、不进 `DUR`**：`DUR` 是"一次动画多长（ms）"，这里是"一帧走多远（px）"，量纲不同；混进 `DUR` 会被 `tests/test_motion_v2110.py` 的 `_DUR_RESERVED` 当成时长档位配对（那张表按 key 名扫）。6px / 120ms 一拍 ≈ 50 px/s，与 v1.4.2「近距缓行」档同量级。
-- **帧驱动**：走帧每推进一步，窗口按「朝向 × STEP_PX」位移；**边界夹紧**按当前屏可用区域算，**角色整只不出屏**，被夹住就停步（不抖、不来回弹）。**只接管水平位移**：远距快追仍走 tick 那条老路；**无 walk 帧集的角色（自定义 / 素材缺失）一行都不改**。
-- **不接「减少动效」**：位移不是时长动画（A-07 收窄口径），钉子 `test_root_motion_ignores_reduce_motion` 专看这条缝（接上开关必红）。
+- `pet_motion.ROOT = {"STEP_PX": 6}`（`pet_motion.py:92-96`）——**单独一张表、不进 `DUR`**：`DUR` 是"一次动画多长（ms）"，这里是"一帧走多远（px）"，量纲不同；混进 `DUR` 会被 `tests/test_motion_v2110.py` 的 `_DUR_RESERVED` 当成时长档位配对。6px / 120ms 一拍 ≈ 50 px/s。
+- **近距才由帧驱动**：`dist <= WALK_FAR_DIST(200)` 时位移 = 步数 × STEP_PX；**远距快追仍走三区速度那条老路**（`pet_wander.tick` 里 `if dist > WALK_FAR_DIST: steps = 0`）。三审实测过上一版：远距只要有走帧就按 6px 走，与老路 30~40px 交替 → 忽快忽慢、平均速度掉到约 60%，4K 屏上追 3000px 要 60 秒。
+- **边界夹紧按当前屏可用区**（`clamp_x(nx, scr.left(), scr.right() - pet.width() + 1)`）：整只不出屏，被夹住就停步（不抖、不来回弹）。判据用**假屏几何**驱动 `tick`（`tests/test_root_motion_v2120.py`），把夹紧写死成 1920 会当场红。
+- **「减少动效」只许放慢帧、不许改走速**（三审 P1-3）：`anim.play("walk", ..., rate_factor=self._frame_rate_factor())`（`桌宠.py:3538-3539`）照常带开关（全仓 A-11 规则：每个素材帧播放点都要带），但 `pet_wander` 按 `1/倍率` 补偿每帧步长（`pet_wander.py:200-208`）—— 帧间隔翻倍时一步走两倍距离，**每秒位移不变**。上一版没补偿 → 开关一开走速砍半（6px/240ms）。判据：`test_walk_speed_is_invariant_under_reduce_motion`（0.5 倍率下必须走 12px 而不是 6px）。
+- **删掉只写不读的 `_walk_root_on`**（三审 P1-5）：真正决定"这一刻归帧管"的只有 `_take_walk_steps()` 的帧计数。
+- **无 walk 帧集的角色一行都没改**：`_walk_anim` 返回 False，仍走「静态图 + squash」老路。
 
 **② 遗留-1：入口链三处收口**
 
-- `大肥鱼桌宠.spec:7` 的 Analysis 入口 → `['main.py']`；`main.py:21` 补 `# entry-marker: daifeiyu_pet_main`（**老启动器靠这枚 ASCII 标记找入口，删了就找不到**）；`启动桌宠.vbs:9-10` **先显式试 `main.py`** 再退回"扫标记"（顺序不许倒：两个文件现在都带标记，扫标记的结果取决于目录枚举顺序，不可信）；`pet_main.py:112-127` 新增 `ENTRY_NAMES` / `entry_name(app_dir)`，开机自启三条兜底路径全部改用它（都没有 → 保守回退 `桌宠.py`）。
+- `大肥鱼桌宠.spec:7` 的 Analysis 入口 → `['main.py']`；`main.py:21` 补 `# entry-marker: daifeiyu_pet_main`（**老启动器靠这枚 ASCII 标记找入口**）；`启动桌宠.vbs` **先显式试 `main.py`** 再退回"扫标记"（顺序不许倒：两个文件都带标记，扫标记结果取决于目录枚举顺序）；`pet_main.py:112-127` 的 `ENTRY_NAMES` / `entry_name()` 是全仓唯一入口名口径，自启**三条兜底**都用它。
+- **`启动桌宠.vbs` 必须是纯 ASCII**（三审 P0）：本轮最初加的三行中文注释让 WSH 在 CP936 下把行尾换行吃掉 → **整个脚本编译失败**（实测 `cscript` 报第 9 行"缺少语句"），绿色版双击启动与开机自启同时废掉。现在注释全英文，并有一条判据（`test_vbs_is_pure_ascii`）钉住"一个 >0x7F 的字节都不许有"。
 - 后果：**打包出来的 exe 上 `pet_guard` 终于真的执行**——v2.11.0 发布说明 §五 5 如实登记过的那条，本轮结单。
 
-**③ UX 三小项**
+**③ D1 首次引导（一次性 · 落盘）**
 
-- **D1 首次引导**：新键 `first_run_done` / `tray_tip_done`（`pet_config.py:256`，默认 `False`）；「关窗收进托盘」提示从**模块级全局** `_HIDE_TIP_SHOWN`（重启就忘）改成**落盘**（`桌宠.py:4578`）；引导排在开场台词之后（`桌宠.py:1359`），**不发声、不进系统通知**；**写盘失败仍只弹一次**并在 `error.log` 留痕。
-- **E1 四类彩蛋**：新模块 `pet_easter.py`（**纯逻辑、零 Qt、时钟与计数可注入**）；四类 `poke`（7 次 / 4s）· `feed`（3 次 / 60s）· `late`（23:00–05:00）· `corner`（≥8s），`DEFAULTS` 在 `pet_easter.py:26-35`；**每类每天最多一次**（`easter_sent` 落盘，坏值回空表）+ **全局冷却 30 分钟** + 开关 `easter_eggs` **默认开**；v1 **不做屏幕震动**（只播台词 / 表情）。四个钩子：点击 / 喂食 / 深夜 / 角落（角落是 2s 采样，计时器登记在 `桌宠.py:6586` 的 cleanup 元组里）。
-- **D2 菜单悬停预览**：新键 `menu_hover_preview`，**默认关**（`pet_config.py:258`）；悬停 300ms（令牌 `pet_motion.DUR["PREVIEW"]`，`pet_motion.py:68`）→ `pet_menu.HoverPreview`（`pet_menu.py:24`，接线 `:332-353`）；`play_action(..., preview=True)` 的预览分支**不写 ledger / 不播 voice / 不改 cfg**；移开 / 换条目 / 关菜单**立即取消**，一个动作都不许晚到。
+- 新键 `first_run_done` / `tray_tip_done`（`pet_config.py:256`，默认 `False`）；「关窗收进托盘」提示从**模块级全局** `_HIDE_TIP_SHOWN`（重启就忘）改成落盘（`桌宠.py:4631`）；引导排在开场台词之后（`桌宠.py:1360` 附近的 `QTimer.singleShot(2600, ...)`），**不发声、不进系统通知**；**写盘失败仍只弹一次**并在 `error.log` 留痕。
+- **老用户升级不弹**（三审 P1-9）：`load_config` 发现 `config.json` **本来就存在**且没有这两个键 → 直接补成 `True`（`桌宠.py:486-492`）。真·首启（文件不存在）才是 `False`。判据：`test_existing_config_marks_an_old_user_as_done` / `test_first_install_has_not_run_yet`。
+- **接线有判据**（三审 P0-1）：`test_window_schedules_the_first_run_guide` 读 AST，要求窗口里真有 `singleShot(..., _first_run_guide)`；上一版把那一行删掉，17 条 D1 判据全绿。
 
-**④ 事件分档：哪些算打扰、哪些算陪伴**
+**④ E1 四类惊喜彩蛋（低频 · 可关）**
 
-- `pet_events.TAXONOMY`（`pet_events.py:19`）+ `README.md:266` 起「打扰还是陪伴（事件分档）」表（标记块 `README.md:271-283`），**两边同源**：文档多一个 / 少一个事件名都红（`tests/test_action_taxonomy_v2120.py`）。分档只有两档（`disturb` / `companion`），**没登记的新东西按打扰审**。
+- 新模块 `pet_easter.py`（**纯逻辑、零 Qt、时钟与计数可注入**）：`poke`（7 次 / 4s）· `feed`（3 次 / 60s）· `late`（23:00–05:00）· `corner`（贴角 ≥8s）· 全局冷却 30 分钟 · 每类每天一次（`easter_sent` 落盘）+ 开关默认开 · v1 不做屏幕震动。
+- **派发查显式表**（三审 P0）：`pet_easter.KIND_METHODS = {"poke": "on_poke", ..., "late": "on_hour", ...}`。上一版拼 `"on_" + kind` → `on_late` 不存在 → **深夜类一次都不响且不留痕**；现在查不到就记 `error.log`。
+- **角落按"边到边"算**（三审 P0）：`pet_easter.near_corner(窗口四边, 屏幕四边)`，半径 24px。上一版拿**窗口中心**比 48px —— 默认窗口 320 宽，贴齐屏幕边时中心仍离边 160px，这一类**物理不可达**。
+- **只记真戳 / 真吃**（三审 P1-6）：`_easter_check("poke")` 挪到松手且 `not _moved`（拖拽、摸头不算）；`_easter_check("feed")` 挪到 busy 与形态闸**之后**（被拒的喂食不算）。
+- **陪伴类不压打扰类**（三审 P1-7）：通知/闹钟的气泡在途时（`桌宠.py:4522` 的 `_disturb_until`）彩蛋**不消费**、过会儿再说；**深夜与「时段问候」30 分钟内不重复说**（`_mood_spoke_at`，`桌宠.py:4187`）。
+- **开关进菜单**：`🎁 惊喜彩蛋`（`easter_eggs`，默认开，`桌宠.py:4118` `_set_easter_eggs` 落盘 + 起停 2s 角落采样）。
+
+**⑤ D2 菜单悬停预览（默认关 · 不改状态）**
+
+- 新键 `menu_hover_preview`，**默认关**（`pet_config.py:258`）；悬停 300ms（令牌 `pet_motion.DUR["PREVIEW"]`，`pet_motion.py:68`）→ `pet_menu.HoverPreview` 预览一次该动作。
+- **预览 = 不落状态、不发声、不计统计**：`play_action(..., preview=True)` 的预览分支**不写 ledger / 不播 voice / 不改 cfg**，只播一次帧或表情。
+- **忙闸最前**（三审 P1-8）：`pet.busy` 或吃帧中**一律不预览** —— 上一版预览直接 `anim.play()`，而 `play()` 内部先 `stop()`，会顶掉吃帧的 `_eat_done`（busy 卡到看门狗）。合成动作（`✦`）**不做预览**（静默跳过，不假装播了）。
+- **开关进菜单**：`👀 菜单悬停预览`（`桌宠.py:4131` `_set_menu_hover_preview`）。
+
+**⑥ 事件分档：哪些算打扰、哪些算陪伴**
+
+- `pet_events.TAXONOMY`（`pet_events.py:19`）+ `README.md` 的「打扰还是陪伴（事件分档）」表（`<!-- taxonomy:begin -->` 标记块），**两边同源**：文档多一个 / 少一个事件名都红。分档只有两档（`disturb` / `companion`），**没登记的新东西按打扰审**。
+- `pet_events.py` 进了 `_check_release.SYNC_FILES`（三审 P1-10）：它不被产品码 import，反向校验抓不到 —— 漏了就是"绿色版/发布包缺件"。
+- README 这一节从 `## 📜 License` **后面**挪到「打包」前面（用户按目录读到 License 就以为结束了，三审 P2）。
 
 **回归**
 

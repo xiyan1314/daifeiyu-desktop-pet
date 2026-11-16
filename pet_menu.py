@@ -209,6 +209,20 @@ class MenuBuilder:
         time_mood_act.setCheckable(True)
         time_mood_act.setChecked(pet.cfg.get("time_mood") is True)
         time_mood_act.toggled.connect(pet._set_time_mood)
+        # ---- v2.12.0（D2/E1）：两个 UX 开关 ----
+        # 只进「⚙️ 设置…」：顶层非空文本项已是 18（硬上限，_verify_green.py:86 与
+        # tests/test_feedback_v2110_b.py:568 两处钉着），**一条都不许加顶层**。
+        # 勾选态读**生效值**（与 桌宠.DEFAULT_CONFIG 同口径：彩蛋默认开、悬停预览默认关）；
+        # 菜单每次 open 重建，天然读"此刻的值"。落盘/立即生效由
+        # _set_easter_eggs / _set_menu_hover_preview 负责（与上面几条同形）。
+        egg_act = set_menu.addAction("🎁 惊喜彩蛋")
+        egg_act.setCheckable(True)
+        egg_act.setChecked(bool(pet.cfg.get("easter_eggs", True)))
+        egg_act.toggled.connect(pet._set_easter_eggs)
+        hover_act = set_menu.addAction("👀 菜单悬停预览")
+        hover_act.setCheckable(True)
+        hover_act.setChecked(bool(pet.cfg.get("menu_hover_preview", False)))
+        hover_act.toggled.connect(pet._set_menu_hover_preview)
         # v2.11.0 第 9 轮（A2/A3 · 代理 B 接线）：两个无障碍开关。托盘菜单里也有一份
         # （由桌宠负责，桌面类的活），但「设置…」是用户找设置的第一落点，两边文案与语义
         # **逐字一致**（原则 4：同语义同表现）。

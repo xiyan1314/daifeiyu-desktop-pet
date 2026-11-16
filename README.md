@@ -246,7 +246,7 @@ v2.4.1 的发布说明里有一句「**pet_tools + pet_lines 82 个函数补全�
 | `pet_io.py` | ✅ 25/28 | 公开 API 与纯函数全覆盖；未标的 3 个是 `_MergeGuard` 的 `__init__/__enter__/__exit__` |
 | `pet_book.py` | ⚠️ 25/34 | 未标的是 8 个私有辅助（`_load`/`_save_all`/`_archive_day`…）与模块级 `esc` |
 | `pet_chat.py` / `pet_balance.py` / `pet_widgets.py` / `pet_export.py` / `pet_config.py` / `pet_alarm.py` / `pet_behaviors.py` | ❌ 0 | 本轮只澄清口径，未新增注解 |
-| `桌宠.py`（311 函数）/ `pet_dialogs.py`（425）/ `pet_voice.py`（93）/ `pet_resources.py`（80）/ `pet_anim.py`（13）/ `pet_actions.py`（7） | ❌ 0 | **单独立项**，不在 v2.4.1 那句「82/82」的口径内 |
+| `桌宠.py`（313 函数）/ `pet_dialogs.py`（425）/ `pet_voice.py`（93）/ `pet_resources.py`（80）/ `pet_anim.py`（13）/ `pet_actions.py`（7） | ❌ 0 | **单独立项**，不在 v2.4.1 那句「82/82」的口径内 |
 
 也就是说：**已经补注解的是 `pet_tools` / `pet_lines` / `pet_io` / `pet_book` 这几个
 Qt-free 模块（其中前两个是全量），三大核心文件与其余 GUI 模块仍是零注解**。评估注解覆盖率
@@ -260,13 +260,11 @@ python -m PyInstaller --noconfirm --clean 大肥鱼桌宠.spec
 # 产物 dist\大肥鱼桌宠\（可选 exe 版；对外分享推荐绿色版）
 ```
 
-## 📜 License
-
-[MIT](LICENSE) © 大肥鱼桌宠项目
 ## 打扰还是陪伴（事件分档）
 
 > 这张表的**机器可读版本**是 `pet_events.TAXONOMY`；两边任何一个事件名对不上，
 > `tests/test_action_taxonomy_v2120.py` 当场红。改一处必须改两处。
+> ⚠ `focus`（番茄钟）是**第 22 轮**才有的东西，现在只是提前划线；其余 8 条都已经在树里。
 
 <!-- taxonomy:begin -->
 | 事件 | 分档 | 说明 |
@@ -279,12 +277,23 @@ python -m PyInstaller --noconfirm --clean 大肥鱼桌宠.spec
 | `idle_say` | 陪伴 | 待机碎碎念 |
 | `time_mood` | 陪伴 | 时段问候 |
 | `first_run` | 陪伴 | 首次引导气泡 |
-| `easter` | 陪伴 | 惊喜彩蛋（第 12 轮） |
+| `easter` | 陪伴 | 惊喜彩蛋 |
 <!-- taxonomy:end -->
 
 **两条口径**：
 
 1. **打扰**类默认可关、且必须克制（一天一条上限、不重复弹同一句）；
-2. **陪伴**类自己发生、不要求回应——关掉只是少点意思，不该影响任何功能使用。
+2. **陪伴**类自己发生、不要求回应——**而且永远不许盖掉在途的打扰类气泡**
+   （实现见 `桌宠.py` 的 `_disturb_until`：通知/闹钟的气泡占着时，彩蛋让位）。
+
+**两个新开关在哪**（都在「⚙️ 设置…」子菜单里，勾选态 ＝ **此刻生效值**）：
+
+- `🎁 惊喜彩蛋`（`easter_eggs`，**默认开**）：关掉后四类彩蛋全静音，角落采样定时器一起停。
+- `👀 菜单悬停预览`（`menu_hover_preview`，**默认关**）：开着的用户把鼠标在动作子菜单上
+  停 **300ms**，预览一次该动作（不落状态、不发声、不计统计、不写 ledger）；吃帧表演期间不预览。
 
 新增任何「会自己弹出来」的东西前，先在 `pet_events.TAXONOMY` 登记分档；**没登记的按打扰审**。
+
+## 📜 License
+
+[MIT](LICENSE) © 大肥鱼桌宠项目
