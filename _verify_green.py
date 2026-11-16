@@ -83,7 +83,7 @@ try:
         if isinstance(obj, _Menu) and getattr(obj, "_captured", None) is not None:
             top = [a.text() for a in obj._captured if a.text()]
             break
-    check("menu compact", len(top) <= 9, "top=%d" % len(top))  # v2.13.0：18 → 9（体积与暴露面）
+    check("menu compact", len(top) == 9, "top=%d" % len(top))  # v2.13.0：恰好 9 项（<=9 只能拦变多，拦不住搬丢）
     check("menu has slider", any(isinstance(a, main.QWidgetAction)
                                   for a in gc.get_objects() if isinstance(a, main.QWidgetAction)))
 finally:

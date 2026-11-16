@@ -56,8 +56,11 @@ def test_first_launch_shows_zero_modal_dialogs(tmp_path, monkeypatch):
     for name in ("information", "warning", "question", "critical"):
         monkeypatch.setattr(QMessageBox, name,
                             lambda *a, **k: dialogs.append((a, k)) or QMessageBox.StandardButton.Ok)
-    monkeypatch.setattr(QMessageBox, "exec", lambda self: dialogs.append("msgbox") or 0)
-    monkeypatch.setattr(QDialog, "exec", lambda self: dialogs.append("dialog") or 0)
+    # 非阻塞模态（setModal(True)+show()）也算"弹窗"：三审实测过，只打桩 exec 会漏掉它。
+    for cls in (QMessageBox, QDialog):
+        monkeypatch.setattr(cls, "exec", lambda self: dialogs.append("exec") or 0)
+        monkeypatch.setattr(cls, "show", lambda self: dialogs.append("show"))
+        monkeypatch.setattr(cls, "open", lambda self: dialogs.append("open"))
 
     QApplication.instance() or QApplication([])
     win = main.PetWindow()
@@ -65,11 +68,16 @@ def test_first_launch_shows_zero_modal_dialogs(tmp_path, monkeypatch):
     monkeypatch.setattr(win, "show_bubble", lambda text, *a, **k: bubbles.append(text) or True)
     try:
         t0 = time.monotonic()
-        while time.monotonic() - t0 < 3.1:      # D1 的定时器是 2600ms
+        while time.monotonic() - t0 < 4.0:      # D1 的定时器是 2600ms；留 1.4s 余量（满载机器也不假红）
             QApplication.processEvents()
             time.sleep(0.02)
         assert dialogs == [], "首启弹了 %d 个模态框：%r" % (len(dialogs), dialogs[:3])
-        assert win.cfg["first_run_done"] is True, "首启标记没落盘"
+        assert win.cfg["first_run_done"] is True
+        # 不只内存：标记必须真的落到 config.json（三审实测：把 save_config 换掉，只看内存仍绿）
+        import json
+        with open(main.CONFIG_PATH, encoding="utf-8") as f:
+            on_disk = json.load(f)
+        assert on_disk.get("first_run_done") is True, "首启标记只改了内存，没落盘：%r" % (on_disk.get("first_run_done"),)
         assert bubbles == [pet_first_run.FIRST_RUN_HINT], \
             "首启引导应恰好一条气泡，实际 %r" % (bubbles,)
     finally:
@@ -107,6 +115,8 @@ def test_guard_restarts_a_crashed_child_end_to_end(tmp_path):
 
     判据：父进程退出码 3 · runs.txt 恰好 2（拉起了且只拉起一次）· crash_recovery.json 落盘。
     红法：删掉 main.py 的 Popen → runs.txt 停在 1；删掉熔断/正常退出判定 → 无限拉起。
+    **本条不证明**：单实例互斥体释放（_release_single_mutex 需要真实 pet_main 才走得通；
+    替身环境里 ImportError 被吞）。那条由 A 规则静态门 + pet_guard 单测兜，别把本条读成"互斥体也验了"。
     """
     app = tmp_path / "app"
     app.mkdir()

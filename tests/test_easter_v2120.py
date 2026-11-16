@@ -396,6 +396,11 @@ def test_corner_timer_respects_switch():
     for node in ast.walk(tree):
         if not isinstance(node, ast.If) or not _is_eggs_read(node.test):
             continue
+        # 取反 = "关掉才起采样"：语义反了却仍然命中"有 .get + 有 start(2000)"。
+        # 三审实测：改成 if not ... 时旧判据 6 条全绿。
+        if any(isinstance(n, ast.UnaryOp) and isinstance(n.op, ast.Not)
+               for n in ast.walk(node.test)):
+            continue
         for stmt in node.body:
             for call in _calls(stmt):
                 if (isinstance(call.func, ast.Attribute) and call.func.attr == "start"
@@ -450,10 +455,15 @@ def test_trigger_is_silent_when_off():
 
 
 def test_quit_stops_easter_timer():
-    """改什么会红：从 _quit 的清理元组删掉 self.easter_timer 这一项 → 红。
+    """改什么会红（三处，任何一处都红）：
+
+    1. 从 _quit 的清理元组删掉 self.easter_timer（或把它注释掉）→ 成员断言红；
+    2. 同上删掉 v2.13.0 的 self._asset_watch_timer（素材热重载 2s 轮询）→ 成员断言红；
+    3. 元组里留着、把循环体的 t.stop() 改成 pass → 停止调用断言红
+       （v2.13.0 三审实测：只钉成员资格时这一改**仍然绿**，所以补了这条）。
 
     这条替代旧的 assert "self.easter_timer" in src：旧断言只要文件里出现这串字就真，
-    注释里有一份也算，永远不可能失败。现在要求它真的是 for 循环元组的一个元素。
+    注释里有一份也算，永远不可能失败。
     """
     tree = ast.parse(_src("桌宠.py"))
     quit_fns = [n for n in ast.walk(tree)
@@ -461,11 +471,23 @@ def test_quit_stops_easter_timer():
     assert quit_fns, "桌宠.py 里找不到 _quit"
     quit_fn = quit_fns[0]
     stopped = []
+    loops = []
     for node in ast.walk(quit_fn):
         if isinstance(node, ast.For) and isinstance(node.iter, (ast.Tuple, ast.List)):
+            loops.append(node)
             for elt in node.iter.elts:
                 if (isinstance(elt, ast.Attribute)
                         and isinstance(elt.value, ast.Name)
                         and elt.value.id == "self"):
                     stopped.append(elt.attr)
     assert "easter_timer" in stopped, "退出清理元组没停 self.easter_timer"
+    # v2.13.0（第 13 轮）：素材热重载的 2s 轮询同样必须在退出清理元组里
+    # （_check_static 的 F 检查先抓到过：只构造不停止）。
+    assert "_asset_watch_timer" in stopped, "退出清理元组没停 self._asset_watch_timer"
+    # 成员资格还不够：循环体必须真的调 t.stop()（把 stop 改成 pass 也要红）。
+    assert any(
+        isinstance(c, ast.Call) and isinstance(c.func, ast.Attribute)
+        and c.func.attr == "stop" and isinstance(c.func.value, ast.Name)
+        and c.func.value.id == "t"
+        for loop in loops for c in ast.walk(loop)), \
+        "退出清理循环体没有真的 t.stop()（只把定时器列进元组不算停）"

@@ -6,7 +6,7 @@
 
 ## v2.13.0（2026-11-16）
 
-主题：**体积与暴露面**——解压体积 309.5 → 123.4 MiB（条目 3890 → 982）· 一级菜单 18 → 9 · 素材热重载 · README 首屏 GIF · `gallery/` 第 1 个官方包 · 首启 0 弹窗 · 崩溃自恢复端到端验收；另把 6 条只守形状的判据换成 AST（遗留-13）。
+主题：**体积与暴露面**——发布包 **3890 条 / 309.5 MB → 968 条 / 123.3 MiB**（绿色版目录 3905 → **983** 文件 / 295.3 → 123.4 MiB）· 一级菜单 **18（余额行在场时）→ 恰好 9** · 素材热重载 · README 首屏 GIF · `gallery/` 第 1 个官方包 · 首启 0 弹窗 · 崩溃自恢复端到端验收；另把 6 条只守形状的判据换成 AST（遗留-13）。
 
 > **版本号五处已升到 `2.13.0`**：`桌宠.py:91` 的 `VERSION` · `version_info.txt` 四行 · `_verify_green.py:49` · 本节标题 · `_release_notes_v2130.md` 标题。
 > 作业单：`_dev/task_r13_v2130_round.md`。判据：`tests/test_menu_v2130.py` · `tests/test_pack_v2130.py` · `tests/test_hotreload_v2130.py` · `tests/test_face_v2130.py` · `tests/test_round13_accept_v2130.py` · 遗留-13 落在 `tests/test_easter_v2120.py` / `tests/test_firstrun_v2120.py`。
@@ -16,12 +16,12 @@
 - **打包白名单单一来源**：`_check_release.PACK_TOP_ALLOWED`（发布包顶层**穷举**）+ `PACK_PRUNE_DIRS / PY_KEEP / DLL_KEEP / PACK_KEEP`；新增发布门 `check_pack()`：**解压 ≤150 MiB · 条目 ≤1300 · 顶层越界红 · 瘦身清单命中红 · 保留项缺失红**。
 - **瘦身脚本** `_dev/prune_green.py`（先副本后真包）：删 PySide6 的 `qml/`（2519 文件）· `resources/`（WebEngine `.pak`）· 未用绑定/DLL/Qt 开发工具/类型桩 · `glue/ metatypes/ typesystems/ scripts/ support/ doc/ lib/ QtAsyncio/` · `Lib/distutils`。
 - **明令保留** `opengl32sw.dll`（19.7 MB）与 `avcodec-61.dll`（13.4 MB）；**QtNetwork 也必须留**（QtMultimedia 抽帧在 C++ 侧动态 import，删了 `_verify_green.py` 当场红——实测）。
-- 绿色版目录：**982 files / 123.4 MiB**（删掉 2923 files / 171.9 MiB）；瘦身后 `_verify_green.py` 在本机 **0 FAILS**。
+- 绿色版目录：**983 files / 123.4 MiB**（瘦身删掉 2923 files / 171.9 MiB；随后同步新增 `pet_hotreload.py` 等 7 个文件 → 983）；发布包重打后 **968 条 / 123.3 MiB**；瘦身后 `_verify_green.py` 在本机 **0 FAILS**。
 
-**② 一级菜单 18 → 9（只搬家，不删功能）**
+**② 一级菜单（最多 18，余额行在场时）→ 恰好 9（只搬家，不删功能）**
 
 `💭 和它说话 · 🍖 喂食 · 🐟 角色 · 💰 记账 · 📦 资源管理 · ⚙️ 设置… · 🎭 动作 · ℹ️ 更多 · ⏹ 退出`
-余额/今日已用信息行收进「💰 记账」（只读首行）；置顶/音效/AI 对话/甩抛物理收进「⚙️ 设置…」第一组；夸夸/天气/城市/系统状态/关于收进「ℹ️ 更多」。两处硬断言（`_verify_green.py` / `_verify_v13.py`）与 4 条用例同步收紧到 **≤9**，另有 `tests/test_menu_v2130.py` 钉住"恰好 9 条 + 搬家后每条都还能触发"。
+余额/今日已用信息行收进「💰 记账」（只读首行）；置顶/音效/AI 对话/甩抛物理收进「⚙️ 设置…」第一组；夸夸/天气/城市/系统状态/关于收进「ℹ️ 更多」。两处硬断言（`_verify_green.py` 收紧成**恰好 9 条**、`_verify_v13.py` 收到 ≤9）与 4 条用例同步收紧，另有 `tests/test_menu_v2130.py` 钉住"恰好 9 条 + 搬家后每条都还能触发"。
 
 **③ 素材热重载（Clover Shimeji 口径）**
 

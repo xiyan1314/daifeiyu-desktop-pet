@@ -29,7 +29,7 @@ Transparent frameless window, always-on-top, draggable, feedable, chatty — per
 - 💰 **Balance widget** (optional): DeepSeek API balance + today's usage, rolling numbers, auto-refresh every 60s
 - 🔐 **Key security**: API Key encrypted with Windows DPAPI, never stored in plaintext
 - 🔁 **Asset hot reload**: edit images / frames / sounds under `assets/` while it runs — changes apply within ~2 s, no restart
-- 🧭 **Nine-item top-level menu** (was 18): balance line moved into 记账, frequent toggles into 设置…
+- 🧭 **Nine-item top-level menu** (was 18 with the balance line, 17 on a fresh install): balance line moved into 记账, frequent toggles into 设置…
 - 🎵 **Sounds**: press / release / feed / AI-reply-done / balance-credit (winsound-first chain, fallback-safe)
 - 🖐️ **Petting**: hold the pet for 1.5s → petpet animation + shy line (inspired by the whale widget's petpet)
 - 💸 **Money rain**: successful balance check → coin sound + money GIF frames

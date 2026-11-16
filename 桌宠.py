@@ -6715,6 +6715,7 @@ class PetWindow(QWidget):
                       self._nap_zzz_timer,     # v2.2.5：饭点小盹 #2（消化结束+13s）
                       self._idle_check_timer,  # v2.1.8：待机触发高速检查
                       self._fullscreen_timer,  # v2.11.0（第 11 轮 · 方向 4）：全屏轮询
+                      self._asset_watch_timer,  # v2.13.0（第 13 轮）：素材热重载 2s 轮询
                       self._alarm_timer):  # v2.0.5：闹钟轮询
                 if t is not None:
                     t.stop()

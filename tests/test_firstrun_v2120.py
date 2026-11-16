@@ -124,6 +124,19 @@ def test_tray_tip_is_persisted_not_a_process_global():
     src = open(os.path.join(HERE, "桌宠.py"), encoding="utf-8").read()
     tree = ast.parse(src)
     # ① 关窗路径必须真的做 `self.cfg.get("tray_tip_done") is not True` 比较；注释不算。
+    #    还要**在真正会执行的函数里**（closeEvent）：三审实测过"把 if 改成 if True、再在
+    #    一个永不调用的方法里放同一个比较"能骗过只查形状的版本。
+    parent = {}
+    for node in ast.walk(tree):
+        for child in ast.iter_child_nodes(node):
+            parent[child] = node
+
+    def _enclosing_fn(node):
+        cur = parent.get(node)
+        while cur is not None and not isinstance(cur, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            cur = parent.get(cur)
+        return cur
+
     persisted = []
     for node in ast.walk(tree):
         if not isinstance(node, ast.Compare) or len(node.ops) != 1:
@@ -139,7 +152,9 @@ def test_tray_tip_is_persisted_not_a_process_global():
                 and left.args[0].value == "tray_tip_done"):
             continue
         if isinstance(right, ast.Constant) and right.value is True:
-            persisted.append(node.lineno)
+            fn = _enclosing_fn(node)
+            if fn is not None and fn.name == "closeEvent":
+                persisted.append(node.lineno)
     assert persisted, "关窗提示没接落盘标记（self.cfg.get(\"tray_tip_done\") is not True）"
     # ② 老的进程级全局不许回来（名字 / 字符串常量两种写法都查）。
     names = {n.id for n in ast.walk(tree) if isinstance(n, ast.Name)}

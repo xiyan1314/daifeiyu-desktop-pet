@@ -81,9 +81,13 @@ def test_moved_toggles_live_in_settings_and_keep_their_wiring():
     assert _find(settings, "🔊 音效").isChecked() is True
     assert _find(settings, "🤖 AI对话").isChecked() is False
     assert _find(settings, "🌀 甩抛物理").isChecked() is False
+    # 四个开关**全部**要 trigger：只测两个的话，删掉另两条 connect 仍然绿
+    # （v2.13.0 三审实测：删 :164 / :177 的 toggled.connect → 旧版本 6 passed）。
+    _find(settings, "📌 窗口置顶").trigger()
     _find(settings, "🔊 音效").trigger()
     _find(settings, "🤖 AI对话").trigger()
-    assert calls == [("sound", False), ("ai", True)], calls
+    _find(settings, "🌀 甩抛物理").trigger()
+    assert calls == [("topmost", False), ("sound", False), ("ai", True), ("physics", True)], calls
 
 
 def test_balance_line_moved_into_ledger_menu():
@@ -132,6 +136,13 @@ def test_resource_manager_appears_once():
 def test_settings_menu_kept_all_old_entries():
     settings = _texts(_open(_MenuPet())["⚙️ 设置…"].actions())
     assert len(settings) >= 30, "设置只剩 %d 条（搬家丢功能）：%r" % (len(settings), settings)
-    for label in ("🎁 惊喜彩蛋", "👀 菜单悬停预览", "🧩 插件管理…", "💾 备份数据…",
-                  "🌊 减少动效", "🔲 高对比度", "🚀 开机自启", "💬 自定义台词…"):
+    # 点名清单要足够长：只钉 8 条时，删掉「⏰ 闹钟…」仍绿（三审实测）。
+    for label in ("📌 窗口置顶", "🔊 音效", "🤖 AI对话", "🌀 甩抛物理",
+                  "🖱️ 跟随鼠标", "🚶 散步", "🎨 气泡样式…", "🖱️ 透明区穿透",
+                  "🖥️ 全屏时自动隐藏", "🔔 系统通知", "💾 备份数据…", "♻️ 从备份恢复…",
+                  "⏰ 时段问候", "🎁 惊喜彩蛋", "👀 菜单悬停预览", "🌊 减少动效",
+                  "🔲 高对比度", "🎞️ 帧数上限…", "🌀 物理参数…", "🎤 语音设置…",
+                  "🧩 行为设置…", "😴 待机设置…", "⏰ 闹钟…", "🎵 音效设置",
+                  "💬 自定义台词…", "🚀 开机自启", "🤖 AI设置…", "🧠 对话记忆…",
+                  "🧹 清理日志…", "🧩 插件管理…"):
         assert label in settings, "设置里丢了 %r" % (label,)

@@ -158,14 +158,23 @@ def _settle(win):
     assert win.anim_mode in ("idle", "form_idle", ""), win.anim_mode
 
 
-def test_window_owns_a_running_watch_timer(win):
+def test_window_owns_a_running_watch_timer(win, _assets_root):
     """2s 定时器必须真的起着、Watcher 指向当前素材根。"""
     t = win._asset_watch_timer
     assert t is not None and t.isActive(), "素材热重载定时器没起"
     assert t.interval() == main.ASSET_WATCH_INTERVAL_MS == 2000
     paths = win._asset_watch_paths()
+    # 监听**面**也要钉住：只认 assets/ 全树 + 根级 character*.png。
+    # （三审实测：把 resource_dir("assets") 改成 app_dir() 会监听整个应用目录
+    #  158→459 个路径，旧版本只查后缀，仍然绿。）
+    assets = os.path.join(_assets_root, "assets")
+    outside = [p for p in paths
+               if not (p == assets or p.startswith(assets + os.sep))
+               and os.path.basename(p) not in main.PetWindow._ASSET_ROOT_FILES]
+    assert outside == [], "监听面越界（不该监听这些）：%r" % (outside[:5],)
     assert any(p.endswith("character.png") for p in paths), paths[:3]
     assert all(os.path.isabs(p) for p in paths)
+    assert len(paths) >= 100, "assets 全树只监听到 %d 个文件（漏面）" % len(paths)
 
 
 def test_no_change_tick_is_silent(win, monkeypatch):
@@ -189,6 +198,25 @@ def test_busy_tick_does_not_reload(win, monkeypatch, _assets_root):
         win.busy = False
 
 
+def test_eating_and_state_modes_skip_reload(win, monkeypatch, _assets_root):
+    """非待机态（吃帧/表情/走路/睡觉）一律不重载：等下一拍待机再说。
+
+    三审实测：把 guard 改成只判 busy=True（去掉 anim_mode 检查）→ 旧版本 10 条全绿。
+    """
+    _settle(win)
+    calls = []
+    monkeypatch.setattr(win, "_reload_sprites", lambda: calls.append(1))
+    changed = os.path.join(_assets_root, "assets", "character.png")
+    _write_png(changed, (9, 9, 9, 255))
+    for mode in ("eat", "state", "sleep", "walk"):
+        win.anim_mode = mode
+        assert win._hot_reload_tick() is False, "anim_mode=%s 时重载了" % (mode,)
+    assert calls == []
+    win.anim_mode = "idle"
+    assert win._hot_reload_tick() is True, "回到待机后应该重载"
+    assert calls == [1]
+
+
 def _write_png(path, color, size=None):
     if size is None:
         img = QImage(path)
@@ -206,12 +234,14 @@ def test_changing_character_png_reloads_the_same_window(win, _assets_root):
     _settle(win)
     target = os.path.join(_assets_root, "assets", "character.png")
     before = win.sprites["normal"]["side"].toImage().pixelColor(2, 2)
+    before_size = (win.width(), win.height())
     _write_png(target, (0, 200, 0, 255))
     assert win._hot_reload_tick() is True, "文件变了却没重载"
     after = win.sprites["normal"]["side"].toImage().pixelColor(2, 2)
     assert (after.red(), after.green(), after.blue()) != (before.red(), before.green(), before.blue()), \
         "重载了但贴图没换（还是旧图）：%r -> %r" % (before.getRgb(), after.getRgb())
-    assert win.width() > 20, "重载后窗口尺寸坏了"
+    assert (win.width(), win.height()) == before_size, \
+        "同尺寸素材重载后窗口几何变了：%r -> %r" % (before_size, (win.width(), win.height()))
 
 
 def test_new_asset_file_also_triggers_a_reload(win, _assets_root, monkeypatch):

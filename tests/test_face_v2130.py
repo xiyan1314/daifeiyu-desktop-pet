@@ -30,7 +30,7 @@ def test_gif_is_a_real_multi_frame_animation():
     from PIL import Image
     im = Image.open(GIF)
     assert im.size == (320, 320), im.size
-    assert getattr(im, "n_frames", 1) >= 12, "GIF 只有 %d 帧（要能看出待机/吃播）" % getattr(im, "n_frames", 1)
+    assert getattr(im, "n_frames", 1) == 17, "GIF 帧数变了（发布口径是 17 帧：10 待机 + 7 吃播）：%d" % getattr(im, "n_frames", 1)
     assert os.path.getsize(GIF) <= 1024 * 1024, "GIF 太大（README 首屏要秒开）：%d B" % os.path.getsize(GIF)
 
 
