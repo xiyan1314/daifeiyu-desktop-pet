@@ -1,6 +1,6 @@
 {
   "title": "铁律 5：整批变异证据复跑（v2.7.0 · 代理 C）",
-  "checked_at": "2026-11-16 11:54:30",
+  "checked_at": "2026-11-16 13:57:08",
   "total": 36,
   "failed": [],
   "items": [
@@ -8,7 +8,7 @@
       "target": "mutations_agent_a_v2100.json",
       "rc": 0,
       "tail": "结果已回写到 mutations_agent_a_v2100.json 的 results 段",
-      "seconds": 44.4,
+      "seconds": 20.8,
       "argv": [
         "_dev\\mutate_check.py",
         "_dev\\mutations_agent_a_v2100.json"
@@ -18,7 +18,7 @@
       "target": "mutations_agent_a_v2110.json",
       "rc": 0,
       "tail": "结果已回写到 mutations_agent_a_v2110.json 的 results 段",
-      "seconds": 59.9,
+      "seconds": 42.7,
       "argv": [
         "_dev\\mutate_check.py",
         "_dev\\mutations_agent_a_v2110.json"
@@ -28,7 +28,7 @@
       "target": "mutations_agent_a_v270.json",
       "rc": 0,
       "tail": "结果已回写到 mutations_agent_a_v270.json 的 results 段",
-      "seconds": 74.3,
+      "seconds": 56.9,
       "argv": [
         "_dev\\mutate_check.py",
         "_dev\\mutations_agent_a_v270.json"
@@ -38,7 +38,7 @@
       "target": "mutations_agent_a_v280.json",
       "rc": 0,
       "tail": "结果已回写到 mutations_agent_a_v280.json 的 results 段",
-      "seconds": 105.6,
+      "seconds": 72.5,
       "argv": [
         "_dev\\mutate_check.py",
         "_dev\\mutations_agent_a_v280.json"
@@ -48,7 +48,7 @@
       "target": "mutations_agent_a_v290.json",
       "rc": 0,
       "tail": "结果已回写到 mutations_agent_a_v290.json 的 results 段",
-      "seconds": 63.2,
+      "seconds": 47.6,
       "argv": [
         "_dev\\mutate_check.py",
         "_dev\\mutations_agent_a_v290.json"
@@ -58,7 +58,7 @@
       "target": "mutations_agent_b_v2110.json",
       "rc": 0,
       "tail": "结果已回写到 mutations_agent_b_v2110.json 的 results 段",
-      "seconds": 109.8,
+      "seconds": 74.8,
       "argv": [
         "_dev\\mutate_check.py",
         "_dev\\mutations_agent_b_v2110.json"
@@ -68,7 +68,7 @@
       "target": "mutations_agent_b_v270.json",
       "rc": 0,
       "tail": "结果已回写到 mutations_agent_b_v270.json 的 results 段",
-      "seconds": 85.2,
+      "seconds": 56.0,
       "argv": [
         "_dev\\mutate_check.py",
         "_dev\\mutations_agent_b_v270.json"
@@ -78,7 +78,7 @@
       "target": "mutations_agent_b_v280.json",
       "rc": 0,
       "tail": "结果已回写到 mutations_agent_b_v280.json 的 results 段",
-      "seconds": 45.2,
+      "seconds": 32.1,
       "argv": [
         "_dev\\mutate_check.py",
         "_dev\\mutations_agent_b_v280.json"
@@ -88,7 +88,7 @@
       "target": "mutations_agent_b_v290.json",
       "rc": 0,
       "tail": "结果已回写到 mutations_agent_b_v290.json 的 results 段",
-      "seconds": 60.2,
+      "seconds": 33.9,
       "argv": [
         "_dev\\mutate_check.py",
         "_dev\\mutations_agent_b_v290.json"
@@ -98,7 +98,7 @@
       "target": "mutations_agent_c_v2100.json",
       "rc": 0,
       "tail": "结果已回写到 mutations_agent_c_v2100.json 的 results 段",
-      "seconds": 48.7,
+      "seconds": 20.2,
       "argv": [
         "_dev\\mutate_check.py",
         "_dev\\mutations_agent_c_v2100.json"
@@ -108,7 +108,7 @@
       "target": "mutations_agent_c_v2110.json",
       "rc": 0,
       "tail": "结果已回写到 mutations_agent_c_v2110.json 的 results 段",
-      "seconds": 56.5,
+      "seconds": 29.0,
       "argv": [
         "_dev\\mutate_check.py",
         "_dev\\mutations_agent_c_v2110.json"
@@ -118,7 +118,7 @@
       "target": "mutations_agent_c_v280.json",
       "rc": 0,
       "tail": "结果已回写到 mutations_agent_c_v280.json 的 results 段",
-      "seconds": 312.0,
+      "seconds": 184.2,
       "argv": [
         "_dev\\mutate_check.py",
         "_dev\\mutations_agent_c_v280.json"
@@ -128,7 +128,7 @@
       "target": "mutations_agent_d_v280.json",
       "rc": 0,
       "tail": "结果已回写到 mutations_agent_d_v280.json 的 results 段",
-      "seconds": 29.1,
+      "seconds": 11.9,
       "argv": [
         "_dev\\mutate_check.py",
         "_dev\\mutations_agent_d_v280.json"
@@ -138,7 +138,7 @@
       "target": "mutations_asset_absence_v244.json",
       "rc": 0,
       "tail": "结果已回写到 mutations_asset_absence_v244.json 的 results 段",
-      "seconds": 41.2,
+      "seconds": 18.3,
       "argv": [
         "_dev\\mutate_check.py",
         "_dev\\mutations_asset_absence_v244.json"
@@ -148,7 +148,7 @@
       "target": "mutations_compat_v242.json",
       "rc": 0,
       "tail": "结果已回写到 mutations_compat_v242.json 的 results 段",
-      "seconds": 52.0,
+      "seconds": 22.8,
       "argv": [
         "_dev\\mutate_check.py",
         "_dev\\mutations_compat_v242.json"
@@ -158,7 +158,7 @@
       "target": "mutations_compat_v243.json",
       "rc": 0,
       "tail": "结果已回写到 mutations_compat_v243.json 的 results 段",
-      "seconds": 48.9,
+      "seconds": 22.6,
       "argv": [
         "_dev\\mutate_check.py",
         "_dev\\mutations_compat_v243.json"
@@ -168,7 +168,7 @@
       "target": "mutations_critic_v270.json",
       "rc": 0,
       "tail": "结果已回写到 mutations_critic_v270.json 的 results 段",
-      "seconds": 41.8,
+      "seconds": 25.7,
       "argv": [
         "_dev\\mutate_check.py",
         "_dev\\mutations_critic_v270.json"
@@ -178,7 +178,7 @@
       "target": "mutations_dialog_fit_v250.json",
       "rc": 0,
       "tail": "结果已回写到 mutations_dialog_fit_v250.json 的 results 段",
-      "seconds": 53.9,
+      "seconds": 34.2,
       "argv": [
         "_dev\\mutate_check.py",
         "_dev\\mutations_dialog_fit_v250.json"
@@ -188,7 +188,7 @@
       "target": "mutations_fastci_slices_v251.json",
       "rc": 0,
       "tail": "结果已回写到 mutations_fastci_slices_v251.json 的 results 段",
-      "seconds": 27.1,
+      "seconds": 13.9,
       "argv": [
         "_dev\\mutate_check.py",
         "_dev\\mutations_fastci_slices_v251.json"
@@ -198,7 +198,7 @@
       "target": "mutations_plugin_c_v270.json",
       "rc": 0,
       "tail": "结果已回写到 mutations_plugin_c_v270.json 的 results 段",
-      "seconds": 132.9,
+      "seconds": 134.2,
       "argv": [
         "_dev\\mutate_check.py",
         "_dev\\mutations_plugin_c_v270.json"
@@ -208,7 +208,7 @@
       "target": "mutations_plugin_gap_v260.json",
       "rc": 0,
       "tail": "结果已回写到 mutations_plugin_gap_v260.json 的 results 段",
-      "seconds": 25.1,
+      "seconds": 12.0,
       "argv": [
         "_dev\\mutate_check.py",
         "_dev\\mutations_plugin_gap_v260.json"
@@ -218,7 +218,7 @@
       "target": "mutations_plugin_market_v260.json",
       "rc": 0,
       "tail": "结果已回写到 mutations_plugin_market_v260.json 的 results 段",
-      "seconds": 44.1,
+      "seconds": 26.0,
       "argv": [
         "_dev\\mutate_check.py",
         "_dev\\mutations_plugin_market_v260.json"
@@ -228,7 +228,7 @@
       "target": "mutations_plugin_v251.json",
       "rc": 0,
       "tail": "结果已回写到 mutations_plugin_v251.json 的 results 段",
-      "seconds": 50.0,
+      "seconds": 27.9,
       "argv": [
         "_dev\\mutate_check.py",
         "_dev\\mutations_plugin_v251.json"
@@ -238,7 +238,7 @@
       "target": "mutations_q_item1.json",
       "rc": 0,
       "tail": "结果已回写到 mutations_q_item1.json 的 results 段",
-      "seconds": 18.6,
+      "seconds": 6.7,
       "argv": [
         "_dev\\mutate_check.py",
         "_dev\\mutations_q_item1.json"
@@ -248,7 +248,7 @@
       "target": "mutations_q_item2.json",
       "rc": 0,
       "tail": "结果已回写到 mutations_q_item2.json 的 results 段",
-      "seconds": 24.1,
+      "seconds": 8.2,
       "argv": [
         "_dev\\mutate_check.py",
         "_dev\\mutations_q_item2.json"
@@ -258,7 +258,7 @@
       "target": "mutations_q_item3.json",
       "rc": 0,
       "tail": "结果已回写到 mutations_q_item3.json 的 results 段",
-      "seconds": 25.2,
+      "seconds": 9.5,
       "argv": [
         "_dev\\mutate_check.py",
         "_dev\\mutations_q_item3.json"
@@ -268,7 +268,7 @@
       "target": "mutations_relay_v243.json",
       "rc": 0,
       "tail": "结果已回写到 mutations_relay_v243.json 的 results 段",
-      "seconds": 68.1,
+      "seconds": 36.2,
       "argv": [
         "_dev\\mutate_check.py",
         "_dev\\mutations_relay_v243.json"
@@ -278,7 +278,7 @@
       "target": "mutations_release_door.json",
       "rc": 0,
       "tail": "结果已回写到 mutations_release_door.json 的 results 段",
-      "seconds": 29.2,
+      "seconds": 6.8,
       "argv": [
         "_dev\\mutate_check.py",
         "_dev\\mutations_release_door.json"
@@ -288,7 +288,7 @@
       "target": "mutations_round3_a.json",
       "rc": 0,
       "tail": "结果已回写到 mutations_round3_a.json 的 results 段",
-      "seconds": 45.4,
+      "seconds": 30.9,
       "argv": [
         "_dev\\mutate_check.py",
         "_dev\\mutations_round3_a.json"
@@ -298,7 +298,7 @@
       "target": "mutations_services_v250.json",
       "rc": 0,
       "tail": "结果已回写到 mutations_services_v250.json 的 results 段",
-      "seconds": 24.7,
+      "seconds": 13.2,
       "argv": [
         "_dev\\mutate_check.py",
         "_dev\\mutations_services_v250.json"
@@ -308,7 +308,7 @@
       "target": "mutations_silent_except_v260.json",
       "rc": 0,
       "tail": "结果已回写到 mutations_silent_except_v260.json 的 results 段",
-      "seconds": 297.8,
+      "seconds": 238.0,
       "argv": [
         "_dev\\mutate_check.py",
         "_dev\\mutations_silent_except_v260.json"
@@ -318,7 +318,7 @@
       "target": "mutations_export_slice_v242.json",
       "rc": 0,
       "tail": "变异验证：5/5 检出",
-      "seconds": 27.0,
+      "seconds": 13.8,
       "argv": [
         "_dev\\mutate_export_slice.py"
       ]
@@ -327,7 +327,7 @@
       "target": "mutations_startup_defer_v242.json",
       "rc": 0,
       "tail": "变异验证：8/8 检出",
-      "seconds": 36.8,
+      "seconds": 23.7,
       "argv": [
         "_dev\\mutate_startup_defer.py"
       ]
@@ -336,7 +336,7 @@
       "target": "mutations_proc_reset_v26.json",
       "rc": 0,
       "tail": "结果: E:\\deep seek\\desktop-pet\\_dev\\mutations_proc_reset_v26.json",
-      "seconds": 297.1,
+      "seconds": 288.9,
       "argv": [
         "_dev\\mutate_proc_reset_v26.py"
       ]
@@ -345,7 +345,7 @@
       "target": "results_fastci_slices_v251.json",
       "rc": 0,
       "tail": "结果已写：_dev\\results_fastci_slices_v251.json",
-      "seconds": 46.7,
+      "seconds": 36.7,
       "argv": [
         "_dev\\verify_fastci_slices_v251.py"
       ]
@@ -354,24 +354,24 @@
       "target": "results_guardrails_can_fail.json",
       "rc": 0,
       "tail": "GUARDRAIL MUTATION ALL CAUGHT",
-      "seconds": 6.9,
+      "seconds": 4.1,
       "argv": [
         "_dev\\verify_guardrails_can_fail.py"
       ]
     }
   ],
   "fingerprint_before": {
-    "桌宠.py": "72e4acbea6a1",
+    "桌宠.py": "fa311bcfa53c",
     "pet_export.py": "db474bdd6670",
     "pet_lines.py": "5332f60b5f26",
     "pet_alarm.py": "1149e94deee3",
     "pet_behaviors.py": "732273f95fb4",
-    "_check_release.py": "34e248c1d1eb",
+    "_check_release.py": "f1c4bf955fab",
     "pet_balance.py": "045129227ee2",
     "pet_plugin.py": "2f7853298fc3",
     "pet_plugin_host.py": "82fb7b1384c8",
     "pet_dialogs.py": "a80c69368b64",
-    "pet_menu.py": "65849eb1a671",
+    "pet_menu.py": "ff8aef314c1f",
     "pet_plugin_index.py": "e5e9845785e8",
     "pet_ai.py": "a5989e7fe646",
     "pet_config.py": "d8db402105e1",
@@ -392,17 +392,17 @@
     "tests/test_import_thread.py": "1c6fc2ec5d05"
   },
   "fingerprint_after": {
-    "桌宠.py": "72e4acbea6a1",
+    "桌宠.py": "fa311bcfa53c",
     "pet_export.py": "db474bdd6670",
     "pet_lines.py": "5332f60b5f26",
     "pet_alarm.py": "1149e94deee3",
     "pet_behaviors.py": "732273f95fb4",
-    "_check_release.py": "34e248c1d1eb",
+    "_check_release.py": "f1c4bf955fab",
     "pet_balance.py": "045129227ee2",
     "pet_plugin.py": "2f7853298fc3",
     "pet_plugin_host.py": "82fb7b1384c8",
     "pet_dialogs.py": "a80c69368b64",
-    "pet_menu.py": "65849eb1a671",
+    "pet_menu.py": "ff8aef314c1f",
     "pet_plugin_index.py": "e5e9845785e8",
     "pet_ai.py": "a5989e7fe646",
     "pet_config.py": "d8db402105e1",

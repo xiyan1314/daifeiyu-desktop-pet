@@ -1,6 +1,6 @@
 {
   "title": "启动延迟装载（帧集/状态图分片）变异验证",
-  "checked_at": "2026-11-16 11:48:39",
+  "checked_at": "2026-11-16 13:51:38",
   "total": 8,
   "caught": 8,
   "not_caught": 0,
@@ -10,66 +10,66 @@
       "id": "M1 帧集不再推迟（构造期把四组都解完）",
       "verdict": "CAUGHT",
       "rc": 1,
-      "tail": "1 failed, 8 passed in 2.03s"
+      "tail": "1 failed, 8 passed in 1.33s"
     },
     {
       "id": "M2 状态图不再推迟（构造期全量构建）",
       "verdict": "CAUGHT",
       "rc": 1,
-      "tail": "4 failed, 5 passed in 1.98s"
+      "tail": "4 failed, 5 passed in 1.51s"
     },
     {
       "id": "M3 接力装载改成一轮做完（不再分片）",
       "verdict": "CAUGHT",
       "rc": 1,
-      "tail": "2 failed, 7 passed in 1.83s"
+      "tail": "2 failed, 7 passed in 1.45s"
     },
     {
       "id": "M4 _state_pix 不再按需补建",
       "verdict": "CAUGHT",
       "rc": 1,
-      "tail": "4 failed, 5 passed in 1.52s"
+      "tail": "4 failed, 5 passed in 1.53s"
     },
     {
       "id": "M5 _play_idle 不再补本形态帧集",
       "verdict": "CAUGHT",
       "rc": 1,
-      "tail": "1 failed, 8 passed in 1.89s"
+      "tail": "1 failed, 8 passed in 1.46s"
     },
     {
       "id": "M6 feed 不再补吃帧",
       "verdict": "CAUGHT",
       "rc": 1,
-      "tail": "1 failed, 8 passed in 1.51s"
+      "tail": "1 failed, 8 passed in 1.44s"
     },
     {
       "id": "M7 _start_petting 不再补 petpet 帧集",
       "verdict": "CAUGHT",
       "rc": 1,
-      "tail": "1 failed, 8 passed in 1.57s"
+      "tail": "1 failed, 8 passed in 1.69s"
     },
     {
       "id": "M8 接力收尾不再重注册帧集（eat 槽停在空集）",
       "verdict": "CAUGHT",
       "rc": 1,
-      "tail": "1 failed, 8 passed in 1.57s"
+      "tail": "1 failed, 8 passed in 1.68s"
     }
   ],
   "tests": "tests/test_startup_defer_v242.py",
   "script": "_dev/mutate_startup_defer.py",
   "note": "变异只在 %TEMP% 影子副本里做，真实仓库只读（只写 _dev/.mutation.lock）",
   "repo_fingerprint": {
-    "桌宠.py": "72e4acbea6a1",
+    "桌宠.py": "fa311bcfa53c",
     "pet_export.py": "db474bdd6670",
     "pet_lines.py": "5332f60b5f26",
     "pet_alarm.py": "1149e94deee3",
     "pet_behaviors.py": "732273f95fb4",
-    "_check_release.py": "34e248c1d1eb",
+    "_check_release.py": "f1c4bf955fab",
     "pet_balance.py": "045129227ee2",
     "pet_plugin.py": "2f7853298fc3",
     "pet_plugin_host.py": "82fb7b1384c8",
     "pet_dialogs.py": "a80c69368b64",
-    "pet_menu.py": "65849eb1a671",
+    "pet_menu.py": "ff8aef314c1f",
     "pet_plugin_index.py": "e5e9845785e8",
     "pet_ai.py": "a5989e7fe646",
     "pet_config.py": "d8db402105e1",

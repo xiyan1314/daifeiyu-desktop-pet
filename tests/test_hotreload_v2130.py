@@ -177,6 +177,21 @@ def test_window_owns_a_running_watch_timer(win, _assets_root):
     assert len(paths) >= 100, "assets 全树只监听到 %d 个文件（漏面）" % len(paths)
 
 
+def test_timeout_signal_really_triggers_the_tick(win, monkeypatch, _assets_root):
+    """定时器的 timeout 必须真的接到 _hot_reload_tick。
+
+    独立验收实测：只删 桌宠.py 的 timeout.connect 那一行，isActive()/interval 两条判据
+    和端到端用例**都仍绿** —— 自动重载整条死掉而套件看不见。所以直接 emit 一次 timeout。
+    """
+    _settle(win)
+    calls = []
+    monkeypatch.setattr(win, "_reload_sprites", lambda: calls.append(1))
+    changed = os.path.join(_assets_root, "assets", "character.png")
+    _write_png(changed, (5, 6, 7, 255))
+    win._asset_watch_timer.timeout.emit()
+    assert calls == [1], "定时器 timeout 没接到 _hot_reload_tick（自动重载失效）"
+
+
 def test_no_change_tick_is_silent(win, monkeypatch):
     calls = []
     monkeypatch.setattr(win, "_reload_sprites", lambda: calls.append(1))

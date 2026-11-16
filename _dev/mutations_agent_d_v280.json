@@ -77,7 +77,7 @@
   ],
   "results": {
     "title": "变异验证 spec：mutations_agent_d_v280.json",
-    "checked_at": "2026-11-16 11:30:06",
+    "checked_at": "2026-11-16 13:39:33",
     "total": 5,
     "caught": 5,
     "not_caught": 0,
@@ -87,7 +87,7 @@
         "id": "MF1-qtimer-not-imported",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "2 failed, 1 passed in 1.16s",
+        "tail": "2 failed, 1 passed in 0.72s",
         "failed": [
           "tests/test_dialogs_feedback_v280.py::test_manual_refresh_while_in_flight_is_replayed_after_the_source_lands",
           "tests/test_dialogs_feedback_v280.py::test_manual_refresh_while_in_flight_is_replayed_on_the_read_path"
@@ -99,7 +99,7 @@
         "id": "MF1b-source-replay-disabled",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed, 1 passed in 0.79s",
+        "tail": "1 failed, 1 passed in 0.47s",
         "failed": [
           "tests/test_dialogs_feedback_v280.py::test_manual_refresh_while_in_flight_is_replayed_after_the_source_lands"
         ],
@@ -110,7 +110,7 @@
         "id": "MF1c-index-replay-disabled",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed, 1 passed in 0.74s",
+        "tail": "1 failed, 1 passed in 0.47s",
         "failed": [
           "tests/test_dialogs_feedback_v280.py::test_manual_refresh_while_in_flight_is_replayed_on_the_read_path"
         ],
@@ -121,7 +121,7 @@
         "id": "MF3b-toast-except-no-fallback",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed, 1 passed in 0.77s",
+        "tail": "1 failed, 1 passed in 0.48s",
         "failed": [
           "tests/test_dialogs_feedback_v280.py::test_toast_falls_back_when_show_bubble_raises"
         ],
@@ -132,7 +132,7 @@
         "id": "MF4-undef-check-neutered",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "3 failed, 17 passed in 2.14s",
+        "tail": "3 failed, 17 passed in 1.34s",
         "failed": [
           "tests/test_static_undef_names_v280.py::test_undefined_global_is_reported",
           "tests/test_static_undef_names_v280.py::test_the_check_catches_the_v280_qtimer_defect",
@@ -151,17 +151,17 @@
     ],
     "note": "变异只在 %TEMP% 影子副本里做，真实仓库只读（只写 _dev/.mutation.lock）",
     "repo_fingerprint": {
-      "桌宠.py": "72e4acbea6a1",
+      "桌宠.py": "fa311bcfa53c",
       "pet_export.py": "db474bdd6670",
       "pet_lines.py": "5332f60b5f26",
       "pet_alarm.py": "1149e94deee3",
       "pet_behaviors.py": "732273f95fb4",
-      "_check_release.py": "34e248c1d1eb",
+      "_check_release.py": "f1c4bf955fab",
       "pet_balance.py": "045129227ee2",
       "pet_plugin.py": "2f7853298fc3",
       "pet_plugin_host.py": "82fb7b1384c8",
       "pet_dialogs.py": "a80c69368b64",
-      "pet_menu.py": "65849eb1a671",
+      "pet_menu.py": "ff8aef314c1f",
       "pet_plugin_index.py": "e5e9845785e8",
       "pet_ai.py": "a5989e7fe646",
       "pet_config.py": "d8db402105e1",

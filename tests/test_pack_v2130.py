@@ -148,6 +148,25 @@ def test_check_pack_enforces_both_caps(monkeypatch, tmp_path):
     assert any("解压体积" in f for f in rel.check_pack(zpath)), rel.check_pack(zpath)
 
 
+def test_cap_boundaries_are_inclusive(monkeypatch, tmp_path):
+    """恰好等于上限必须**通过**，多 1 才红（把 > 改成 >= 会误杀边界包）。
+
+    独立验收实测：旧用例只测「cap 远小于实际」，把 > 改成 >= 仍然绿。
+    """
+    zpath = _clean_zip(str(tmp_path / "boundary.zip"))
+    with zipfile.ZipFile(zpath) as z:
+        total = sum(i.file_size for i in z.infolist())
+    monkeypatch.setattr(rel, "PACK_CAP_FILES", 3)
+    assert rel.check_pack(zpath) == [], rel.check_pack(zpath)
+    monkeypatch.setattr(rel, "PACK_CAP_FILES", 2)
+    assert any("条目数" in f for f in rel.check_pack(zpath))
+    monkeypatch.setattr(rel, "PACK_CAP_FILES", 1300)
+    monkeypatch.setattr(rel, "PACK_CAP_BYTES", total)
+    assert rel.check_pack(zpath) == [], rel.check_pack(zpath)
+    monkeypatch.setattr(rel, "PACK_CAP_BYTES", total - 1)
+    assert any("解压体积" in f for f in rel.check_pack(zpath))
+
+
 def test_check_pack_requires_the_two_kept_big_items(tmp_path):
     """§23.4 明令保留的两个大件：缺一个就红（防止瘦身顺手把它们删了）。"""
     zpath = tmp_path / "nokeep.zip"

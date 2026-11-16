@@ -88,7 +88,7 @@
   ],
   "results": {
     "title": "变异验证 spec：mutations_services_v250.json",
-    "checked_at": "2026-11-16 11:42:38",
+    "checked_at": "2026-11-16 13:47:03",
     "total": 6,
     "caught": 6,
     "not_caught": 0,
@@ -98,7 +98,7 @@
         "id": "M-S1",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed, 1 passed in 0.83s",
+        "tail": "1 failed, 1 passed in 0.64s",
         "failed": [
           "tests/test_services_registry_v250.py::test_service_construction_order_and_types_match_the_old_init"
         ],
@@ -109,7 +109,7 @@
         "id": "M-S2",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.74s",
+        "tail": "1 failed in 0.62s",
         "failed": [
           "tests/test_services_registry_v250.py::test_service_construction_order_and_types_match_the_old_init"
         ],
@@ -120,7 +120,7 @@
         "id": "M-S3",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.78s",
+        "tail": "1 failed in 0.57s",
         "failed": [
           "tests/test_services_registry_v250.py::test_service_construction_order_and_types_match_the_old_init"
         ],
@@ -131,7 +131,7 @@
         "id": "M-S4",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "2 failed in 0.87s",
+        "tail": "2 failed in 0.73s",
         "failed": [
           "tests/test_services_registry_v250.py::test_init_keeps_only_the_three_documented_constructions",
           "tests/test_services_registry_v250.py::test_service_construction_order_and_types_match_the_old_init"
@@ -143,7 +143,7 @@
         "id": "M-S5",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "2 failed, 1 passed in 0.82s",
+        "tail": "2 failed, 1 passed in 0.69s",
         "failed": [
           "tests/test_petting_guard_v250.py::test_custom_role_petting_does_not_decode_default_frame_sets",
           "tests/test_petting_guard_v250.py::test_petting_ensure_uses_the_role_scope"
@@ -155,7 +155,7 @@
         "id": "M-S6",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.61s",
+        "tail": "1 failed in 0.51s",
         "failed": [
           "tests/test_services_registry_v250.py::test_pet_services_is_in_the_release_sync_list"
         ],
@@ -174,17 +174,17 @@
     ],
     "note": "变异只在 %TEMP% 影子副本里做，真实仓库只读（只写 _dev/.mutation.lock）",
     "repo_fingerprint": {
-      "桌宠.py": "72e4acbea6a1",
+      "桌宠.py": "fa311bcfa53c",
       "pet_export.py": "db474bdd6670",
       "pet_lines.py": "5332f60b5f26",
       "pet_alarm.py": "1149e94deee3",
       "pet_behaviors.py": "732273f95fb4",
-      "_check_release.py": "34e248c1d1eb",
+      "_check_release.py": "f1c4bf955fab",
       "pet_balance.py": "045129227ee2",
       "pet_plugin.py": "2f7853298fc3",
       "pet_plugin_host.py": "82fb7b1384c8",
       "pet_dialogs.py": "a80c69368b64",
-      "pet_menu.py": "65849eb1a671",
+      "pet_menu.py": "ff8aef314c1f",
       "pet_plugin_index.py": "e5e9845785e8",
       "pet_ai.py": "a5989e7fe646",
       "pet_config.py": "d8db402105e1",
