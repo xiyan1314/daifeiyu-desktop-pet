@@ -178,7 +178,7 @@
   ],
   "results": {
     "title": "变异验证 spec：mutations_compat_v243.json",
-    "checked_at": "2026-10-17 16:22:56",
+    "checked_at": "2026-11-16 11:32:28",
     "total": 13,
     "caught": 13,
     "not_caught": 0,
@@ -188,7 +188,7 @@
         "id": "M-C1",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "2 failed in 1.77s",
+        "tail": "2 failed in 1.31s",
         "failed": [
           "tests/test_round3_a_fixes.py::test_no_shipped_source_hardcodes_a_single_font_family",
           "tests/test_round3_a_fixes.py::test_dialog_qss_uses_the_single_source_fallback_chain"
@@ -200,7 +200,7 @@
         "id": "M-C2",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.75s",
+        "tail": "1 failed in 0.64s",
         "failed": [
           "tests/test_round3_a_fixes.py::test_dialog_qss_uses_the_single_source_fallback_chain"
         ],
@@ -211,7 +211,7 @@
         "id": "M-C3",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 1.02s",
+        "tail": "1 failed in 0.72s",
         "failed": [
           "tests/test_round3_a_fixes.py::test_font_fallback_mechanism_comment_is_hedged"
         ],
@@ -222,7 +222,7 @@
         "id": "M-C4",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed, 1 passed in 0.76s",
+        "tail": "1 failed, 1 passed in 0.50s",
         "failed": [
           "tests/test_deps_bounds_v24.py::test_every_declared_package_has_an_upper_bound"
         ],
@@ -233,7 +233,7 @@
         "id": "M-C5",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.86s",
+        "tail": "1 failed in 0.60s",
         "failed": [
           "tests/test_round3_a_fixes.py::test_readme_annotation_scope_matches_the_code"
         ],
@@ -244,7 +244,7 @@
         "id": "M-C6",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 1.11s",
+        "tail": "1 failed in 1.87s",
         "failed": [
           "tests/test_release_check.py::test_clean_tree_shows_utf8_paths_not_octal_escapes"
         ],
@@ -255,7 +255,7 @@
         "id": "M-C7",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 1.17s",
+        "tail": "1 failed in 3.11s",
         "failed": [
           "tests/test_release_check.py::test_asset_manifest_ignores_gitignored_files"
         ],
@@ -266,7 +266,7 @@
         "id": "M-C8",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 1.75s",
+        "tail": "1 failed in 0.92s",
         "failed": [
           "tests/test_relay_v243.py::test_custom_role_first_feed_does_not_decode_default_sets"
         ],
@@ -277,7 +277,7 @@
         "id": "M-C9",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.65s",
+        "tail": "1 failed in 0.42s",
         "failed": [
           "tests/test_compat_v242_fixes.py::test_manifest_timestamp_is_fixed_so_exports_are_reproducible"
         ],
@@ -288,7 +288,7 @@
         "id": "M-C10",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.75s",
+        "tail": "1 failed in 0.64s",
         "failed": [
           "tests/test_round3_a_fixes.py::test_refresh_resets_guard_when_thread_start_fails"
         ],
@@ -299,7 +299,7 @@
         "id": "M-C11",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.71s",
+        "tail": "1 failed in 0.51s",
         "failed": [
           "tests/test_round3_a_fixes.py::test_closing_flag_renamed_does_not_silently_drop_results"
         ],
@@ -310,7 +310,7 @@
         "id": "M-C12",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "2 failed in 0.65s",
+        "tail": "2 failed in 0.44s",
         "failed": [
           "tests/test_release_check.py::test_mutation_evidence_notes_flags_a_stale_result_json",
           "tests/test_release_check.py::test_stale_fingerprints_reports_only_mismatches"
@@ -322,7 +322,7 @@
         "id": "M-C13",
         "verdict": "CAUGHT",
         "rc": 1,
-        "tail": "1 failed in 0.65s",
+        "tail": "1 failed in 0.48s",
         "failed": [
           "tests/test_release_check.py::test_asset_manifest_notes_when_the_check_cannot_run"
         ],
@@ -350,20 +350,20 @@
     ],
     "note": "变异只在 %TEMP% 影子副本里做，真实仓库只读（只写 _dev/.mutation.lock）",
     "repo_fingerprint": {
-      "桌宠.py": "d71ee3fe3c47",
+      "桌宠.py": "72e4acbea6a1",
       "pet_export.py": "db474bdd6670",
       "pet_lines.py": "5332f60b5f26",
       "pet_alarm.py": "1149e94deee3",
       "pet_behaviors.py": "732273f95fb4",
-      "_check_release.py": "a265ca1341e9",
+      "_check_release.py": "34e248c1d1eb",
       "pet_balance.py": "045129227ee2",
       "pet_plugin.py": "2f7853298fc3",
       "pet_plugin_host.py": "82fb7b1384c8",
       "pet_dialogs.py": "a80c69368b64",
-      "pet_menu.py": "c5d7f8b8339e",
+      "pet_menu.py": "65849eb1a671",
       "pet_plugin_index.py": "e5e9845785e8",
       "pet_ai.py": "a5989e7fe646",
-      "pet_config.py": "a8d7b1cb6b7c",
+      "pet_config.py": "d8db402105e1",
       "pet_io.py": "6b1e0413fb7f",
       "pet_services.py": "ecebb6ab5891",
       "pet_widgets.py": "929458a553ce",
@@ -373,10 +373,10 @@
       "pet_audio.py": "a6feadf4d653",
       "pet_chat.py": "de979c429c2c",
       "pet_log.py": "de14ecf338ab",
-      "pet_actions.py": "a4871b371ea0",
+      "pet_actions.py": "045834164fdb",
       "pet_book.py": "098676ac52d4",
       "_check_static.py": "6286f9f493bd",
-      "pet_motion.py": "a737b42a336f",
+      "pet_motion.py": "31cd799ce0ad",
       "tests/test_dialog_buttons_v270.py": "4f95acca7fc6",
       "tests/test_import_thread.py": "1c6fc2ec5d05"
     },
