@@ -82,6 +82,16 @@ RATE = {
     "FRAME_REDUCED": 0.5,  # 减少动效下的帧率倍率：半速（必须 0 < x < 1；0 = 冻帧，不许）
 }
 
+# ---------------- root motion（v2.12.0 第 12 轮 A） ----------------
+# 走帧每推进一帧，窗口按「朝向 × STEP_PX」位移。**单独一张表、不进 DUR**：
+# DUR 是"一次动画的时长（ms）"，这里是"一帧走多远（px）"——量纲不同；混进 DUR 会被
+# tests/test_motion_v2110.py 的 _DUR_RESERVED 当成时长档位配对（那张表按 key 名扫）。
+ROOT = {
+    # 6px / 120ms（WALK_FRAME_MS）≈ 50px/s：与 v1.4.2「近距缓行」档（上限 8px/tick）同量级，
+    # 换成帧驱动后观感不跳档；远距快追仍走 tick 那条老路（root motion 只接管水平位移）。
+    "STEP_PX": 6,
+}
+
 # ---------------- 缓动 ----------------
 # 值是 QEasingCurve.Type 的成员名（字符串），由消费方映射——本模块因此不必 import Qt。
 EASE = {

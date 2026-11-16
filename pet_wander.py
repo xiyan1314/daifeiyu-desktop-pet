@@ -23,6 +23,8 @@ from typing import Any, Callable
 from PySide6.QtCore import QPoint
 from PySide6.QtGui import QCursor
 
+import pet_motion
+
 # 跟随/散步行走参数（v1.4.2 降速档：温柔滑行，保证用户能追上点住）
 WALK_INTERVAL_MS = 120   # 行走 tick 间隔
 WALK_EASE = 0.10         # 每 tick 走剩余距离的比例（缓动）
@@ -30,6 +32,26 @@ WALK_STEP_MIN = 1        # 每轴最小步进（px）
 WALK_STEP_MAX = 6        # 每轴最大步进（px，峰值约 50px/s）
 WALK_FAR_DIST = 200      # 远距阈值：超过走快追档
 WALK_NEAR_CAP = 8        # 近距每 tick 上限
+
+
+def root_dx(dx: int, steps: int, step_px: int) -> int:
+    """帧驱动水平位移（纯函数，供验证脚本直接断言）。
+
+    走帧每推进一帧 = 窗口横移 step_px（方向随行进方向）。位移**不越过目标**
+    （剩 10px 时走 3 帧 × 6px 只挪 10px），否则角色会在目标点左右来回甩。
+    steps 为 0（无帧集 / 没在走）→ 返回 0，调用方继续走 _walk_step 那条老路。
+    """
+    if not steps or step_px <= 0 or dx == 0:
+        return 0
+    raw = int(steps) * int(step_px)
+    return min(raw, abs(dx)) if dx > 0 else -min(raw, abs(dx))
+
+
+def clamp_x(nx: int, lo: int, hi: int) -> int:
+    """把水平位置夹进 [lo, hi]；hi < lo（窗口比可用区还宽）时退到 lo，不产生负区间。"""
+    if hi < lo:
+        return lo
+    return max(lo, min(hi, nx))
 
 
 def _walk_step(d: int, cap: int | None = None) -> int:
@@ -162,10 +184,24 @@ class WanderController:
             cap = min(40, max(10, int(pet.width() * 0.10)))
         else:
             cap = WALK_NEAR_CAP
-        step_x = _walk_step(dx, cap)
         step_y = _walk_step(dy, cap)
-        nx = cur.x() + (min(step_x, abs(dx)) if dx > 0 else -min(step_x, abs(dx)))
         ny = cur.y() + (min(step_y, abs(dy)) if dy > 0 else -min(step_y, abs(dy)))
+        # v2.12.0（第 12 轮 A · root motion）：走帧在播时，**水平位移由帧推进驱动**
+        # （每帧 STEP_PX），不再是 tick 缓动；无帧集角色 / 没在播走帧 → 老路照旧。
+        # 竖轴仍走 _walk_step：素材只有左右朝向，帧推进不该假装管上下。
+        _take = getattr(pet, "_take_walk_steps", None)
+        steps = _take() if _take is not None else 0
+        sdx = root_dx(dx, steps, pet_motion.ROOT["STEP_PX"])
+        if sdx:
+            nx = cur.x() + sdx
+            # 边界夹紧：按**当前屏可用区**夹，角色整只不许出屏；被夹住就停在边上
+            # （下一 tick 再夹一次仍是同一点 → 不抖、不来回弹）。
+            scr = self._screen_geo(pet.frameGeometry().center())
+            if scr is not None:
+                nx = clamp_x(nx, scr.left(), scr.right() - pet.width() + 1)
+        else:
+            step_x = _walk_step(dx, cap)
+            nx = cur.x() + (min(step_x, abs(dx)) if dx > 0 else -min(step_x, abs(dx)))
         pet.move(nx, ny)
         if dx != 0:
             pet.flip = 1 if dx < 0 else -1

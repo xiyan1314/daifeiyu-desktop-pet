@@ -1176,6 +1176,9 @@ class PetWindow(QWidget):
         self.busy = False
         self.walk_phase = 0
         self._walk_interval = WALK_INTERVAL_MS
+        # v2.12.0（第 12 轮 A · root motion）：走帧推进计数 + "此刻水平位移归帧管"标志
+        self._walk_steps = 0
+        self._walk_root_on = False
         self._wander_target = None
         self._click_composite = None  # P3-1：点击穿透命中画布（关闭/未启用时 None）
         self._click_cache_key = None
@@ -3326,11 +3329,24 @@ class PetWindow(QWidget):
             self._show_emote(self._last_emote_kind)  # 头顶表情随新窗口尺寸重排
 
     # ---------- 阶段1：帧动画与状态 ----------
+    def _take_walk_steps(self):
+        """取走并清零"本 tick 推进了几帧"（root motion 的唯一输入）。
+
+        为什么按帧计数而不是按定时器：帧驱动位移的全部意义是"画面走一步、窗口挪一步"。
+        定时器照走而帧没推进（被 busy/减少动效拖慢）时，位移就不该照给。
+        """
+        n = self._walk_steps
+        self._walk_steps = 0
+        return n
+
     def _on_frame_changed(self, _idx):
         # 帧下标由信号携带，但直接以 current() 为唯一取帧入口（单一事实来源）
         # P1-7：state/sleep 也纳入（poke 动画/睡眠动画走帧播放；静态展示时 anim 已停不发帧）
         # v2.11.0（W2）：**walk 也纳入**——走路帧同样靠这个信号贴图（漏了它 = anim 在播、
         # 画面不动，用户看到的是"走起来像滑冰"）。
+        # v2.12.0（第 12 轮 A）：**只认走帧**的推进（idle/eat 的帧不许推着角色走）。
+        if self.anim_mode == "walk" and self.anim._name == "walk":
+            self._walk_steps += 1
         if self.anim_mode in ("idle", "walk", "eat", "state", "sleep"):
             pix = self.anim.current()
             if pix is not None and not pix.isNull():
@@ -3358,14 +3374,17 @@ class PetWindow(QWidget):
           · 只写 anim_mode / 帧集 / opacity，**不写任何几何**（A4 硬口径）。
         """
         if not on:
+            self._walk_root_on = False
             if self.anim_mode == "walk":
                 self._play_idle()  # 停下回 idle（_play_idle 自带 S1 守卫）
             return False
         if self.busy and self.anim_mode == "eat":
+            self._walk_root_on = False
             return False
         if not self._custom_role and self.form != self.form_keys[0]:
             # 默认角色的 walk 帧是**首形态**的画法：吃饱形态借过来播 = 把吃饱图换成常态图
             # （v2.2.5 修的正是这个症状）→ 非首形态不播走路帧，退回待机那套判据。
+            self._walk_root_on = False
             if self.anim_mode == "walk":
                 self._play_idle()
             return False
@@ -3382,7 +3401,10 @@ class PetWindow(QWidget):
             if frames:
                 self.anim.add_set("walk", frames)
         if not frames:
+            self._walk_root_on = False
             return False    # 无帧集角色：静态兜底（不报错、不改动画状态、不动任何几何）
+        # v2.12.0（第 12 轮 A）：从这里往下 = 走帧真的在播 → 水平位移交给帧推进。
+        self._walk_root_on = True
         if (self.anim_mode == "walk" and self.anim._name == "walk"
                 and self.anim._frames is frames):
             return True     # 已经在播同一批走帧（每 tick 都会走到这里）
